@@ -12,7 +12,6 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
 import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { CategoriasProps, type BreadcrumbItem } from '@/types';
@@ -62,29 +61,20 @@ export default function CategoriasPage({ categorias }: { categorias: CategoriasP
                         className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
                     />
                 </div>
-                <div className="grid auto-rows-min gap-4 md:grid-cols-3">
-                    <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                    <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                    <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                </div>
+
                 {/* <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" /> */}
                 <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
-                    <Table className="mt-4">
+                    <Table>
                         <TableCaption>Categorías de los Productos</TableCaption>
-                        <TableHeader className="bg-sidebar">
-                            <TableRow>
-                                <TableHead>Nombre</TableHead>
+                        <TableHeader>
+                            <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
+                                <TableHead className="w-[100px]">Identificación</TableHead>
                                 <TableHead>Descripción</TableHead>
                                 <TableHead>Estado</TableHead>
-                                <TableHead className="text-right text-blue-600 dark:text-amber-600">Opciones</TableHead>
+                                <TableHead className="text-right">Acciones</TableHead>
                             </TableRow>
                         </TableHeader>
+
                         <TableBody>
                             {categorias.map((categoria) => (
                                 <TableRow key={categoria.id}>

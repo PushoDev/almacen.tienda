@@ -54,3 +54,15 @@ export interface CategoriasProps {
     updated_at: string;
 }
 
+// Interface para Almacenes
+export interface AlmacenProps {
+    id: number;
+    nombre_almacen: string;
+    telefono_almacen: string;
+    correo_almacen?: string | null;
+    provincia_almacen?: string | null;
+    ciudad_almacen?: string | null;
+    notas_almacen?: string | null;
+    created_at: string;
+    updated_at: string;
+}

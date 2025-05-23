@@ -10,18 +10,22 @@ class AlmacenController extends Controller
 {
     /**
      * Display a listing of the resource.
+     * Listado de Almacenes
      */
     public function index()
     {
-        return Inertia::render('almacenes/index', []);
+        return Inertia::render('Almacenes/Index', [
+            'almacenes' => Almacen::all(),
+        ]);
     }
 
     /**
      * Show the form for creating a new resource.
+     * Ruta para crear un nuevo almacén
      */
     public function create()
     {
-        //
+        return Inertia::render('Almacenes/Create');
     }
 
     /**
@@ -29,7 +33,28 @@ class AlmacenController extends Controller
      */
     public function store(Request $request)
     {
-        //
+        // Validamos los datos del formulario
+        $request->validate([
+            'nombre_almacen' => ['required', 'string', 'max:255'],
+            'telefono_almacen' => ['required', 'string', 'unique:almacens,telefono_almacen'],
+            'correo_almacen' => ['nullable', 'email'],
+            'provincia_almacen' => ['nullable', 'string'],
+            'ciudad_almacen' => ['nullable', 'string'],
+            'notas_almacen' => ['nullable', 'string'],
+        ]);
+
+        // Nuevo almacén en la base de datos
+        Almacen::create([
+            'nombre_almacen' => $request->nombre_almacen,
+            'telefono_almacen' => $request->telefono_almacen,
+            'correo_almacen' => $request->correo_almacen,
+            'provincia_almacen' => $request->provincia_almacen,
+            'ciudad_almacen' => $request->ciudad_almacen,
+            'notas_almacen' => $request->notas_almacen,
+        ]);
+
+        // Redirigimos al usuario a la lista de almacenes
+        return redirect()->route('almacenes.index')->with('success', 'Almacén creado exitosamente.');
     }
 
     /**
@@ -37,7 +62,9 @@ class AlmacenController extends Controller
      */
     public function show(Almacen $almacen)
     {
-        //
+        return Inertia::render('Almacenes/Show', [
+            'almacen' => $almacen,
+        ]);
     }
 
     /**
@@ -45,7 +72,9 @@ class AlmacenController extends Controller
      */
     public function edit(Almacen $almacen)
     {
-        //
+        return Inertia::render('Almacenes/Edit', [
+            'almacen' => $almacen,
+        ]);
     }
 
     /**
@@ -53,7 +82,37 @@ class AlmacenController extends Controller
      */
     public function update(Request $request, Almacen $almacen)
     {
-        //
+        // Validamos los datos del formulario
+        $request->validate([
+            'nombre_almacen' => [
+                'required',
+                'string',
+                'max:255',
+                'unique:almacens,nombre_almacen,' . $almacen->id
+            ],
+            'telefono_almacen' => [
+                'required',
+                'string',
+                'unique:almacens,telefono_almacen,' . $almacen->id
+            ],
+            'correo_almacen' => ['nullable', 'email'],
+            'provincia_almacen' => ['nullable', 'string'],
+            'ciudad_almacen' => ['nullable', 'string'],
+            'notas_almacen' => ['nullable', 'string'],
+        ]);
+
+        // Actualizar el almacén en la base de datos
+        $almacen->update([
+            'nombre_almacen' => $request->nombre_almacen,
+            'telefono_almacen' => $request->telefono_almacen,
+            'correo_almacen' => $request->correo_almacen,
+            'provincia_almacen' => $request->provincia_almacen,
+            'ciudad_almacen' => $request->ciudad_almacen,
+            'notas_almacen' => $request->notas_almacen,
+        ]);
+
+        // Redirigimos al usuario a la lista de almacenes
+        return redirect()->route('almacenes.index')->with('success', 'Almacén actualizado exitosamente.');
     }
 
     /**
@@ -61,6 +120,7 @@ class AlmacenController extends Controller
      */
     public function destroy(Almacen $almacen)
     {
-        //
+        $almacen->delete();
+        return redirect()->route('almacenes.index')->with('success', 'Almacén eliminado exitosamente.');
     }
 }
