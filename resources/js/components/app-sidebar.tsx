@@ -23,6 +23,11 @@ const mainNavItems: NavItem[] = [
         href: '/almacenes',
         icon: StoreIcon,
     },
+    {
+        title: 'Cataegorias',
+        href: '/categorias',
+        icon: StoreIcon,
+    },
 ];
 
 const footerNavItems: NavItem[] = [

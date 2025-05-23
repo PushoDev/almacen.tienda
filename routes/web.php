@@ -15,8 +15,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     /**
      * Rutas Principales
      */
+    // Categorias
+    require __DIR__ . '/crud/categorias.php';
     // Almacen
-    require __DIR__ . '/crud/almacnes.php';
+    require __DIR__ . '/crud/almacenes.php';
 });
 
 require __DIR__ . '/settings.php';
