@@ -62,9 +62,10 @@ class AlmacenController extends Controller
      */
     public function show(Almacen $almacen)
     {
-        return Inertia::render('Almacenes/Show', [
-            'almacen' => $almacen,
-        ]);
+        dd($almacen);
+        // return Inertia::render('Almacenes/Show', [
+        //     'almacen' => $almacen,
+        // ]);
     }
 
     /**
@@ -72,6 +73,7 @@ class AlmacenController extends Controller
      */
     public function edit(Almacen $almacen)
     {
+        // dd($almacen);
         return Inertia::render('Almacenes/Edit', [
             'almacen' => $almacen,
         ]);

@@ -66,3 +66,15 @@ export interface AlmacenProps {
     created_at: string;
     updated_at: string;
 }
+
+// Interface para Proveedores
+export interface ProveedorProps {
+    id: number;
+    nombre_proveedor: string;
+    telefono_proveedor: string;
+    correo_proveedor?: string | null;
+    localidad_proveedor: string;
+    notas_proveedor?: string | null;
+    created_at: string;
+    updated_at: string;
+}

@@ -15,7 +15,7 @@ import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, Tabl
 import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { Edit3, Trash2, Warehouse } from 'lucide-react';
+import { Edit3, Eye, Trash2, Warehouse } from 'lucide-react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -87,6 +87,12 @@ export default function AlmacenesPage({ almacenes }: { almacenes: AlmacenProps[]
                                             : 'Sin ubicación'}
                                     </TableCell>
                                     <TableCell className="text-right">
+                                        {/* Boton Detalles */}
+                                        <Link href={route('almacenes.show', { almacen: almacen.id })}>
+                                            <Button variant="outline" className="cursor-pointer">
+                                                <Eye />
+                                            </Button>
+                                        </Link>
                                         {/* Botón Editar */}
                                         <Link href={route('almacenes.edit', { almacen: almacen.id })}>
                                             <Button

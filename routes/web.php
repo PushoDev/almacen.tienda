@@ -19,6 +19,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     require __DIR__ . '/crud/categorias.php';
     // Almacen
     require __DIR__ . '/crud/almacenes.php';
+    // Proveedores
+    require __DIR__ . '/crud/proveedores.php';
 });
 
 require __DIR__ . '/settings.php';
