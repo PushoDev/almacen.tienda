@@ -11,6 +11,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', function () {
         return Inertia::render('dashboard');
     })->name('dashboard');
+
+    /**
+     * Rutas Principales
+     */
+    // Almacen
+    require __DIR__ . '/crud/almacnes.php';
 });
 
 require __DIR__ . '/settings.php';
