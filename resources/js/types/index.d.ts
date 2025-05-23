@@ -78,3 +78,15 @@ export interface ProveedorProps {
     created_at: string;
     updated_at: string;
 }
+
+// Interface para Cuentas
+export interface CuentaProps {
+    id: number;
+    nombre_cuenta: string;
+    saldo_cuenta: number | null;
+    deuda: number;
+    tipo_cuenta: 'permanentes' | 'temporales';
+    notas_cuenta?: string | null;
+    created_at: string;
+    updated_at: string;
+}
