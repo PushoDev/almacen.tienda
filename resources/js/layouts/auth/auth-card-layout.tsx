@@ -17,12 +17,14 @@ export default function AuthCardLayout({
             <div className="flex w-full max-w-md flex-col gap-6">
                 <Link href={route('home')} className="flex items-center gap-2 self-center font-medium">
                     <div className="flex h-9 w-9 items-center justify-center">
-                        <AppLogoIcon className="size-9 fill-current text-black dark:text-white" />
+                        <AppLogoIcon />
                     </div>
                 </Link>
 
                 <div className="flex flex-col gap-6">
                     <Card className="rounded-xl">
+                        {/* Imagen del Auth */}
+                        {/* <div className="image-background animate__animated animate__fadeInLeft absolute inset-0" /> */}
                         <CardHeader className="px-10 pt-8 pb-0 text-center">
                             <CardTitle className="text-xl">{title}</CardTitle>
                             <CardDescription>{description}</CardDescription>

@@ -1,5 +1,5 @@
 import { Head, useForm } from '@inertiajs/react';
-import { LoaderCircle } from 'lucide-react';
+import { DoorOpen, LoaderCircle } from 'lucide-react';
 import { FormEventHandler } from 'react';
 
 import InputError from '@/components/input-error';
@@ -36,13 +36,13 @@ export default function Login({ status, canResetPassword }: LoginProps) {
     };
 
     return (
-        <AuthLayout title="Log in to your account" description="Enter your email and password below to log in">
-            <Head title="Log in" />
+        <AuthLayout title="Authentificar su Cuenta" description="Introduzca sus credenciales para acceder al sistema">
+            <Head title="Log in - 🏪🛒" />
 
-            <form className="flex flex-col gap-6" onSubmit={submit}>
+            <form className="animate__animated animate__fadeInUp flex flex-col gap-6" onSubmit={submit}>
                 <div className="grid gap-6">
                     <div className="grid gap-2">
-                        <Label htmlFor="email">Email address</Label>
+                        <Label htmlFor="email">Correo Electrónico</Label>
                         <Input
                             id="email"
                             type="email"
@@ -59,10 +59,10 @@ export default function Login({ status, canResetPassword }: LoginProps) {
 
                     <div className="grid gap-2">
                         <div className="flex items-center">
-                            <Label htmlFor="password">Password</Label>
+                            <Label htmlFor="password">Contraseña</Label>
                             {canResetPassword && (
                                 <TextLink href={route('password.request')} className="ml-auto text-sm" tabIndex={5}>
-                                    Forgot password?
+                                    Has olvidado tu contraseña?
                                 </TextLink>
                             )}
                         </div>
@@ -87,21 +87,28 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                             onClick={() => setData('remember', !data.remember)}
                             tabIndex={3}
                         />
-                        <Label htmlFor="remember">Remember me</Label>
+                        <Label htmlFor="remember">Recuerdar mi Cuenta</Label>
                     </div>
 
-                    <Button type="submit" className="mt-4 w-full" tabIndex={4} disabled={processing}>
-                        {processing && <LoaderCircle className="h-4 w-4 animate-spin" />}
-                        Log in
+                    <Button
+                        variant="secondary"
+                        type="submit"
+                        className="mt-4 w-full cursor-pointer hover:animate-pulse"
+                        tabIndex={4}
+                        disabled={processing}
+                    >
+                        {processing && <LoaderCircle className="h-4 w-4" />}
+                        <DoorOpen />
+                        Loguearse
                     </Button>
                 </div>
 
-                <div className="text-muted-foreground text-center text-sm">
-                    Don't have an account?{' '}
+                {/* <div className="text-muted-foreground text-center text-sm">
+                    No tienes cuenta?{' '}
                     <TextLink href={route('register')} tabIndex={5}>
-                        Sign up
+                        Registro Nuevo
                     </TextLink>
-                </div>
+                </div> */}
             </form>
 
             {status && <div className="mb-4 text-center text-sm font-medium text-green-600">{status}</div>}
