@@ -90,3 +90,19 @@ export interface CuentaProps {
     created_at: string;
     updated_at: string;
 }
+
+// Interface para Productos
+export interface ProductoProps {
+    id: number;
+    nombre_producto: string;
+    marca_producto?: string | null;
+    codigo_producto?: string | null;
+    categoria_id: number;
+    categoria?: CategoriaProps;
+    precio_compra_producto: number;
+    cantidad_producto: number;
+    imagen_producto?: string | null;
+    imagen_url?: string | null;
+    created_at: string;
+    updated_at: string;
+}

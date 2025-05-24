@@ -10,13 +10,12 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
-import { CuentaProps, type BreadcrumbItem } from '@/types';
+import { ProductoProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { Edit3, Landmark, Trash2 } from 'lucide-react';
+import { Edit3, Package2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -25,17 +24,19 @@ const breadcrumbs: BreadcrumbItem[] = [
         href: '/dashboard',
     },
     {
-        title: 'Cuentas',
-        href: '/cuentas',
+        title: 'Productos',
+        href: '/productos',
     },
 ];
 
-export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
-    // Eliminar Cuenta
-    const deleteCuenta = (id: number) => {
-        router.delete(route('cuentas.destroy', { cuenta: id }), {
+export default function ProductosPage({ productos }: { productos: ProductoProps[] }) {
+    console.log('Productos recibidos:', productos);
+
+    // Eliminar Producto
+    const deleteProducto = (id: number) => {
+        router.delete(route('productos.destroy', { producto: id }), {
             onSuccess: () => {
-                toast.success('Cuenta eliminada correctamente');
+                toast.success('Producto eliminado correctamente');
             },
             onError: () => {
                 toast.error('Error en el proceso, inténtelo nuevamente');
@@ -45,7 +46,7 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Cuentas" />
+            <Head title="Productos" />
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
@@ -55,46 +56,56 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                         description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento"
                     />
                     {/* Ícono semitransparente */}
-                    <Landmark
+                    <Package2
                         size={70}
                         color="#d6d3d1"
                         className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
                     />
                 </div>
 
-                {/* Tabla de Cuentas */}
+                {/* Tabla de Productos */}
                 <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
                     <Table>
-                        <TableCaption>Lista de Cuentas</TableCaption>
+                        <TableCaption>Lista de Productos</TableCaption>
                         <TableHeader>
                             <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
                                 <TableHead className="w-[100px]">Nombre</TableHead>
-                                <TableHead>Saldo</TableHead>
-                                <TableHead>Deuda</TableHead>
-                                <TableHead>Tipo</TableHead>
-                                <TableHead>Notas</TableHead>
+                                <TableHead>Marca</TableHead>
+                                <TableHead>Código</TableHead>
+                                <TableHead>Categoría</TableHead>
+                                <TableHead>Precio</TableHead>
+                                <TableHead>Cantidad</TableHead>
+                                <TableHead>Imagen</TableHead>
                                 <TableHead className="text-right">Acciones</TableHead>
                             </TableRow>
                         </TableHeader>
-
                         <TableBody>
-                            {cuentas.map((cuenta) => (
-                                <TableRow key={cuenta.id}>
-                                    <TableCell>{cuenta.nombre_cuenta}</TableCell>
-                                    <TableCell>{cuenta.saldo_cuenta?.toFixed(2) || 'Sin saldo'}</TableCell>
-                                    <TableCell>{cuenta.deuda.toFixed(2)}</TableCell>
+                            {productos.map((producto) => (
+                                <TableRow key={producto.id}>
+                                    <TableCell>{producto.nombre_producto}</TableCell>
+                                    <TableCell>{producto.marca_producto || 'Sin marca'}</TableCell>
+                                    <TableCell>{producto.codigo_producto || 'Sin código'}</TableCell>
+                                    <TableCell>{producto.categoria || 'Sin categoría'}</TableCell>
                                     <TableCell>
-                                        <Badge
-                                            variant="outline"
-                                            className={`${cuenta.tipo_cuenta === 'permanentes' ? 'text-emerald-500' : 'text-blue-500'}`}
-                                        >
-                                            {cuenta.tipo_cuenta.charAt(0).toUpperCase() + cuenta.tipo_cuenta.slice(1)}
-                                        </Badge>
+                                        {typeof producto.precio_compra_producto === 'number'
+                                            ? `$${producto.precio_compra_producto.toFixed(2)}`
+                                            : 'Sin precio'}
                                     </TableCell>
-                                    <TableCell>{cuenta.notas_cuenta || 'Sin notas'}</TableCell>
+                                    <TableCell>{producto.cantidad_producto}</TableCell>
+                                    <TableCell>
+                                        {producto.imagen_url ? (
+                                            <img
+                                                src={producto.imagen_url}
+                                                alt={producto.nombre_producto}
+                                                className="h-10 w-10 rounded-full object-cover"
+                                            />
+                                        ) : (
+                                            'Sin imagen'
+                                        )}
+                                    </TableCell>
                                     <TableCell className="text-right">
                                         {/* Botón Editar */}
-                                        <Link href={route('cuentas.edit', { cuenta: cuenta.id })}>
+                                        <Link href={route('productos.edit', { producto: producto.id })}>
                                             <Button
                                                 variant="outline"
                                                 className="cursor-pointer hover:bg-blue-900 hover:text-white dark:hover:bg-blue-700"
@@ -117,12 +128,12 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                                                 <AlertDialogHeader>
                                                     <AlertDialogTitle className="text-center">Atención</AlertDialogTitle>
                                                     <AlertDialogDescription>
-                                                        ¿Estás seguro de eliminar esta cuenta? Esta acción es irreversible.
+                                                        ¿Estás seguro de eliminar este producto? Esta acción es irreversible.
                                                     </AlertDialogDescription>
                                                 </AlertDialogHeader>
                                                 <AlertDialogFooter>
                                                     <AlertDialogAction
-                                                        onClick={() => deleteCuenta(cuenta.id)}
+                                                        onClick={() => deleteProducto(producto.id)}
                                                         className="bg-destructive cursor-pointer hover:bg-red-300"
                                                     >
                                                         Aceptar
@@ -139,10 +150,10 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                         </TableBody>
                         <TableFooter>
                             <TableRow>
-                                <TableCell colSpan={5} className="bg-gray-700">
-                                    Total de Cuentas
+                                <TableCell colSpan={7} className="bg-gray-700">
+                                    Total de Productos
                                 </TableCell>
-                                <TableCell className="bg-gray-500 text-center">{cuentas.length}</TableCell>
+                                <TableCell className="bg-gray-500 text-center">{productos.length}</TableCell>
                             </TableRow>
                         </TableFooter>
                     </Table>

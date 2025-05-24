@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
-import { ListCheck } from 'lucide-react';
+import { HandCoins } from 'lucide-react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -61,7 +61,7 @@ export default function CreateCuentasPage() {
                         description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento"
                     />
                     {/* Ícono semitransparente */}
-                    <ListCheck
+                    <HandCoins
                         size={70}
                         color="#d6d3d1"
                         className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
