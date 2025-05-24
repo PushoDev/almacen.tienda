@@ -25,14 +25,14 @@ class Almacen extends Model
 
 
     // Relacion: Tabla de los productos
-    // public function productos()
-    // {
-    //     return $this->hasMany(Producto::class);
-    // }
+    public function productos()
+    {
+        return $this->hasMany(Producto::class);
+    }
 
     // Relación: Un almacén puede tener muchas compras
-    // public function compras()
-    // {
-    //     return $this->hasMany(Compra::class);
-    // }
+    public function compras()
+    {
+        return $this->hasMany(Compra::class);
+    }
 }

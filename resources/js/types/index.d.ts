@@ -106,3 +106,150 @@ export interface ProductoProps {
     created_at: string;
     updated_at: string;
 }
+
+
+
+// Otras Interfaces
+// Interface para el formulario de Comprar Productos
+export interface ProductoComprarProps {
+    id: number;
+    producto: string;
+    categoria: string;
+    codigo: string;
+    cantidad: number;
+    precio: number;
+}
+
+// Interface para las cuentas del Negocio
+export interface CuentaNegocioProps {
+    id: number;
+    nombre_cuenta: string;
+    saldo_cuenta: number;
+    deuda: number;
+    tipo_cuenta: 'permanentes' | 'temporales';
+    notas_cuenta?: string;
+    created_at?: string;
+    updated_at?: string;
+}
+
+// Interface para las deudas con los Proveedores
+export interface DeudasProveedoresProps {
+    id: number;
+    proveedor_id: number;
+    monto_deuda: number;
+    fecha_generacion: string;
+    estado: 'pendiente' | 'pagado';
+    notas?: string;
+    created_at?: string;
+    updated_at?: string;
+}
+
+// Interface para la solicitud de compra
+export interface CompraRequest {
+    compra: 'deuda_proveedor' | 'pago_cash';
+    cuenta_id: number;
+    almacen: string;
+    proveedor: string;
+    fecha: string;
+    productos: ProductoComprarProps[];
+}
+
+// Interface para respuesta de compra (si es necesario)
+export interface CompraResponse {
+    id: number;
+    tipo_compra: 'deuda_proveedor' | 'pago_cash';
+    cuenta: {
+        id: number;
+        saldo: number;
+        deuda: number;
+    };
+    almacen: string;
+    proveedor: string;
+    fecha: string;
+    total: number;
+    productos: ProductoComprarProps[];
+}
+
+// Interface Productos mas comprados
+export interface ProductosMasCompradosRef {
+    nombre_producto: string;
+    total_cantidad: number;
+    veces_comprado: number;
+}
+export type ProductosMasCompradosList = ProductosMasCompradosRef[];
+
+// Interface de Compras por periodos
+export interface CompraPorPeriodoRef {
+    id: number;
+    fecha_compra: string;
+    total_compra: number;
+    nombre_proveedor: string;
+    tipo_compra: 'deuda_proveedor' | 'pago_cash';
+}
+
+// Interface de Gastos Mensuales
+export interface GastoMensualRef {
+    mes_anio: string;
+    total: number;
+    cantidad_compras: number;
+}
+
+// Interface de Compras por Proveedor
+export interface CompraPorProveedorRef {
+    id: number;
+    fecha_compra: string;
+    total_compra: number;
+    tipo_compra: 'deuda_proveedor' | 'pago_cash';
+}
+
+// Inteface de Productos por Almacen
+export interface ProductoPorAlmacenRef {
+    almacen_id: number;
+    nombre_almacen: string;
+    total_productos: number;
+    productos_unicos: number;
+}
+
+// Interface Productos por Almacen detalles
+export interface ProductoPorAlmacenDetalleRef {
+    almacen_id: number;
+    nombre_almacen: string;
+    producto_id: number;
+    nombre_producto: string;
+    cantidad_total: number;
+}
+
+// Para los Charts
+// Interface para gráficos - Compras por Proveedor
+export interface CompraPorProveedorChartRef {
+    nombre_proveedor: string;
+    cantidad_compras: number;
+    total_gastado: number;
+}
+
+export interface ProductoPorAlmacenRefCharts {
+    nombre_almacen: string;
+    total_productos: number;
+    productos_unicos: number;
+}
+
+// Interface para la Logistica
+export interface LogisticaProps {
+    totalCategorias: number;
+    categoriasActivas: number;
+    totalProveedores: number;
+    totalClientes: number;
+    totalAlmacenes: number;
+    totalProductos: number;
+    totalUnidades: number;
+    inversionTotal: number;
+    totalCuentas: number;
+    saldoCuentas: number;
+    montoGeneralInvertido: number;
+    deudaPendientes: number;
+    deudaPendietesSaldo: number;
+    gastosMensuales: GastoMensualRef[];
+    productosTop: ProductosMasCompradosRef[];
+    comprasPorProveedor: CompraPorProveedorChartRef[];
+    productosPorAlmacen: ProductoPorAlmacenRefCharts[];
+}

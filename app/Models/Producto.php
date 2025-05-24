@@ -46,9 +46,9 @@ class Producto extends Model
     }
 
     // Relación: Un producto puede estar en varias compras
-    // public function compras()
-    // {
-    //     return $this->belongsToMany(Compra::class, 'compra_producto')
-    //         ->withPivot('cantidad', 'precio');
-    // }
+    public function compras()
+    {
+        return $this->belongsToMany(Compra::class, 'compra_producto')
+            ->withPivot('cantidad', 'precio');
+    }
 }

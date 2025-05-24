@@ -57,7 +57,7 @@ export default function Dashboard() {
                                 <span className="text-lg text-white">Adquirir Productos Nuevos</span>
                             </div>
                             {/* Link {route('comprar.index' */}
-                            <Link href="#">
+                            <Link href={route('comprar.index')}>
                                 <button className="absolute right-4 bottom-4 ms-2 rounded-md bg-red-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-red-800">
                                     Acceder a Compra
                                 </button>

@@ -24,8 +24,8 @@ class Proveedor extends Model
     ];
 
     // Relación: Un proveedor puede tener muchas compras
-    // public function compras()
-    // {
-    //     return $this->hasMany(Compra::class);
-    // }
+    public function compras()
+    {
+        return $this->hasMany(Compra::class);
+    }
 }

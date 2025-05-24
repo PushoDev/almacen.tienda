@@ -25,6 +25,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     require __DIR__ . '/crud/proveedores.php';
     // Cuentas
     require __DIR__ . '/crud/cuentas.php';
+
+    /**
+     * Rutas de las Acciones Generales
+     */
+    // Comprar Productos
+    require __DIR__ . '/acciones/compras.php';
 });
 
 require __DIR__ . '/settings.php';
