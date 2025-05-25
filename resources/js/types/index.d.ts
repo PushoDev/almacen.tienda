@@ -107,6 +107,17 @@ export interface ProductoProps {
     updated_at: string;
 }
 
+// Interface para Clientes
+export interface ClienteProps {
+    id: number;
+    nombre_cliente: string;
+    telefono_cliente: string;
+    direccion_cliente?: string | null;
+    ciudad_cliente?: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
 
 
 // Otras Interfaces

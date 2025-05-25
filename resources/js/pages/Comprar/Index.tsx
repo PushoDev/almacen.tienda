@@ -158,15 +158,21 @@ export default function ComprarPage() {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Comprar" />
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
-                {/* Encabezado */}
-                <div className="relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed border-gray-700 bg-gray-800 p-4">
-                    <HeadingSmall title="Productos Nuevos" description="Comprar o adquirir nuevos productos para el Negocio" />
+                {/* Header */}
+                <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                    {/* Contenido principal */}
+                    <HeadingSmall
+                        title="Opciones Generales del Sistema"
+                        description="Comprar o adquirir nuevos productos para el negocio, antes de distribuir"
+                    />
+                    {/* Ícono semitransparente */}
                     <ShoppingBasket
                         size={70}
                         color="#f59e0b"
-                        className="absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform opacity-40"
+                        className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
                     />
                 </div>
+
                 <Separator className="col-span-4" />
 
                 {/* Formulario principal */}
@@ -388,20 +394,21 @@ export default function ComprarPage() {
                 </Table>
 
                 {/* Botones de acción */}
-                <div className="flex justify-center p-4">
+                <div className="flex justify-center gap-4 p-4">
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
-                            <Button variant="outline">Realizar Compra</Button>
+                            <Button variant="outline" className="bg-green-600 text-white hover:bg-green-700">
+                                Realizar Compra
+                            </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                             <AlertDialogHeader>
                                 <AlertDialogTitle>Tipo de Compra</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                    Antes de realizar la compra, seleccione si desea pagar ahora o comprar y pagar luego
-                                </AlertDialogDescription>
+                                <AlertDialogDescription>Seleccione si desea pagar ahora o comprar y pagar luego</AlertDialogDescription>
                             </AlertDialogHeader>
+
                             {/* Opciones de Compra */}
-                            <div>
+                            <div className="grid grid-cols-2 gap-4">
                                 {/* Tipo de Compra */}
                                 <div className="grid w-full max-w-sm items-center gap-1.5">
                                     <Label htmlFor="tipo_compra">Tipo de Compra</Label>
@@ -410,7 +417,7 @@ export default function ComprarPage() {
                                         value={data.compra}
                                         onValueChange={(value) => setData('compra', value as 'deuda_proveedor' | 'pago_cash')}
                                     >
-                                        <SelectTrigger className="mt-2 w-full">
+                                        <SelectTrigger className="w-full">
                                             <SelectValue placeholder="Seleccione tipo de compra" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -429,7 +436,7 @@ export default function ComprarPage() {
                                         value={data.cuenta_id.toString()}
                                         onValueChange={(value) => setData('cuenta_id', parseInt(value))}
                                     >
-                                        <SelectTrigger className="mt-2 w-full">
+                                        <SelectTrigger className="w-full">
                                             <SelectValue placeholder="Seleccione Cuenta" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -443,19 +450,24 @@ export default function ComprarPage() {
                                     {errors.cuenta_id && <InputError message={errors.cuenta_id[0]} />}
                                 </div>
                             </div>
+
                             <AlertDialogFooter>
                                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
                                 <Button
                                     type="button"
                                     onClick={() => {
-                                        // Mapear productos al formato esperado por el backend
                                         setData('productos', productos);
-
                                         post('/comprar', {
                                             preserveScroll: true,
                                             onSuccess: () => {
                                                 setProductos([]);
-                                                setTempFormData({ producto: '', categoria: '', codigo: '', cantidad: 0, precio: 0 });
+                                                setTempFormData({
+                                                    producto: '',
+                                                    categoria: '',
+                                                    codigo: '',
+                                                    cantidad: 0,
+                                                    precio: 0,
+                                                });
                                             },
                                         });
                                     }}
@@ -467,11 +479,12 @@ export default function ComprarPage() {
                             </AlertDialogFooter>
                         </AlertDialogContent>
                     </AlertDialog>
+
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <Link href="/dashboard" className="ms-2">
-                                    <Button variant="secondary">
+                                <Link href="/dashboard">
+                                    <Button variant="secondary" className="ms-2">
                                         <BookCheck />
                                         Cancelar Compra
                                     </Button>

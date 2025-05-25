@@ -4,7 +4,19 @@ import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { BookOpen, ChartNoAxesCombinedIcon, Folder, Landmark, LayoutGrid, Package, ShoppingCart, StoreIcon } from 'lucide-react';
+import {
+    BookOpen,
+    Cctv,
+    ChartNoAxesCombinedIcon,
+    FileText,
+    Folder,
+    Landmark,
+    LayoutGrid,
+    Package,
+    ShoppingCart,
+    StoreIcon,
+    Users,
+} from 'lucide-react';
 import AppLogo from './app-logo';
 
 const mainNavItems: NavItem[] = [
@@ -42,6 +54,21 @@ const mainNavItems: NavItem[] = [
         title: 'Cuentas',
         href: '/cuentas',
         icon: Landmark,
+    },
+    {
+        title: 'Clientes',
+        href: '/clientes',
+        icon: Users,
+    },
+    {
+        title: 'Repostes',
+        href: '#',
+        icon: FileText,
+    },
+    {
+        title: 'Seguimientos',
+        href: '#',
+        icon: Cctv,
     },
 ];
 
