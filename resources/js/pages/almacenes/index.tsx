@@ -16,7 +16,7 @@ import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, Tabl
 import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { Edit3, Eye, Trash2, Warehouse } from 'lucide-react';
+import { Edit3, Eye, FileText, HousePlus, Sheet, Trash2, Warehouse } from 'lucide-react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -64,6 +64,33 @@ export default function AlmacenesPage({ almacenes }: { almacenes: AlmacenProps[]
 
                 <Separator className="col-span-4" />
 
+                {/* Acciones */}
+                <div className="flex justify-end gap-2">
+                    {/* Botón Crear nuevo */}
+                    <Link href={route('almacenes.create')}>
+                        <Button variant="default" className="flex cursor-pointer items-center gap-2">
+                            <HousePlus size={16} />
+                            Crear Nuevo
+                        </Button>
+                    </Link>
+
+                    {/* Botón Editar */}
+                    <Link href="#">
+                        <Button variant="outline" className="hover:bg-chart-5 flex cursor-pointer items-center gap-2">
+                            <FileText size={16} />
+                            Exportar PDF
+                        </Button>
+                    </Link>
+
+                    {/* Botón Regresar */}
+                    <Link href="#">
+                        <Button variant="secondary" className="hover:bg-chart-2 flex cursor-pointer items-center gap-2">
+                            <Sheet size={16} />
+                            Exportar Excel
+                        </Button>
+                    </Link>
+                </div>
+
                 {/* Tabla de Almacenes */}
                 <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
                     <Table>
@@ -92,7 +119,7 @@ export default function AlmacenesPage({ almacenes }: { almacenes: AlmacenProps[]
                                     <TableCell className="text-right">
                                         {/* Boton Detalles */}
                                         <Link href={route('almacenes.show', { almacen: almacen.id })}>
-                                            <Button variant="outline" className="cursor-pointer">
+                                            <Button variant="outline" className="hover:bg-chart-3 cursor-pointer hover:text-white">
                                                 <Eye />
                                             </Button>
                                         </Link>

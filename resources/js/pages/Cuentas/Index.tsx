@@ -17,7 +17,7 @@ import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, Tabl
 import AppLayout from '@/layouts/app-layout';
 import { CuentaProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { Edit3, Landmark, Trash2 } from 'lucide-react';
+import { CreditCard, Edit3, FileText, Landmark, Sheet, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -63,6 +63,33 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                     />
                 </div>
                 <Separator className="col-span-4" />
+
+                {/* Acciones */}
+                <div className="flex justify-end gap-2">
+                    {/* Botón Crear nuevo */}
+                    <Link href={route('cuentas.create')}>
+                        <Button variant="default" className="flex cursor-pointer items-center gap-2">
+                            <CreditCard size={16} />
+                            Crear Nueva
+                        </Button>
+                    </Link>
+
+                    {/* Botón Editar */}
+                    <Link href="#">
+                        <Button variant="outline" className="hover:bg-chart-5 flex cursor-pointer items-center gap-2">
+                            <FileText size={16} />
+                            Exportar PDF
+                        </Button>
+                    </Link>
+
+                    {/* Botón Regresar */}
+                    <Link href="#">
+                        <Button variant="secondary" className="hover:bg-chart-2 flex cursor-pointer items-center gap-2">
+                            <Sheet size={16} />
+                            Exportar Excel
+                        </Button>
+                    </Link>
+                </div>
 
                 {/* Tabla de Cuentas */}
                 <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">

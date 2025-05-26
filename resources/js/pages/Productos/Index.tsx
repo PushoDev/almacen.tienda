@@ -16,7 +16,7 @@ import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, Tabl
 import AppLayout from '@/layouts/app-layout';
 import { ProductoProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { Edit3, Package2, Trash2 } from 'lucide-react';
+import { Edit3, FileText, Package2, Sheet, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -54,7 +54,7 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                     {/* Contenido principal */}
                     <HeadingSmall
                         title="Opciones Generales del Sistema"
-                        description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento"
+                        description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento. Listado de los Productos"
                     />
                     {/* Ícono semitransparente */}
                     <Package2
@@ -65,6 +65,33 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                 </div>
 
                 <Separator className="col-span-4" />
+
+                {/* Acciones */}
+                <div className="flex justify-end gap-2">
+                    {/* Botón Exportar PDF */}
+                    <Link href="#">
+                        <Button variant="outline" className="hover:bg-chart-5 flex cursor-pointer items-center gap-2">
+                            <FileText size={16} />
+                            Exportar PDF
+                        </Button>
+                    </Link>
+
+                    {/* Boton Importar Excel */}
+                    <Link href="#">
+                        <Button variant="secondary" className="hover:bg-chart-2 flex cursor-pointer items-center gap-2">
+                            <Sheet size={16} />
+                            Importar Excel
+                        </Button>
+                    </Link>
+
+                    {/* Botón Exportar Excel */}
+                    <Link href="#">
+                        <Button variant="secondary" className="hover:bg-chart-2 flex cursor-pointer items-center gap-2">
+                            <Sheet size={16} />
+                            Exportar Excel
+                        </Button>
+                    </Link>
+                </div>
 
                 {/* Tabla de Productos */}
                 <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">

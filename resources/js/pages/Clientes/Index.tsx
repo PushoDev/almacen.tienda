@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppLayout from '@/layouts/app-layout';
 import { ClienteProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { BookUser, Edit3, Trash2 } from 'lucide-react';
+import { BookUser, Edit3, FileText, Sheet, Trash2, UserRoundPlus } from 'lucide-react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -62,6 +62,33 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                     />
                 </div>
                 <Separator className="col-span-4" />
+
+                {/* Acciones */}
+                <div className="flex justify-end gap-2">
+                    {/* Botón Crear nuevo */}
+                    <Link href={route('clientes.create')}>
+                        <Button variant="default" className="flex cursor-pointer items-center gap-2">
+                            <UserRoundPlus size={16} />
+                            Crear Nuevo
+                        </Button>
+                    </Link>
+
+                    {/* Botón Editar */}
+                    <Link href="#">
+                        <Button variant="outline" className="hover:bg-chart-5 flex cursor-pointer items-center gap-2">
+                            <FileText size={16} />
+                            Exportar PDF
+                        </Button>
+                    </Link>
+
+                    {/* Botón Regresar */}
+                    <Link href="#">
+                        <Button variant="secondary" className="hover:bg-chart-2 flex cursor-pointer items-center gap-2">
+                            <Sheet size={16} />
+                            Exportar Excel
+                        </Button>
+                    </Link>
+                </div>
 
                 {/* Tabla de Clientes */}
                 <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">

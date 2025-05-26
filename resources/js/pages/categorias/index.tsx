@@ -17,7 +17,7 @@ import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, Tabl
 import AppLayout from '@/layouts/app-layout';
 import { CategoriasProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { CheckIcon, Edit3, ListCheck, MessageCircleWarningIcon, Trash2 } from 'lucide-react';
+import { CheckIcon, Edit3, FileText, ListCheck, MessageCircleWarningIcon, MessageSquareDiff, Sheet, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -63,6 +63,33 @@ export default function CategoriasPage({ categorias }: { categorias: CategoriasP
                     />
                 </div>
                 <Separator className="col-span-4" />
+
+                {/* Acciones */}
+                <div className="flex justify-end gap-2">
+                    {/* Botón Crear nuevo */}
+                    <Link href={route('categorias.create')}>
+                        <Button variant="default" className="flex cursor-pointer items-center gap-2">
+                            <MessageSquareDiff size={16} />
+                            Crear Nueva
+                        </Button>
+                    </Link>
+
+                    {/* Botón Editar */}
+                    <Link href="#">
+                        <Button variant="outline" className="hover:bg-chart-5 flex cursor-pointer items-center gap-2">
+                            <FileText size={16} />
+                            Exportar PDF
+                        </Button>
+                    </Link>
+
+                    {/* Botón Regresar */}
+                    <Link href="#">
+                        <Button variant="secondary" className="hover:bg-chart-2 flex cursor-pointer items-center gap-2">
+                            <Sheet size={16} />
+                            Exportar Excel
+                        </Button>
+                    </Link>
+                </div>
 
                 {/* <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" /> */}
                 <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
