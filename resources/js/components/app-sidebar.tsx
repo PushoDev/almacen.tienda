@@ -13,6 +13,7 @@ import {
     Landmark,
     LayoutGrid,
     Package,
+    Repeat,
     ShoppingCart,
     StoreIcon,
     Users,
@@ -34,6 +35,11 @@ const mainNavItems: NavItem[] = [
         title: 'Almacenes o Tiendas',
         href: '/almacenes',
         icon: StoreIcon,
+    },
+    {
+        title: 'Movimientos',
+        href: '#',
+        icon: Repeat,
     },
     {
         title: 'Cataegorias',
