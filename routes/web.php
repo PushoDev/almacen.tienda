@@ -37,6 +37,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     require __DIR__ . '/acciones/compras.php';
     // Reportes
     require __DIR__ . '/acciones/reportes.php';
+
+
+    /**
+     * Rutas de Errores
+     */
+    // 404
+
 });
 
 require __DIR__ . '/settings.php';
