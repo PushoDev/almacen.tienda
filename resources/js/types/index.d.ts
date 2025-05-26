@@ -264,3 +264,13 @@ export interface LogisticaProps {
     comprasPorProveedor: CompraPorProveedorChartRef[];
     productosPorAlmacen: ProductoPorAlmacenRefCharts[];
 }
+
+
+// Productos por Almacenes
+export interface ProductoPorAlmacenDetalleRef {
+    almacen_id: number;
+    nombre_almacen: string;
+    producto_id: number;
+    nombre_producto: string;
+    cantidad_total: number;
+}

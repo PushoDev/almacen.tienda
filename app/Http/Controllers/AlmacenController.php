@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Almacen;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\DB;
 
 class AlmacenController extends Controller
 {
@@ -62,9 +63,19 @@ class AlmacenController extends Controller
      */
     public function show(Almacen $almacen)
     {
-        // dd($almacen);
+        $productos = $almacen->getProductosConCantidad()->map(function ($item) use ($almacen) {
+            return [
+                'producto_id' => $item->id,
+                'nombre_producto' => $item->nombre,
+                'cantidad_total' => $item->cantidad_total,
+                'almacen_id' => $almacen->id,
+                'nombre_almacen' => $almacen->nombre_almacen,
+            ];
+        });
+
         return Inertia::render('Almacenes/Show', [
             'almacen' => $almacen,
+            'productos' => $productos,
         ]);
     }
 

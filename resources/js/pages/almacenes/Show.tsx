@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
-import { AlmacenProps, type BreadcrumbItem } from '@/types';
+import { AlmacenProps, ProductoPorAlmacenDetalleRef, type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import { Edit2, Mail, MapPin, Phone, Warehouse } from 'lucide-react';
 
@@ -22,7 +22,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function ShowAlmacenesPage({ almacen }: { almacen: AlmacenProps }) {
+export default function ShowAlmacenesPage({ almacen, productos }: { almacen: AlmacenProps; productos: ProductoPorAlmacenDetalleRef[] }) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Detalles Almacen" />
@@ -135,17 +135,60 @@ export default function ShowAlmacenesPage({ almacen }: { almacen: AlmacenProps }
                     {/* <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" /> */}
                 </div>
 
-                {/* <div className="grid auto-rows-min gap-4 md:grid-cols-3">
-                    <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                    <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                    <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                </div> */}
+                {/* Listado de Productos */}
+                <Card className="mt-6">
+                    <CardHeader>
+                        <CardTitle className="text-sidebar-accent">Productos Disponibles</CardTitle>
+                        <CardDescription>Listado de productos con sus cantidades totales en este almacén</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {productos.length === 0 ? (
+                            <p className="py-4 text-center text-gray-500">No hay productos registrados en este almacén.</p>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                    <thead className="bg-gray-50 dark:bg-gray-800">
+                                        <tr>
+                                            <th
+                                                scope="col"
+                                                className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300"
+                                            >
+                                                ID
+                                            </th>
+                                            <th
+                                                scope="col"
+                                                className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300"
+                                            >
+                                                Nombre del Producto
+                                            </th>
+                                            <th
+                                                scope="col"
+                                                className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300"
+                                            >
+                                                Cantidad Total
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-900">
+                                        {productos.map((producto) => (
+                                            <tr key={producto.producto_id}>
+                                                <td className="px-6 py-4 text-sm whitespace-nowrap text-gray-900 dark:text-gray-200">
+                                                    {producto.producto_id}
+                                                </td>
+                                                <td className="px-6 py-4 text-sm whitespace-nowrap text-gray-900 dark:text-gray-200">
+                                                    {producto.nombre_producto}
+                                                </td>
+                                                <td className="px-6 py-4 text-sm whitespace-nowrap text-gray-900 dark:text-gray-200">
+                                                    {producto.cantidad_total}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
             </div>
         </AppLayout>
     );
