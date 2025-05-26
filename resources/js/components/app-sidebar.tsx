@@ -61,8 +61,8 @@ const mainNavItems: NavItem[] = [
         icon: Users,
     },
     {
-        title: 'Repostes',
-        href: '#',
+        title: 'Reportes',
+        href: '/reportes',
         icon: FileText,
     },
     {
