@@ -38,6 +38,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Reportes
     require __DIR__ . '/acciones/reportes.php';
 
+    /**
+     * Punto de Venta
+     */
+    require __DIR__ . '/vendor/vendedor.php';
+
 
     /**
      * Rutas de Errores
