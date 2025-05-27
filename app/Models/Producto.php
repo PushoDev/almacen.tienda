@@ -51,4 +51,10 @@ class Producto extends Model
         return $this->belongsToMany(Compra::class, 'compra_producto')
             ->withPivot('cantidad', 'precio');
     }
+
+    // Asociar para Almacen de conservas
+    public function almacen()
+    {
+        return $this->belongsTo(Almacen::class);
+    }
 }

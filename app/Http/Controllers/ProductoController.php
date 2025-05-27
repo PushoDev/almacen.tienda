@@ -64,11 +64,11 @@ class ProductoController extends Controller
         // Subir imagen si se proporciona
         $imagenPath = null;
         if ($request->hasFile('imagen_producto')) {
-            $imagenPath = $request->file('imagen_producto')->store('productos', 'public'); // Guardar en storage/app/public/productos
+            $imagenPath = $request->file('imagen_producto')->store('productos', 'public');
         }
 
         // Crear el producto
-        Producto::create([
+        $producto = Producto::create([
             'nombre_producto' => $request->nombre_producto,
             'marca_producto' => $request->marca_producto,
             'codigo_producto' => $request->codigo_producto,
@@ -76,6 +76,16 @@ class ProductoController extends Controller
             'precio_compra_producto' => $request->precio_compra_producto,
             'cantidad_producto' => $request->cantidad_producto,
             'imagen_producto' => $imagenPath,
+        ]);
+
+        // Obtener el ID del "Almacén de Conservas"
+        $almacenId = \App\Models\Almacen::getDefault()->id;
+
+        // Asociar el producto al almacén usando la nueva tabla intermedia
+        \App\Models\AlmacenProducto::create([
+            'almacen_id' => $almacenId,
+            'producto_id' => $producto->id,
+            'cantidad' => $request->cantidad_producto,
         ]);
 
         // Redirigir al usuario

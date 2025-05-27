@@ -40,7 +40,6 @@ export default function CreateProductosPage({ categorias }: { categorias: Catego
     // Función para enviar el formulario
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
-
         const formData = new FormData();
         formData.append('nombre_producto', data.nombre_producto);
         formData.append('marca_producto', data.marca_producto);
@@ -51,7 +50,6 @@ export default function CreateProductosPage({ categorias }: { categorias: Catego
         if (data.imagen_producto) {
             formData.append('imagen_producto', data.imagen_producto);
         }
-
         post(route('productos.store'), {
             onSuccess: () => {
                 reset(); // Limpia el formulario después de enviar
@@ -69,7 +67,6 @@ export default function CreateProductosPage({ categorias }: { categorias: Catego
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
-                    {/* Contenido principal */}
                     <HeadingSmall
                         title="Opciones Generales del Sistema"
                         description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento"
@@ -89,6 +86,17 @@ export default function CreateProductosPage({ categorias }: { categorias: Catego
                         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                             {/* Columna 1 */}
                             <div className="space-y-4">
+                                {/* Campo Almacén */}
+                                <div>
+                                    <Label htmlFor="almacen_id" className="mt-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        Almacén por defecto:
+                                    </Label>
+                                    <Select value="1" disabled>
+                                        <SelectTrigger className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                            <SelectValue>Almacén de Conservas</SelectValue>
+                                        </SelectTrigger>
+                                    </Select>
+                                </div>
                                 {/* Campo Nombre del Producto */}
                                 <div>
                                     <Label htmlFor="nombre_producto" className="block text-sm font-medium text-gray-700 dark:text-gray-300">

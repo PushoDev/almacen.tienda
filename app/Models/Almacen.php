@@ -31,6 +31,12 @@ class Almacen extends Model
         return $this->hasMany(Producto::class);
     }
 
+    // alamacen de Conservas por default
+    public static function getDefault()
+    {
+        return self::where('nombre_almacen', 'Almacén de Conservas')->firstOrFail();
+    }
+
     // Relación: Un almacén puede tener muchas compras
     public function compras()
     {
@@ -40,7 +46,8 @@ class Almacen extends Model
     // Listar los Productos por almacen
     public function getProductosConCantidad()
     {
-        return DB::table('compra_producto')
+        // Obtener productos asociados a compras
+        $productosPorCompra = DB::table('compra_producto')
             ->join('compras', 'compra_producto.compra_id', '=', 'compras.id')
             ->join('productos', 'compra_producto.producto_id', '=', 'productos.id')
             ->where('compras.almacen_id', $this->id)
@@ -49,8 +56,20 @@ class Almacen extends Model
                 'productos.nombre_producto as nombre',
                 DB::raw('SUM(compra_producto.cantidad) as cantidad_total')
             )
-            ->groupBy('productos.id', 'productos.nombre_producto')
-            ->orderBy('nombre')
-            ->get();
+            ->groupBy('productos.id', 'productos.nombre_producto');
+
+        // Obtener productos asociados directamente a través de almacen_producto
+        $productosDirectos = DB::table('almacen_producto')
+            ->join('productos', 'almacen_producto.producto_id', '=', 'productos.id')
+            ->where('almacen_producto.almacen_id', $this->id)
+            ->select(
+                'productos.id',
+                'productos.nombre_producto as nombre',
+                DB::raw('SUM(almacen_producto.cantidad) as cantidad_total')
+            )
+            ->groupBy('productos.id', 'productos.nombre_producto');
+
+        // Combinar ambos conjuntos de productos
+        return $productosPorCompra->union($productosDirectos)->orderBy('nombre')->get();
     }
 }
