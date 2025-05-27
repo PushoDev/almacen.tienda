@@ -70,7 +70,7 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                 <div className="flex justify-end gap-2">
                     {/* Botón Exportar PDF */}
                     <Link href="#">
-                        <Button variant="outline" className="hover:bg-chart-5 flex cursor-pointer items-center gap-2">
+                        <Button variant="outline" className="hover:bg-chart-3 flex cursor-pointer items-center gap-2">
                             <FileText size={16} />
                             Exportar PDF
                         </Button>
@@ -78,7 +78,7 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
 
                     {/* Boton Importar Excel */}
                     <Link href="#">
-                        <Button variant="secondary" className="hover:bg-chart-2 flex cursor-pointer items-center gap-2">
+                        <Button variant="secondary" className="hover:bg-chart-1 flex cursor-pointer items-center gap-2">
                             <Sheet size={16} />
                             Importar Excel
                         </Button>

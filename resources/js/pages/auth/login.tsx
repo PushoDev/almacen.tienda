@@ -93,7 +93,7 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                     <Button
                         variant="secondary"
                         type="submit"
-                        className="mt-4 w-full cursor-pointer hover:animate-pulse"
+                        className="hover:bg-sidebar-accent mt-4 w-full cursor-pointer hover:animate-pulse"
                         tabIndex={4}
                         disabled={processing}
                     >
