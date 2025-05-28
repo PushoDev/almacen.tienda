@@ -1,5 +1,6 @@
 // Widget Transacciones
 import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
+import { Link } from '@inertiajs/react';
 import { DiamondPercent, LucideClockArrowDown } from 'lucide-react';
 
 const WidgetTransacciones = () => {
@@ -25,9 +26,11 @@ const WidgetTransacciones = () => {
                     </div>
 
                     {/* Botón pequeño */}
-                    <button className="absolute right-4 bottom-4 rounded-md bg-green-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-green-800">
-                        Transacciones
-                    </button>
+                    <Link href={route('vendedor')}>
+                        <button className="absolute right-4 bottom-4 rounded-md bg-green-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-green-800">
+                            Transacciones
+                        </button>
+                    </Link>
                 </div>
 
                 {/* Patrón de fondo adicional */}
