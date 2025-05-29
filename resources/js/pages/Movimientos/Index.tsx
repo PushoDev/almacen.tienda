@@ -123,7 +123,7 @@ export default function MovimientosPage() {
                     </CardHeader>
                     <CardContent>
                         <form>
-                            <div className="grid w-full items-center gap-4">
+                            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                                 {/* Almacén Emisor */}
                                 <div className="flex flex-col space-y-1.5">
                                     <Label htmlFor="almacen_emisor">Almacén Emisor</Label>
@@ -213,7 +213,7 @@ export default function MovimientosPage() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-900">
-                                        {productosEmisor.map((producto) => (
+                                        {productosEmisor.map((producto: ProductoPorAlmacenDetalleRef) => (
                                             <tr key={producto.producto_id}>
                                                 <td className="px-6 py-4 text-sm whitespace-nowrap text-gray-900 dark:text-gray-200">
                                                     {producto.producto_id}

@@ -274,3 +274,41 @@ export interface ProductoPorAlmacenDetalleRef {
     nombre_producto: string;
     cantidad_total: number;
 }
+
+// Interface para Movimientos
+export interface MovimientoProps {
+    id: number;
+    producto_id: number;
+    almacen_origen_id: number;
+    almacen_destino_id: number;
+    cantidad: number;
+    fecha_movimiento: string;
+    created_at: string;
+    updated_at: string;
+    producto?: {
+        nombre_producto: string;
+    };
+    almacen_origen?: {
+        nombre_almacen: string;
+    };
+    almacen_destino?: {
+        nombre_almacen: string;
+    };
+}
+
+// Interface para la solicitud de movimiento
+export interface MovimientoRequest {
+    almacen_origen_id: number;
+    almacen_destino_id: number;
+    productos: {
+        producto_id: number;
+        cantidad: number;
+    }[];
+}
+
+// Interface para la respuesta de movimiento
+export interface MovimientoResponse {
+    success: boolean;
+    message: string;
+    movimiento?: MovimientoProps;
+}
