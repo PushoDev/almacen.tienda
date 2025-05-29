@@ -18,6 +18,7 @@ return new class extends Migration
             $table->foreignId('almacen_origen_id')->constrained('almacens')->onDelete('cascade');
             $table->foreignId('almacen_destino_id')->constrained('almacens')->onDelete('cascade');
             $table->integer('cantidad')->unsigned();
+            $table->timestamp('fecha_movimiento')->useCurrent();
             $table->timestamps();
         });
     }

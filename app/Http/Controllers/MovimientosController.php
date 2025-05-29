@@ -11,14 +11,14 @@ use Inertia\Inertia;
 class MovimientosController extends Controller
 {
     /**
-     * Para seleccionar almacenes desde API
+     * Productos por Almacen
      *
      * @return void
      */
-    // Alamcenes
-    public function getAlmacen()
+    public function getProductosPorAlmacen($id)
     {
-        return response()->json(Almacen::select('id', 'nombre_almacen')->get());
+        $almacen = Almacen::findOrFail($id);
+        return response()->json($almacen->getProductosConCantidad());
     }
     /**
      * Display a listing of the resource.
@@ -28,49 +28,51 @@ class MovimientosController extends Controller
         return Inertia::render('Movimientos/Index', []);
     }
 
+    /**
+     * Registrar Movimientos
+     */
     public function store(Request $request)
     {
-        // Validaciones
+        // Validar los datos enviados desde el frontend
         $request->validate([
-            'producto_id' => ['required', 'exists:productos,id'],
             'almacen_origen_id' => ['required', 'exists:almacens,id'],
             'almacen_destino_id' => ['required', 'exists:almacens,id', 'different:almacen_origen_id'],
-            'cantidad' => ['required', 'integer', 'min:1'],
+            'productos' => ['required', 'array'],
+            'productos.*.producto_id' => ['required', 'exists:productos,id'],
+            'productos.*.cantidad' => ['required', 'integer', 'min:1'],
         ]);
 
-        // Verificar si hay suficiente cantidad en el almacén de origen
-        $almacenOrigen = AlmacenProducto::where('almacen_id', $request->almacen_origen_id)
-            ->where('producto_id', $request->producto_id)
-            ->firstOrFail();
+        // Iterar sobre los productos y realizar el movimiento
+        foreach ($request->productos as $item) {
+            $productoId = $item['producto_id'];
+            $cantidad = $item['cantidad'];
 
-        if ($almacenOrigen->cantidad < $request->cantidad) {
-            return redirect()->back()->withErrors(['cantidad' => 'No hay suficiente cantidad en el almacén de origen.']);
+            // Verificar si hay suficiente cantidad en el almacén emisor
+            $almacenOrigen = AlmacenProducto::where('almacen_id', $request->almacen_origen_id)
+                ->where('producto_id', $productoId)
+                ->firstOrFail();
+
+            if ($almacenOrigen->cantidad < $cantidad) {
+                return response()->json(['error' => 'No hay suficiente cantidad en el almacén emisor.'], 400);
+            }
+
+            // Actualizar la cantidad en el almacén emisor
+            $almacenOrigen->decrement('cantidad', $cantidad);
+
+            // Obtener o crear el registro en el almacén receptor
+            $almacenDestino = AlmacenProducto::firstOrCreate(
+                [
+                    'almacen_id' => $request->almacen_destino_id,
+                    'producto_id' => $productoId,
+                ],
+                ['cantidad' => 0]
+            );
+
+            // Actualizar la cantidad en el almacén receptor
+            $almacenDestino->increment('cantidad', $cantidad);
         }
 
-        // Actualizar la cantidad en el almacén de origen
-        $almacenOrigen->decrement('cantidad', $request->cantidad);
-
-        // Obtener o crear el registro en el almacén de destino
-        $almacenDestino = AlmacenProducto::firstOrCreate(
-            [
-                'almacen_id' => $request->almacen_destino_id,
-                'producto_id' => $request->producto_id,
-            ],
-            ['cantidad' => 0]
-        );
-
-        // Actualizar la cantidad en el almacén de destino
-        $almacenDestino->increment('cantidad', $request->cantidad);
-
-        // Registrar el movimiento
-        Movimiento::create([
-            'producto_id' => $request->producto_id,
-            'almacen_origen_id' => $request->almacen_origen_id,
-            'almacen_destino_id' => $request->almacen_destino_id,
-            'cantidad' => $request->cantidad,
-        ]);
-
-        // Redirigir al usuario
-        return redirect()->route('movimientos.index')->with('success', 'Movimiento registrado exitosamente.');
+        // Responder al frontend con éxito
+        return response()->json(['message' => 'Movimiento registrado exitosamente.']);
     }
 }

@@ -9,7 +9,8 @@ class Movimiento extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['producto_id', 'almacen_origen_id', 'almacen_destino_id', 'cantidad'];
+    protected $fillable = ['producto_id', 'almacen_origen_id', 'almacen_destino_id', 'cantidad', 'fecha_movimiento'];
+
 
     // Relación con Producto
     public function producto()

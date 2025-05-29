@@ -12,14 +12,9 @@ Route::middleware(['auth', 'verified'])->group(
         Route::resource('movimientos', MovimientosController::class);
 
         /**
-         * Interactuar Api para los Almacenes
+         * Interactuar con los productos de los almacenes
          */
-        Route::prefix('movimientos')->name('movimientos')->group(
-            function () {
-                // Ruta de seleccion de almacen
-                Route::get('/almacen', [MovimientosController::class, 'getAlmacen']);
-            }
-        );
+        Route::get('/almacenes/{id}/productos', [MovimientosController::class, 'getProductosPorAlmacen']);
     }
 
 );
