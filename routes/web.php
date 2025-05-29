@@ -37,6 +37,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     require __DIR__ . '/acciones/compras.php';
     // Reportes
     require __DIR__ . '/acciones/reportes.php';
+    // Movimientos
+    require __DIR__ . '/acciones/movimientos.php';
 
     /**
      * Punto de Venta

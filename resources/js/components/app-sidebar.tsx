@@ -38,7 +38,7 @@ const mainNavItems: NavItem[] = [
     },
     {
         title: 'Movimientos',
-        href: '#',
+        href: '/movimientos',
         icon: Repeat,
     },
     {
