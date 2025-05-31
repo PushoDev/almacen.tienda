@@ -12,17 +12,17 @@ use Inertia\Inertia;
 class MovimientosController extends Controller
 {
     /**
-     * Muestra la interfaz principal de movimientos
+     * Muestra la interfaz principal de movimientos.
      */
     public function index()
     {
         return Inertia::render('Movimientos/Index', [
-            'almacenes' => Almacen::select('id', 'nombre_almacen')->get()
+            'almacenes' => Almacen::select('id', 'nombre_almacen')->get(),
         ]);
     }
 
     /**
-     * Obtiene productos de un almacén específico
+     * Obtiene productos de un almacén específico.
      */
     public function getProductosPorAlmacen($id)
     {
@@ -30,7 +30,9 @@ class MovimientosController extends Controller
         return response()->json($almacen->getProductosConCantidad());
     }
 
-    // En MovimientosController.php
+    /**
+     * Obtiene todos los almacenes disponibles.
+     */
     public function getAlmacenes()
     {
         return response()->json(
@@ -38,9 +40,8 @@ class MovimientosController extends Controller
         );
     }
 
-
     /**
-     * Registra un nuevo movimiento entre almacenes
+     * Registra un nuevo movimiento entre almacenes.
      */
     public function store(Request $request)
     {
@@ -56,30 +57,37 @@ class MovimientosController extends Controller
         DB::beginTransaction();
 
         try {
+            // Iterar sobre cada producto en el movimiento
             foreach ($request->productos as $item) {
                 $productoId = $item['producto_id'];
                 $cantidad = $item['cantidad'];
 
-                // Verificar stock en origen
-                $almacenOrigen = AlmacenProducto::where('almacen_id', $request->almacen_origen_id)
-                    ->where('producto_id', $productoId)
-                    ->firstOrFail();
+                // Verificar stock en el almacén de origen
+                $almacenOrigen = AlmacenProducto::where([
+                    'almacen_id' => $request->almacen_origen_id,
+                    'producto_id' => $productoId,
+                ])->firstOrFail();
 
                 if ($almacenOrigen->cantidad < $cantidad) {
                     throw new \Exception("Stock insuficiente para el producto ID: {$productoId}");
                 }
 
-                // Actualizar almacén origen
+                // Actualizar stock en el almacén de origen
                 $almacenOrigen->decrement('cantidad', $cantidad);
 
-                // Actualizar almacén destino
+                // Actualizar stock en el almacén de destino
                 $almacenDestino = AlmacenProducto::firstOrCreate(
-                    ['almacen_id' => $request->almacen_destino_id, 'producto_id' => $productoId],
-                    ['cantidad' => 0]
+                    [
+                        'almacen_id' => $request->almacen_destino_id,
+                        'producto_id' => $productoId,
+                    ],
+                    [
+                        'cantidad' => 0, // Valor inicial si no existe el registro
+                    ]
                 );
                 $almacenDestino->increment('cantidad', $cantidad);
 
-                // Registrar movimiento
+                // Registrar el movimiento
                 Movimiento::create([
                     'producto_id' => $productoId,
                     'almacen_origen_id' => $request->almacen_origen_id,
@@ -88,16 +96,20 @@ class MovimientosController extends Controller
                 ]);
             }
 
+            // Confirmar la transacción
             DB::commit();
+
             return response()->json([
                 'success' => true,
-                'message' => '¡Movimiento registrado exitosamente!'
+                'message' => '¡Movimiento registrado exitosamente!',
             ]);
         } catch (\Exception $e) {
+            // Revertir la transacción en caso de error
             DB::rollBack();
+
             return response()->json([
                 'error' => true,
-                'message' => 'Error: ' . $e->getMessage()
+                'message' => 'Error: ' . $e->getMessage(),
             ], 500);
         }
     }
