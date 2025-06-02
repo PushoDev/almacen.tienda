@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Almacen;
 use App\Models\AlmacenProducto;
 use App\Models\Movimiento;
-use App\Models\Almacen;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -27,7 +27,17 @@ class MovimientosController extends Controller
     public function getProductosPorAlmacen($id)
     {
         $almacen = Almacen::findOrFail($id);
-        return response()->json($almacen->getProductosConCantidad());
+
+        // Obtener productos con cantidad disponible en el almacén
+        $productos = $almacen->productos()->withPivot('cantidad')->get()->map(function ($producto) {
+            return [
+                'id' => $producto->id,
+                'nombre_producto' => $producto->nombre_producto,
+                'cantidad' => $producto->pivot->cantidad,
+            ];
+        });
+
+        return response()->json($productos);
     }
 
     /**

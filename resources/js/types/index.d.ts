@@ -266,7 +266,7 @@ export interface LogisticaProps {
 }
 
 
-// Productos por Almacenes
+// Interface para Productos por Almacén (Detalles)
 export interface ProductoPorAlmacenDetalleRef {
     almacen_id: number;
     nombre_almacen: string;

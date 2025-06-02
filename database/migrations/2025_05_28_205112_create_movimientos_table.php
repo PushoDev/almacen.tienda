@@ -4,7 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
+class CreateMovimientosTable extends Migration
 {
     /**
      * Run the migrations.
@@ -13,13 +13,12 @@ return new class extends Migration
     {
         Schema::create('movimientos', function (Blueprint $table) {
             $table->id();
-            // Detalles de la Tabla Movimientos
-            $table->foreignId('producto_id')->constrained()->onDelete('cascade');
-            $table->foreignId('almacen_origen_id')->constrained('almacens')->onDelete('cascade');
-            $table->foreignId('almacen_destino_id')->constrained('almacens')->onDelete('cascade');
-            $table->integer('cantidad')->unsigned();
-            $table->timestamp('fecha_movimiento')->useCurrent();
-            $table->timestamps();
+            $table->foreignId('almacen_emisor_id')->constrained('almacens')->onDelete('cascade'); // Almacén emisor
+            $table->foreignId('almacen_receptor_id')->constrained('almacens')->onDelete('cascade'); // Almacén receptor
+            $table->foreignId('producto_id')->constrained('productos')->onDelete('cascade'); // Producto movido
+            $table->integer('cantidad')->unsigned(); // Cantidad de productos movidos
+            $table->timestamp('fecha_movimiento')->useCurrent(); // Fecha del movimiento
+            $table->timestamps(); // Timestamps para seguimiento
         });
     }
 
@@ -30,4 +29,4 @@ return new class extends Migration
     {
         Schema::dropIfExists('movimientos');
     }
-};
+}

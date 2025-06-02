@@ -28,7 +28,8 @@ class Almacen extends Model
     // Relacion: Tabla de los productos
     public function productos()
     {
-        return $this->hasMany(Producto::class);
+        return $this->belongsToMany(Producto::class, 'almacen_producto')
+            ->withPivot('cantidad');
     }
 
     // alamacen de Conservas por default

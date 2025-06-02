@@ -4,9 +4,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AppLayout from '@/layouts/app-layout';
-import { AlmacenProps, ProductoPorAlmacenDetalleRef, type BreadcrumbItem } from '@/types';
+import { AlmacenProps, BreadcrumbItem, ProductoPorAlmacenDetalleRef } from '@/types';
 import { Head, Link } from '@inertiajs/react';
-import { SendToBack, Sheet } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -21,31 +20,27 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function MovimientosPage() {
-    // Estados para almacenar datos
     const [almacens, setAlmacens] = useState<AlmacenProps[]>([]);
     const [productosEmisor, setProductosEmisor] = useState<ProductoPorAlmacenDetalleRef[]>([]);
     const [almacenEmisorId, setAlmacenEmisorId] = useState<string | null>(null);
     const [almacenReceptorId, setAlmacenReceptorId] = useState<string | null>(null);
 
-    // Cargar datos de los almacenes
     useEffect(() => {
-        fetch('/compras/almacenes')
+        fetch('/movimientos/almacenes')
             .then((res) => res.json())
             .then((data) => setAlmacens(data))
             .catch((err) => console.error(err));
     }, []);
 
-    // Cargar productos del almacén emisor seleccionado
     const handleAlmacenEmisorChange = (value: string) => {
         setAlmacenEmisorId(value);
         const almacenId = parseInt(value);
-        fetch(`/almacenes/${almacenId}/productos`)
+        fetch(`/movimientos/almacenes/${almacenId}/productos`)
             .then((res) => res.json())
             .then((data) => setProductosEmisor(data))
             .catch((err) => console.error(err));
     };
 
-    // Manejar el envío del formulario
     const handleSubmit = () => {
         if (!almacenEmisorId || !almacenReceptorId) {
             alert('Debes seleccionar un almacén emisor y un almacén receptor.');
@@ -65,11 +60,11 @@ export default function MovimientosPage() {
             return;
         }
 
-        // Realizar la solicitud al backend para registrar el movimiento
         fetch('/movimientos', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
             },
             body: JSON.stringify({
                 almacen_origen_id: almacenEmisorId,
@@ -83,7 +78,7 @@ export default function MovimientosPage() {
                 setProductosEmisor([]); // Limpiar la tabla
             })
             .catch((err) => {
-                console.error(err);
+                console.error('Error al registrar el movimiento:', err);
                 alert('Error al registrar el movimiento.');
             });
     };
@@ -98,21 +93,6 @@ export default function MovimientosPage() {
                         title="Opciones Generales del Sistema"
                         description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento."
                     />
-                    <SendToBack
-                        size={70}
-                        color="#d6d3d1"
-                        className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
-                    />
-                </div>
-
-                {/* Acciones */}
-                <div className="flex justify-end gap-2">
-                    <Link href="#">
-                        <Button variant="outline" className="hover:bg-chart-5 flex cursor-pointer items-center gap-2">
-                            <Sheet size={16} />
-                            Exportar Excel
-                        </Button>
-                    </Link>
                 </div>
 
                 {/* Seleccionar Almacenes */}
@@ -190,12 +170,6 @@ export default function MovimientosPage() {
                                                 scope="col"
                                                 className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300"
                                             >
-                                                ID
-                                            </th>
-                                            <th
-                                                scope="col"
-                                                className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300"
-                                            >
                                                 Nombre del Producto
                                             </th>
                                             <th
@@ -213,17 +187,17 @@ export default function MovimientosPage() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-900">
-                                        {productosEmisor.map((producto: ProductoPorAlmacenDetalleRef) => (
+                                        {productosEmisor.map((producto) => (
                                             <tr key={producto.producto_id}>
-                                                <td className="px-6 py-4 text-sm whitespace-nowrap text-gray-900 dark:text-gray-200">
-                                                    {producto.producto_id}
-                                                </td>
+                                                {/* Nombre del Producto */}
                                                 <td className="px-6 py-4 text-sm whitespace-nowrap text-gray-900 dark:text-gray-200">
                                                     {producto.nombre_producto}
                                                 </td>
+                                                {/* Cantidad Disponible */}
                                                 <td className="px-6 py-4 text-sm whitespace-nowrap text-gray-900 dark:text-gray-200">
                                                     {producto.cantidad_total}
                                                 </td>
+                                                {/* Cantidad a Trasladar */}
                                                 <td className="px-6 py-4 text-sm whitespace-nowrap">
                                                     <input
                                                         id={`cantidad-${producto.producto_id}`}

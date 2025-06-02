@@ -10,17 +10,17 @@ Route::middleware(['auth', 'verified'])->group(
         Route::get('/movimientos', [MovimientosController::class, 'index'])
             ->name('movimientos.index');
 
+        // Obtener todos los almacenes disponibles (API)
+        Route::get('/movimientos/almacenes', [MovimientosController::class, 'getAlmacenes'])
+            ->name('movimientos.almacenes');
 
-        Route::get('/movimientos/almacenes', [MovimientosController::class, 'getAlmacenes']);
+        // Obtener productos de un almacén específico (API)
+        Route::get('/movimientos/almacenes/{id}/productos', [MovimientosController::class, 'getProductosPorAlmacen'])
+            ->name('movimientos.productos-por-almacen');
 
-
-        // Registrar nuevos movimientos
+        // Registrar nuevos movimientos (API)
         Route::post('/movimientos', [MovimientosController::class, 'store'])
             ->name('movimientos.store');
-
-        // Obtener productos de un almacén (API)
-        Route::get('/almacenes/{id}/productos', [MovimientosController::class, 'getProductosPorAlmacen'])
-            ->name('movimientos.productos-por-almacen');
     }
 
 );
