@@ -17,6 +17,8 @@ class CreateAlmacenProductoTable extends Migration
             $table->foreignId('producto_id')->constrained('productos')->onDelete('cascade'); // Relación con productos
             $table->integer('cantidad')->default(0); // Cantidad de productos en el almacén
             $table->timestamps(); // Timestamps para seguimiento
+
+            $table->primary(['almacen_id', 'producto_id']);
         });
     }
 

@@ -22,45 +22,33 @@ class Almacen extends Model
         'notas_almacen'
     ];
 
-
-
-
-    // Relacion: Tabla de los productos
+    // Relación: Productos en el almacén
     public function productos()
     {
         return $this->belongsToMany(Producto::class, 'almacen_producto')
             ->withPivot('cantidad');
     }
 
-    // alamacen de Conservas por default
+    // Almacén por defecto
     public static function getDefault()
     {
         return self::where('nombre_almacen', 'Almacén de Conservas')->firstOrFail();
     }
 
-    // Relación: Un almacén puede tener muchas compras
+    // Relación: Compras
     public function compras()
     {
         return $this->hasMany(Compra::class);
     }
 
-    // Listar los Productos por almacen
+    /**
+     * Obtiene productos con cantidad total en el almacén
+     *
+     * @return \Illuminate\Support\Collection
+     */
     public function getProductosConCantidad()
     {
-        // Obtener productos asociados a compras
-        $productosPorCompra = DB::table('compra_producto')
-            ->join('compras', 'compra_producto.compra_id', '=', 'compras.id')
-            ->join('productos', 'compra_producto.producto_id', '=', 'productos.id')
-            ->where('compras.almacen_id', $this->id)
-            ->select(
-                'productos.id',
-                'productos.nombre_producto as nombre',
-                DB::raw('SUM(compra_producto.cantidad) as cantidad_total')
-            )
-            ->groupBy('productos.id', 'productos.nombre_producto');
-
-        // Obtener productos asociados directamente a través de almacen_producto
-        $productosDirectos = DB::table('almacen_producto')
+        return DB::table('almacen_producto')
             ->join('productos', 'almacen_producto.producto_id', '=', 'productos.id')
             ->where('almacen_producto.almacen_id', $this->id)
             ->select(
@@ -68,9 +56,8 @@ class Almacen extends Model
                 'productos.nombre_producto as nombre',
                 DB::raw('SUM(almacen_producto.cantidad) as cantidad_total')
             )
-            ->groupBy('productos.id', 'productos.nombre_producto');
-
-        // Combinar ambos conjuntos de productos
-        return $productosPorCompra->union($productosDirectos)->orderBy('nombre')->get();
+            ->groupBy('productos.id', 'productos.nombre_producto')
+            ->orderBy('productos.nombre_producto')
+            ->get();
     }
 }

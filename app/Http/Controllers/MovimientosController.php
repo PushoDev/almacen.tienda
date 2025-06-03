@@ -110,10 +110,12 @@ class MovimientosController extends Controller
             // Confirmar la transacción
             DB::commit();
 
-            return response()->json([
-                'success' => true,
-                'message' => '¡Movimiento registrado exitosamente!',
-            ]);
+            // return response()->json([
+            //     'success' => true,
+            //     'message' => '¡Movimiento registrado exitosamente!',
+            // ]);
+
+            return Inertia::render('Almacenes/Index', []);
         } catch (\Exception $e) {
             // Revertir la transacción en caso de error
             DB::rollBack();
