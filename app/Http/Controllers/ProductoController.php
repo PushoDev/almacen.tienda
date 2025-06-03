@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Producto;
 use App\Models\Categoria;
+use App\Models\Almacen;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Storage;
@@ -12,7 +13,6 @@ class ProductoController extends Controller
 {
     /**
      * Display a listing of the resource.
-     * Listado de Productos
      */
     public function index()
     {
@@ -36,12 +36,11 @@ class ProductoController extends Controller
 
     /**
      * Show the form for creating a new resource.
-     * Ruta para crear un nuevo producto
      */
     public function create()
     {
         return Inertia::render('Productos/Create', [
-            'categorias' => Categoria::all(), // Pasar las categorías disponibles al formulario
+            'categorias' => Categoria::all(),
         ]);
     }
 
@@ -50,7 +49,6 @@ class ProductoController extends Controller
      */
     public function store(Request $request)
     {
-        // Validaciones
         $request->validate([
             'nombre_producto' => ['required', 'string', 'max:255'],
             'marca_producto' => ['nullable', 'string', 'max:255'],
@@ -58,16 +56,14 @@ class ProductoController extends Controller
             'categoria_id' => ['required', 'exists:categorias,id'],
             'precio_compra_producto' => ['required', 'numeric', 'min:0'],
             'cantidad_producto' => ['required', 'integer', 'min:0'],
-            'imagen_producto' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'], // Máximo 2MB
+            'imagen_producto' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'],
         ]);
 
-        // Subir imagen si se proporciona
         $imagenPath = null;
         if ($request->hasFile('imagen_producto')) {
             $imagenPath = $request->file('imagen_producto')->store('productos', 'public');
         }
 
-        // Crear el producto
         $producto = Producto::create([
             'nombre_producto' => $request->nombre_producto,
             'marca_producto' => $request->marca_producto,
@@ -78,27 +74,38 @@ class ProductoController extends Controller
             'imagen_producto' => $imagenPath,
         ]);
 
-        // Obtener el ID del "Almacén de Conservas"
-        $almacenId = \App\Models\Almacen::getDefault()->id;
+        // Obtener o crear el almacén por defecto
+        $almacen = Almacen::where('nombre_almacen', 'Almacén de Conservas')->first();
+        if (!$almacen) {
+            $almacen = Almacen::create([
+                'nombre_almacen' => 'Almacén de Conservas',
+                'telefono_almacen' => 'N/A',
+                'correo_almacen' => 'almacen@default.com',
+                'provincia_almacen' => 'Default',
+                'ciudad_almacen' => 'Default',
+            ]);
+        }
 
-        // Asociar el producto al almacén usando la nueva tabla intermedia
-        \App\Models\AlmacenProducto::create([
-            'almacen_id' => $almacenId,
-            'producto_id' => $producto->id,
+        // Asociar el producto al almacén
+        $almacen->productos()->attach($producto->id, [
             'cantidad' => $request->cantidad_producto,
         ]);
 
-        // Redirigir al usuario
         return redirect()->route('productos.index')->with('success', 'Producto creado exitosamente.');
     }
 
     /**
      * Display the specified resource.
+     * Detalle del Producto
      */
     public function show(Producto $producto)
     {
+        // Cargar relaciones de categorias y almacenes
+        $producto->load(['categoria', 'almacenes']);
+
         return Inertia::render('Productos/Show', [
-            'producto' => $producto->load('categoria'), // Cargar la relación con categoría
+            'producto' => $producto,
+            'almacenes' => $producto->getAlmacenesConCantidad(),
         ]);
     }
 
@@ -109,7 +116,7 @@ class ProductoController extends Controller
     {
         return Inertia::render('Productos/Edit', [
             'producto' => $producto,
-            'categorias' => Categoria::all(), // Pasar las categorías disponibles al formulario
+            'categorias' => Categoria::all(),
         ]);
     }
 
@@ -118,7 +125,6 @@ class ProductoController extends Controller
      */
     public function update(Request $request, Producto $producto)
     {
-        // Validaciones
         $request->validate([
             'nombre_producto' => ['required', 'string', 'max:255'],
             'marca_producto' => ['nullable', 'string', 'max:255'],
@@ -130,21 +136,17 @@ class ProductoController extends Controller
             'categoria_id' => ['required', 'exists:categorias,id'],
             'precio_compra_producto' => ['required', 'numeric', 'min:0'],
             'cantidad_producto' => ['required', 'integer', 'min:0'],
-            'imagen_producto' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'], // Máximo 2MB
+            'imagen_producto' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'],
         ]);
 
-        // Subir nueva imagen si se proporciona
-        $imagenPath = $producto->imagen_producto; // Conservar la imagen existente
+        $imagenPath = $producto->imagen_producto;
         if ($request->hasFile('imagen_producto')) {
-            // Eliminar la imagen anterior si existe
             if ($producto->imagen_producto) {
                 Storage::disk('public')->delete($producto->imagen_producto);
             }
-            // Guardar la nueva imagen
             $imagenPath = $request->file('imagen_producto')->store('productos', 'public');
         }
 
-        // Actualizar el producto
         $producto->update([
             'nombre_producto' => $request->nombre_producto,
             'marca_producto' => $request->marca_producto,
@@ -155,7 +157,12 @@ class ProductoController extends Controller
             'imagen_producto' => $imagenPath,
         ]);
 
-        // Redirigir al usuario
+        // Actualizar cantidad en almacen_producto
+        $almacen = Almacen::getDefault();
+        $almacen->productos()->updateExistingPivot($producto->id, [
+            'cantidad' => $request->cantidad_producto,
+        ]);
+
         return redirect()->route('productos.index')->with('success', 'Producto actualizado exitosamente.');
     }
 
@@ -164,15 +171,15 @@ class ProductoController extends Controller
      */
     public function destroy(Producto $producto)
     {
-        // Eliminar la imagen si existe
         if ($producto->imagen_producto) {
             Storage::disk('public')->delete($producto->imagen_producto);
         }
 
-        // Eliminar el producto
+        // Eliminar relaciones en almacen_producto
+        $producto->almacenes()->detach();
+
         $producto->delete();
 
-        // Redirigir al usuario
         return redirect()->route('productos.index')->with('success', 'Producto eliminado exitosamente.');
     }
 }

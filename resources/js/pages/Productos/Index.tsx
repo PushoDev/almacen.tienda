@@ -16,7 +16,7 @@ import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, Tabl
 import AppLayout from '@/layouts/app-layout';
 import { ProductoProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { Edit3, FileText, Package2, Sheet, Trash2 } from 'lucide-react';
+import { Edit3, Eye, FileText, Package2, Sheet, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -136,6 +136,12 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                                         )}
                                     </TableCell>
                                     <TableCell className="text-right">
+                                        {/* Boton Detalles */}
+                                        <Link href={route('productos.show', { producto: producto.id })}>
+                                            <Button variant="outline" className="hover:bg-chart-3 cursor-pointer hover:text-white">
+                                                <Eye />
+                                            </Button>
+                                        </Link>
                                         {/* Botón Editar */}
                                         <Link href={route('productos.edit', { producto: producto.id })}>
                                             <Button

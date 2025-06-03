@@ -11,6 +11,7 @@ class Producto extends Model
     use HasFactory;
 
     protected $primaryKey = 'id';
+    protected $table = 'productos';
 
     protected $fillable = [
         'nombre_producto',
@@ -22,39 +23,57 @@ class Producto extends Model
         'imagen_producto',
     ];
 
-    // Casts para asegurar tipos de datos
     protected $casts = [
-        'precio_compra_producto' => 'decimal:2', // 'float'
+        'precio_compra_producto' => 'decimal:2',
         'cantidad_producto' => 'integer',
     ];
 
-    // Relación con la tabla categorías
+    // Relación con categorías
     public function categoria()
     {
         return $this->belongsTo(Categoria::class, 'categoria_id');
     }
 
-
-    // Accesor para obtener la URL completa de la imagen
+    // Accesor para URL de imagen
     public function getImagenUrlAttribute(): ?string
     {
-        if ($this->imagen_producto) {
-            return asset('storage/' . $this->imagen_producto);
-        }
-        // Retorna null si no hay imagen
-        return null;
+        return $this->imagen_producto
+            ? asset('storage/' . $this->imagen_producto)
+            : null;
     }
 
-    // Relación: Un producto puede estar en varias compras
+    // Relación con compras (many-to-many)
     public function compras()
     {
         return $this->belongsToMany(Compra::class, 'compra_producto')
             ->withPivot('cantidad', 'precio');
     }
 
-    // Asociar para Almacen de conservas
+    // Relación directa con un almacén (si se usa en otro contexto)
     public function almacen()
     {
         return $this->belongsTo(Almacen::class);
+    }
+
+    // Relación con múltiples almacenes (many-to-many)
+    public function almacenes()
+    {
+        return $this->belongsToMany(Almacen::class, 'almacen_producto')
+            ->withPivot('cantidad')
+            ->withTimestamps(); // Asegura manejo de timestamps si existen
+    }
+
+    // Método para estructurar datos de almacenes
+    public function getAlmacenesConCantidad()
+    {
+        return $this->almacenes->map(function ($almacen) {
+            return [
+                'id' => $almacen->id,
+                'nombre_almacen' => $almacen->nombre_almacen,
+                'pivot' => [
+                    'cantidad' => $almacen->pivot->cantidad,
+                ],
+            ];
+        });
     }
 }

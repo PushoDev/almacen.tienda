@@ -91,6 +91,14 @@ export interface CuentaProps {
     updated_at: string;
 }
 
+export interface AlmacenProductoProps {
+    id: number;
+    nombre_almacen: string;
+    pivot: {
+        cantidad: number;
+    };
+}
+
 // Interface para Productos
 export interface ProductoProps {
     id: number;
@@ -105,6 +113,7 @@ export interface ProductoProps {
     imagen_url?: string | null;
     created_at: string;
     updated_at: string;
+    almacenes?: AlmacenProductoProps[];
 }
 
 // Interface para Clientes
@@ -117,8 +126,6 @@ export interface ClienteProps {
     created_at: string;
     updated_at: string;
 }
-
-
 
 // Otras Interfaces
 // Interface para el formulario de Comprar Productos
@@ -264,7 +271,6 @@ export interface LogisticaProps {
     comprasPorProveedor: CompraPorProveedorChartRef[];
     productosPorAlmacen: ProductoPorAlmacenRefCharts[];
 }
-
 
 // Interface para Productos por Almacén (Detalles)
 export interface ProductoPorAlmacenDetalleRef {
