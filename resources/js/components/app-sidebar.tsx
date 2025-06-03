@@ -8,6 +8,7 @@ import {
     BookOpen,
     Cctv,
     ChartNoAxesCombinedIcon,
+    Contact,
     FileText,
     Folder,
     Landmark,
@@ -70,6 +71,11 @@ const mainNavItems: NavItem[] = [
         title: 'Reportes',
         href: '/reportes',
         icon: FileText,
+    },
+    {
+        title: 'Empleados',
+        href: '#',
+        icon: Contact,
     },
     {
         title: 'Seguimientos',

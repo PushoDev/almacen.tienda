@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Almacen;
+use App\Models\AlmacenProducto;
 use App\Models\Categoria;
 use App\Models\Compra;
 use App\Models\Cuenta;
@@ -101,10 +102,30 @@ class CompraController extends Controller
                     'cantidad_producto' => $item['cantidad'],
                 ]);
 
+                // Asociar el producto a la compra
                 $compra->productos()->attach($producto->id, [
                     'cantidad' => $item['cantidad'],
                     'precio' => $item['precio'],
                 ]);
+
+                // Actualizar la tabla 'almacen_producto' para reflejar el inventario
+                $registro = AlmacenProducto::where([
+                    ['almacen_id', $almacen->id],
+                    ['producto_id', $producto->id],
+                ])->first();
+
+                if ($registro) {
+                    // Si ya existe, aumentar la cantidad
+                    $registro->cantidad += $item['cantidad'];
+                    $registro->save();
+                } else {
+                    // Si no existe, crear un nuevo registro
+                    AlmacenProducto::create([
+                        'almacen_id' => $almacen->id,
+                        'producto_id' => $producto->id,
+                        'cantidad' => $item['cantidad'],
+                    ]);
+                }
             }
 
             // Actualizar cuenta según tipo de compra

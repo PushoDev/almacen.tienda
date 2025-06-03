@@ -8,6 +8,7 @@ use App\Models\Movimiento;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\Log;
 
 class MovimientosController extends Controller
 {
@@ -31,7 +32,7 @@ class MovimientosController extends Controller
         // Obtener productos con cantidad disponible en el almacén
         $productos = $almacen->productos()->withPivot('cantidad')->get()->map(function ($producto) {
             return [
-                'id' => $producto->id,
+                'producto_id' => $producto->id, // ✅ Cambio: de 'id' a 'producto_id'
                 'nombre_producto' => $producto->nombre_producto,
                 'cantidad' => $producto->pivot->cantidad,
             ];
@@ -72,11 +73,11 @@ class MovimientosController extends Controller
                 $productoId = $item['producto_id'];
                 $cantidad = $item['cantidad'];
 
-                // Verificar stock en el almacén de origen
+                // Verificar stock en el almacén de origen con bloqueo para evitar condiciones de carrera
                 $almacenOrigen = AlmacenProducto::where([
                     'almacen_id' => $request->almacen_origen_id,
                     'producto_id' => $productoId,
-                ])->firstOrFail();
+                ])->lockForUpdate()->firstOrFail();
 
                 if ($almacenOrigen->cantidad < $cantidad) {
                     throw new \Exception("Stock insuficiente para el producto ID: {$productoId}");
@@ -100,8 +101,8 @@ class MovimientosController extends Controller
                 // Registrar el movimiento
                 Movimiento::create([
                     'producto_id' => $productoId,
-                    'almacen_origen_id' => $request->almacen_origen_id,
-                    'almacen_destino_id' => $request->almacen_destino_id,
+                    'almacen_emisor_id' => $request->almacen_origen_id,
+                    'almacen_receptor_id' => $request->almacen_destino_id,
                     'cantidad' => $cantidad,
                 ]);
             }
@@ -116,6 +117,7 @@ class MovimientosController extends Controller
         } catch (\Exception $e) {
             // Revertir la transacción en caso de error
             DB::rollBack();
+            Log::error('Error en movimiento de almacén: ' . $e->getMessage());
 
             return response()->json([
                 'error' => true,

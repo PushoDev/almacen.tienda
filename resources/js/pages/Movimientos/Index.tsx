@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, BreadcrumbItem, ProductoPorAlmacenDetalleRef } from '@/types';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -20,67 +20,108 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function MovimientosPage() {
+    console.log('🔄 Componente MovimientosPage montado');
+
     const [almacens, setAlmacens] = useState<AlmacenProps[]>([]);
     const [productosEmisor, setProductosEmisor] = useState<ProductoPorAlmacenDetalleRef[]>([]);
-    const [almacenEmisorId, setAlmacenEmisorId] = useState<string | null>(null);
-    const [almacenReceptorId, setAlmacenReceptorId] = useState<string | null>(null);
+    const [almacenEmisorId, setAlmacenEmisorId] = useState<string>('');
+    const [almacenReceptorId, setAlmacenReceptorId] = useState<string>('');
+    const [loading, setLoading] = useState(false);
 
+    // Cargar almacenes desde la API
     useEffect(() => {
+        console.log('📂 Cargando almacenes desde /movimientos/almacenes');
         fetch('/movimientos/almacenes')
-            .then((res) => res.json())
-            .then((data) => setAlmacens(data))
-            .catch((err) => console.error(err));
+            .then((res) => {
+                console.log('📥 Respuesta de almacenes:', res.status);
+                return res.json();
+            })
+            .then((data) => {
+                console.log('📦 Almacenes cargados:', data);
+                setAlmacens(data);
+            })
+            .catch((err) => {
+                console.error('❌ Error al cargar almacenes:', err);
+            });
     }, []);
 
+    // Cargar productos del almacén emisor
     const handleAlmacenEmisorChange = (value: string) => {
+        console.log('🔄 Almacén emisor seleccionado:', value);
         setAlmacenEmisorId(value);
         const almacenId = parseInt(value);
         fetch(`/movimientos/almacenes/${almacenId}/productos`)
-            .then((res) => res.json())
-            .then((data) => setProductosEmisor(data))
-            .catch((err) => console.error(err));
+            .then((res) => {
+                console.log('📥 Respuesta de productos del almacén:', res.status);
+                return res.json();
+            })
+            .then((data) => {
+                console.log('📦 Productos del almacén emisor:', data);
+                setProductosEmisor(data);
+            })
+            .catch((err) => {
+                console.error('❌ Error al cargar productos del almacén:', err);
+            });
     };
 
+    // Manejar el envío del formulario
     const handleSubmit = () => {
+        console.log('📤 Iniciando envío del formulario');
+
         if (!almacenEmisorId || !almacenReceptorId) {
+            console.warn('⚠️ Almacén emisor o receptor no seleccionado');
             alert('Debes seleccionar un almacén emisor y un almacén receptor.');
             return;
         }
 
+        // Recopilar cantidades de productos
         const productosTrasladados = productosEmisor
             .map((producto) => {
-                const cantidadInput = document.getElementById(`cantidad-${producto.producto_id}`) as HTMLInputElement;
-                const cantidad = parseInt(cantidadInput?.value || '0');
+                const input = document.getElementById(`cantidad-${producto.producto_id}`) as HTMLInputElement;
+                const cantidad = parseInt(input?.value || '0');
+                console.log(`📊 Producto ID ${producto.producto_id}: Cantidad ingresada:`, cantidad);
                 return cantidad > 0 ? { producto_id: producto.producto_id, cantidad } : null;
             })
             .filter((item) => item !== null);
 
         if (productosTrasladados.length === 0) {
+            console.warn('⚠️ No se seleccionaron productos para trasladar');
             alert('Debes especificar al menos una cantidad a trasladar.');
             return;
         }
 
-        fetch('/movimientos', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-            },
-            body: JSON.stringify({
+        console.log('📦 Datos a enviar:', {
+            almacen_origen_id: almacenEmisorId,
+            almacen_destino_id: almacenReceptorId,
+            productos: productosTrasladados,
+        });
+
+        setLoading(true);
+        router.post(
+            '/movimientos',
+            {
                 almacen_origen_id: almacenEmisorId,
                 almacen_destino_id: almacenReceptorId,
                 productos: productosTrasladados,
-            }),
-        })
-            .then((res) => res.json())
-            .then((data) => {
-                alert(data.message || 'Movimiento registrado exitosamente.');
-                setProductosEmisor([]); // Limpiar la tabla
-            })
-            .catch((err) => {
-                console.error('Error al registrar el movimiento:', err);
-                alert('Error al registrar el movimiento.');
-            });
+            },
+            {
+                onSuccess: (page) => {
+                    console.log('✅ Movimiento exitoso:', page);
+                    alert('Movimiento registrado exitosamente.');
+                    setProductosEmisor([]); // Limpiar tabla
+                    setAlmacenEmisorId(''); // Reiniciar almacén emisor
+                    setAlmacenReceptorId(''); // Reiniciar almacén receptor
+                },
+                onError: (errors) => {
+                    console.error('❌ Errores de validación:', errors);
+                    alert('Error al registrar el movimiento. Verifica los datos ingresados.');
+                },
+                onFinish: () => {
+                    setLoading(false); // Quitar estado de carga
+                    console.log('🏁 Finalizado: Carga completada');
+                },
+            },
+        );
     };
 
     return (
@@ -107,7 +148,7 @@ export default function MovimientosPage() {
                                 {/* Almacén Emisor */}
                                 <div className="flex flex-col space-y-1.5">
                                     <Label htmlFor="almacen_emisor">Almacén Emisor</Label>
-                                    <Select onValueChange={handleAlmacenEmisorChange}>
+                                    <Select onValueChange={handleAlmacenEmisorChange} value={almacenEmisorId}>
                                         <SelectTrigger id="almacen_emisor">
                                             <SelectValue placeholder="Selecciona el almacén emisor..." />
                                         </SelectTrigger>
@@ -124,16 +165,18 @@ export default function MovimientosPage() {
                                 {/* Almacén Receptor */}
                                 <div className="flex flex-col space-y-1.5">
                                     <Label htmlFor="almacen_receptor">Almacén Receptor</Label>
-                                    <Select onValueChange={(value) => setAlmacenReceptorId(value)}>
+                                    <Select onValueChange={(value) => setAlmacenReceptorId(value)} value={almacenReceptorId}>
                                         <SelectTrigger id="almacen_receptor">
                                             <SelectValue placeholder="Selecciona el almacén receptor..." />
                                         </SelectTrigger>
                                         <SelectContent position="popper">
-                                            {almacens.map((almacen) => (
-                                                <SelectItem key={almacen.id} value={almacen.id.toString()}>
-                                                    {almacen.nombre_almacen}
-                                                </SelectItem>
-                                            ))}
+                                            {almacens
+                                                .filter((alm) => (almacenEmisorId ? alm.id.toString() !== almacenEmisorId : true))
+                                                .map((almacen) => (
+                                                    <SelectItem key={almacen.id} value={almacen.id.toString()}>
+                                                        {almacen.nombre_almacen}
+                                                    </SelectItem>
+                                                ))}
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -146,8 +189,8 @@ export default function MovimientosPage() {
                                 Cancelar
                             </Button>
                         </Link>
-                        <Button onClick={handleSubmit} className="hover:bg-chart-2 cursor-pointer">
-                            Realizar Movimiento
+                        <Button onClick={handleSubmit} className="hover:bg-chart-2 cursor-pointer" disabled={loading}>
+                            {loading ? 'Procesando...' : 'Realizar Movimiento'}
                         </Button>
                     </CardFooter>
                 </Card>
@@ -166,22 +209,13 @@ export default function MovimientosPage() {
                                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                                     <thead className="bg-gray-50 dark:bg-gray-800">
                                         <tr>
-                                            <th
-                                                scope="col"
-                                                className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300"
-                                            >
+                                            <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
                                                 Nombre del Producto
                                             </th>
-                                            <th
-                                                scope="col"
-                                                className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300"
-                                            >
+                                            <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
                                                 Cantidad Disponible
                                             </th>
-                                            <th
-                                                scope="col"
-                                                className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300"
-                                            >
+                                            <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
                                                 Cantidad a Trasladar
                                             </th>
                                         </tr>
@@ -189,21 +223,18 @@ export default function MovimientosPage() {
                                     <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-900">
                                         {productosEmisor.map((producto) => (
                                             <tr key={producto.producto_id}>
-                                                {/* Nombre del Producto */}
                                                 <td className="px-6 py-4 text-sm whitespace-nowrap text-gray-900 dark:text-gray-200">
                                                     {producto.nombre_producto}
                                                 </td>
-                                                {/* Cantidad Disponible */}
                                                 <td className="px-6 py-4 text-sm whitespace-nowrap text-gray-900 dark:text-gray-200">
-                                                    {producto.cantidad_total}
+                                                    {producto.cantidad}
                                                 </td>
-                                                {/* Cantidad a Trasladar */}
                                                 <td className="px-6 py-4 text-sm whitespace-nowrap">
                                                     <input
                                                         id={`cantidad-${producto.producto_id}`}
                                                         type="number"
                                                         min="0"
-                                                        max={producto.cantidad_total}
+                                                        max={producto.cantidad}
                                                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                                     />
                                                 </td>
