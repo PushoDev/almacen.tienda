@@ -103,9 +103,21 @@ class ProductoController extends Controller
         // Cargar relaciones de categorias y almacenes
         $producto->load(['categoria', 'almacenes']);
 
+        // Verificar si hay almacenes asociados
+        $almacenes = $producto->getAlmacenesConCantidad();
+        if ($almacenes->isEmpty()) {
+            $almacenes = collect([[
+                'id' => null,
+                'nombre_almacen' => 'Sin almacén asociado',
+                'pivot' => [
+                    'cantidad' => 0,
+                ],
+            ]]);
+        }
+
         return Inertia::render('Productos/Show', [
             'producto' => $producto,
-            'almacenes' => $producto->getAlmacenesConCantidad(),
+            'almacenes' => $almacenes,
         ]);
     }
 

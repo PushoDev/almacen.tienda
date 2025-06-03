@@ -94,6 +94,10 @@ export interface CuentaProps {
 export interface AlmacenProductoProps {
     id: number;
     nombre_almacen: string;
+    telefono_almacen: string;
+    correo_almacen: string;
+    ciudad_almacen: string;
+    provincia_almacen: string;
     pivot: {
         cantidad: number;
     };

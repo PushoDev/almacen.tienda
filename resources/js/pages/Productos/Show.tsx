@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
-import { ProductoProps, type BreadcrumbItem } from '@/types';
+import { AlmacenProductoProps, ProductoProps, type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import { Edit2, Package2 } from 'lucide-react';
 
@@ -22,7 +22,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function ShowPageProductos({ producto }: { producto: ProductoProps }) {
+export default function ShowPageProductos({ producto, almacen }: { producto: ProductoProps; almacen: AlmacenProductoProps }) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Productos" />
@@ -121,9 +121,34 @@ export default function ShowPageProductos({ producto }: { producto: ProductoProp
                 <Card className="mt-6">
                     <CardHeader>
                         <CardTitle className="text-sidebar-accent">Almacenes Disponibles</CardTitle>
-                        <CardDescription>Listado de Alamcény su disponibilidad Total</CardDescription>
+                        <CardDescription>Listado de almacenes y su disponibilidad total</CardDescription>
                     </CardHeader>
-                    <CardContent>{/* Pivot de los Productos en sus almacenes */}</CardContent>
+                    <CardContent>
+                        {producto.almacenes && producto.almacenes.length > 0 ? (
+                            <div className="space-y-4">
+                                {producto.almacenes.map((almacen) => (
+                                    <div key={almacen.id} className="rounded-lg border p-4">
+                                        <h3 className="text-sidebar-accent font-semibold">{almacen.nombre_almacen}</h3>
+                                        <p className="text-muted-foreground text-sm">
+                                            <span className="font-medium">Teléfono:</span> {almacen.telefono_almacen || 'No disponible'}
+                                        </p>
+                                        <p className="text-muted-foreground text-sm">
+                                            <span className="font-medium">Correo:</span> {almacen.correo_almacen || 'No disponible'}
+                                        </p>
+                                        <p className="text-muted-foreground text-sm">
+                                            <span className="font-medium">Ubicación:</span> {almacen.ciudad_almacen}, {almacen.provincia_almacen}
+                                        </p>
+                                        <p className="text-muted-foreground text-sm">
+                                            <span className="font-medium">Cantidad Disponible:</span>{' '}
+                                            <span className="font-bold">{almacen.pivot.cantidad} unidades</span>
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-muted-foreground text-sm">No hay almacenes asociados a este producto.</p>
+                        )}
+                    </CardContent>
                 </Card>
             </div>
         </AppLayout>
