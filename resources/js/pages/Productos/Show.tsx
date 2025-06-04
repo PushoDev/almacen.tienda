@@ -98,7 +98,7 @@ export default function ShowPageProductos({ producto }: { producto: ProductoProp
                                     <p className="font-medium">{producto.categoria?.nombre_categoria}</p>
                                 </div>
                                 <div>
-                                    <p className="text-muted-foreground text-sm">Precio</p>
+                                    <p className="text-muted-foreground text-sm">Precio de Compra</p>
                                     <p className="font-medium">${producto.precio_compra_producto}</p>
                                 </div>
                                 <div>
@@ -148,7 +148,12 @@ export default function ShowPageProductos({ producto }: { producto: ProductoProp
                                                     <span className="font-bold">{almacen.pivot.cantidad} unidades</span>
                                                 </p>
                                                 <Separator orientation="vertical" />
-                                                <div>Ventas:</div>
+                                                <div>Precio Venta:</div>
+                                                <p className="text-muted-foreground">
+                                                    <span className="font-bold">$ 0.00</span>
+                                                </p>
+                                                <Separator orientation="vertical" />
+                                                <div>Ventas Realizadas:</div>
                                             </div>
                                         </div>
                                         <Accordion type="single" collapsible className="w-full" defaultValue="item-1">
