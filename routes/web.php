@@ -8,9 +8,19 @@ Route::get('/', function () {
 })->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
+
+    /**
+     * Administrador
+     */
     Route::get('dashboard', function () {
         return Inertia::render('dashboard');
     })->name('dashboard');
+    /**
+     * Vendedor
+     */
+    Route::get('vendedor', function () {
+        return Inertia::render('vendor');
+    })->name('vendedor');
 
     /**
      * Rutas Principales
