@@ -74,7 +74,7 @@ const mainNavItems: NavItem[] = [
     },
     {
         title: 'Empleados',
-        href: '#',
+        href: '/empleados',
         icon: Contact,
     },
     {

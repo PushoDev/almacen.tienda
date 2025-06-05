@@ -25,6 +25,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     /**
      * Rutas Principales
      */
+    // Empleados
+    require __DIR__ . '/empleados/empleados.php';
     // Categorias
     require __DIR__ . '/crud/categorias.php';
     // Productos

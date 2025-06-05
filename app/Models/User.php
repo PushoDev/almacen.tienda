@@ -57,7 +57,6 @@ class User extends Authenticatable
     public function almacenes()
     {
         return $this->belongsToMany(Almacen::class, 'user_almacens')
-            ->using(UserAlmacen::class)
-            ->withTimestamps();
+            ->using(UserAlmacen::class);
     }
 }
