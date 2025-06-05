@@ -22,6 +22,18 @@ class Almacen extends Model
         'notas_almacen'
     ];
 
+    /**
+     * Undocumented function
+     * ✅ Relación inversa con User
+     * @return void
+     */
+    public function usuarios()
+    {
+        return $this->belongsToMany(User::class, 'user_almacens')
+            ->using(UserAlmacen::class)
+            ->withTimestamps();
+    }
+
     // Relación: Productos en el almacén
     public function productos()
     {

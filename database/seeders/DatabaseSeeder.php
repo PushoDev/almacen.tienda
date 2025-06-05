@@ -21,6 +21,7 @@ class DatabaseSeeder extends Seeder
             'name' => 'Luis Alberto',
             'email' => 'pushodevs@example.com',
             'password' => Hash::make('guisa290**'),
+            'role' => 'admin',
         ]);
 
         // Crear el almacén predeterminado

@@ -22,6 +22,7 @@ class User extends Authenticatable
         'email',
         'password',
         'avatar',
+        'role',
     ];
 
     /**
@@ -44,6 +45,19 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'role' => 'string',
         ];
+    }
+
+    /**
+     * Undocumented function
+     * ✅ Relación muchos a muchos con Almacen
+     * @return void
+     */
+    public function almacenes()
+    {
+        return $this->belongsToMany(Almacen::class, 'user_almacens')
+            ->using(UserAlmacen::class)
+            ->withTimestamps();
     }
 }
