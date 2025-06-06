@@ -16,7 +16,7 @@ import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, Tabl
 import AppLayout from '@/layouts/app-layout';
 import { ProveedorProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { BadgePlus, Edit3, FileText, Sheet, ShoppingCart, Trash2 } from 'lucide-react';
+import { BadgePlus, Edit3, FileText, Handshake, Sheet, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -48,14 +48,14 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
             <Head title="Proveedores" />
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
-                <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                <div className="bg-sidebar animate__animated animate__fadeIn border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     {/* Contenido principal */}
                     <HeadingSmall
                         title="Opciones Generales del Sistema"
                         description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento"
                     />
                     {/* Ícono semitransparente */}
-                    <ShoppingCart
+                    <Handshake
                         size={70}
                         color="#d6d3d1"
                         className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"

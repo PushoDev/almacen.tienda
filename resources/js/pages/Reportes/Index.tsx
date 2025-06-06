@@ -36,7 +36,7 @@ export default function ReportesPage() {
             <Head title="Reportes" />
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
-                <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     {/* Contenido principal */}
                     <HeadingSmall
                         title="Reporte General del Sistema"

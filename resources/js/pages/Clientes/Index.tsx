@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppLayout from '@/layouts/app-layout';
 import { ClienteProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { BookUser, Edit3, FileText, Sheet, Trash2, UserRoundPlus } from 'lucide-react';
+import { Edit3, FileText, HandHeart, Sheet, Trash2, UserRoundPlus } from 'lucide-react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -48,14 +48,14 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
             <Head title="Clientes" />
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
-                <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     {/* Contenido principal */}
                     <HeadingSmall
                         title="Logistica General del Sistema"
                         description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento"
                     />
                     {/* Ícono semitransparente */}
-                    <BookUser
+                    <HandHeart
                         size={70}
                         color="#d6d3d1"
                         className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
