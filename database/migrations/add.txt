@@ -1,0 +1,690 @@
+Migraciones:
+Usuarios.
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('users', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('avatar')->nullable();
+            $table->string('email')->unique();
+            $table->timestamp('email_verified_at')->nullable();
+            $table->string('password');
+            $table->rememberToken();
+            $table->enum('role', ['admin', 'vendedor'])->default('vendedor'); // ✅ Nuevo campo de roles
+            $table->timestamps();
+        });
+
+        Schema::create('password_reset_tokens', function (Blueprint $table) {
+            $table->string('email')->primary();
+            $table->string('token');
+            $table->timestamp('created_at')->nullable();
+        });
+
+        Schema::create('sessions', function (Blueprint $table) {
+            $table->string('id')->primary();
+            $table->foreignId('user_id')->nullable()->index();
+            $table->string('ip_address', 45)->nullable();
+            $table->text('user_agent')->nullable();
+            $table->longText('payload');
+            $table->integer('last_activity')->index();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('users');
+        Schema::dropIfExists('password_reset_tokens');
+        Schema::dropIfExists('sessions');
+    }
+};
+
+Almacenes:
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('almacens', function (Blueprint $table) {
+            $table->id();
+            // Detalles del Almacen
+            $table->string('nombre_almacen');
+            $table->string('telefono_almacen')->unique();
+            $table->string('correo_almacen')->nullable();
+            $table->string('provincia_almacen')->nullable();
+            $table->string('ciudad_almacen')->nullable();
+            $table->text('notas_almacen')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('almacens');
+    }
+};
+
+Usuarios Almacenes.
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('user_almacens', function (Blueprint $table) {
+            $table->unsignedBigInteger('user_id');
+            $table->unsignedBigInteger('almacen_id');
+            $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
+            $table->foreign('almacen_id')->references('id')->on('almacens')->onDelete('cascade');
+            $table->primary(['user_id', 'almacen_id']);
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('user_almacens');
+    }
+};
+
+
+Modelos:
+Usuarios.
+<?php
+
+namespace App\Models;
+
+// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+
+class User extends Authenticatable
+{
+    /** @use HasFactory<\Database\Factories\UserFactory> */
+    use HasFactory, Notifiable;
+
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var list<string>
+     */
+    protected $fillable = [
+        'name',
+        'email',
+        'password',
+        'avatar',
+        'role',
+    ];
+
+    /**
+     * The attributes that should be hidden for serialization.
+     *
+     * @var list<string>
+     */
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
+
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
+            'role' => 'string',
+        ];
+    }
+
+    /**
+     * Undocumented function
+     * ✅ Relación muchos a muchos con Almacen
+     * @return void
+     */
+    public function almacenes()
+    {
+        return $this->belongsToMany(Almacen::class, 'user_almacens')
+            ->using(UserAlmacen::class);
+    }
+}
+
+Almacenes.
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
+
+class Almacen extends Model
+{
+    use HasFactory;
+
+    protected $primaryKey = 'id';
+    protected $table = 'almacens';
+
+    protected $fillable = [
+        'nombre_almacen',
+        'telefono_almacen',
+        'correo_almacen',
+        'provincia_almacen',
+        'ciudad_almacen',
+        'notas_almacen'
+    ];
+
+    /**
+     * Undocumented function
+     * ✅ Relación inversa con User
+     * @return void
+     */
+    public function usuarios()
+    {
+        return $this->belongsToMany(User::class, 'user_almacens')
+            ->using(UserAlmacen::class)
+            ->withTimestamps();
+    }
+
+    // Relación: Productos en el almacén
+    public function productos()
+    {
+        return $this->belongsToMany(Producto::class, 'almacen_producto')
+            ->withPivot('cantidad');
+    }
+
+    // Almacén por defecto
+    public static function getDefault()
+    {
+        return self::where('nombre_almacen', 'Almacén de Conservas')->firstOrFail();
+    }
+
+    // Relación: Compras
+    public function compras()
+    {
+        return $this->hasMany(Compra::class);
+    }
+
+    /**
+     * Obtiene productos con cantidad total en el almacén
+     *
+     * @return \Illuminate\Support\Collection
+     */
+    public function getProductosConCantidad()
+    {
+        return DB::table('almacen_producto')
+            ->join('productos', 'almacen_producto.producto_id', '=', 'productos.id')
+            ->where('almacen_producto.almacen_id', $this->id)
+            ->select(
+                'productos.id',
+                'productos.nombre_producto as nombre',
+                DB::raw('SUM(almacen_producto.cantidad) as cantidad_total')
+            )
+            ->groupBy('productos.id', 'productos.nombre_producto')
+            ->orderBy('productos.nombre_producto')
+            ->get();
+    }
+}
+
+
+Usuarios Almacenes.
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Pivot;
+
+class UserAlmacen extends Pivot
+{
+    /**
+     * Undocumented variable
+     * ✅ Sin ID autoincremental
+     * @var boolean
+     */
+    public $incrementing = false;
+}
+
+
+Controladores:
+UserController.
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Almacen;
+use App\Models\User;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Illuminate\Support\Facades\Hash;
+
+class UserController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     */
+    public function index()
+    {
+        $empleados = User::with('almacenes')->get();
+        $almacenes = Almacen::all();
+
+        return Inertia::render('Empleados/Index', [
+            'empleados' => $empleados,
+            'almacenes' => $almacenes,
+        ]);
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     */
+    public function create()
+    {
+        $almacenes = Almacen::all();
+        return Inertia::render('Empleados/Create', [
+            'almacenes' => $almacenes,
+        ]);
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     */
+    public function store(Request $request)
+    {
+        // Validación
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email',
+            'password' => 'required|min:8',
+            'role' => 'required|in:admin,vendedor',
+            'almacenes' => 'array|exists:almacens,id',
+        ]);
+
+        // Creación del usuario
+        $user = User::create([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => Hash::make($validated['password']),
+            'role' => $validated['role'],
+        ]);
+
+        // Asignar almacenes
+        if (!empty($validated['almacenes'])) {
+            $user->almacenes()->sync($validated['almacenes']);
+        }
+
+        return redirect()->route('empleados.index');
+    }
+
+    /**
+     * Display the specified resource.
+     */
+    public function show(string $id)
+    {
+        // Si necesitas mostrar detalles individuales
+        $empleado = User::with('almacenes')->findOrFail($id);
+        return Inertia::render('Empleados/Show', [
+            'empleado' => $empleado,
+        ]);
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     */
+    public function edit(string $id)
+    {
+        $empleado = User::with('almacenes')->findOrFail($id);
+        $almacenes = Almacen::all();
+
+        return Inertia::render('Empleados/Edit', [
+            'empleado' => $empleado,
+            'almacenes' => $almacenes,
+        ]);
+    }
+
+    /**
+     * Update the specified resource in storage.
+     */
+    public function update(Request $request, string $id)
+    {
+        $user = User::findOrFail($id);
+
+        // Validación
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email,' . $user->id,
+            'password' => 'nullable|min:8',
+            'role' => 'required|in:admin,vendedor',
+            'almacenes' => 'array|exists:almacens,id',
+        ]);
+
+        // Actualización del usuario
+        $user->update([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'role' => $validated['role'],
+            'password' => $validated['password'] ? Hash::make($validated['password']) : $user->password,
+        ]);
+
+        // Actualizar almacenes
+        $user->almacenes()->sync($validated['almacenes'] ?? []);
+
+        return redirect()->route('empleados.index');
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     */
+    public function destroy(string $id)
+    {
+        $user = User::findOrFail($id);
+        $user->delete();
+
+        return redirect()->route('empleados.index');
+    }
+}
+
+
+AlmacenController.
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Almacen;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Illuminate\Support\Facades\DB;
+
+class AlmacenController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     * Listado de Almacenes
+     */
+    public function index()
+    {
+        return Inertia::render('Almacenes/Index', [
+            'almacenes' => Almacen::all(),
+        ]);
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     * Ruta para crear un nuevo almacén
+     */
+    public function create()
+    {
+        return Inertia::render('Almacenes/Create');
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     */
+    public function store(Request $request)
+    {
+        // Validamos los datos del formulario
+        $request->validate([
+            'nombre_almacen' => ['required', 'string', 'max:255'],
+            'telefono_almacen' => ['required', 'string', 'unique:almacens,telefono_almacen'],
+            'correo_almacen' => ['nullable', 'email'],
+            'provincia_almacen' => ['nullable', 'string'],
+            'ciudad_almacen' => ['nullable', 'string'],
+            'notas_almacen' => ['nullable', 'string'],
+        ]);
+
+        // Nuevo almacén en la base de datos
+        Almacen::create([
+            'nombre_almacen' => $request->nombre_almacen,
+            'telefono_almacen' => $request->telefono_almacen,
+            'correo_almacen' => $request->correo_almacen,
+            'provincia_almacen' => $request->provincia_almacen,
+            'ciudad_almacen' => $request->ciudad_almacen,
+            'notas_almacen' => $request->notas_almacen,
+        ]);
+
+        // Redirigimos al usuario a la lista de almacenes
+        return redirect()->route('almacenes.index')->with('success', 'Almacén creado exitosamente.');
+    }
+
+    /**
+     * Display the specified resource.
+     */
+    public function show(Almacen $almacen)
+    {
+        $productos = $almacen->getProductosConCantidad()->map(function ($item) use ($almacen) {
+            return [
+                'producto_id' => $item->id,
+                'nombre_producto' => $item->nombre,
+                'cantidad_total' => $item->cantidad_total,
+                'almacen_id' => $almacen->id,
+                'nombre_almacen' => $almacen->nombre_almacen,
+            ];
+        });
+
+        return Inertia::render('Almacenes/Show', [
+            'almacen' => $almacen,
+            'productos' => $productos,
+        ]);
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     */
+    public function edit(Almacen $almacen)
+    {
+        // dd($almacen);
+        return Inertia::render('Almacenes/Edit', [
+            'almacen' => $almacen,
+        ]);
+    }
+
+    /**
+     * Update the specified resource in storage.
+     */
+    public function update(Request $request, Almacen $almacen)
+    {
+        // Validamos los datos del formulario
+        $request->validate([
+            'nombre_almacen' => [
+                'required',
+                'string',
+                'max:255',
+                'unique:almacens,nombre_almacen,' . $almacen->id
+            ],
+            'telefono_almacen' => [
+                'required',
+                'string',
+                'unique:almacens,telefono_almacen,' . $almacen->id
+            ],
+            'correo_almacen' => ['nullable', 'email'],
+            'provincia_almacen' => ['nullable', 'string'],
+            'ciudad_almacen' => ['nullable', 'string'],
+            'notas_almacen' => ['nullable', 'string'],
+        ]);
+
+        // Actualizar el almacén en la base de datos
+        $almacen->update([
+            'nombre_almacen' => $request->nombre_almacen,
+            'telefono_almacen' => $request->telefono_almacen,
+            'correo_almacen' => $request->correo_almacen,
+            'provincia_almacen' => $request->provincia_almacen,
+            'ciudad_almacen' => $request->ciudad_almacen,
+            'notas_almacen' => $request->notas_almacen,
+        ]);
+
+        // Redirigimos al usuario a la lista de almacenes
+        return redirect()->route('almacenes.index')->with('success', 'Almacén actualizado exitosamente.');
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     */
+    public function destroy(Almacen $almacen)
+    {
+        $almacen->delete();
+        return redirect()->route('almacenes.index')->with('success', 'Almacén eliminado exitosamente.');
+    }
+}
+
+
+Routes.
+<?php
+
+use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
+
+Route::get('/', function () {
+    return Inertia::render('auth/login');
+})->name('home');
+
+Route::middleware(['auth', 'verified'])->group(function () {
+
+    /**
+     * Administrador
+     */
+    Route::get('dashboard', function () {
+        return Inertia::render('dashboard');
+    })->name('dashboard');
+    /**
+     * Vendedor
+     */
+    Route::get('vendedor', function () {
+        return Inertia::render('vendor');
+    })->name('vendedor');
+
+    /**
+     * Rutas Principales
+     */
+    // Empleados
+    require __DIR__ . '/empleados/empleados.php';
+    // Categorias
+    require __DIR__ . '/crud/categorias.php';
+    // Productos
+    require __DIR__ . '/crud/productos.php';
+    // Almacen
+    require __DIR__ . '/crud/almacenes.php';
+    // Proveedores
+    require __DIR__ . '/crud/proveedores.php';
+    // Cuentas
+    require __DIR__ . '/crud/cuentas.php';
+    // Clientes
+    require __DIR__ . '/crud/clientes.php';
+
+    /**
+     * Rutas de las Acciones Generales
+     */
+    // Logistica
+    require __DIR__ . '/acciones/logistica.php';
+    // Comprar Productos
+    require __DIR__ . '/acciones/compras.php';
+    // Reportes
+    require __DIR__ . '/acciones/reportes.php';
+    // Movimientos
+    require __DIR__ . '/acciones/movimientos.php';
+
+    /**
+     * Punto de Venta
+     */
+    require __DIR__ . '/vendor/vendedor.php';
+
+
+    /**
+     * Rutas de Errores
+     */
+    // 404
+
+});
+
+require __DIR__ . '/settings.php';
+require __DIR__ . '/auth.php';
+
+Otros Archivos.
+<?php
+
+namespace App\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Symfony\Component\HttpFoundation\Response;
+
+class EnsureUserIsAdmin
+{
+    /**
+     * Handle an incoming request.
+     *
+     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
+     */
+    public function handle(Request $request, Closure $next): Response
+    {
+        // return $next($request);
+        // Verificar si el usuario está autenticado y su rol es 'admin'
+        if (Auth::check() && Auth::user()->role === 'admin') {
+            return $next($request);
+        }
+
+        // Si no es 'admin', redirigir a la ruta de vendedor
+        return redirect()->route('vendedor');
+    }
+}
+
+
+<?php
+
+namespace App\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Symfony\Component\HttpFoundation\Response;
+
+class EnsureUserIsVendor
+{
+    /**
+     * Handle an incoming request.
+     *
+     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
+     */
+    public function handle(Request $request, Closure $next): Response
+    {
+        // return $next($request);
+        // Verificar si el usuario está autenticado y su rol es 'vendedor'
+        if (Auth::check() && Auth::user()->role === 'vendedor') {
+            return $next($request);
+        }
+
+        // Si no es 'vendedor', redirigir al dashboard de admin
+        return redirect()->route('dashboard');
+    }
+}
+

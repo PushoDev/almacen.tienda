@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Almacen;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
 
@@ -15,10 +16,18 @@ class AlmacenController extends Controller
      */
     public function index()
     {
+        $almacenes = Auth::user()->role === 'admin'
+            ? Almacen::withCount('productos')->get()
+            : Auth::user()->almacenes()->withCount('productos')->get();
+
         return Inertia::render('Almacenes/Index', [
-            'almacenes' => Almacen::all(),
+            'almacenes' => $almacenes,
+            'permisos' => [
+                'crear' => Auth::user()->role === 'admin'
+            ]
         ]);
     }
+
 
     /**
      * Show the form for creating a new resource.
