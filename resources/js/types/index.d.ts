@@ -325,3 +325,32 @@ export interface MovimientoResponse {
     message: string;
     movimiento?: MovimientoProps;
 }
+
+// Interface para disponibilidad de venta
+export interface VendedorProductoProps {
+    id: number;
+    nombre_producto: string;
+    codigo_producto?: string | null;
+    // Adds
+    marca_producto: string;
+    categoria: string;
+    precio_compra_producto: number;
+    precio_venta_producto: number;
+    cantidad_producto: string;
+    precio_venta: number; // Precio base o personalizado
+    es_precio_personalizado: boolean; // True si el vendedor lo modificó
+    stock_total: number; // Suma de stock en todos los almacenes del vendedor
+    imagen_url?: string | null; // URL de la imagen (si existe)
+    almacenes: Array<{
+        id: number;
+        nombre_almacen: string;
+        stock_disponible: number; // Stock en este almacén específico
+    }>;
+    permisos: {
+        editar_precio: boolean; // Ej: solo si el rol es 'vendedor' con permisos
+        transferir_stock: boolean; // Si puede mover entre almacenes
+    };
+    // Fechas opcionales (depende de si las necesitas en la vista)
+    creado_en?: string;
+    actualizado_en?: string;
+}
