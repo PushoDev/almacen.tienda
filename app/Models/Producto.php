@@ -76,4 +76,16 @@ class Producto extends Model
             ];
         });
     }
+
+    /**
+     * Undocumented function
+     * Relación con vendedores y sus precios
+     * @return void
+     */
+    public function vendedores()
+    {
+        return $this->belongsToMany(User::class, 'producto_vendedors')
+            ->using(ProductoVendedor::class)
+            ->withPivot('precio_venta', 'importe_ganancia');
+    }
 }

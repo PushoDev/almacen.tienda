@@ -16,6 +16,7 @@ import {
     LayoutGrid,
     Package,
     Repeat,
+    ShoppingBasket,
     ShoppingCart,
     StoreIcon,
     Users,
@@ -69,6 +70,12 @@ const allNavItems: NavItem[] = [
         title: 'Productos',
         href: '/productos',
         icon: Package,
+        roles: ['admin', 'vendedor'],
+    },
+    {
+        title: 'Ventas Disponibles',
+        href: '/disponibles',
+        icon: ShoppingBasket,
         roles: ['admin', 'vendedor'],
     },
     {

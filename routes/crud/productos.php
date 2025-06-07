@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ProductoController;
+use App\Http\Controllers\ProductoVendedorController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'verified'])->group(
@@ -8,5 +9,8 @@ Route::middleware(['auth', 'verified'])->group(
         Route::resource('productos', ProductoController::class)->parameters([
             'productos' => 'producto',
         ]);
+
+        // Para las Ventas
+        Route::resource('disponibles', ProductoVendedorController::class);
     }
 );

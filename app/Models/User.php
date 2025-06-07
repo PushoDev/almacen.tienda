@@ -59,4 +59,16 @@ class User extends Authenticatable
         return $this->belongsToMany(Almacen::class, 'user_almacens')
             ->using(UserAlmacen::class);
     }
+
+    /**
+     * Undocumented function
+     * Relación con productos y precios personalizados
+     * @return void
+     */
+    public function productos()
+    {
+        return $this->belongsToMany(Producto::class, 'producto_vendedors')
+            ->using(ProductoVendedor::class)
+            ->withPivot('precio_venta', 'importe_ganancia');
+    }
 }
