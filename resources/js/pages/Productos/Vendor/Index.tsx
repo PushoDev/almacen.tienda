@@ -1,23 +1,23 @@
 import HeadingSmall from '@/components/heading-small';
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem, type VendedorProductoProps } from '@/types';
-import { Head, Link, router } from '@inertiajs/react';
-import { Edit3, Eye, FileText, Sheet, ShoppingBag, Trash2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { type BreadcrumbItem } from '@/types';
+import { Head } from '@inertiajs/react';
+import { AlertCircle, Edit, FileText, Save, Sheet, ShoppingBag } from 'lucide-react';
+import { useState } from 'react';
+
+// Tipos para los datos de productos
+interface Producto {
+    id: number;
+    nombre_producto: string;
+    marca_producto: string;
+    categoria: string | null;
+    precio_compra: number;
+    stock_total: number;
+    precio_venta: number | null;
+    ganancia: number | null;
+}
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Resumen General', href: '/dashboard' },
@@ -25,12 +25,57 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Productos Disponibles', href: '#' },
 ];
 
-export default function VendedorPage({ productos }: { productos: VendedorProductoProps[] }) {
-    const deleteProducto = (id: number) => {
-        router.delete(route('productos.destroy', { producto: id }), {
-            onSuccess: () => toast.success('Producto eliminado correctamente'),
-            onError: () => toast.error('Error al eliminar el producto'),
-        });
+export default function VendedorPage({ productos, meta }: { productos: Producto[]; meta: { total_productos: number; role_usuario: string } }) {
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedProduct, setSelectedProduct] = useState<Producto | null>(null);
+    const [newPrice, setNewPrice] = useState<string>('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const formatCurrency = (value: number | null) => {
+        if (value === null) return 'No definido';
+        return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'USD' }).format(value);
+    };
+
+    const openModal = (producto: Producto) => {
+        setSelectedProduct(producto);
+        setNewPrice(producto.precio_venta?.toString() || '');
+        setError(null);
+        setIsModalOpen(true);
+    };
+
+    const handleSubmit = async () => {
+        if (!selectedProduct || !newPrice) return;
+
+        const parsedPrice = parseFloat(newPrice);
+        if (isNaN(parsedPrice) || parsedPrice <= 0) {
+            setError('El precio debe ser un número positivo');
+            return;
+        }
+
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const response = await fetch(`/disponibles/${selectedProduct.id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                },
+                body: JSON.stringify({ precio_venta: parsedPrice }),
+            });
+
+            if (!response.ok) throw new Error('Error al actualizar el precio');
+
+            alert('Precio actualizado correctamente');
+            setIsModalOpen(false);
+        } catch (err: Error) {
+            console.error('Error al actualizar precio:', err); // Para depuración
+            setError(`No se pudo actualizar el precio: ${err.message}`);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -58,91 +103,127 @@ export default function VendedorPage({ productos }: { productos: VendedorProduct
                 </div>
 
                 {/* Tabla de Productos */}
-                <div className="border-sidebar-border/70 rounded-xl border">
-                    <Table>
-                        <TableCaption>Listado de Productos Disponibles</TableCaption>
-                        <TableHeader>
-                            <TableRow className="bg-sidebar-accent">
-                                <TableHead>Nombre</TableHead>
-                                <TableHead>Marca</TableHead>
-                                <TableHead>Código</TableHead>
-                                <TableHead>Categoría</TableHead>
-                                <TableHead>Precio</TableHead>
-                                <TableHead>Cantidad</TableHead>
-                                <TableHead>Ganancia</TableHead>
-                                <TableHead>Imagen</TableHead>
-                                <TableHead className="text-right">Acciones</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {productos.map((producto) => (
-                                <TableRow key={producto.id}>
-                                    <TableCell className="font-medium">{producto.nombre_producto}</TableCell>
-                                    <TableCell>{producto.marca_producto || '—'}</TableCell>
-                                    <TableCell>{producto.codigo_producto || '—'}</TableCell>
-                                    <TableCell>{producto.categoria || '—'}</TableCell>
-                                    <TableCell>
-                                        ${typeof producto.precio_compra_producto === 'number' ? producto.precio_compra_producto.toFixed(2) : '0.00'}
-                                    </TableCell>
-                                    <TableCell>{producto.cantidad_producto}</TableCell>
-                                    <TableCell>${(producto.precio_compra_producto * producto.cantidad_producto).toFixed(2)}</TableCell>
-                                    <TableCell>
-                                        {producto.imagen_url ? (
-                                            <img
-                                                src={producto.imagen_url}
-                                                alt={producto.nombre_producto}
-                                                className="h-10 w-10 rounded-full object-cover"
-                                            />
-                                        ) : (
-                                            '—'
-                                        )}
-                                    </TableCell>
-                                    <TableCell className="flex justify-end gap-1">
-                                        <Link href={route('productos.show', { producto: producto.id })}>
-                                            <Button variant="outline" size="icon" className="hover:bg-chart-3">
-                                                <Eye size={16} />
+                <div className="mt-4 overflow-x-auto">
+                    {productos.length > 0 ? (
+                        <table className="min-w-full rounded-lg border border-gray-200 bg-white shadow-sm">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Producto</th>
+                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Marca</th>
+                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Categoría</th>
+                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Precio Compra</th>
+                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Stock</th>
+                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Precio Venta</th>
+                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Ganancia</th>
+                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                                {productos.map((producto, index) => (
+                                    <tr key={index} className="transition-colors hover:bg-gray-50">
+                                        <td className="px-4 py-3 text-sm text-gray-800">{producto.nombre_producto}</td>
+                                        <td className="px-4 py-3 text-sm text-gray-800">{producto.marca_producto}</td>
+                                        <td className="px-4 py-3 text-sm text-gray-800">{producto.categoria || 'Sin categoría'}</td>
+                                        <td className="px-4 py-3 text-sm text-gray-800">{formatCurrency(producto.precio_compra)}</td>
+                                        <td className="px-4 py-3 text-sm font-medium text-gray-800">{producto.stock_total}</td>
+                                        <td className={`px-4 py-3 text-sm ${producto.precio_venta === null ? 'text-gray-400' : 'text-gray-800'}`}>
+                                            {formatCurrency(producto.precio_venta)}
+                                        </td>
+                                        <td
+                                            className={`px-4 py-3 text-sm font-medium ${producto.ganancia !== null && producto.ganancia >= 0 ? 'text-green-600' : 'text-gray-400'}`}
+                                        >
+                                            {producto.ganancia !== null ? formatCurrency(producto.ganancia) : 'N/A'}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="text-blue-600 hover:text-blue-800"
+                                                onClick={() => openModal(producto)}
+                                            >
+                                                <Edit size={16} />
                                             </Button>
-                                        </Link>
-                                        <Link href={route('productos.edit', { producto: producto.id })}>
-                                            <Button variant="outline" size="icon" className="hover:bg-blue-600 hover:text-white">
-                                                <Edit3 size={16} />
-                                            </Button>
-                                        </Link>
-                                        <AlertDialog>
-                                            <AlertDialogTrigger asChild>
-                                                <Button variant="outline" size="icon" className="hover:bg-destructive hover:text-white">
-                                                    <Trash2 size={16} />
-                                                </Button>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                    <AlertDialogTitle>¿Eliminar producto?</AlertDialogTitle>
-                                                    <AlertDialogDescription>Esta acción no se puede deshacer.</AlertDialogDescription>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                    <AlertDialogAction
-                                                        onClick={() => deleteProducto(producto.id)}
-                                                        className="bg-destructive hover:bg-destructive/90"
-                                                    >
-                                                        Eliminar
-                                                    </AlertDialogAction>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        </AlertDialog>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                        <TableFooter>
-                            <TableRow>
-                                <TableCell colSpan={8}>Total de Productos</TableCell>
-                                <TableCell className="text-center font-bold">{productos.length}</TableCell>
-                            </TableRow>
-                        </TableFooter>
-                    </Table>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-gray-50 py-12">
+                            <AlertCircle size={48} className="mb-3 text-gray-400" />
+                            <h3 className="text-lg font-medium text-gray-700">No hay productos disponibles</h3>
+                            <p className="text-sm text-gray-500">No se encontraron productos para mostrar.</p>
+                        </div>
+                    )}
+                </div>
+
+                {/* Resumen */}
+                <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
+                    <p>
+                        Total de productos: <span className="font-medium">{meta.total_productos}</span>
+                    </p>
+                    <p>
+                        Rol actual: <span className="font-medium">{meta.role_usuario === 'admin' ? 'Administrador' : 'Vendedor'}</span>
+                    </p>
                 </div>
             </div>
+
+            {/* Modal de edición */}
+            {isModalOpen && selectedProduct && (
+                <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black">
+                    <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+                        <h3 className="mb-4 text-lg font-semibold">Editar Precio de Venta</h3>
+
+                        <div className="mb-4">
+                            <label className="mb-1 block text-sm font-medium text-gray-700">Producto: {selectedProduct.nombre_producto}</label>
+                            <label className="mb-1 block text-sm font-medium text-gray-700">
+                                Precio de Compra: {formatCurrency(selectedProduct.precio_compra)}
+                            </label>
+                            <label className="mb-1 block text-sm font-medium text-gray-700">
+                                Ganancia Actual: {selectedProduct.ganancia !== null ? formatCurrency(selectedProduct.ganancia) : 'No definida'}
+                            </label>
+                        </div>
+
+                        <div className="mb-4">
+                            <label className="mb-1 block text-sm font-medium text-gray-700">Nuevo Precio de Venta</label>
+                            <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={newPrice}
+                                onChange={(e) => setNewPrice(e.target.value)}
+                                className="w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                placeholder="0.00"
+                            />
+                            {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
+                        </div>
+
+                        <div className="flex justify-end gap-2">
+                            <Button variant="outline" onClick={() => setIsModalOpen(false)} disabled={isLoading}>
+                                Cancelar
+                            </Button>
+                            <Button
+                                variant="default"
+                                className="bg-blue-600 text-white hover:bg-blue-700"
+                                onClick={handleSubmit}
+                                disabled={isLoading}
+                            >
+                                {isLoading ? (
+                                    <span className="flex items-center">
+                                        <span className="mr-2 animate-spin">🔄</span>
+                                        Guardando...
+                                    </span>
+                                ) : (
+                                    <span className="flex items-center">
+                                        <Save size={16} className="mr-2" />
+                                        Guardar
+                                    </span>
+                                )}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </AppLayout>
     );
 }

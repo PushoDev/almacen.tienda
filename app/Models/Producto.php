@@ -86,6 +86,6 @@ class Producto extends Model
     {
         return $this->belongsToMany(User::class, 'producto_vendedors')
             ->using(ProductoVendedor::class)
-            ->withPivot('precio_venta', 'importe_ganancia');
+            ->withPivot('precio_venta', 'venta_ganancia');
     }
 }
