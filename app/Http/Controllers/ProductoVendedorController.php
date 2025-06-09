@@ -10,11 +10,11 @@ use Inertia\Inertia;
 class ProductoVendedorController extends Controller
 {
     /**
-     * Mostrar productos con campos específicos (nombre, marca, categoría, precios, stock, ganancia).
+     * Mostrar productos con campos específicos.
      */
     public function index()
     {
-        $user = auth()->user();
+        $user = Auth::user();
 
         // Base de la consulta con relaciones esenciales
         $query = Producto::with(['categoria']);
@@ -28,32 +28,27 @@ class ProductoVendedorController extends Controller
                 ->with(['almacenes' => fn($q) => $q->whereIn('almacens.id', $almacenIds)->withPivot('cantidad')]);
         }
 
-        // Cargar vendedores con filtro explícito por usuario actual
+        // Cargar vendedores con filtro por usuario actual
         $query->with(['vendedores' => fn($q) => $q->where('user_id', $user->id)]);
 
-        // Ejecutar consulta
         $productos = $query->get();
 
-        // Transformar datos para el frontend (solo campos solicitados)
+        // Transformar datos para el frontend
         $productosTransformados = $productos->map(function ($producto) use ($user) {
-            // Precio personalizado del usuario actual
-            $precioPersonalizado = $producto->vendedores->first()?->pivot->precio_venta;
-
-            // Calcular precio de venta (personalizado o por defecto)
-            $precioVenta = $precioPersonalizado ?? $producto->precio_compra_producto * 1.25;
+            $vendedor = $producto->vendedores->first();
 
             return [
+                'id' => $producto->id,
                 'nombre_producto' => $producto->nombre_producto,
                 'marca_producto' => $producto->marca_producto,
-                'categoria' => $producto->categoria->nombre ?? null,
+                'categoria' => optional($producto->categoria)->nombre,
                 'precio_compra' => $producto->precio_compra_producto,
                 'stock_total' => $producto->almacenes->sum('pivot.cantidad'),
-                'precio_venta' => $precioVenta,
-                'ganancia' => $precioVenta - $producto->precio_compra_producto
+                'precio_venta' => $vendedor?->pivot?->precio_venta,
+                'ganancia' => $vendedor?->pivot?->venta_ganancia,
             ];
         });
 
-        // Renderizar vista Inertia con datos simplificados
         return Inertia::render('Productos/Vendor/Index', [
             'productos' => $productosTransformados,
             'meta' => [
@@ -63,28 +58,30 @@ class ProductoVendedorController extends Controller
         ]);
     }
 
-
     /**
-     * Actualizar el precio de venta de un producto para el usuario actual.
+     * Actualizar precio de venta y ganancia.
      */
-    /**
-     * Actualizar el precio de venta de un producto para el usuario actual.
-     */
-    public function update(Request $request, $id)
+    public function update(Request $request, Producto $producto)
     {
         $user = Auth::user();
 
-        // Validar el precio
+        // Validar que precio_venta sea opcional
         $request->validate([
-            'precio_venta' => 'required|numeric|min:0'
+            'precio_venta' => 'nullable|numeric|min:0'
         ]);
 
-        // Buscar el producto por ID
-        $producto = Producto::findOrFail($id);
+        // Calcular ganancia si hay precio_venta
+        $precioVenta = $request->input('precio_venta');
+        $ganancia = $precioVenta !== null
+            ? $precioVenta - $producto->precio_compra_producto
+            : null;
 
-        // Actualizar o crear la relación con el precio personalizado
+        // Actualizar pivot
         $producto->vendedores()->syncWithoutDetaching([
-            $user->id => ['precio_venta' => $request->precio_venta]
+            $user->id => [
+                'precio_venta' => $precioVenta,
+                'venta_ganancia' => $ganancia,
+            ]
         ]);
 
         return response()->json(['success' => true]);

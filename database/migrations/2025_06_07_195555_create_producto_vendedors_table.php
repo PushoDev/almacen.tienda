@@ -17,7 +17,7 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
 
             $table->decimal('precio_venta', 10, 2)->comment('Precio asignado por el vendedor')->nullable();
-            $table->decimal('venta_ganancia', 10, 2)->default(0);
+            $table->decimal('venta_ganancia', 10, 2)->nullable();
 
 
             // Clave compuesta (evita duplicados producto-vendedor)

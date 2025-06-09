@@ -4,7 +4,7 @@ import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import { AlertCircle, Edit, FileText, Save, Sheet, ShoppingBag } from 'lucide-react';
+import { AlertCircle, Edit, FileText, PlusCircle, Save, Sheet, ShoppingBag } from 'lucide-react';
 import { useState } from 'react';
 
 // Tipos para los datos de productos
@@ -12,7 +12,7 @@ interface Producto {
     id: number;
     nombre_producto: string;
     marca_producto: string;
-    categoria: string | null;
+    categoria: string;
     precio_compra: number;
     stock_total: number;
     precio_venta: number | null;
@@ -31,34 +31,42 @@ export default function VendedorPage({ productos, meta }: { productos: Producto[
     const [newPrice, setNewPrice] = useState<string>('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [isEditMode, setIsEditMode] = useState(true); // true: edit, false: add
 
     const formatCurrency = (value: number | null) => {
         if (value === null) return 'No definido';
         return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'USD' }).format(value);
     };
 
-    const openModal = (producto: Producto) => {
+    const openEditModal = (producto: Producto) => {
         setSelectedProduct(producto);
         setNewPrice(producto.precio_venta?.toString() || '');
         setError(null);
+        setIsEditMode(true);
+        setIsModalOpen(true);
+    };
+
+    const openAddModal = (producto: Producto) => {
+        setSelectedProduct(producto);
+        setNewPrice('');
+        setError(null);
+        setIsEditMode(false);
         setIsModalOpen(true);
     };
 
     const handleSubmit = async () => {
         if (!selectedProduct || !newPrice) return;
-
         const parsedPrice = parseFloat(newPrice);
         if (isNaN(parsedPrice) || parsedPrice <= 0) {
             setError('El precio debe ser un número positivo');
             return;
         }
-
         setIsLoading(true);
         setError(null);
 
         try {
             const response = await fetch(`/disponibles/${selectedProduct.id}`, {
-                method: 'PATCH',
+                method: isEditMode ? 'PATCH' : 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
@@ -66,13 +74,13 @@ export default function VendedorPage({ productos, meta }: { productos: Producto[
                 body: JSON.stringify({ precio_venta: parsedPrice }),
             });
 
-            if (!response.ok) throw new Error('Error al actualizar el precio');
+            if (!response.ok) throw new Error('Error al actualizar/agregar el precio');
 
-            alert('Precio actualizado correctamente');
+            alert(isEditMode ? 'Precio actualizado correctamente' : 'Precio agregado correctamente');
             setIsModalOpen(false);
-        } catch (err: Error) {
-            console.error('Error al actualizar precio:', err); // Para depuración
-            setError(`No se pudo actualizar el precio: ${err.message}`);
+        } catch (err: any) {
+            console.error('Error al procesar la solicitud:', err);
+            setError(`No se pudo procesar la solicitud: ${err.message}`);
         } finally {
             setIsLoading(false);
         }
@@ -87,9 +95,7 @@ export default function VendedorPage({ productos, meta }: { productos: Producto[
                     <HeadingSmall title="Opciones Generales del Sistema" description="Gestión del Negocio. Listado de Productos disponibles" />
                     <ShoppingBag size={70} color="#d6d3d1" className="absolute right-2 bottom-0 opacity-40" />
                 </div>
-
                 <Separator />
-
                 {/* Acciones */}
                 <div className="flex justify-end gap-2">
                     <Button variant="outline" className="hover:bg-chart-5 gap-2">
@@ -101,7 +107,6 @@ export default function VendedorPage({ productos, meta }: { productos: Producto[
                         Exportar Excel
                     </Button>
                 </div>
-
                 {/* Tabla de Productos */}
                 <div className="mt-4 overflow-x-auto">
                     {productos.length > 0 ? (
@@ -130,19 +135,32 @@ export default function VendedorPage({ productos, meta }: { productos: Producto[
                                             {formatCurrency(producto.precio_venta)}
                                         </td>
                                         <td
-                                            className={`px-4 py-3 text-sm font-medium ${producto.ganancia !== null && producto.ganancia >= 0 ? 'text-green-600' : 'text-gray-400'}`}
+                                            className={`px-4 py-3 text-sm font-medium ${
+                                                producto.ganancia !== null && producto.ganancia >= 0 ? 'text-green-600' : 'text-gray-400'
+                                            }`}
                                         >
                                             {producto.ganancia !== null ? formatCurrency(producto.ganancia) : 'N/A'}
                                         </td>
                                         <td className="px-4 py-3 text-sm">
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="text-blue-600 hover:text-blue-800"
-                                                onClick={() => openModal(producto)}
-                                            >
-                                                <Edit size={16} />
-                                            </Button>
+                                            {producto.precio_venta !== null ? (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="text-blue-600 hover:text-blue-800"
+                                                    onClick={() => openEditModal(producto)}
+                                                >
+                                                    <Edit size={16} />
+                                                </Button>
+                                            ) : (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="text-green-600 hover:text-green-800"
+                                                    onClick={() => openAddModal(producto)}
+                                                >
+                                                    <PlusCircle size={16} />
+                                                </Button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}
@@ -156,7 +174,6 @@ export default function VendedorPage({ productos, meta }: { productos: Producto[
                         </div>
                     )}
                 </div>
-
                 {/* Resumen */}
                 <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
                     <p>
@@ -167,25 +184,26 @@ export default function VendedorPage({ productos, meta }: { productos: Producto[
                     </p>
                 </div>
             </div>
-
-            {/* Modal de edición */}
+            {/* Modal de edición/agregación */}
             {isModalOpen && selectedProduct && (
                 <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black">
                     <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
-                        <h3 className="mb-4 text-lg font-semibold">Editar Precio de Venta</h3>
-
+                        <h3 className="mb-4 text-lg font-semibold">{isEditMode ? 'Editar Precio de Venta' : 'Agregar Precio de Venta'}</h3>
                         <div className="mb-4">
                             <label className="mb-1 block text-sm font-medium text-gray-700">Producto: {selectedProduct.nombre_producto}</label>
                             <label className="mb-1 block text-sm font-medium text-gray-700">
                                 Precio de Compra: {formatCurrency(selectedProduct.precio_compra)}
                             </label>
-                            <label className="mb-1 block text-sm font-medium text-gray-700">
-                                Ganancia Actual: {selectedProduct.ganancia !== null ? formatCurrency(selectedProduct.ganancia) : 'No definida'}
-                            </label>
+                            {isEditMode && (
+                                <label className="mb-1 block text-sm font-medium text-gray-700">
+                                    Ganancia Actual: {selectedProduct.ganancia !== null ? formatCurrency(selectedProduct.ganancia) : 'No definida'}
+                                </label>
+                            )}
                         </div>
-
                         <div className="mb-4">
-                            <label className="mb-1 block text-sm font-medium text-gray-700">Nuevo Precio de Venta</label>
+                            <label className="mb-1 block text-sm font-medium text-gray-700">
+                                {isEditMode ? 'Nuevo Precio de Venta' : 'Precio de Venta'}
+                            </label>
                             <input
                                 type="number"
                                 step="0.01"
@@ -197,7 +215,6 @@ export default function VendedorPage({ productos, meta }: { productos: Producto[
                             />
                             {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
                         </div>
-
                         <div className="flex justify-end gap-2">
                             <Button variant="outline" onClick={() => setIsModalOpen(false)} disabled={isLoading}>
                                 Cancelar
@@ -216,7 +233,7 @@ export default function VendedorPage({ productos, meta }: { productos: Producto[
                                 ) : (
                                     <span className="flex items-center">
                                         <Save size={16} className="mr-2" />
-                                        Guardar
+                                        {isEditMode ? 'Guardar' : 'Agregar'}
                                     </span>
                                 )}
                             </Button>
