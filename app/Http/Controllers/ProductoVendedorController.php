@@ -6,20 +6,20 @@ use App\Models\Producto;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
+use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
 
 class ProductoVendedorController extends Controller
 {
     /**
-     * Mostrar productos con campos específicos.
+     * Mostrar productos con precios de vendedor
      */
     public function index()
     {
         $user = Auth::user();
 
-        // Base de la consulta con relaciones esenciales
         $query = Producto::with(['categoria']);
 
-        // Filtrar y cargar almacenes según el rol
+        // Filtrado por rol y almacenes
         if ($user->role === 'admin') {
             $query->with(['almacenes' => fn($q) => $q->withPivot('cantidad')]);
         } else {
@@ -28,12 +28,15 @@ class ProductoVendedorController extends Controller
                 ->with(['almacenes' => fn($q) => $q->whereIn('almacens.id', $almacenIds)->withPivot('cantidad')]);
         }
 
-        // Cargar vendedores con filtro por usuario actual
-        $query->with(['vendedores' => fn($q) => $q->where('user_id', $user->id)]);
+        // Carga optimizada de datos de vendedor
+        $query->with(['vendedores' => function ($q) use ($user) {
+            $q->where('user_id', $user->id)
+                ->select('users.id', 'producto_vendedors.precio_venta', 'producto_vendedors.venta_ganancia');
+        }]);
 
         $productos = $query->get();
 
-        // Transformar datos para el frontend
+        // Transformación de datos
         $productosTransformados = $productos->map(function ($producto) use ($user) {
             $vendedor = $producto->vendedores->first();
 
@@ -41,11 +44,12 @@ class ProductoVendedorController extends Controller
                 'id' => $producto->id,
                 'nombre_producto' => $producto->nombre_producto,
                 'marca_producto' => $producto->marca_producto,
-                'categoria' => $producto->categoria ? $producto->categoria->nombre_categoria : null,
+                'categoria' => $producto->categoria->nombre_categoria ?? 'Sin categoría',
                 'precio_compra' => $producto->precio_compra_producto,
                 'stock_total' => $producto->almacenes->sum('pivot.cantidad'),
-                'precio_venta' => $vendedor?->pivot?->precio_venta,
-                'ganancia' => $vendedor?->pivot?->venta_ganancia,
+                'precio_venta' => $vendedor->pivot->precio_venta ?? 0.00,
+                'ganancia' => $vendedor->pivot->venta_ganancia ?? 0.00,
+                'tiene_precio' => ($vendedor->pivot->precio_venta ?? 0) > 0
             ];
         });
 
@@ -59,31 +63,61 @@ class ProductoVendedorController extends Controller
     }
 
     /**
-     * Actualizar precio de venta y ganancia.
+     * Actualizar precio y ganancia (Método principal)
      */
-    public function update(Request $request, Producto $producto)
+    public function update(Request $request, $productoId)
     {
         $user = Auth::user();
+        $producto = Producto::findOrFail($productoId);
 
-        // Validar que precio_venta sea opcional
-        $request->validate([
-            'precio_venta' => 'nullable|numeric|min:0'
+        // Validación reforzada
+        $validated = $request->validate([
+            'precio_venta' => 'required|numeric|min:0.01|decimal:0,2'
         ]);
 
-        // Calcular ganancia si hay precio_venta
-        $precioVenta = $request->input('precio_venta');
-        $ganancia = $precioVenta !== null
-            ? $precioVenta - $producto->precio_compra_producto
-            : null;
+        // Cálculo preciso de ganancia
+        $precioVenta = round($validated['precio_venta'], 2);
+        $ganancia = round($precioVenta - $producto->precio_compra_producto, 2);
 
-        // Actualizar pivot
+        // Sincronización de datos en pivot
         $producto->vendedores()->syncWithoutDetaching([
             $user->id => [
                 'precio_venta' => $precioVenta,
                 'venta_ganancia' => $ganancia,
+                'updated_at' => now()  // Actualización manual de timestamp
             ]
         ]);
 
-        return response()->json(['success' => true]);
+        return response()->json([
+            'success' => true,
+            'new_profit' => $ganancia,
+            'new_price' => $precioVenta
+        ]);
+    }
+
+    // --- Métodos no implementados (seguridad) ---
+    public function create()
+    {
+        abort(404, 'Recurso no disponible');
+    }
+
+    public function store(Request $request)
+    {
+        throw new MethodNotAllowedHttpException([], 'Método no permitido');
+    }
+
+    public function show($id)
+    {
+        abort(404, 'Recurso no disponible');
+    }
+
+    public function edit($id)
+    {
+        abort(404, 'Recurso no disponible');
+    }
+
+    public function destroy($id)
+    {
+        throw new MethodNotAllowedHttpException([], 'Método no permitido');
     }
 }

@@ -11,6 +11,13 @@ Route::middleware(['auth', 'verified'])->group(
         ]);
 
         // Para las Ventas
-        Route::resource('disponibles', ProductoVendedorController::class);
+        Route::resource('disponibles', ProductoVendedorController::class)
+            ->only([
+                'index',
+                'update'
+            ])
+            ->parameters([
+                'disponibles' => 'disponible',
+            ]);
     }
 );

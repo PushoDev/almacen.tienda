@@ -2,12 +2,12 @@ import HeadingSmall from '@/components/heading-small';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
+import { cn } from '@/lib/utils'; // Asegúrate de tener esta utilidad
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import { AlertCircle, Edit, FileText, PlusCircle, Save, Sheet, ShoppingBag } from 'lucide-react';
 import { useState } from 'react';
 
-// Tipos para los datos de productos
 interface Producto {
     id: number;
     nombre_producto: string;
@@ -25,17 +25,30 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Productos Disponibles', href: '#' },
 ];
 
-export default function VendedorPage({ productos, meta }: { productos: Producto[]; meta: { total_productos: number; role_usuario: string } }) {
+export default function VendedorPage({
+    productos: initialProductos,
+    meta,
+}: {
+    productos: Producto[];
+    meta: { total_productos: number; role_usuario: string };
+}) {
+    // Estado local para manejar los productos
+    const [productos, setProductos] = useState<Producto[]>(initialProductos);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState<Producto | null>(null);
     const [newPrice, setNewPrice] = useState<string>('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [isEditMode, setIsEditMode] = useState(true); // true: edit, false: add
+    const [isEditMode, setIsEditMode] = useState(true);
 
     const formatCurrency = (value: number | null) => {
         if (value === null) return 'No definido';
-        return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'USD' }).format(value);
+        return new Intl.NumberFormat('es-ES', {
+            style: 'currency',
+            currency: 'USD',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        }).format(value);
     };
 
     const openEditModal = (producto: Producto) => {
@@ -56,31 +69,51 @@ export default function VendedorPage({ productos, meta }: { productos: Producto[
 
     const handleSubmit = async () => {
         if (!selectedProduct || !newPrice) return;
+
         const parsedPrice = parseFloat(newPrice);
-        if (isNaN(parsedPrice) || parsedPrice <= 0) {
-            setError('El precio debe ser un número positivo');
+
+        // Validación mejorada
+        if (isNaN(parsedPrice) || parsedPrice < 0.01) {
+            setError('El precio debe ser un número positivo mayor a 0.00');
             return;
         }
+
         setIsLoading(true);
         setError(null);
 
         try {
             const response = await fetch(`/disponibles/${selectedProduct.id}`, {
-                method: isEditMode ? 'PATCH' : 'POST',
+                method: 'PUT', // Usamos PUT para ambas operaciones
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                    'X-Requested-With': 'XMLHttpRequest',
                 },
                 body: JSON.stringify({ precio_venta: parsedPrice }),
             });
 
-            if (!response.ok) throw new Error('Error al actualizar/agregar el precio');
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Error al actualizar el precio');
+            }
 
-            alert(isEditMode ? 'Precio actualizado correctamente' : 'Precio agregado correctamente');
+            // Actualizar el estado local inmediatamente
+            setProductos((prev) =>
+                prev.map((p) =>
+                    p.id === selectedProduct.id
+                        ? {
+                              ...p,
+                              precio_venta: parsedPrice,
+                              ganancia: parsedPrice - p.precio_compra, // Calcular ganancia
+                          }
+                        : p,
+                ),
+            );
+
             setIsModalOpen(false);
-        } catch (err: any) {
-            console.error('Error al procesar la solicitud:', err);
-            setError(`No se pudo procesar la solicitud: ${err.message}`);
+        } catch (err) {
+            console.error('Error en la solicitud:', err);
+            setError(err instanceof Error ? err.message : 'Error inesperado al procesar la solicitud');
         } finally {
             setIsLoading(false);
         }
@@ -92,10 +125,14 @@ export default function VendedorPage({ productos, meta }: { productos: Producto[
             <div className="flex flex-col gap-4 p-4">
                 {/* Header */}
                 <div className="border-sidebar-accent bg-sidebar relative rounded-2xl border border-dashed p-4">
-                    <HeadingSmall title="Opciones Generales del Sistema" description="Gestión del Negocio. Listado de Productos disponibles" />
+                    <HeadingSmall
+                        title="Gestión de Precios de Venta"
+                        description="Asigne precios a los productos disponibles para su comercialización"
+                    />
                     <ShoppingBag size={70} color="#d6d3d1" className="absolute right-2 bottom-0 opacity-40" />
                 </div>
                 <Separator />
+
                 {/* Acciones */}
                 <div className="flex justify-end gap-2">
                     <Button variant="outline" className="hover:bg-chart-5 gap-2">
@@ -107,73 +144,82 @@ export default function VendedorPage({ productos, meta }: { productos: Producto[
                         Exportar Excel
                     </Button>
                 </div>
+
                 {/* Tabla de Productos */}
                 <div className="mt-4 overflow-x-auto">
                     {productos.length > 0 ? (
-                        <table className="min-w-full rounded-lg border border-gray-200 bg-white shadow-sm">
-                            <thead className="bg-gray-50">
-                                <tr>
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Producto</th>
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Marca</th>
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Categoría</th>
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Precio Compra</th>
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Stock</th>
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Precio Venta</th>
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Ganancia</th>
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200">
-                                {productos.map((producto, index) => (
-                                    <tr key={index} className="transition-colors hover:bg-gray-50">
-                                        <td className="px-4 py-3 text-sm text-gray-800">{producto.nombre_producto}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-800">{producto.marca_producto}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-800">{producto.categoria || 'Sin categoría'}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-800">{formatCurrency(producto.precio_compra)}</td>
-                                        <td className="px-4 py-3 text-sm font-medium text-gray-800">{producto.stock_total}</td>
-                                        <td className={`px-4 py-3 text-sm ${producto.precio_venta === null ? 'text-gray-400' : 'text-gray-800'}`}>
-                                            {formatCurrency(producto.precio_venta)}
-                                        </td>
-                                        <td
-                                            className={`px-4 py-3 text-sm font-medium ${
-                                                producto.ganancia !== null && producto.ganancia >= 0 ? 'text-green-600' : 'text-gray-400'
-                                            }`}
-                                        >
-                                            {producto.ganancia !== null ? formatCurrency(producto.ganancia) : 'N/A'}
-                                        </td>
-                                        <td className="px-4 py-3 text-sm">
-                                            {producto.precio_venta !== null ? (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    className="text-blue-600 hover:text-blue-800"
-                                                    onClick={() => openEditModal(producto)}
-                                                >
-                                                    <Edit size={16} />
-                                                </Button>
-                                            ) : (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    className="text-green-600 hover:text-green-800"
-                                                    onClick={() => openAddModal(producto)}
-                                                >
-                                                    <PlusCircle size={16} />
-                                                </Button>
-                                            )}
-                                        </td>
+                        <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
+                            <table className="min-w-full">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Producto</th>
+                                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Marca</th>
+                                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Categoría</th>
+                                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Precio Compra</th>
+                                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Stock</th>
+                                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Precio Venta</th>
+                                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Ganancia</th>
+                                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Acciones</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200">
+                                    {productos.map((producto) => (
+                                        <tr key={producto.id} className="transition-colors hover:bg-gray-50">
+                                            <td className="px-4 py-3 text-sm text-gray-800">{producto.nombre_producto}</td>
+                                            <td className="px-4 py-3 text-sm text-gray-800">{producto.marca_producto}</td>
+                                            <td className="px-4 py-3 text-sm text-gray-800">{producto.categoria || 'Sin categoría'}</td>
+                                            <td className="px-4 py-3 text-sm text-gray-800">{formatCurrency(producto.precio_compra)}</td>
+                                            <td className="px-4 py-3 text-sm font-medium text-gray-800">{producto.stock_total}</td>
+                                            <td
+                                                className={cn(
+                                                    'px-4 py-3 text-sm',
+                                                    producto.precio_venta === null ? 'text-gray-400 italic' : 'text-gray-800',
+                                                )}
+                                            >
+                                                {formatCurrency(producto.precio_venta)}
+                                            </td>
+                                            <td
+                                                className={cn(
+                                                    'px-4 py-3 text-sm font-medium',
+                                                    producto.ganancia === null
+                                                        ? 'text-gray-400 italic'
+                                                        : producto.ganancia >= 0
+                                                          ? 'text-green-600'
+                                                          : 'text-red-600',
+                                                )}
+                                            >
+                                                {formatCurrency(producto.ganancia)}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className={cn(
+                                                        producto.precio_venta !== null
+                                                            ? 'text-blue-600 hover:text-blue-800'
+                                                            : 'text-green-600 hover:text-green-800',
+                                                    )}
+                                                    onClick={() =>
+                                                        producto.precio_venta !== null ? openEditModal(producto) : openAddModal(producto)
+                                                    }
+                                                >
+                                                    {producto.precio_venta !== null ? <Edit size={16} /> : <PlusCircle size={16} />}
+                                                </Button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     ) : (
                         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-gray-50 py-12">
                             <AlertCircle size={48} className="mb-3 text-gray-400" />
                             <h3 className="text-lg font-medium text-gray-700">No hay productos disponibles</h3>
-                            <p className="text-sm text-gray-500">No se encontraron productos para mostrar.</p>
+                            <p className="text-sm text-gray-500">Agregue productos al sistema para comenzar</p>
                         </div>
                     )}
                 </div>
+
                 {/* Resumen */}
                 <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
                     <p>
@@ -184,22 +230,28 @@ export default function VendedorPage({ productos, meta }: { productos: Producto[
                     </p>
                 </div>
             </div>
-            {/* Modal de edición/agregación */}
+
+            {/* Modal de precio */}
             {isModalOpen && selectedProduct && (
                 <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black">
                     <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
                         <h3 className="mb-4 text-lg font-semibold">{isEditMode ? 'Editar Precio de Venta' : 'Agregar Precio de Venta'}</h3>
-                        <div className="mb-4">
-                            <label className="mb-1 block text-sm font-medium text-gray-700">Producto: {selectedProduct.nombre_producto}</label>
-                            <label className="mb-1 block text-sm font-medium text-gray-700">
-                                Precio de Compra: {formatCurrency(selectedProduct.precio_compra)}
-                            </label>
-                            {isEditMode && (
-                                <label className="mb-1 block text-sm font-medium text-gray-700">
-                                    Ganancia Actual: {selectedProduct.ganancia !== null ? formatCurrency(selectedProduct.ganancia) : 'No definida'}
-                                </label>
+
+                        <div className="mb-4 space-y-2">
+                            <p className="text-sm">
+                                <span className="font-medium">Producto:</span> {selectedProduct.nombre_producto}
+                            </p>
+                            <p className="text-sm">
+                                <span className="font-medium">Precio de Compra:</span> {formatCurrency(selectedProduct.precio_compra)}
+                            </p>
+                            {isEditMode && selectedProduct.precio_venta !== null && (
+                                <p className="text-sm">
+                                    <span className="font-medium">Ganancia Actual:</span>{' '}
+                                    {selectedProduct.ganancia !== null ? formatCurrency(selectedProduct.ganancia) : 'No definida'}
+                                </p>
                             )}
                         </div>
+
                         <div className="mb-4">
                             <label className="mb-1 block text-sm font-medium text-gray-700">
                                 {isEditMode ? 'Nuevo Precio de Venta' : 'Precio de Venta'}
@@ -207,33 +259,30 @@ export default function VendedorPage({ productos, meta }: { productos: Producto[
                             <input
                                 type="number"
                                 step="0.01"
-                                min="0"
+                                min="0.01"
                                 value={newPrice}
                                 onChange={(e) => setNewPrice(e.target.value)}
-                                className="w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                                placeholder="0.00"
+                                className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                placeholder="Ej: 24.99"
                             />
+                            <p className="mt-1 text-xs text-gray-500">Mínimo: $0.01</p>
                             {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
                         </div>
+
                         <div className="flex justify-end gap-2">
                             <Button variant="outline" onClick={() => setIsModalOpen(false)} disabled={isLoading}>
                                 Cancelar
                             </Button>
-                            <Button
-                                variant="default"
-                                className="bg-blue-600 text-white hover:bg-blue-700"
-                                onClick={handleSubmit}
-                                disabled={isLoading}
-                            >
+                            <Button variant="default" className="bg-blue-600 hover:bg-blue-700" onClick={handleSubmit} disabled={isLoading}>
                                 {isLoading ? (
                                     <span className="flex items-center">
                                         <span className="mr-2 animate-spin">🔄</span>
-                                        Guardando...
+                                        Procesando...
                                     </span>
                                 ) : (
                                     <span className="flex items-center">
                                         <Save size={16} className="mr-2" />
-                                        {isEditMode ? 'Guardar' : 'Agregar'}
+                                        {isEditMode ? 'Actualizar' : 'Agregar'}
                                     </span>
                                 )}
                             </Button>
