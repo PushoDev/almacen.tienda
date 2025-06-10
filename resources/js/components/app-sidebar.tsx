@@ -14,6 +14,7 @@ import {
     GitCommit,
     Landmark,
     LayoutGrid,
+    MessageSquare,
     Package,
     Repeat,
     ShoppingBasket,
@@ -118,16 +119,22 @@ const allNavItems: NavItem[] = [
 
 const footerNavItems: NavItem[] = [
     {
+        title: 'Chat.POS',
+        href: '#',
+        icon: MessageSquare,
+        roles: ['admin', 'vendedor'],
+    },
+    {
         title: 'Repositorio',
         href: 'https://github.com/laravel/react-starter-kit',
         icon: GitCommit,
-        roles: ['admin', 'vendedor'],
+        roles: ['vendedor'],
     },
     {
         title: 'Documentación',
         href: 'https://laravel.com/docs/starter-kits#react',
         icon: BookOpen,
-        roles: ['admin', 'vendedor'],
+        roles: ['vendedor'],
     },
 ];
 
