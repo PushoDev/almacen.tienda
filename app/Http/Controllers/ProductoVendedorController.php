@@ -41,7 +41,7 @@ class ProductoVendedorController extends Controller
                 'id' => $producto->id,
                 'nombre_producto' => $producto->nombre_producto,
                 'marca_producto' => $producto->marca_producto,
-                'categoria' => optional($producto->categoria)->nombre,
+                'categoria' => $producto->categoria ? $producto->categoria->nombre_categoria : null,
                 'precio_compra' => $producto->precio_compra_producto,
                 'stock_total' => $producto->almacenes->sum('pivot.cantidad'),
                 'precio_venta' => $vendedor?->pivot?->precio_venta,
