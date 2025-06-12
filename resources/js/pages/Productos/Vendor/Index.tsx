@@ -10,6 +10,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -17,7 +18,7 @@ import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import { Edit, FileText, PlusCircle, Save, Sheet, ShoppingBag } from 'lucide-react';
+import { BadgeDollarSign, FileText, Save, Sheet, ShoppingBag } from 'lucide-react';
 import { useState } from 'react';
 
 interface Producto {
@@ -149,10 +150,14 @@ export default function VendedorPage({
                 {/* Resumen */}
                 <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
                     <p>
-                        Total de productos: <span className="font-medium">{meta.total_productos}</span>
+                        Total de productos:{' '}
+                        <span className="font-medium">
+                            <Badge variant="secondary">{meta.total_productos}</Badge>
+                        </span>
                     </p>
                     <p>
-                        Rol actual: <span className="font-medium">{meta.role_usuario === 'admin' ? 'Administrador' : 'Vendedor'}</span>
+                        Rol actual:{' '}
+                        <span className="text-primary font-sans font-medium">{meta.role_usuario === 'admin' ? 'Administrador' : 'Vendedor'}</span>
                     </p>
                 </div>
                 {/* Tabla de Productos */}
@@ -167,7 +172,7 @@ export default function VendedorPage({
                                 <TableHead>Stock</TableHead>
                                 <TableHead>Precio Venta</TableHead>
                                 <TableHead>Ganancia</TableHead>
-                                <TableHead className="text-right">Acciones</TableHead>
+                                <TableHead className="text-center">Acciones</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -178,7 +183,9 @@ export default function VendedorPage({
                                         <TableCell>{producto.marca_producto}</TableCell>
                                         <TableCell>{producto.categoria || 'Sin categoría'}</TableCell>
                                         <TableCell>{formatCurrency(producto.precio_compra)}</TableCell>
-                                        <TableCell>{producto.stock_total}</TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline">{producto.stock_total}</Badge>
+                                        </TableCell>
                                         <TableCell className={cn(producto.precio_venta === null ? 'text-amber-400 italic' : 'text-amber-800')}>
                                             {formatCurrency(producto.precio_venta)}
                                         </TableCell>
@@ -194,18 +201,18 @@ export default function VendedorPage({
                                         >
                                             {formatCurrency(producto.ganancia)}
                                         </TableCell>
-                                        <TableCell className="text-right">
+                                        <TableCell className="text-center">
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
                                                 className={cn(
                                                     producto.precio_venta !== null
-                                                        ? 'text-blue-600 hover:text-blue-800'
-                                                        : 'text-green-600 hover:text-green-800',
+                                                        ? 'text-amber-600 hover:animate-pulse hover:bg-amber-200 hover:text-amber-800'
+                                                        : 'text-green-600 hover:animate-pulse hover:bg-emerald-200 hover:text-green-800',
                                                 )}
                                                 onClick={() => (producto.precio_venta !== null ? openEditModal(producto) : openAddModal(producto))}
                                             >
-                                                {producto.precio_venta !== null ? <Edit size={16} /> : <PlusCircle size={16} />}
+                                                {producto.precio_venta !== null ? <BadgeDollarSign size={16} /> : <BadgeDollarSign size={16} />}
                                             </Button>
                                         </TableCell>
                                     </TableRow>
@@ -226,7 +233,7 @@ export default function VendedorPage({
                         <AlertDialogTrigger asChild>
                             {/* Este botón es solo un placeholder, ya que el modal se activa programáticamente */}
                             <Button variant="outline" className="hidden">
-                                Show Dialog
+                                Precio Producto
                             </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
