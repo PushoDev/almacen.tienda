@@ -8,6 +8,9 @@ use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
 
+use Illuminate\Support\Facades\DB;
+
+
 class ProductoVendedorController extends Controller
 {
     /**
@@ -17,6 +20,7 @@ class ProductoVendedorController extends Controller
     {
         $user = Auth::user();
 
+        // Consulta base de productos
         $query = Producto::with(['categoria']);
 
         // Filtrado por rol y almacenes
@@ -28,15 +32,16 @@ class ProductoVendedorController extends Controller
                 ->with(['almacenes' => fn($q) => $q->whereIn('almacens.id', $almacenIds)->withPivot('cantidad')]);
         }
 
-        // Carga optimizada de datos de vendedor
+        // Cargar datos específicos del vendedor
         $query->with(['vendedores' => function ($q) use ($user) {
             $q->where('user_id', $user->id)
                 ->select('users.id', 'producto_vendedors.precio_venta', 'producto_vendedors.venta_ganancia');
         }]);
 
+        // Obtener productos
         $productos = $query->get();
 
-        // Transformación de datos
+        // Transformar datos para el frontend
         $productosTransformados = $productos->map(function ($producto) use ($user) {
             $vendedor = $producto->vendedores->first();
 
@@ -47,9 +52,9 @@ class ProductoVendedorController extends Controller
                 'categoria' => $producto->categoria->nombre_categoria ?? 'Sin categoría',
                 'precio_compra' => $producto->precio_compra_producto,
                 'stock_total' => $producto->almacenes->sum('pivot.cantidad'),
-                'precio_venta' => $vendedor->pivot->precio_venta ?? 0.00,
-                'ganancia' => $vendedor->pivot->venta_ganancia ?? 0.00,
-                'tiene_precio' => ($vendedor->pivot->precio_venta ?? 0) > 0
+                'precio_venta' => $vendedor?->pivot->precio_venta ?? null,
+                'ganancia' => $vendedor?->pivot->venta_ganancia ?? null,
+                'tiene_precio' => ($vendedor?->pivot->precio_venta ?? 0) > 0,
             ];
         });
 
@@ -57,8 +62,8 @@ class ProductoVendedorController extends Controller
             'productos' => $productosTransformados,
             'meta' => [
                 'total_productos' => $productosTransformados->count(),
-                'role_usuario' => $user->role
-            ]
+                'role_usuario' => $user->role,
+            ],
         ]);
     }
 
@@ -70,32 +75,35 @@ class ProductoVendedorController extends Controller
         $user = Auth::user();
         $producto = Producto::findOrFail($productoId);
 
-        // Validación reforzada
         $validated = $request->validate([
-            'precio_venta' => 'required|numeric|min:0.01|decimal:0,2'
+            'precio_venta' => ['required', 'numeric', 'min:0.01', 'regex:/^\d+(\.\d{1,2})?$/'],
         ]);
 
-        // Cálculo preciso de ganancia
         $precioVenta = round($validated['precio_venta'], 2);
         $ganancia = round($precioVenta - $producto->precio_compra_producto, 2);
 
-        // Sincronización de datos en pivot
-        $producto->vendedores()->syncWithoutDetaching([
-            $user->id => [
+        // Actualización directa del registro pivot existente
+        DB::table('producto_vendedors')
+            ->where('producto_id', $productoId)
+            ->where('user_id', $user->id)
+            ->update([
                 'precio_venta' => $precioVenta,
                 'venta_ganancia' => $ganancia,
-                'updated_at' => now()  // Actualización manual de timestamp
-            ]
-        ]);
+                'updated_at' => now()
+            ]);
 
         return response()->json([
             'success' => true,
+            'message' => 'Precio actualizado correctamente',
             'new_profit' => $ganancia,
-            'new_price' => $precioVenta
-        ]);
+            'new_price' => $precioVenta,
+        ], 200);
     }
 
-    // --- Métodos no implementados (seguridad) ---
+
+    /**
+     * Métodos no implementados (seguridad)
+     */
     public function create()
     {
         abort(404, 'Recurso no disponible');

@@ -97,6 +97,7 @@ export default function VendedorPage({
                 },
                 body: JSON.stringify({ precio_venta: parsedPrice }),
             });
+            console.log(await response.json());
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.message || 'Error al actualizar el precio');
