@@ -9,54 +9,93 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 
 class MovimientosController extends Controller
 {
     /**
-     * Muestra la interfaz principal de movimientos.
+     * Obtiene almacenes según rol del usuario
+     *
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+    private function getPermittedAlmacenes()
+    {
+        $user = Auth::user();
+
+        return $user->role === 'admin'
+            ? Almacen::select('id', 'nombre_almacen')->get()
+            : $user->almacenes()->select('id', 'nombre_almacen')->get();
+    }
+
+    /**
+     * Muestra la interfaz principal de movimientos
+     *
+     * @return \Inertia\Response
      */
     public function index()
     {
         return Inertia::render('Movimientos/Index', [
-            'almacenes' => Almacen::select('id', 'nombre_almacen')->get(),
+            'almacenes' => $this->getPermittedAlmacenes(),
         ]);
     }
 
     /**
-     * Obtiene productos de un almacén específico.
+     * Obtiene productos de un almacén con verificación de permisos
+     *
+     * @param int $id
+     * @return \Illuminate\Http\JsonResponse
      */
     public function getProductosPorAlmacen($id)
     {
+        $user = Auth::user();
         $almacen = Almacen::findOrFail($id);
 
-        // Obtener productos con cantidad disponible en el almacén
-        $productos = $almacen->productos()->withPivot('cantidad')->get()->map(function ($producto) {
-            return [
-                'producto_id' => $producto->id, // ✅ Cambio: de 'id' a 'producto_id'
-                'nombre_producto' => $producto->nombre_producto,
-                'cantidad' => $producto->pivot->cantidad,
-            ];
-        });
+        // Verificar permisos para vendedores
+        if ($user->role !== 'admin') {
+            $userAlmacenesIds = $user->almacenes->pluck('id');
+            if (!$userAlmacenesIds->contains($almacen->id)) {
+                abort(403, 'Acceso denegado a este almacén');
+            }
+        }
+
+        // Obtener productos con cantidad disponible
+        $productos = $almacen->productos()
+            ->select('productos.id', 'productos.nombre_producto', 'almacen_producto.cantidad')
+            ->get()
+            ->map(function ($producto) {
+                return [
+                    'producto_id' => $producto->id,
+                    'nombre_producto' => $producto->nombre_producto,
+                    'cantidad' => $producto->pivot->cantidad,
+                ];
+            });
 
         return response()->json($productos);
     }
 
     /**
-     * Obtiene todos los almacenes disponibles.
+     * Obtiene todos los almacenes permitidos
+     *
+     * @return \Illuminate\Http\JsonResponse
      */
     public function getAlmacenes()
     {
-        return response()->json(
-            Almacen::select('id', 'nombre_almacen')->get()
-        );
+        return response()->json($this->getPermittedAlmacenes());
     }
 
     /**
-     * Registra un nuevo movimiento entre almacenes.
+     * Registra un nuevo movimiento entre almacenes
+     *
+     * @param \Illuminate\Http\Request $request
+     * @return \Illuminate\Http\RedirectResponse
      */
     public function store(Request $request)
     {
-        // Validación de datos
+        $user = Auth::user();
+        $almacenesPermitidosIds = $this->getPermittedAlmacenes()->pluck('id');
+
+        // Validación básica
         $request->validate([
             'almacen_origen_id' => ['required', 'exists:almacens,id'],
             'almacen_destino_id' => ['required', 'exists:almacens,id', 'different:almacen_origen_id'],
@@ -65,66 +104,70 @@ class MovimientosController extends Controller
             'productos.*.cantidad' => ['required', 'integer', 'min:1'],
         ]);
 
+        // Validación adicional de permisos
+        if ($user->role !== 'admin') {
+            if (!$almacenesPermitidosIds->contains($request->almacen_origen_id)) {
+                throw ValidationException::withMessages([
+                    'almacen_origen_id' => 'No tienes permisos sobre este almacén de origen'
+                ]);
+            }
+
+            if (!$almacenesPermitidosIds->contains($request->almacen_destino_id)) {
+                throw ValidationException::withMessages([
+                    'almacen_destino_id' => 'No tienes permisos sobre este almacén de destino'
+                ]);
+            }
+        }
+
         DB::beginTransaction();
 
         try {
-            // Iterar sobre cada producto en el movimiento
             foreach ($request->productos as $item) {
                 $productoId = $item['producto_id'];
                 $cantidad = $item['cantidad'];
 
-                // Verificar stock en el almacén de origen con bloqueo para evitar condiciones de carrera
+                // Verificar stock en origen con bloqueo
                 $almacenOrigen = AlmacenProducto::where([
                     'almacen_id' => $request->almacen_origen_id,
                     'producto_id' => $productoId,
-                ])->lockForUpdate()->firstOrFail();
+                ])->lockForUpdate()->first();
+
+                if (!$almacenOrigen) {
+                    throw new \Exception("El producto ID {$productoId} no existe en el almacén de origen");
+                }
 
                 if ($almacenOrigen->cantidad < $cantidad) {
                     throw new \Exception("Stock insuficiente para el producto ID: {$productoId}");
                 }
 
-                // Actualizar stock en el almacén de origen
+                // Actualizar almacén origen
                 $almacenOrigen->decrement('cantidad', $cantidad);
 
-                // Actualizar stock en el almacén de destino
+                // Actualizar almacén destino
                 $almacenDestino = AlmacenProducto::firstOrCreate(
-                    [
-                        'almacen_id' => $request->almacen_destino_id,
-                        'producto_id' => $productoId,
-                    ],
-                    [
-                        'cantidad' => 0, // Valor inicial si no existe el registro
-                    ]
+                    ['almacen_id' => $request->almacen_destino_id, 'producto_id' => $productoId],
+                    ['cantidad' => 0]
                 );
                 $almacenDestino->increment('cantidad', $cantidad);
 
-                // Registrar el movimiento
+                // Registrar movimiento
                 Movimiento::create([
                     'producto_id' => $productoId,
                     'almacen_emisor_id' => $request->almacen_origen_id,
                     'almacen_receptor_id' => $request->almacen_destino_id,
                     'cantidad' => $cantidad,
+                    'user_id' => $user->id, // Registrar usuario responsable
                 ]);
             }
 
-            // Confirmar la transacción
             DB::commit();
 
-            // return response()->json([
-            //     'success' => true,
-            //     'message' => '¡Movimiento registrado exitosamente!',
-            // ]);
-
-            return Inertia::render('Almacenes/Index', []);
+            return redirect()->route('movimientos.index')->with('success', 'Movimiento registrado exitosamente!');
         } catch (\Exception $e) {
-            // Revertir la transacción en caso de error
             DB::rollBack();
-            Log::error('Error en movimiento de almacén: ' . $e->getMessage());
+            Log::error("Error en movimiento - Usuario: {$user->id} - Error: {$e->getMessage()}");
 
-            return response()->json([
-                'error' => true,
-                'message' => 'Error: ' . $e->getMessage(),
-            ], 500);
+            return back()->withErrors(['general' => 'Error: ' . $e->getMessage()])->withInput();
         }
     }
 }
