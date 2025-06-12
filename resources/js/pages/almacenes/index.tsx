@@ -16,7 +16,7 @@ import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, Tabl
 import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { Edit3, Eye, FileText, HousePlus, Sheet, Trash2, Warehouse } from 'lucide-react';
+import { Edit3, Eye, FileText, HousePlus, Mail, MapPin, Phone, Sheet, Trash2, Warehouse } from 'lucide-react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -108,14 +108,47 @@ export default function AlmacenesPage({ almacenes }: { almacenes: AlmacenProps[]
                         <TableBody>
                             {almacenes.map((almacen) => (
                                 <TableRow key={almacen.id}>
-                                    <TableCell>{almacen.nombre_almacen}</TableCell>
-                                    <TableCell>{almacen.telefono_almacen}</TableCell>
-                                    <TableCell>{almacen.correo_almacen || 'Sin correo'}</TableCell>
-                                    <TableCell>
-                                        {almacen.provincia_almacen && almacen.ciudad_almacen
-                                            ? `${almacen.provincia_almacen}, ${almacen.ciudad_almacen}`
-                                            : 'Sin ubicación'}
+                                    <TableCell className="min-w-[180px]">
+                                        <div className="flex items-center gap-2">
+                                            <Warehouse size={14} className="text-primary shrink-0" />
+                                            <span className="truncate font-medium">{almacen.nombre_almacen}</span>
+                                        </div>
                                     </TableCell>
+
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <Phone size={14} className="shrink-0 text-gray-500" />
+                                            {almacen.telefono_almacen || <span className="text-gray-400 italic">Sin teléfono</span>}
+                                        </div>
+                                    </TableCell>
+
+                                    <TableCell>
+                                        <div className="flex min-w-[200px] items-center gap-2">
+                                            <Mail size={14} className="shrink-0 text-gray-500" />
+                                            {almacen.correo_almacen ? (
+                                                <a
+                                                    href={`mailto:${almacen.correo_almacen}`}
+                                                    className="max-w-[160px] truncate text-blue-600 hover:underline"
+                                                >
+                                                    {almacen.correo_almacen}
+                                                </a>
+                                            ) : (
+                                                <span className="text-gray-400 italic">Sin correo</span>
+                                            )}
+                                        </div>
+                                    </TableCell>
+
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <MapPin size={14} className="shrink-0 text-gray-500" />
+                                            {almacen.provincia_almacen && almacen.ciudad_almacen ? (
+                                                <span className="truncate">{`${almacen.ciudad_almacen}, ${almacen.provincia_almacen}`}</span>
+                                            ) : (
+                                                <span className="text-gray-400 italic">Sin ubicación</span>
+                                            )}
+                                        </div>
+                                    </TableCell>
+
                                     <TableCell className="text-right">
                                         {/* Boton Detalles */}
                                         <Link href={route('almacenes.show', { almacen: almacen.id })}>

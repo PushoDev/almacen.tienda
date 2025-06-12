@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppLayout from '@/layouts/app-layout';
 import { ClienteProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { Edit3, FileText, HandHeart, Sheet, Trash2, UserRoundPlus } from 'lucide-react';
+import { Edit3, FileText, HandHeart, Home, MapPin, Phone, Sheet, Trash2, User, UserRoundPlus } from 'lucide-react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -105,10 +105,42 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                         <TableBody>
                             {clientes.map((cliente) => (
                                 <TableRow key={cliente.id}>
-                                    <TableCell>{cliente.nombre_cliente}</TableCell>
-                                    <TableCell>{cliente.telefono_cliente}</TableCell>
-                                    <TableCell>{cliente.direccion_cliente || 'Sin dirección'}</TableCell>
-                                    <TableCell>{cliente.ciudad_cliente || 'Sin ciudad'}</TableCell>
+                                    <TableCell className="min-w-[180px]">
+                                        <div className="flex items-center gap-2">
+                                            <User size={14} className="text-primary shrink-0" />
+                                            <span className="truncate font-medium">{cliente.nombre_cliente}</span>
+                                        </div>
+                                    </TableCell>
+
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <Phone size={14} className="shrink-0 text-gray-500" />
+                                            {cliente.telefono_cliente || <span className="text-gray-400 italic">Sin teléfono</span>}
+                                        </div>
+                                    </TableCell>
+
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <Home size={14} className="shrink-0 text-gray-500" />
+                                            {cliente.direccion_cliente ? (
+                                                <span className="max-w-[160px] truncate">{cliente.direccion_cliente}</span>
+                                            ) : (
+                                                <span className="text-gray-400 italic">Sin dirección</span>
+                                            )}
+                                        </div>
+                                    </TableCell>
+
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <MapPin size={14} className="shrink-0 text-gray-500" />
+                                            {cliente.ciudad_cliente ? (
+                                                <span className="truncate">{cliente.ciudad_cliente}</span>
+                                            ) : (
+                                                <span className="text-gray-400 italic">Sin ciudad</span>
+                                            )}
+                                        </div>
+                                    </TableCell>
+
                                     <TableCell className="text-right">
                                         {/* Botón Editar */}
                                         <Link href={route('clientes.edit', { cliente: cliente.id })}>

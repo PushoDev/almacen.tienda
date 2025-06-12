@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, User, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { BookUser, Edit2, FileText, Sheet, Trash2 } from 'lucide-react';
+import { BookUser, Edit2, FileText, Key, Mail, Sheet, Trash2, UserCircle, Warehouse } from 'lucide-react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -99,19 +99,58 @@ export default function PageEmpleado({ empleados }: { empleados: User[]; almacen
                             {empleados.length > 0 ? (
                                 empleados.map((empleado) => (
                                     <TableRow key={empleado.id}>
-                                        <TableCell>{empleado.name}</TableCell>
-                                        <TableCell>{empleado.email}</TableCell>
-                                        <TableCell>{empleado.role}</TableCell>
+                                        <TableCell className="min-w-[180px]">
+                                            <div className="flex items-center gap-2">
+                                                <UserCircle size={14} className="text-primary shrink-0" />
+                                                <span className="truncate font-medium">{empleado.name}</span>
+                                            </div>
+                                        </TableCell>
+
                                         <TableCell>
-                                            {empleado.almacenes?.length > 0 ? (
-                                                empleado.almacenes.map((almacen) => (
-                                                    <span key={almacen.id} className="mr-1">
-                                                        {almacen.nombre_almacen}
-                                                    </span>
-                                                ))
-                                            ) : (
-                                                <span>Sin asignar</span>
-                                            )}
+                                            <div className="flex items-center gap-2">
+                                                <Mail size={14} className="shrink-0 text-gray-500" />
+                                                {empleado.email ? (
+                                                    <a
+                                                        href={`mailto:${empleado.email}`}
+                                                        className="max-w-[160px] truncate text-blue-600 hover:underline"
+                                                    >
+                                                        {empleado.email}
+                                                    </a>
+                                                ) : (
+                                                    <span className="text-gray-400 italic">Sin email</span>
+                                                )}
+                                            </div>
+                                        </TableCell>
+
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <Key size={14} className="shrink-0 text-gray-500" />
+                                                {empleado.role ? (
+                                                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700">{empleado.role}</span>
+                                                ) : (
+                                                    <span className="text-gray-400 italic">Sin rol</span>
+                                                )}
+                                            </div>
+                                        </TableCell>
+
+                                        <TableCell>
+                                            <div className="flex items-start gap-2">
+                                                <Warehouse size={14} className="mt-1 shrink-0 text-gray-500" />
+                                                <div className="flex flex-wrap gap-1">
+                                                    {empleado.almacenes?.length > 0 ? (
+                                                        empleado.almacenes.map((almacen) => (
+                                                            <span
+                                                                key={almacen.id}
+                                                                className="max-w-[120px] truncate rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-700"
+                                                            >
+                                                                {almacen.nombre_almacen}
+                                                            </span>
+                                                        ))
+                                                    ) : (
+                                                        <span className="text-gray-400 italic">General</span>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </TableCell>
 
                                         <TableCell className="text-right">

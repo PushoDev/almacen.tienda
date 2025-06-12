@@ -16,7 +16,7 @@ import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, Tabl
 import AppLayout from '@/layouts/app-layout';
 import { ProveedorProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { BadgePlus, Edit3, FileText, Handshake, Sheet, Trash2 } from 'lucide-react';
+import { BadgePlus, Building, Edit3, FileText, Handshake, Mail, MapPin, Phone, Sheet, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -108,10 +108,47 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                         <TableBody>
                             {proveedores.map((proveedor) => (
                                 <TableRow key={proveedor.id}>
-                                    <TableCell>{proveedor.nombre_proveedor}</TableCell>
-                                    <TableCell>{proveedor.telefono_proveedor}</TableCell>
-                                    <TableCell>{proveedor.correo_proveedor || 'Sin correo'}</TableCell>
-                                    <TableCell>{proveedor.localidad_proveedor}</TableCell>
+                                    <TableCell className="min-w-[180px]">
+                                        <div className="flex items-center gap-2">
+                                            <Building size={14} className="text-primary shrink-0" />
+                                            <span className="truncate font-medium">{proveedor.nombre_proveedor}</span>
+                                        </div>
+                                    </TableCell>
+
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <Phone size={14} className="shrink-0 text-gray-500" />
+                                            {proveedor.telefono_proveedor || <span className="text-gray-400 italic">Sin teléfono</span>}
+                                        </div>
+                                    </TableCell>
+
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <Mail size={14} className="shrink-0 text-gray-500" />
+                                            {proveedor.correo_proveedor ? (
+                                                <a
+                                                    href={`mailto:${proveedor.correo_proveedor}`}
+                                                    className="max-w-[160px] truncate text-blue-600 hover:underline"
+                                                >
+                                                    {proveedor.correo_proveedor}
+                                                </a>
+                                            ) : (
+                                                <span className="text-gray-400 italic">Sin correo</span>
+                                            )}
+                                        </div>
+                                    </TableCell>
+
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <MapPin size={14} className="shrink-0 text-gray-500" />
+                                            {proveedor.localidad_proveedor ? (
+                                                <span className="truncate">{proveedor.localidad_proveedor}</span>
+                                            ) : (
+                                                <span className="text-gray-400 italic">Sin ubicación</span>
+                                            )}
+                                        </div>
+                                    </TableCell>
+
                                     <TableCell className="text-right">
                                         {/* Botón Editar */}
                                         <Link href={route('proveedores.edit', { proveedor: proveedor.id })}>
