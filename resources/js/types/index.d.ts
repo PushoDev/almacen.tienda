@@ -89,6 +89,7 @@ export interface CuentaProps {
     saldo_cuenta: number | null;
     deuda: number;
     tipo_cuenta: 'permanentes' | 'temporales';
+    tipo_moneda: 'USD' | 'EUR' | 'MLC' | 'CUP';
     notas_cuenta?: string | null;
     created_at: string;
     updated_at: string;

@@ -10,19 +10,25 @@ class Cuenta extends Model
     use HasFactory;
 
     protected $primaryKey = 'id';
+    protected $table = 'cuentas';
 
+
+    // Propiedades que pueden ser asignadas masivamente
     protected $fillable = [
         'nombre_cuenta',
         'saldo_cuenta',
+        'tipo_moneda',
         'deuda',
         'tipo_cuenta',
         'notas_cuenta',
     ];
 
+    // Casts para manejar tipos de datos específicos
     protected $casts = [
-        'saldo_cuenta' => 'float', // double
-        'deuda' => 'float',  // double
-        'tipo_cuenta' => 'string'
+        'saldo_cuenta' => 'double',
+        'deuda' => 'double',
+        'tipo_cuenta' => 'string',
+        'tipo_moneda' => 'string',
     ];
 
     // Relación con compras (opcional)

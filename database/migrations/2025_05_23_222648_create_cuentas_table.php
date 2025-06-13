@@ -15,9 +15,10 @@ return new class extends Migration
             $table->id();
             $table->string('nombre_cuenta')->unique();
             $table->double('saldo_cuenta', 15, 8)->nullable()->default(123.4567);
+            $table->enum('tipo_moneda', ['USD', 'EUR', 'MLC', 'CUP'])->default('USD');
             // Para deudas de proveedores
             $table->double('deuda', 15, 8)->default(0);
-            $table->enum('tipo_cuenta', ['permanentes', 'temporales']);
+            $table->enum('tipo_cuenta', ['permanentes', 'temporales'])->default('permanentes');
             $table->text('notas_cuenta')->nullable();
             $table->timestamps();
         });

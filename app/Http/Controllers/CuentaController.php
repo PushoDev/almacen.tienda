@@ -14,8 +14,22 @@ class CuentaController extends Controller
      */
     public function index()
     {
+        $cuentas = Cuenta::all(); // Obtener todas las cuentas
+
         return Inertia::render('Cuentas/Index', [
-            'cuentas' => Cuenta::all(),
+            'cuentas' => $cuentas->map(function ($cuenta) {
+                return [
+                    'id' => $cuenta->id,
+                    'nombre_cuenta' => $cuenta->nombre_cuenta,
+                    'saldo_cuenta' => $cuenta->saldo_cuenta,
+                    'deuda' => $cuenta->deuda,
+                    'tipo_cuenta' => $cuenta->tipo_cuenta,
+                    'tipo_moneda' => $cuenta->tipo_moneda,
+                    'notas_cuenta' => $cuenta->notas_cuenta,
+                    'created_at' => $cuenta->created_at->format('Y-m-d H:i:s'),
+                    'updated_at' => $cuenta->updated_at->format('Y-m-d H:i:s'),
+                ];
+            }),
         ]);
     }
 
@@ -34,21 +48,23 @@ class CuentaController extends Controller
     public function store(Request $request)
     {
         // Validamos los datos del formulario
-        $request->validate([
+        $validated = $request->validate([
             'nombre_cuenta' => ['required', 'string', 'max:255', 'unique:cuentas,nombre_cuenta'],
             'saldo_cuenta' => ['nullable', 'numeric'],
+            'tipo_moneda' => ['required', 'in:USD,EUR,MLC,CUP'], // Agregamos validación para tipo_moneda
             'deuda' => ['nullable', 'numeric'],
             'tipo_cuenta' => ['required', 'in:permanentes,temporales'],
             'notas_cuenta' => ['nullable', 'string'],
         ]);
 
-        // Nueva cuenta en la base de datos
+        // Crear la cuenta en la base de datos
         Cuenta::create([
-            'nombre_cuenta' => $request->nombre_cuenta,
-            'saldo_cuenta' => $request->saldo_cuenta ?? 123.4567, // Valor por defecto si no se proporciona
-            'deuda' => $request->deuda ?? 0, // Valor por defecto si no se proporciona
-            'tipo_cuenta' => $request->tipo_cuenta,
-            'notas_cuenta' => $request->notas_cuenta,
+            'nombre_cuenta' => $validated['nombre_cuenta'],
+            'saldo_cuenta' => $validated['saldo_cuenta'] ?? 123.4567, // Valor por defecto si no se proporciona
+            'tipo_moneda' => $validated['tipo_moneda'], // Aseguramos que se guarde el tipo de moneda
+            'deuda' => $validated['deuda'] ?? 0, // Valor por defecto si no se proporciona
+            'tipo_cuenta' => $validated['tipo_cuenta'],
+            'notas_cuenta' => $validated['notas_cuenta'],
         ]);
 
         // Redirigimos al usuario a la lista de cuentas
@@ -61,7 +77,17 @@ class CuentaController extends Controller
     public function show(Cuenta $cuenta)
     {
         return Inertia::render('Cuentas/Show', [
-            'cuenta' => $cuenta,
+            'cuenta' => [
+                'id' => $cuenta->id,
+                'nombre_cuenta' => $cuenta->nombre_cuenta,
+                'saldo_cuenta' => $cuenta->saldo_cuenta,
+                'tipo_moneda' => $cuenta->tipo_moneda,
+                'deuda' => $cuenta->deuda,
+                'tipo_cuenta' => $cuenta->tipo_cuenta,
+                'notas_cuenta' => $cuenta->notas_cuenta,
+                'created_at' => $cuenta->created_at->format('Y-m-d H:i:s'),
+                'updated_at' => $cuenta->updated_at->format('Y-m-d H:i:s'),
+            ],
         ]);
     }
 
@@ -71,7 +97,15 @@ class CuentaController extends Controller
     public function edit(Cuenta $cuenta)
     {
         return Inertia::render('Cuentas/Edit', [
-            'cuenta' => $cuenta,
+            'cuenta' => [
+                'id' => $cuenta->id,
+                'nombre_cuenta' => $cuenta->nombre_cuenta,
+                'saldo_cuenta' => $cuenta->saldo_cuenta,
+                'tipo_moneda' => $cuenta->tipo_moneda,
+                'deuda' => $cuenta->deuda,
+                'tipo_cuenta' => $cuenta->tipo_cuenta,
+                'notas_cuenta' => $cuenta->notas_cuenta,
+            ],
         ]);
     }
 
@@ -81,14 +115,15 @@ class CuentaController extends Controller
     public function update(Request $request, Cuenta $cuenta)
     {
         // Validamos los datos del formulario
-        $request->validate([
+        $validated = $request->validate([
             'nombre_cuenta' => [
                 'required',
                 'string',
                 'max:255',
-                'unique:cuentas,nombre_cuenta,' . $cuenta->id
+                'unique:cuentas,nombre_cuenta,' . $cuenta->id,
             ],
             'saldo_cuenta' => ['nullable', 'numeric'],
+            'tipo_moneda' => ['required', 'in:USD,EUR,MLC,CUP'], // Validación para tipo_moneda
             'deuda' => ['nullable', 'numeric'],
             'tipo_cuenta' => ['required', 'in:permanentes,temporales'],
             'notas_cuenta' => ['nullable', 'string'],
@@ -96,11 +131,12 @@ class CuentaController extends Controller
 
         // Actualizar la cuenta en la base de datos
         $cuenta->update([
-            'nombre_cuenta' => $request->nombre_cuenta,
-            'saldo_cuenta' => $request->saldo_cuenta ?? $cuenta->saldo_cuenta,
-            'deuda' => $request->deuda ?? $cuenta->deuda,
-            'tipo_cuenta' => $request->tipo_cuenta,
-            'notas_cuenta' => $request->notas_cuenta,
+            'nombre_cuenta' => $validated['nombre_cuenta'],
+            'saldo_cuenta' => $validated['saldo_cuenta'] ?? $cuenta->saldo_cuenta,
+            'tipo_moneda' => $validated['tipo_moneda'], // Aseguramos que se actualice el tipo de moneda
+            'deuda' => $validated['deuda'] ?? $cuenta->deuda,
+            'tipo_cuenta' => $validated['tipo_cuenta'],
+            'notas_cuenta' => $validated['notas_cuenta'],
         ]);
 
         // Redirigimos al usuario a la lista de cuentas

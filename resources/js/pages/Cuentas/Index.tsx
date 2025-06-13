@@ -17,7 +17,7 @@ import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, Tabl
 import AppLayout from '@/layouts/app-layout';
 import { CuentaProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { CreditCard, Edit3, FileText, Landmark, Sheet, Trash2 } from 'lucide-react';
+import { Coins, CreditCard, Edit3, FileText, Landmark, Receipt, Sheet, Trash2, Type, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -44,18 +44,20 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
         });
     };
 
+    // Calcular el saldo total de todas las cuentas
+    const calcularSaldoTotal = () => {
+        return cuentas.reduce((total, cuenta) => total + (cuenta.saldo_cuenta || 0), 0).toFixed(2);
+    };
+
+    console.log('Listado de Cuentas -> ', cuentas);
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Cuentas" />
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
-                    {/* Contenido principal */}
-                    <HeadingSmall
-                        title="Opciones Generales del Sistema"
-                        description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento"
-                    />
-                    {/* Ícono semitransparente */}
+                    <HeadingSmall title="Gestión de Cuentas" description="Administre las cuentas disponibles para su negocio" />
                     <Landmark
                         size={70}
                         color="#d6d3d1"
@@ -74,7 +76,7 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                         </Button>
                     </Link>
 
-                    {/* Botón Editar */}
+                    {/* Botón Exportar PDF */}
                     <Link href="#">
                         <Button variant="outline" className="hover:bg-chart-5 flex cursor-pointer items-center gap-2">
                             <FileText size={16} />
@@ -82,7 +84,7 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                         </Button>
                     </Link>
 
-                    {/* Botón Regresar */}
+                    {/* Botón Exportar Excel */}
                     <Link href="#">
                         <Button variant="secondary" className="hover:bg-chart-2 flex cursor-pointer items-center gap-2">
                             <Sheet size={16} />
@@ -98,29 +100,72 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                         <TableHeader>
                             <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
                                 <TableHead className="w-[100px]">Nombre</TableHead>
+                                <TableHead>Moneda</TableHead>
                                 <TableHead>Saldo</TableHead>
                                 <TableHead>Deuda</TableHead>
-                                <TableHead>Tipo</TableHead>
+                                <TableHead>Tipo de Cuenta</TableHead>
                                 <TableHead>Notas</TableHead>
                                 <TableHead className="text-right">Acciones</TableHead>
                             </TableRow>
                         </TableHeader>
-
                         <TableBody>
                             {cuentas.map((cuenta) => (
                                 <TableRow key={cuenta.id}>
-                                    <TableCell>{cuenta.nombre_cuenta}</TableCell>
-                                    <TableCell>{cuenta.saldo_cuenta?.toFixed(2) || 'Sin saldo'}</TableCell>
-                                    <TableCell>{cuenta.deuda.toFixed(2)}</TableCell>
-                                    <TableCell>
-                                        <Badge
-                                            variant="outline"
-                                            className={`${cuenta.tipo_cuenta === 'permanentes' ? 'text-emerald-500' : 'text-blue-500'}`}
-                                        >
-                                            {cuenta.tipo_cuenta.charAt(0).toUpperCase() + cuenta.tipo_cuenta.slice(1)}
-                                        </Badge>
+                                    <TableCell className="min-w-[180px]">
+                                        <div className="flex items-center gap-2">
+                                            <Landmark size={14} className="text-primary shrink-0" />
+                                            <span className="text-primary truncate font-medium">{cuenta.nombre_cuenta}</span>
+                                        </div>
                                     </TableCell>
-                                    <TableCell>{cuenta.notas_cuenta || 'Sin notas'}</TableCell>
+
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <Coins size={14} className="shrink-0 text-amber-500" />
+                                            <Badge variant="outline" className="font-mono">
+                                                {cuenta.tipo_moneda}
+                                            </Badge>
+                                        </div>
+                                    </TableCell>
+
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <Wallet size={14} className="shrink-0 text-emerald-500" />
+                                            <span className={cuenta.saldo_cuenta ? 'font-medium' : 'text-gray-400 italic'}>
+                                                {cuenta.saldo_cuenta ? `$${cuenta.saldo_cuenta.toFixed(2)}` : 'Sin saldo'}
+                                            </span>
+                                        </div>
+                                    </TableCell>
+
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <Receipt size={14} className="shrink-0 text-rose-500" />
+                                            <span className={`font-medium ${cuenta.deuda > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                ${cuenta.deuda.toFixed(2)}
+                                            </span>
+                                        </div>
+                                    </TableCell>
+
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <Type size={14} className="shrink-0 text-indigo-500" />
+                                            <Badge
+                                                variant="outline"
+                                                className={`font-medium ${cuenta.tipo_cuenta === 'permanentes' ? 'text-emerald-500' : 'text-blue-500'}`}
+                                            >
+                                                {cuenta.tipo_cuenta.charAt(0).toUpperCase() + cuenta.tipo_cuenta.slice(1)}
+                                            </Badge>
+                                        </div>
+                                    </TableCell>
+
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <FileText size={14} className="shrink-0 text-gray-500" />
+                                            <span className="max-w-[200px] truncate">
+                                                {cuenta.notas_cuenta || <span className="text-gray-400 italic">Sin notas</span>}
+                                            </span>
+                                        </div>
+                                    </TableCell>
+
                                     <TableCell className="text-right">
                                         {/* Botón Editar */}
                                         <Link href={route('cuentas.edit', { cuenta: cuenta.id })}>
@@ -172,6 +217,7 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                                     Total de Cuentas
                                 </TableCell>
                                 <TableCell className="bg-gray-500 text-center">{cuentas.length}</TableCell>
+                                <TableCell className="bg-gray-500 text-center">${calcularSaldoTotal()}</TableCell>
                             </TableRow>
                         </TableFooter>
                     </Table>
