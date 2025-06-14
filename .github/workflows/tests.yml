@@ -16,23 +16,23 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3  # Versión estable
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@v3
         with:
-          php-version: 8.4
+          php-version: '8.2'  # PHP 8.2
           tools: composer:v2
           coverage: xdebug
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '18'  # Node.js 18.x (estable y compatible)
           cache: 'npm'
 
       - name: Install Node Dependencies
-        run: npm ci
+        run: npm ci --legacy-peer-deps  # Ignora conflictos de React 19.0.0
 
       - name: Build Assets
         run: npm run build

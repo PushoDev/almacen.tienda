@@ -17,17 +17,18 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3  # Versión estable
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@v3
         with:
-          php-version: '8.4'
+          php-version: '8.2'  # PHP 8.2
+          tools: composer:v2
 
       - name: Install Dependencies
         run: |
           composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
-          npm install --legacy-peer-deps # Agregamos --legacy-peer-deps aquí
+          npm install --legacy-peer-deps  # Ignora conflictos de React 19.0.0
 
       - name: Run Pint
         run: vendor/bin/pint
@@ -37,9 +38,3 @@ jobs:
 
       - name: Lint Frontend
         run: npm run lint
-
-      # - name: Commit Changes
-      #   uses: stefanzweifel/git-auto-commit-action@v5
-      #   with:
-      #     commit_message: fix code style
-      #     commit_options: '--no-verify'
