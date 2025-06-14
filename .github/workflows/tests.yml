@@ -12,11 +12,11 @@ on:
 
 jobs:
   ci:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # Usa la imagen más reciente de Ubuntu
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3  # Versión estable
+        uses: actions/checkout@v4  # Versión actualizada
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v3
@@ -25,14 +25,15 @@ jobs:
           tools: composer:v2
           coverage: xdebug
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'  # Node.js 18.x (estable y compatible)
+          node-version: '18'  # Node.js 18.x (compatible con React 19.0.0)
           cache: 'npm'
 
       - name: Install Node Dependencies
-        run: npm ci --legacy-peer-deps  # Ignora conflictos de React 19.0.0
+        run: |
+          npm install --legacy-peer-deps  # Ignora conflictos de React 19.0.0
 
       - name: Build Assets
         run: npm run build
