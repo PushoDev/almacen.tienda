@@ -17,7 +17,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function ComprasPorProveedorPage({ compras, proveedor }: { compras: CompraPorProveedorRef[]; proveedor: ProveedorProps | null }) {
+export default function ComprasPorProveedorPage({ compras }: { compras: CompraPorProveedorRef[]; proveedor: ProveedorProps | null }) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Compras por Proveedor" />

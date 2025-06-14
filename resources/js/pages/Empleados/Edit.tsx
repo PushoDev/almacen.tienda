@@ -28,7 +28,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 export default function EditEmpleadoPage({ empleado, almacenes }: { empleado: User; almacenes: AlmacenProps[] }) {
     // Manejo del formulario con useForm
-    const { data, setData, put, reset, errors, processing } = useForm({
+    const { data, setData, put, errors, processing } = useForm({
         name: empleado.name,
         email: empleado.email,
         password: '',
