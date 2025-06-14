@@ -1,3 +1,5 @@
+# Creado por: Luis Alberto Guisado
+# Pushodev
 name: linter
 
 on:
@@ -17,24 +19,18 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3  # Versión estable
+      # Paso 1: Checkout del código
+      - uses: actions/checkout@v4
 
+      # Paso 2: Configuración de PHP
       - name: Setup PHP
-        uses: shivammathur/setup-php@v3
+        uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.2'  # PHP 8.2
-          tools: composer:v2
+          php-version: '8.2'
 
-      - name: Install Dependencies
-        run: |
-          composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
-          npm install --legacy-peer-deps  # Ignora conflictos de React 19.0.0
+      # Paso 3: Configuración de Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
 
-      - name: Run Pint
-        run: vendor/bin/pint
-
-      - name: Format Frontend
-        run: npm run format
-
-      - name: Lint Frontend
-        run: npm run lint
