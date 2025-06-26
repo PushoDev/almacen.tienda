@@ -6,6 +6,7 @@ import { type Auth, type NavItem } from '@/types';
 import type { PageProps as InertiaPageProps } from '@inertiajs/core';
 import { Link, usePage } from '@inertiajs/react';
 import {
+    ArrowUpNarrowWide,
     BookOpen,
     Cctv,
     ChartNoAxesCombinedIcon,
@@ -74,10 +75,16 @@ const allNavItems: NavItem[] = [
         roles: ['admin', 'vendedor'],
     },
     {
-        title: 'Ventas Disponibles',
+        title: 'Inventario Disponible',
         href: '/disponibles',
         icon: ShoppingBasket,
         roles: ['admin', 'vendedor'],
+    },
+    {
+        title: 'Tops Productos',
+        href: '#',
+        icon: ArrowUpNarrowWide,
+        roles: ['admin'],
     },
     {
         title: 'Proveedores',

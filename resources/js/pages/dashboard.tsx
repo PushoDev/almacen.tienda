@@ -1,5 +1,7 @@
 import HeadingSmall from '@/components/heading-small';
+import { CursorFollow, CursorProvider } from '@/components/ui/cursor';
 import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
+import { ScrollProgress } from '@/components/ui/scroll';
 import AppLayout from '@/layouts/app-layout';
 import { ComprasVentasCharts } from '@/layouts/charts/ChartCompraVenta';
 import WidgetInventario from '@/layouts/home/WidgetInventario';
@@ -20,10 +22,15 @@ export default function Dashboard() {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Inventario" />
+            <ScrollProgress />
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
-                {/* <div className="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-2 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4"></div> */}
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                    <CursorProvider>
+                        <CursorFollow>
+                            <div className="rounded-lg bg-blue-500 px-2 py-1 text-sm text-white shadow-lg">Opciones Generales</div>
+                        </CursorFollow>
+                    </CursorProvider>
                     {/* Contenido principal */}
                     <HeadingSmall
                         title="Opciones Generales del Sistema"
@@ -41,6 +48,11 @@ export default function Dashboard() {
                 <div className="animate__animated animate__flipInX grid auto-rows-min gap-4 md:grid-cols-4">
                     {/* Widget de Compra */}
                     <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-red-800 to-red-400">
+                        <CursorProvider>
+                            <CursorFollow>
+                                <div className="rounded-lg bg-red-500 px-2 py-1 text-sm text-white shadow-lg">Comprar Nuevos Productos</div>
+                            </CursorFollow>
+                        </CursorProvider>
                         {/* Ícono de fondo transparente */}
                         <div id="compra-producto" className="absolute inset-0 flex items-center justify-center opacity-10">
                             <ShoppingBagIcon className="h-48 w-48 text-white" />
@@ -63,6 +75,7 @@ export default function Dashboard() {
                                 </button>
                             </Link>
                         </div>
+
                         {/* Patrón de fondo adicional */}
                         <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
                     </div>
