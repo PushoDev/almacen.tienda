@@ -41,7 +41,7 @@ function ScrollProgress({
         {...progressProps}
         style={{ scaleX }}
         className={cn(
-          'fixed z-50 top-0 inset-x-0 h-1 bg-blue-500 origin-left',
+          'fixed z-50 top-0 inset-x-0 h-1 dark:bg-red-400 bg-blue-600 origin-left',
           progressProps?.className,
         )}
       />
