@@ -6,10 +6,7 @@ use App\Models\Producto;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
-use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
-
 use Illuminate\Support\Facades\DB;
-
 
 class ProductoVendedorController extends Controller
 {
@@ -32,7 +29,7 @@ class ProductoVendedorController extends Controller
                 ->with(['almacenes' => fn($q) => $q->whereIn('almacens.id', $almacenIds)->withPivot('cantidad')]);
         }
 
-        // Cargar datos específicos del vendedor
+        // Cargar datos específicos del vendedor actual
         $query->with(['vendedores' => function ($q) use ($user) {
             $q->where('user_id', $user->id)
                 ->select('users.id', 'producto_vendedors.precio_venta', 'producto_vendedors.venta_ganancia');
@@ -75,57 +72,71 @@ class ProductoVendedorController extends Controller
         $user = Auth::user();
         $producto = Producto::findOrFail($productoId);
 
+        // Validación de datos
         $validated = $request->validate([
-            'precio_venta' => ['required', 'numeric', 'min:0.01', 'regex:/^\d+(\.\d{1,2})?$/'],
+            'precio_venta' => ['required', 'numeric', 'min:0.01'],
         ]);
 
+        // Calcular valores
         $precioVenta = round($validated['precio_venta'], 2);
         $ganancia = round($precioVenta - $producto->precio_compra_producto, 2);
 
-        // Actualización directa del registro pivot existente
-        DB::table('producto_vendedors')
-            ->where('producto_id', $productoId)
-            ->where('user_id', $user->id)
-            ->update([
+        // Verificar acceso al producto (solo para vendedores)
+        if ($user->role !== 'admin') {
+            $almacenIds = $user->almacenes->pluck('id');
+            if (!$producto->almacenes->whereIn('id', $almacenIds)->isNotEmpty()) {
+                return response()->json([
+                    'error' => 'No tienes acceso a este producto.',
+                ], 403);
+            }
+        }
+
+        // Crear o actualizar el registro pivot
+        DB::table('producto_vendedors')->updateOrInsert(
+            [
+                'producto_id' => $productoId,
+                'user_id' => $user->id,
+            ],
+            [
                 'precio_venta' => $precioVenta,
                 'venta_ganancia' => $ganancia,
-                'updated_at' => now()
-            ]);
+                'updated_at' => now(),
+            ]
+        );
 
         return response()->json([
             'success' => true,
             'message' => 'Precio actualizado correctamente',
             'new_profit' => $ganancia,
             'new_price' => $precioVenta,
-        ], 200);
+        ]);
     }
-
 
     /**
      * Métodos no implementados (seguridad)
      */
     public function create()
     {
-        abort(404, 'Recurso no disponible');
+        abort(404);
     }
 
     public function store(Request $request)
     {
-        throw new MethodNotAllowedHttpException([], 'Método no permitido');
+        abort(405, 'Método no permitido');
     }
 
     public function show($id)
     {
-        abort(404, 'Recurso no disponible');
+        abort(404);
     }
 
     public function edit($id)
     {
-        abort(404, 'Recurso no disponible');
+        abort(404);
     }
 
     public function destroy($id)
     {
-        throw new MethodNotAllowedHttpException([], 'Método no permitido');
+        abort(405, 'Método no permitido');
     }
 }
