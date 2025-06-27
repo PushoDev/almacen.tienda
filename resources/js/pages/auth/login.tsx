@@ -2,9 +2,9 @@ import { Head, useForm } from '@inertiajs/react';
 import { DoorOpen, LoaderCircle } from 'lucide-react';
 import { FormEventHandler } from 'react';
 
+import { LiquidButton } from '@/components/animated/liquid-button';
 import InputError from '@/components/input-error';
 import TextLink from '@/components/text-link';
-import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -90,7 +90,13 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                         <Label htmlFor="remember">Recuerdar mi Cuenta</Label>
                     </div>
 
-                    <Button
+                    <LiquidButton tabIndex={4} type="submit" className="cursor-pointer hover:animate-pulse" disabled={processing}>
+                        {processing && <LoaderCircle className="h-4 w-4" />}
+                        <DoorOpen />
+                        Loguearse
+                    </LiquidButton>
+
+                    {/* <Button
                         variant="secondary"
                         type="submit"
                         className="hover:bg-sidebar-accent mt-4 w-full cursor-pointer hover:animate-pulse"
@@ -100,7 +106,7 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                         {processing && <LoaderCircle className="h-4 w-4" />}
                         <DoorOpen />
                         Loguearse
-                    </Button>
+                    </Button> */}
                 </div>
 
                 {/* <div className="text-muted-foreground text-center text-sm">
