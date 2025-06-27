@@ -2,7 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Producto;
+use App\Models\Producto; // ✅ Productos disponibles
+use App\Models\PrecioHistorial; // ✅ Historia
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
@@ -91,6 +92,16 @@ class ProductoVendedorController extends Controller
             }
         }
 
+        // 💡 Obtenemos el precio anterior antes de actualizar
+        $precioAnterior = DB::table('producto_vendedors')
+            ->where('producto_id', $productoId)
+            ->where('user_id', $user->id)
+            ->value('precio_venta');
+
+        // 🛠️ Flag para detectar cambio de precio
+        $precioCambio = $precioAnterior !== null &&
+            round($precioAnterior, 2) != $precioVenta;
+
         // Crear o actualizar el registro pivot
         DB::table('producto_vendedors')->updateOrInsert(
             [
@@ -104,11 +115,48 @@ class ProductoVendedorController extends Controller
             ]
         );
 
+        // 📜 Registramos en el historial solo si hubo cambio
+        if ($precioCambio) {
+            PrecioHistorial::create([
+                'producto_id' => $productoId,
+                'user_id' => $user->id,
+                'precio_anterior' => $precioAnterior ?? 0.00,
+                'precio_nuevo' => $precioVenta,
+            ]);
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Precio actualizado correctamente',
             'new_profit' => $ganancia,
             'new_price' => $precioVenta,
+            'history_recorded' => $precioCambio, // ✅ Información adicional opcional
+        ]);
+    }
+
+    /**
+     * Historial de Precios
+     */
+    public function historial($productoId)
+    {
+        $historial = PrecioHistorial::with(['usuario', 'producto'])
+            ->where('producto_id', $productoId)
+            ->latest()
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'producto' => $item->producto->nombre_producto,
+                    'usuario' => $item->usuario->name,
+                    'precio_anterior' => $item->precio_anterior,
+                    'precio_nuevo' => $item->precio_nuevo,
+                    'accion' => $item->accion,
+                    'fecha' => $item->created_at->format('d/m/Y H:i'),
+                ];
+            });
+
+        return Inertia::render('Reportes/Report/HistorialPrecios', [
+            'historial' => $historial,
         ]);
     }
 

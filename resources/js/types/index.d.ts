@@ -355,3 +355,13 @@ export interface VendedorProductoProps {
     creado_en?: string;
     actualizado_en?: string;
 }
+
+// Historial de Precios
+export interface HistorialPrecioRef {
+    id: number;
+    producto: string;
+    usuario: string;
+    precio_anterior: number;
+    precio_nuevo: number;
+    fecha: string;
+}

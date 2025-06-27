@@ -211,6 +211,31 @@ export default function ReportesPage() {
                         <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
                     </div>
                     {/* Par otros reportes, faltarian 6 entonces */}
+                    <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-sky-800 to-sky-400">
+                        {/* Ícono de fondo transparente */}
+                        <div id="compra-producto" className="absolute inset-0 flex items-center justify-center opacity-10">
+                            <FileBox className="h-48 w-48 text-white" />
+                        </div>
+                        {/* Contenido principal */}
+                        <div className="relative z-10 h-full p-6">
+                            {/* Ícono en la esquina superior izquierda */}
+                            <div className="absolute top-4 left-4">
+                                <FileBox className="h-8 w-8 text-white" />
+                            </div>
+                            {/* Textos alineados a la derecha */}
+                            <div className="flex h-full flex-col items-end justify-center space-y-2">
+                                <span className="text-lg text-white">Ver historial de precios</span>
+                            </div>
+
+                            <Link href="#">
+                                <button className="absolute right-4 bottom-4 ms-2 rounded-md bg-sky-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-sky-800">
+                                    Ver más ...
+                                </button>
+                            </Link>
+                        </div>
+                        {/* Patrón de fondo adicional */}
+                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
+                    </div>
                 </div>
 
                 {/* Charts Reportes */}

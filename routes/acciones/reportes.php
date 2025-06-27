@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ProductoVendedorController;
 use App\Http\Controllers\ReporteController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -32,5 +33,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         // Lista detallada de productos por almacén
         Route::get('/productos-por-almacen-detalle', [ReporteController::class, 'productosPorAlmacenDetalle'])
             ->name('productos_por_almacen_detalle');
+
+
+        // Historial de Precios
+        Route::get('/historial/precios/{producto}', [ProductoVendedorController::class, 'historial'])
+            ->name('historial_precios')
+            ->where('producto', '[0-9]+');
     });
 });
