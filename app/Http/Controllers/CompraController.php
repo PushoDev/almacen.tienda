@@ -100,7 +100,7 @@ class CompraController extends Controller
 
             // Lógica de cuenta según tipo de compra
             if ($validated['compra'] === 'deuda_proveedor') {
-                $nombreCuentaTemporal = "Deuda - {$proveedor->nombre_proveedor}";
+                $nombreCuentaTemporal = "{$proveedor->nombre_proveedor}";
 
                 // Buscar o crear cuenta temporal
                 $cuentaTemporal = Cuenta::firstOrCreate(
@@ -108,7 +108,8 @@ class CompraController extends Controller
                     [
                         'tipo_cuenta' => 'temporales',
                         'saldo_cuenta' => $total,
-                        'tipo_moneda' => 'USD'
+                        'tipo_moneda' => 'USD',
+                        'notas_cuenta' => 'Deuda Pendiente, pagar luego en Transacciones',
                     ]
                 );
 
