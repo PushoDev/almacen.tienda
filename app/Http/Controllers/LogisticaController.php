@@ -110,18 +110,18 @@ class LogisticaController extends Controller
 
         // Renderizar la vista con los datos
         return Inertia::render('Logistica/Index', [
-            'totalCategorias' => $totalCategorias,
-            'categoriasActivas' => $categoriasActivas,
-            'totalProveedores' => $totalProveedores,
-            'totalClientes' => $totalClientes,
-            'totalProductos' => $totalProductos,
-            'totalUnidades' => $totalUnidades, // Total de unidades por porductos
-            'inversionTotal' => $inversionTotal, // Inversión total de los productos
-            'totalCuentas' => $totalCuentas,  // Cuentasa de Inversion y Ganancias
-            'saldoCuentas' => $saldoCuentas,  // Saldo de las Cuentas Bancarias
-            'deudaPendientes' => $deudaPendientes, // Deudas a Proveedores
-            'deudaPendietesSaldo' => $deudaPendietesSaldo,
-            'montoGeneralInvertido' => $montoGeneralInvertido, // Toda la plata limpia del negocio 💀
+            'totalCategorias' => $totalCategorias ?? 0,
+            'categoriasActivas' => $categoriasActivas ?? 0,
+            'totalProveedores' => $totalProveedores ?? 0,
+            'totalClientes' => $totalClientes ?? 0,
+            'totalProductos' => $totalProductos ?? 0,
+            'totalUnidades' => $totalUnidades ?? 0, // Total de unidades por porductos
+            'inversionTotal' => $inversionTotal ?? 0, // Inversión total de los productos
+            'totalCuentas' => $totalCuentas ?? 0,  // Cuentasa de Inversion y Ganancias
+            'saldoCuentas' => $saldoCuentas ?? 0,  // Saldo de las Cuentas Bancarias
+            'deudaPendientes' => $deudaPendientes ?? 0, // Deudas a Proveedores
+            'deudaPendietesSaldo' => $deudaPendietesSaldo ?? 0,
+            'montoGeneralInvertido' => $montoGeneralInvertido ?? 0, // Toda la plata limpia del negocio 💀
 
             // Charts
             'gastosMensuales' => $gastosMensuales,

@@ -8,6 +8,8 @@ use App\Models\Almacen;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
+use Illuminate\Support\Facades\DB;
+
 class DatabaseSeeder extends Seeder
 {
     /**
@@ -35,5 +37,30 @@ class DatabaseSeeder extends Seeder
                 'notas_almacen' => 'Este es el almacén predeterminado para productos sin compra asociada.',
             ]
         );
+
+        // Insertar categorías
+        DB::table('categorias')->insert([
+            [
+                'nombre_categoria' => 'Cocina',
+                'descripcion_categoria' => 'Equipos de Cocina, cafeteras, hornillas, hornos, etc',
+                'activar_categoria' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'nombre_categoria' => 'Refrigeración',
+                'descripcion_categoria' => 'Refrigeración, Neveras',
+                'activar_categoria' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'nombre_categoria' => 'Audiovisuales',
+                'descripcion_categoria' => 'Smartv, Cajitas, Equipos audiovisuales',
+                'activar_categoria' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
     }
 }
