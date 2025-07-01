@@ -12,6 +12,7 @@ use App\Models\Proveedor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
+use Illuminate\Validation\Rule;
 
 class CompraController extends Controller
 {
@@ -60,16 +61,24 @@ class CompraController extends Controller
     {
         $validated = $request->validate([
             'compra' => 'required|in:deuda_proveedor,pago_cash',
-            'cuenta_id' => 'required|exists:cuentas,id',
             'almacen' => 'required|string|max:255',
             'proveedor' => 'required|string|max:255',
             'fecha' => 'required|date',
             'productos' => 'required|array|min:1',
             'productos.*.producto' => 'required|string|max:255',
             'productos.*.categoria' => 'required|string|max:255',
-            'productos.*.codigo' => 'required|string|max:255|unique:productos,codigo_producto',
+            'productos.*.codigo' => [
+                'required',
+                'string',
+                'max:255',
+                'unique:productos,codigo_producto'
+            ],
             'productos.*.cantidad' => 'required|integer|min:1',
             'productos.*.precio' => 'required|numeric|min:0',
+            'cuenta_id' => [
+                Rule::requiredIf(fn() => $request->input('compra') === 'pago_cash'),
+                'exists:cuentas,id',
+            ],
         ]);
 
         DB::beginTransaction();
@@ -81,73 +90,94 @@ class CompraController extends Controller
 
             // Calcular total y crear compra
             $total = collect($validated['productos'])->sum(fn($p) => $p['cantidad'] * $p['precio']);
-            $compra = Compra::create([
+            $compraData = [
                 'almacen_id' => $almacen->id,
                 'proveedor_id' => $proveedor->id,
-                'cuenta_id' => $validated['cuenta_id'],
                 'fecha_compra' => $validated['fecha'],
                 'total_compra' => $total,
                 'tipo_compra' => $validated['compra'],
-            ]);
+            ];
+
+            // Lógica de cuenta según tipo de compra
+            if ($validated['compra'] === 'deuda_proveedor') {
+                $nombreCuentaTemporal = "Deuda - {$proveedor->nombre_proveedor}";
+
+                // Buscar o crear cuenta temporal
+                $cuentaTemporal = Cuenta::firstOrCreate(
+                    ['nombre_cuenta' => $nombreCuentaTemporal],
+                    [
+                        'tipo_cuenta' => 'temporales',
+                        'saldo_cuenta' => $total,
+                        'tipo_moneda' => 'USD'
+                    ]
+                );
+
+                // Actualizar saldo si ya existía
+                if (!$cuentaTemporal->wasRecentlyCreated) {
+                    $cuentaTemporal->saldo_cuenta += $total;
+                    $cuentaTemporal->save();
+                }
+
+                $compraData['cuenta_id'] = $cuentaTemporal->id;
+            } else {
+                // Validación adicional para pago en efectivo
+                $cuenta = Cuenta::findOrFail($validated['cuenta_id']);
+
+                if ($cuenta->saldo_cuenta < $total) {
+                    throw new \Exception('Saldo insuficiente en la cuenta seleccionada');
+                }
+
+                $cuenta->saldo_cuenta -= $total;
+                $cuenta->save();
+
+                $compraData['cuenta_id'] = $cuenta->id;
+            }
+
+            // Crear compra
+            $compra = Compra::create($compraData);
 
             // Procesar productos
             foreach ($validated['productos'] as $item) {
+                // Crear categoría si no existe
                 $categoria = Categoria::firstOrCreate(['nombre_categoria' => $item['categoria']]);
 
-                $producto = Producto::create([
-                    'nombre_producto' => $item['producto'],
-                    'categoria_id' => $categoria->id,
-                    'codigo_producto' => $item['codigo'],
-                    'precio_compra_producto' => $item['precio'],
-                    'cantidad_producto' => $item['cantidad'],
-                ]);
+                // Crear producto si no existe
+                $producto = Producto::firstOrCreate(
+                    ['codigo_producto' => $item['codigo']],
+                    [
+                        'nombre_producto' => $item['producto'],
+                        'categoria_id' => $categoria->id,
+                        'precio_compra_producto' => $item['precio'],
+                        'cantidad_producto' => $item['cantidad'],
+                    ]
+                );
 
-                // Asociar el producto a la compra
+                // Asociar producto a la compra
                 $compra->productos()->attach($producto->id, [
                     'cantidad' => $item['cantidad'],
                     'precio' => $item['precio'],
                 ]);
 
-                // Actualizar la tabla 'almacen_producto' para reflejar el inventario
-                $registro = AlmacenProducto::where([
-                    ['almacen_id', $almacen->id],
-                    ['producto_id', $producto->id],
-                ])->first();
-
-                if ($registro) {
-                    // Si ya existe, aumentar la cantidad
-                    $registro->cantidad += $item['cantidad'];
-                    $registro->save();
-                } else {
-                    // Si no existe, crear un nuevo registro
-                    AlmacenProducto::create([
-                        'almacen_id' => $almacen->id,
-                        'producto_id' => $producto->id,
-                        'cantidad' => $item['cantidad'],
-                    ]);
-                }
+                // Actualizar inventario en AlmacenProducto
+                $registro = AlmacenProducto::updateOrCreate(
+                    ['almacen_id' => $almacen->id, 'producto_id' => $producto->id],
+                    ['cantidad' => DB::raw("cantidad + {$item['cantidad']}")]
+                );
             }
-
-            // Actualizar cuenta según tipo de compra
-            $cuenta = Cuenta::findOrFail($validated['cuenta_id']);
-            if ($validated['compra'] === 'deuda_proveedor') {
-                $cuenta->deuda += $total;
-            } else {
-                $cuenta->saldo_cuenta -= $total;
-            }
-            $cuenta->save();
 
             DB::commit();
 
-            // Redirigir con mensaje de éxito
-            return Inertia::location(route('dashboard'));
+            return Inertia::render('dashboard');
         } catch (\Exception $e) {
             DB::rollBack();
+
+            // Respuesta de error corregida
             return Inertia::render('Comprar/Index', [
                 'errors' => ['_error' => 'Error al procesar la compra: ' . $e->getMessage()]
-            ])->withStatusCode(500);
+            ])->setStatusCode(500);
         }
     }
+
 
 
     /**
