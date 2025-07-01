@@ -17,7 +17,7 @@ import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, Tabl
 import AppLayout from '@/layouts/app-layout';
 import { CuentaProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { Coins, CreditCard, Edit3, FileText, Landmark, Receipt, Sheet, Trash2, Type, Wallet } from 'lucide-react';
+import { Coins, CreditCard, Edit3, FileText, Landmark, Sheet, Trash2, Type, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -102,7 +102,6 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                                 <TableHead className="w-[100px]">Nombre</TableHead>
                                 <TableHead>Moneda</TableHead>
                                 <TableHead>Saldo</TableHead>
-                                <TableHead>Deuda</TableHead>
                                 <TableHead>Tipo de Cuenta</TableHead>
                                 <TableHead>Notas</TableHead>
                                 <TableHead className="text-right">Acciones</TableHead>
@@ -132,15 +131,6 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                                             <Wallet size={14} className="shrink-0 text-emerald-500" />
                                             <span className={cuenta.saldo_cuenta ? 'font-medium' : 'text-gray-400 italic'}>
                                                 {cuenta.saldo_cuenta ? `$${cuenta.saldo_cuenta.toFixed(2)}` : 'Sin saldo'}
-                                            </span>
-                                        </div>
-                                    </TableCell>
-
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <Receipt size={14} className="shrink-0 text-rose-500" />
-                                            <span className={`font-medium ${cuenta.deuda > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                                ${cuenta.deuda.toFixed(2)}
                                             </span>
                                         </div>
                                     </TableCell>
@@ -213,7 +203,7 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                         </TableBody>
                         <TableFooter>
                             <TableRow>
-                                <TableCell colSpan={5} className="bg-gray-700">
+                                <TableCell colSpan={4} className="bg-gray-700">
                                     Total de Cuentas
                                 </TableCell>
                                 <TableCell className="bg-gray-500 text-center">{cuentas.length}</TableCell>

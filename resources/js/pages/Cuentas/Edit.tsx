@@ -31,7 +31,6 @@ export default function EditarCuentasPage({ cuenta }: { cuenta: CuentaProps }) {
     const { data, setData, put, errors, processing } = useForm({
         nombre_cuenta: cuenta.nombre_cuenta,
         saldo_cuenta: cuenta.saldo_cuenta ?? 123.4567,
-        deuda: cuenta.deuda,
         tipo_cuenta: cuenta.tipo_cuenta,
         tipo_moneda: cuenta.tipo_moneda || 'USD', // Valor por defecto si no está definido
         notas_cuenta: cuenta.notas_cuenta || '',
@@ -106,22 +105,6 @@ export default function EditarCuentasPage({ cuenta }: { cuenta: CuentaProps }) {
                                 </div>
 
                                 {/* Campo Deuda */}
-                                <div>
-                                    <Label htmlFor="deuda" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        Deuda:
-                                    </Label>
-                                    <Input
-                                        id="deuda"
-                                        type="number"
-                                        step="0.00000001"
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                        value={data.deuda}
-                                        onChange={(e) => setData('deuda', parseFloat(e.target.value))}
-                                        autoComplete="deuda"
-                                        placeholder="Deuda"
-                                    />
-                                    <InputError className="mt-2" message={errors.deuda} />
-                                </div>
                             </div>
 
                             {/* Columna 2 */}
