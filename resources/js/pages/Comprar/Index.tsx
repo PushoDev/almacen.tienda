@@ -65,13 +65,16 @@ export default function ComprarPage() {
     // Estado para productos en la tabla
     const [productos, setProductos] = useState<ProductoComprarProps[]>([]);
 
+    const cuentaDefaultId = 1;
+
     // Datos del formulario principal
     const { data, setData, post, processing } = useForm({
         compra: 'deuda_proveedor',
-        cuenta_id: 1,
+        cuenta_id: cuentaDefaultId, // Referencia para 'deuda_proveedor'
         almacen: '',
         proveedor: '',
         fecha: date ? date.toISOString().split('T')[0] : '',
+        pagos: [] as { cuenta_id: number; monto: number }[],
     });
 
     // Cargar datos iniciales
@@ -401,16 +404,17 @@ export default function ComprarPage() {
                                 Realizar Compra
                             </Button>
                         </AlertDialogTrigger>
+                        {/* Contenido */}
                         <AlertDialogContent>
                             <AlertDialogHeader>
                                 <AlertDialogTitle>Tipo de Compra</AlertDialogTitle>
                                 <AlertDialogDescription>Seleccione si desea pagar ahora o comprar y pagar luego</AlertDialogDescription>
                             </AlertDialogHeader>
 
-                            {/* Opciones de Compra */}
-                            <div className="grid grid-cols-2 gap-4">
-                                {/* Tipo de Compra */}
-                                <div className="grid w-full max-w-sm items-center gap-1.5">
+                            {/* Formulario dinámico */}
+                            <div className="flex flex-col gap-4 pt-4">
+                                {/* Tipo de Compra (único campo visible siempre) */}
+                                <div className="grid w-full items-center gap-1.5">
                                     <Label htmlFor="tipo_compra">Tipo de Compra</Label>
                                     <Select
                                         name="compra"
@@ -428,27 +432,72 @@ export default function ComprarPage() {
                                     {errors.compra && <InputError message={errors.compra[0]} />}
                                 </div>
 
-                                {/* Cuenta */}
-                                <div className="grid w-full max-w-sm items-center gap-1.5">
-                                    <Label htmlFor="cuenta">Cuenta</Label>
-                                    <Select
-                                        name="cuenta_id"
-                                        value={data.cuenta_id.toString()}
-                                        onValueChange={(value) => setData('cuenta_id', parseInt(value))}
-                                    >
-                                        <SelectTrigger className="w-full">
-                                            <SelectValue placeholder="Seleccione Cuenta" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {cuentas.map((cuenta) => (
-                                                <SelectItem key={cuenta.id} value={cuenta.id.toString()}>
-                                                    {cuenta.nombre_cuenta}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    {errors.cuenta_id && <InputError message={errors.cuenta_id[0]} />}
-                                </div>
+                                {/* Solo mostrar si es pago_cash */}
+                                {data.compra === 'pago_cash' && (
+                                    <>
+                                        <Separator />
+
+                                        <div className="space-y-3">
+                                            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                Selecciona las cuentas y asigna el monto
+                                            </h3>
+
+                                            {/* Lista de cuentas */}
+                                            {cuentas.map((cuenta) => {
+                                                const index = data.pagos?.findIndex((pago) => pago.cuenta_id === cuenta.id);
+
+                                                const pago = data.pagos?.[index] || null;
+
+                                                return (
+                                                    <div key={cuenta.id} className="flex items-center gap-3">
+                                                        <div className="flex-1">
+                                                            <span className="block font-medium">{cuenta.nombre_cuenta}</span>
+                                                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                                                                Saldo: ${cuenta.saldo_cuenta.toFixed(2)}
+                                                            </span>
+                                                        </div>
+
+                                                        <div className="flex-1">
+                                                            <Input
+                                                                type="number"
+                                                                min="0.01"
+                                                                step="0.01"
+                                                                placeholder="Monto"
+                                                                value={pago?.monto ?? ''}
+                                                                onChange={(e) => {
+                                                                    const monto = parseFloat(e.target.value) || 0;
+                                                                    if (!data.pagos) {
+                                                                        setData('pagos', [{ cuenta_id: cuenta.id, monto }]);
+                                                                    } else {
+                                                                        const updatedPagos = [...data.pagos];
+                                                                        const idx = updatedPagos.findIndex((p) => p.cuenta_id === cuenta.id);
+
+                                                                        if (idx > -1) {
+                                                                            updatedPagos[idx].monto = monto;
+                                                                        } else {
+                                                                            updatedPagos.push({ cuenta_id: cuenta.id, monto });
+                                                                        }
+
+                                                                        setData('pagos', updatedPagos);
+                                                                    }
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+
+                                            {/* Mostrar mensaje de error si hay */}
+                                            {errors.pagos && <InputError message={errors.pagos[0]} />}
+                                        </div>
+
+                                        {/* Mostrar total acumulado */}
+                                        <div className="mt-2 text-right text-sm text-gray-600 dark:text-gray-400">
+                                            Total pagado: ${data.pagos?.reduce((acc, pago) => acc + pago.monto, 0).toFixed(2) || '0.00'} / $
+                                            {parseFloat(calcularTotal()).toFixed(2)}
+                                        </div>
+                                    </>
+                                )}
                             </div>
 
                             <AlertDialogFooter>
