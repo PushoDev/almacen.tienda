@@ -65,16 +65,13 @@ export default function ComprarPage() {
     // Estado para productos en la tabla
     const [productos, setProductos] = useState<ProductoComprarProps[]>([]);
 
-    const cuentaDefaultId = 1;
-
     // Datos del formulario principal
     const { data, setData, post, processing } = useForm({
         compra: 'deuda_proveedor',
-        cuenta_id: cuentaDefaultId, // Referencia para 'deuda_proveedor'
+        cuenta_id: 1,
         almacen: '',
         proveedor: '',
         fecha: date ? date.toISOString().split('T')[0] : '',
-        pagos: [] as { cuenta_id: number; monto: number }[],
     });
 
     // Cargar datos iniciales
@@ -413,7 +410,7 @@ export default function ComprarPage() {
 
                             {/* Formulario dinámico */}
                             <div className="flex flex-col gap-4 pt-4">
-                                {/* Tipo de Compra (único campo visible siempre) */}
+                                {/* Tipo de Compra (siempre visible) */}
                                 <div className="grid w-full items-center gap-1.5">
                                     <Label htmlFor="tipo_compra">Tipo de Compra</Label>
                                     <Select
@@ -439,13 +436,12 @@ export default function ComprarPage() {
 
                                         <div className="space-y-3">
                                             <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                Selecciona las cuentas y asigna el monto
+                                                Seleccione las cuentas y el monto a usar
                                             </h3>
 
-                                            {/* Lista de cuentas */}
+                                            {/* Lista de cuentas con monto */}
                                             {cuentas.map((cuenta) => {
                                                 const index = data.pagos?.findIndex((pago) => pago.cuenta_id === cuenta.id);
-
                                                 const pago = data.pagos?.[index] || null;
 
                                                 return (
@@ -491,7 +487,7 @@ export default function ComprarPage() {
                                             {errors.pagos && <InputError message={errors.pagos[0]} />}
                                         </div>
 
-                                        {/* Mostrar total acumulado */}
+                                        {/* Total acumulado */}
                                         <div className="mt-2 text-right text-sm text-gray-600 dark:text-gray-400">
                                             Total pagado: ${data.pagos?.reduce((acc, pago) => acc + pago.monto, 0).toFixed(2) || '0.00'} / $
                                             {parseFloat(calcularTotal()).toFixed(2)}
