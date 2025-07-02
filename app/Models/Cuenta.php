@@ -34,6 +34,7 @@ class Cuenta extends Model
     // Relación con compras (opcional)
     public function compras()
     {
-        return $this->hasMany(Compra::class);
+        return $this->belongsToMany(Compra::class, 'compra_pago')
+            ->withPivot('monto');
     }
 }

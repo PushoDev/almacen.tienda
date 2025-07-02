@@ -36,6 +36,12 @@ class Compra extends Model
         return $this->belongsTo(Cuenta::class);
     }
 
+    public function cuentas()
+    {
+        return $this->belongsToMany(Cuenta::class, 'compra_pago')
+            ->withPivot('monto');
+    }
+
     // Relación con productos
     public function productos()
     {
