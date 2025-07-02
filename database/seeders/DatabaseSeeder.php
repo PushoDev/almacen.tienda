@@ -41,22 +41,50 @@ class DatabaseSeeder extends Seeder
         // Insertar categorías
         DB::table('categorias')->insert([
             [
-                'nombre_categoria' => 'Cocina',
+                'nombre_categoria' => 'COCINA',
                 'descripcion_categoria' => 'Equipos de Cocina, cafeteras, hornillas, hornos, etc',
                 'activar_categoria' => true,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
             [
-                'nombre_categoria' => 'Refrigeración',
+                'nombre_categoria' => 'REFRIGERACION',
                 'descripcion_categoria' => 'Refrigeración, Neveras',
                 'activar_categoria' => true,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
             [
-                'nombre_categoria' => 'Audiovisuales',
+                'nombre_categoria' => 'AUDIOVISUALES',
                 'descripcion_categoria' => 'Smartv, Cajitas, Equipos audiovisuales',
+                'activar_categoria' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'nombre_categoria' => 'CICLOMOTORES',
+                'descripcion_categoria' => 'Bicicletas, Motorinas, etc',
+                'activar_categoria' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'nombre_categoria' => 'ACCESORIOS',
+                'descripcion_categoria' => 'Mochilas, Adornos para el hogar',
+                'activar_categoria' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'nombre_categoria' => 'MISCELANEAS',
+                'descripcion_categoria' => 'Split, Plantas, Motores, Turbinas, etc',
+                'activar_categoria' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'nombre_categoria' => 'TELEFONOS/TABLETS',
+                'descripcion_categoria' => 'Celulares, Tablets, Memorias SD/USB, Laptop, etc',
                 'activar_categoria' => true,
                 'created_at' => now(),
                 'updated_at' => now(),
