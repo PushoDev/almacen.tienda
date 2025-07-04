@@ -1,28 +1,51 @@
+import HeadingSmall from '@/components/heading-small';
 import { Button } from '@/components/ui/button';
+import { CursorFollow, CursorProvider } from '@/components/ui/cursor';
 import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
-import { ScrollProgress } from '@/components/ui/scroll';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
-import { FileText, Sheet } from 'lucide-react';
+import { FileText, Sheet, ShoppingBag } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
-        title: 'Resumen General',
+        title: 'Caja Principal',
         href: '/dashboard',
     },
     {
-        title: 'Categorias',
-        href: '/categorias',
+        title: 'Productos',
+        href: '/productos',
+    },
+    {
+        title: 'Realizar Venta',
+        href: '#',
     },
 ];
 
-export default function Dashboard() {
+export default function PuntoVentaPage() {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Categorias" />
-            <ScrollProgress />
-            <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
+            <Head title="Punto Venta" />
+            <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
+                {/* Header */}
+                <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                    <CursorProvider>
+                        <CursorFollow>
+                            <div className="bg-sidebar-accent rounded-lg px-2 py-1 text-sm text-white shadow-lg">Punto de Venta</div>
+                        </CursorFollow>
+                    </CursorProvider>
+                    {/* Contenido principal */}
+                    <HeadingSmall
+                        title="Opciones Generales del Sistema"
+                        description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamineto"
+                    />
+                    {/* Ícono semitransparente */}
+                    <ShoppingBag
+                        size={70}
+                        color="#d6d3d1"
+                        className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
+                    />
+                </div>
                 {/* Acciones */}
                 <div className="flex justify-end gap-2">
                     {/* Botón Editar */}

@@ -1,10 +1,7 @@
-import { Button } from '@/components/ui/button';
 import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
-import { ScrollProgress } from '@/components/ui/scroll';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/react';
-import { FileText, Sheet } from 'lucide-react';
+import { Head } from '@inertiajs/react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -21,26 +18,7 @@ export default function Dashboard() {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Categorias" />
-            <ScrollProgress />
-            <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
-                {/* Acciones */}
-                <div className="flex justify-end gap-2">
-                    {/* Botón Editar */}
-                    <Link href="#">
-                        <Button variant="outline" className="hover:bg-chart-5 flex cursor-pointer items-center gap-2">
-                            <FileText size={16} />
-                            Exportar PDF
-                        </Button>
-                    </Link>
-
-                    {/* Botón Regresar */}
-                    <Link href="#">
-                        <Button variant="secondary" className="hover:bg-chart-2 flex cursor-pointer items-center gap-2">
-                            <Sheet size={16} />
-                            Exportar Excel
-                        </Button>
-                    </Link>
-                </div>
+            <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 <div className="grid auto-rows-min gap-4 md:grid-cols-3">
                     <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border">
                         <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />

@@ -6,7 +6,6 @@ import AppLayout from '@/layouts/app-layout';
 import { ComprasVentasCharts } from '@/layouts/charts/ChartCompraVenta';
 import WidgetInventario from '@/layouts/home/WidgetInventario';
 import WidgetTransacciones from '@/layouts/home/WidgetTransacciones';
-import WidgetVenta from '@/layouts/home/WidgetVenta';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import { ComputerIcon, LucideBaggageClaim, ShoppingBagIcon } from 'lucide-react';
@@ -23,12 +22,12 @@ export default function Dashboard() {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Inventario" />
             <ScrollProgress />
-            <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
+            <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     <CursorProvider>
                         <CursorFollow>
-                            <div className="rounded-lg bg-blue-500 px-2 py-1 text-sm text-white shadow-lg">Opciones Generales</div>
+                            <div className="bg-sidebar-accent rounded-lg px-2 py-1 text-sm text-white shadow-lg">Opciones Generales</div>
                         </CursorFollow>
                     </CursorProvider>
                     {/* Contenido principal */}
@@ -66,7 +65,6 @@ export default function Dashboard() {
                             {/* Textos alineados a la derecha */}
                             <div className="flex h-full flex-col items-end justify-center space-y-2">
                                 <h3 className="font-sans text-4xl font-bold text-white">Comprar</h3>
-                                <span className="text-lg text-white">Adquirir Productos Nuevos</span>
                             </div>
                             {/* Link {route('comprar.index' */}
                             <Link href={route('comprar.index')}>
@@ -81,7 +79,40 @@ export default function Dashboard() {
                     </div>
                     {/* Widget de Venta */}
                     <div>
-                        <WidgetVenta />
+                        <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-blue-800 to-blue-400">
+                            <CursorProvider>
+                                <CursorFollow>
+                                    <div className="rounded-lg bg-blue-500 px-2 py-1 text-sm text-white shadow-lg">Punto de Venta</div>
+                                </CursorFollow>
+                            </CursorProvider>
+                            {/* Ícono de fondo transparente */}
+                            <div className="absolute inset-0 flex items-center justify-center opacity-10">
+                                <LucideBaggageClaim className="h-48 w-48 text-white" />
+                            </div>
+
+                            {/* Contenido principal */}
+                            <div className="relative z-10 h-full p-6">
+                                {/* Ícono en la esquina superior izquierda */}
+                                <div className="absolute top-4 left-4">
+                                    <ShoppingBagIcon className="h-8 w-8 text-white" />
+                                </div>
+
+                                {/* Textos alineados a la derecha */}
+                                <div className="flex h-full flex-col items-end justify-center space-y-2">
+                                    <h3 className="text-4xl font-bold text-white">Vender</h3>
+                                </div>
+
+                                {/* Botón pequeño con Dialog */}
+                                <Link href={route('punto-venta.index')}>
+                                    <button className="absolute right-4 bottom-4 rounded-md bg-blue-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-blue-800">
+                                        Vender
+                                    </button>
+                                </Link>
+                            </div>
+
+                            {/* Patrón de fondo adicional */}
+                            <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
+                        </div>
                     </div>
                     {/* Widget de Transacciones */}
                     <div>

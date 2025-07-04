@@ -66,7 +66,7 @@ export default function LogisticaPage({
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Logistica" />
             <ScrollProgress />
-            <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
+            <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     {/* Contenido principal */}

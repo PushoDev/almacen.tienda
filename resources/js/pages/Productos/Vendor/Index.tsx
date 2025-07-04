@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
@@ -126,7 +127,8 @@ export default function VendedorPage({
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Productos Disponibles" />
-            <div className="flex flex-col gap-4 p-4">
+            <ScrollProgress />
+            <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="border-sidebar-accent bg-sidebar relative rounded-2xl border border-dashed p-4">
                     <HeadingSmall
