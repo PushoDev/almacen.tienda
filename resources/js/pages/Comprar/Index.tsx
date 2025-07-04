@@ -346,52 +346,57 @@ export default function ComprarPage() {
                 </Card>
 
                 {/* Tabla de productos */}
-                <Table>
-                    <TableCaption className="text-sidebar-accent">Lista de los Productos a Comprar.</TableCaption>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Producto</TableHead>
-                            <TableHead>Categoria</TableHead>
-                            <TableHead>Código</TableHead>
-                            <TableHead>Cantidad</TableHead>
-                            <TableHead>Precio</TableHead>
-                            <TableHead>Importe</TableHead>
-                            <TableHead className="text-sidebar-accent text-right">Acciones</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {productos.map((p) => (
-                            <TableRow key={p.id}>
-                                <TableCell className="font-medium">{p.producto}</TableCell>
-                                <TableCell>{p.categoria}</TableCell>
-                                <TableCell>{p.codigo}</TableCell>
-                                <TableCell>{p.cantidad}</TableCell>
-                                <TableCell>${p.precio.toFixed(2)}</TableCell>
-                                <TableCell>${(p.cantidad * p.precio).toFixed(2)}</TableCell>
-                                <TableCell className="text-right">
-                                    <Button variant="link" onClick={() => editarProducto(p.id)} className="text-blue-600 hover:text-blue-800">
-                                        <Edit2 />
-                                    </Button>
-                                    <Button variant="link" onClick={() => eliminarProducto(p.id)} className="ms-2 text-red-600 hover:text-red-800">
-                                        <Trash2Icon />
-                                    </Button>
+                <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
+                    <Table>
+                        <TableCaption className="text-sidebar-accent">Lista de los Productos a Comprar</TableCaption>
+                        <TableHeader>
+                            <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
+                                <TableHead>Producto</TableHead>
+                                <TableHead>Categoria</TableHead>
+                                <TableHead>Código</TableHead>
+                                <TableHead>Cantidad</TableHead>
+                                <TableHead>Precio</TableHead>
+                                <TableHead>Importe</TableHead>
+                                <TableHead className="text-right">Acciones</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {productos.map((p) => (
+                                <TableRow key={p.id}>
+                                    <TableCell className="font-medium">{p.producto}</TableCell>
+                                    <TableCell>{p.categoria}</TableCell>
+                                    <TableCell>{p.codigo}</TableCell>
+                                    <TableCell>{p.cantidad}</TableCell>
+                                    <TableCell>${p.precio.toFixed(2)}</TableCell>
+                                    <TableCell>${(p.cantidad * p.precio).toFixed(2)}</TableCell>
+                                    <TableCell className="text-right">
+                                        <Button variant="link" onClick={() => editarProducto(p.id)} className="text-blue-600 hover:text-blue-800">
+                                            <Edit2 />
+                                        </Button>
+                                        <Button
+                                            variant="link"
+                                            onClick={() => eliminarProducto(p.id)}
+                                            className="ms-2 text-red-600 hover:text-red-800"
+                                        >
+                                            <Trash2Icon />
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                        <TableFooter>
+                            <TableRow>
+                                <TableCell colSpan={3} className="bg-gray-500 text-center text-white">
+                                    {productos.length} Tipo de Mercancía
+                                </TableCell>
+                                <TableCell className="bg-gray-600 text-amber-300">{productos.reduce((t, p) => t + p.cantidad, 0)} Unidades</TableCell>
+                                <TableCell colSpan={3} className="bg-gray-900 text-center font-bold text-emerald-300">
+                                    Importe General: ${calcularTotal()}
                                 </TableCell>
                             </TableRow>
-                        ))}
-                    </TableBody>
-                    <TableFooter>
-                        <TableRow>
-                            <TableCell colSpan={2} className="font-bold">
-                                Total de la Compra
-                            </TableCell>
-                            <TableCell className="bg-amber-300 text-amber-950">{productos.length} Productos</TableCell>
-                            <TableCell className="bg-amber-800 text-amber-300">{productos.reduce((t, p) => t + p.cantidad, 0)} Unidades</TableCell>
-                            <TableCell colSpan={2} className="bg-emerald-700 text-center text-xl font-bold text-emerald-950">
-                                ${calcularTotal()}
-                            </TableCell>
-                        </TableRow>
-                    </TableFooter>
-                </Table>
+                        </TableFooter>
+                    </Table>
+                </div>
 
                 {/* Botones de acción */}
                 <div className="flex justify-center gap-4 p-4">
