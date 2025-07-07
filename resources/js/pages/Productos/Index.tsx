@@ -11,7 +11,6 @@ import {
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
@@ -49,7 +48,6 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Productos" />
-            <ScrollProgress />
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">

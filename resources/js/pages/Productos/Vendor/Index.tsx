@@ -12,9 +12,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
@@ -127,7 +126,6 @@ export default function VendedorPage({
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Productos Disponibles" />
-            <ScrollProgress />
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="border-sidebar-accent bg-sidebar relative rounded-2xl border border-dashed p-4">
@@ -165,6 +163,7 @@ export default function VendedorPage({
                 {/* Tabla de Productos */}
                 <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
                     <Table>
+                        <TableCaption>Productos Disponibles para Venta</TableCaption>
                         <TableHeader>
                             <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
                                 <TableHead className="w-[100px]">Producto</TableHead>
