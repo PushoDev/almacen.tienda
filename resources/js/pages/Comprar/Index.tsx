@@ -38,6 +38,10 @@ const breadcrumbs: BreadcrumbItem[] = [
         href: '/productos',
     },
     {
+        title: 'Realizar Venta',
+        href: 'punto-venta',
+    },
+    {
         title: 'Adquirir Nuevos Productos',
         href: '/comprar',
     },
@@ -157,7 +161,7 @@ export default function ComprarPage() {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Comprar" />
-            <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
+            <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     {/* Contenido principal */}
