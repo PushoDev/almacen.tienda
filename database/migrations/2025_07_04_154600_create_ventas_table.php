@@ -17,6 +17,7 @@ return new class extends Migration
             $table->foreignId('almacen_id')->constrained()->onDelete('cascade'); // Almacén donde se realiza la venta
             $table->foreignId('cliente_id')->nullable()->constrained()->onDelete('set null'); // Cliente (opcional)
             $table->decimal('total', 10, 2); // Total de la venta
+            $table->string('detalles_venta')->nullable(); // Detalles de la Venta
             $table->timestamps();
         });
     }
