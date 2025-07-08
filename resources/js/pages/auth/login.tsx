@@ -90,7 +90,7 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                         <Label htmlFor="remember">Recuerdar mi Cuenta</Label>
                     </div>
 
-                    <LiquidButton tabIndex={4} type="submit" className="cursor-pointer hover:animate-pulse" disabled={processing}>
+                    <LiquidButton tabIndex={4} type="submit" className="cursor-pointer hover:animate-pulse dark:text-white" disabled={processing}>
                         {processing && <LoaderCircle className="h-4 w-4" />}
                         <DoorOpen />
                         Loguearse
