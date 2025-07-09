@@ -18,10 +18,12 @@ use App\Models\PagoVenta;
 use Illuminate\Support\Facades\DB;
 
 // Seleccionar un usuario válido
-$user = User::first();
+// $user = User::first();
+$user = User::find(3);
 
 // Seleccionar un almacén que tenga productos asignados
-$almacen = Almacen::has('productos')->first();
+// $almacen = Almacen::has('productos')->first();
+$almacen = Almacen::find(4);
 
 if (!$almacen) {
     echo "❌ No se encontró un almacén con productos.\n";

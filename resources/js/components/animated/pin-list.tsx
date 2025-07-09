@@ -30,7 +30,7 @@ type PinListProps = {
 
 function PinList({
     items,
-    labels = { pinned: 'Pinned Items', unpinned: 'All Items' },
+    labels = { pinned: 'Pinned Items', unpinned: 'Listado Disponible' },
     transition = { stiffness: 320, damping: 20, mass: 0.8, type: 'spring' },
     labelMotionProps = {
         initial: { opacity: 0 },

@@ -365,3 +365,98 @@ export interface HistorialPrecioRef {
     precio_nuevo: number;
     fecha: string;
 }
+
+// Para el Punto de Venta (POS)
+/**
+ * Pata el Punto de Venta
+ */
+
+/**
+ * Producto a vender: datos básicos y stock por almacén
+ */
+export interface ProductoVenta {
+    id: number;
+    nombre_producto: string;
+    marca_producto: string | null;
+    codigo_producto: string | null;
+    categoria_id: number;
+    precio_compra_producto: number;
+    cantidad_producto: number;
+    imagen_producto: string | null;
+    precio_venta?: number; // Precio asignado por vendedor
+    stock_total: number; // Suma total del stock en sus almacenes
+    tiene_precio: boolean; // Indica si tiene un precio de venta definido
+    almacenes: Array<{
+        id: number;
+        nombre_almacen: string;
+        stock_disponible: number; // Stock en este almacén específico
+    }>;
+}
+
+/**
+ * Formato de solicitud para registrar una venta
+ */
+export interface VentaRequestProps {
+    almacen_id: number;
+    productos: Array<ProductoVentaItemProps>;
+    pagos: Array<PagoVentaProps>;
+}
+
+/**
+ * Detalle de producto vendido
+ */
+export interface ProductoVentaItemProps {
+    producto_id: number;
+    cantidad: number;
+    precio_venta: number;
+}
+
+/**
+ * Forma de pago registrada
+ */
+export interface PagoVentaProps {
+    tipo_pago: 'efectivo' | 'tarjeta' | 'transferencia' | 'otros';
+    via_pago: 'zelle' | 'visa' | 'paypal' | 'mastercard' | 'stripe' | 'transfermovil' | 'enzona' | 'otros';
+    tipo_moneda: 'usd' | 'euro' | 'mlc' | 'cup';
+    monto: number;
+}
+
+/**
+ * Respuesta de venta desde backend
+ */
+export interface VentaResponseProps {
+    id: number;
+    user_id: number;
+    almacen_id: number;
+    total: number;
+    created_at: string;
+    updated_at: string;
+    detalles: Array<VentaDetalleProps>;
+    pagos: Array<PagoVentaProps>;
+}
+
+/**
+ * Detalles de los productos vendidos
+ */
+export interface VentaDetalleProps {
+    id: number;
+    venta_id: number;
+    producto_id: number;
+    cantidad: number;
+    precio_venta: number;
+    subtotal: number;
+    created_at: string;
+    updated_at: string;
+    producto: {
+        id: number;
+        nombre_producto: string;
+        marca_producto: string | null;
+        codigo_producto: string | null;
+        categoria_id: number;
+        precio_compra_producto: number;
+        cantidad_producto: number;
+        imagen_producto: string | null;
+        created_at: string;
+        updated_at: string;
+    };
+}
