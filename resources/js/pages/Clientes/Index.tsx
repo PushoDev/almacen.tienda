@@ -17,7 +17,7 @@ import AppLayout from '@/layouts/app-layout';
 import { ClienteProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { Edit3, FileText, HandHeart, Home, MapPin, Phone, Sheet, Trash2, User, UserRoundPlus } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -188,6 +188,7 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                     </Table>
                 </div>
             </div>
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }

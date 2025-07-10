@@ -17,7 +17,7 @@ import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, User, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { BookUser, Edit2, FileText, Key, Mail, Sheet, Trash2, UserCircle, Warehouse } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -207,6 +207,7 @@ export default function PageEmpleado({ empleados }: { empleados: User[]; almacen
                     </Table>
                 </div>
             </div>
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }

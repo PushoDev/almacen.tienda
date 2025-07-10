@@ -18,7 +18,7 @@ import AppLayout from '@/layouts/app-layout';
 import { CategoriasProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { CheckIcon, Edit3, FileText, ListCheck, MessageCircleWarningIcon, MessageSquareDiff, Sheet, Trash2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -177,6 +177,7 @@ export default function CategoriasPage({ categorias }: { categorias: CategoriasP
                     </Table>
                 </div>
             </div>
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }

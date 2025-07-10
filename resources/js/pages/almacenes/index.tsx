@@ -17,7 +17,7 @@ import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { Edit3, Eye, FileText, HousePlus, Mail, MapPin, Phone, Sheet, Trash2, Warehouse } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -35,7 +35,7 @@ export default function AlmacenesPage({ almacenes }: { almacenes: AlmacenProps[]
     const deleteAlmacen = (id: number) => {
         router.delete(route('almacenes.destroy', { almacen: id }), {
             onSuccess: () => {
-                toast.success('Almacén eliminado correctamente');
+                toast.success('Almacen eliminado satisfacoriamente');
             },
             onError: () => {
                 toast.error('Error en el proceso, inténtelo nuevamente');
@@ -211,6 +211,7 @@ export default function AlmacenesPage({ almacenes }: { almacenes: AlmacenProps[]
                     </Table>
                 </div>
             </div>
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }

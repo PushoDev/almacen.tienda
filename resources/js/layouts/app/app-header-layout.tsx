@@ -10,7 +10,7 @@ export default function AppHeaderLayout({ children, breadcrumbs }: PropsWithChil
         <AppShell>
             <AppHeader breadcrumbs={breadcrumbs} />
             <AppContent>{children}</AppContent>
-            <Toaster />
+            <Toaster position="top-center" />
         </AppShell>
     );
 }

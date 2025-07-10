@@ -8,6 +8,7 @@ import { AlmacenProps, BreadcrumbItem, ProductoPorAlmacenDetalleRef } from '@/ty
 import { Head, Link, router } from '@inertiajs/react';
 import { CarFront } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -108,14 +109,14 @@ export default function MovimientosPage() {
             {
                 onSuccess: (page) => {
                     console.log('✅ Movimiento exitoso:', page);
-                    alert('Movimiento registrado exitosamente.');
+                    toast.success('Movimiento registrado exitosamente.');
                     setProductosEmisor([]); // Limpiar tabla
                     setAlmacenEmisorId(''); // Reiniciar almacén emisor
                     setAlmacenReceptorId(''); // Reiniciar almacén receptor
                 },
                 onError: (errors) => {
                     console.error('❌ Errores de validación:', errors);
-                    alert('Error al registrar el movimiento. Verifica los datos ingresados.');
+                    toast.error('Error al registrar el movimiento. Verifica los datos ingresados.');
                 },
                 onFinish: () => {
                     setLoading(false); // Quitar estado de carga
@@ -253,6 +254,7 @@ export default function MovimientosPage() {
                     </CardContent>
                 </Card>
             </div>
+            <Toaster position="top-center" />
         </AppLayout>
     );
 }
