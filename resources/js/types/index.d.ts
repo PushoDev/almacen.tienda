@@ -379,18 +379,21 @@ export interface ProductoVenta {
     nombre_producto: string;
     marca_producto: string | null;
     codigo_producto: string | null;
-    categoria_id: number;
-    precio_compra_producto: number;
+    categoria: string;
+    caegoria_id: number;
+    precio_compra: number;
     cantidad_producto: number;
     imagen_producto: string | null;
-    precio_venta?: number; // Precio asignado por vendedor
+    precio_venta?: number | null; // Precio asignado por vendedor
     stock_total: number; // Suma total del stock en sus almacenes
+    ganancia: number | null;
     tiene_precio: boolean; // Indica si tiene un precio de venta definido
     almacenes: Array<{
         id: number;
         nombre_almacen: string;
         stock_disponible: number; // Stock en este almacén específico
     }>;
+    cantidad: number;
 }
 
 /**

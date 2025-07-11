@@ -6,32 +6,22 @@ import { CursorFollow, CursorProvider } from '@/components/ui/cursor';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem } from '@/types';
+import { ProductoVenta, VentaRequestProps, type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
-import { ShoppingBag } from 'lucide-react';
+import { PackagePlus, ShoppingBag } from 'lucide-react';
 import { useState } from 'react';
-
-// Interfaz Producto
-interface Producto {
-    id: number;
-    nombre_producto: string;
-    marca_producto: string;
-    categoria: string;
-    precio_compra: number;
-    stock_total: number;
-    precio_venta: number | null;
-    ganancia: number | null;
-}
+import { toast } from 'sonner';
+import { AlmacenProductoProps } from './../../types/index.d';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
-        title: 'Caja Principal',
-        href: '/dashboard',
+        title: 'Todos los Productos',
+        href: '/productos',
     },
     {
-        title: 'Productos',
-        href: '/productos',
+        title: 'Disponibilidades',
+        href: '/disponibles',
     },
     {
         title: 'Realizar Venta',
@@ -43,21 +33,17 @@ export default function PuntoVentaPage({
     productos: initialProductos,
     meta,
 }: {
-    productos: Producto[];
+    productos: ProductoVenta[];
     meta: { total_productos: number; role_usuario: string; almacenes_usuario: any[] };
 }) {
     // Estados principales
-    const [productosSeleccionados, setProductosSeleccionados] = useState<Producto[]>([]);
-    const [almacenSeleccionado, setAlmacenSeleccionado] = useState<string>('');
-    const [pago, setPago] = useState({
-        tipo_pago: '',
-        via_pago: '',
-        tipo_moneda: 'PEN',
-        monto: '',
-    });
+    const [productosSeleccionados, setProductosSeleccionados] = useState<ProductoVenta[]>([]);
+    // const [almacenSeleccionado, setAlmacenSeleccionado] = useState<string>('');
+    const [almacenSeleccionado, setAlmacenSeleccionado] = useState<AlmacenProductoProps[]>([]);
+    const [pago, setPago] = useState<VentaRequestProps[]>([]);
 
     // Función para agregar producto al carrito
-    const agregarProducto = (producto: Producto) => {
+    const agregarProducto = (producto: ProductoVenta) => {
         const existe = productosSeleccionados.some((p) => p.id === producto.id);
         if (existe) return;
 
@@ -103,14 +89,14 @@ export default function PuntoVentaPage({
         try {
             const response = await axios.post('/ventas', ventaData);
             console.log('Venta registrada:', response.data);
-            alert('✅ Venta realizada con éxito');
+            toast.success('Venta realizada con éxito');
             // Reiniciar estados
             setProductosSeleccionados([]);
             setPago({ tipo_pago: '', via_pago: '', tipo_moneda: 'PEN', monto: '' });
             setAlmacenSeleccionado('');
         } catch (error) {
             console.error('Error al registrar venta:', error.response?.data?.error || error.message);
-            alert(`❌ Error: ${error.response?.data?.error || 'No se pudo completar la venta'}`);
+            toast.error(`❌ Error: ${error.response?.data?.error || 'No se pudo completar la venta'}`);
         }
     };
 
@@ -178,7 +164,7 @@ export default function PuntoVentaPage({
                                             <TableCell>{producto.precio_venta ?? 'No definido'}</TableCell>
                                             <TableCell className="text-center">
                                                 <Button variant="ghost" onClick={() => agregarProducto(producto)}>
-                                                    <ShoppingBag className="text-green-600" />
+                                                    <PackagePlus className="text-green-600" />
                                                 </Button>
                                             </TableCell>
                                         </TableRow>
@@ -246,7 +232,7 @@ export default function PuntoVentaPage({
                                             </div>
                                         ))
                                     ) : (
-                                        <p className="text-center text-sm text-gray-500 dark:text-gray-400">No hay productos seleccionados</p>
+                                        <p className="text-center text-sm text-gray-500 dark:text-red-400">No hay productos seleccionados</p>
                                     )}
                                 </div>
                             </div>
