@@ -1,6 +1,5 @@
 import HeadingSmall from '@/components/heading-small';
 import { CursorFollow, CursorProvider } from '@/components/ui/cursor';
-import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
 import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
@@ -52,14 +51,73 @@ export default function PuntoVentaPage() {
                 </div>
                 <Separator className="col-span-4" />
                 {/* POS - Punto de Venta */}
-                <div className="grid auto-rows-min gap-4 md:grid-cols-2">
-                    {/* Prodecutos a Vender Vista */}
-                    <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
+                <div className="grid gap-4 md:grid-cols-2">
+                    {/* Columna 1: Productos Disponibles */}
+                    <div className="flex flex-col space-y-4">
+                        {/* Input de búsqueda */}
+                        <div>
+                            <input
+                                type="text"
+                                placeholder="Buscar productos..."
+                                className="w-full rounded-lg border border-gray-300 p-2 dark:border-gray-600 dark:bg-gray-800"
+                            />
+                        </div>
+
+                        {/* Tabla de productos */}
+                        <div className="border-sidebar-border/70 dark:border-sidebar-border relative flex-1 overflow-hidden rounded-xl border">
+                            {/* Simulando tabla o listado */}
+                            <div className="p-4">
+                                <h3 className="mb-2 text-lg font-semibold">Productos Disponibles</h3>
+                                <table className="w-full table-auto text-left">
+                                    <thead>
+                                        <tr className="border-b dark:border-gray-700">
+                                            <th className="px-2 py-1">Nombre</th>
+                                            <th className="px-2 py-1">Precio</th>
+                                            <th className="px-2 py-1">Acción</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr className="border-b dark:border-gray-700">
+                                            <td className="px-2 py-1">Producto 1</td>
+                                            <td className="px-2 py-1">$10.00</td>
+                                            <td className="px-2 py-1">
+                                                <button className="rounded bg-blue-500 px-2 py-1 text-white">Agregar</button>
+                                            </td>
+                                        </tr>
+                                        {/* Más filas... */}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
-                    {/* Listado de Productos Disponibles */}
-                    <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
+
+                    {/* Columna 2: Productos Seleccionados y Resumen de Venta */}
+                    <div className="flex flex-col space-y-4">
+                        {/* Productos seleccionados */}
+                        <div className="border-sidebar-border/70 dark:border-sidebar-border relative flex-1 overflow-hidden rounded-xl border">
+                            <div className="p-4">
+                                <h3 className="mb-2 text-lg font-semibold">Productos Seleccionados</h3>
+                                <div className="space-y-2">
+                                    <div className="flex justify-between rounded bg-gray-100 p-2 dark:bg-gray-700">
+                                        <span>Producto 1</span>
+                                        <span>$10.00</span>
+                                    </div>
+                                    {/* Más productos seleccionados... */}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Resumen de venta */}
+                        <div className="border-sidebar-border/70 dark:border-sidebar-border relative overflow-hidden rounded-xl border bg-green-50 dark:bg-green-900/20">
+                            <div className="p-4">
+                                <h3 className="mb-2 text-lg font-semibold">Resumen de Venta</h3>
+                                <div className="space-y-1">
+                                    <p>Total de productos: 2</p>
+                                    <p className="text-xl font-bold text-green-600 dark:text-green-400">Total: $20.00</p>
+                                </div>
+                                <button className="mt-4 w-full rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700">Proceder a Pagar</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
