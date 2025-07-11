@@ -20,7 +20,7 @@ class AlmacenController extends Controller
             ? Almacen::withCount('productos')->get()
             : Auth::user()->almacenes()->withCount('productos')->get();
 
-        return Inertia::render('Almacenes/Index', [
+        return Inertia::render('Almacenes/index', [
             'almacenes' => $almacenes,
             'permisos' => [
                 'crear' => Auth::user()->role === 'admin'
