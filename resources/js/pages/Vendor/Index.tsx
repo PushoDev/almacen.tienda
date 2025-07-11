@@ -8,10 +8,11 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
+import axios from 'axios';
 import { ShoppingBag } from 'lucide-react';
 import { useState } from 'react';
 
-// Interfax Producto
+// Interfaz Producto
 interface Producto {
     id: number;
     nombre_producto: string;
@@ -22,6 +23,7 @@ interface Producto {
     precio_venta: number | null;
     ganancia: number | null;
 }
+
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Caja Principal',
@@ -30,10 +32,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Productos',
         href: '/productos',
-    },
-    {
-        title: 'Nueva Compra',
-        href: 'comprar',
     },
     {
         title: 'Realizar Venta',
@@ -46,85 +44,76 @@ export default function PuntoVentaPage({
     meta,
 }: {
     productos: Producto[];
-    meta: { total_productos: number; role_usuario: string };
+    meta: { total_productos: number; role_usuario: string; almacenes_usuario: any[] };
 }) {
-    const [productos, setProductos] = useState<Producto[]>(initialProductos);
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [selectedProduct, setSelectedProduct] = useState<Producto | null>(null);
-    const [newPrice, setNewPrice] = useState<string>('');
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [isEditMode, setIsEditMode] = useState(true);
+    // Estados principales
+    const [productosSeleccionados, setProductosSeleccionados] = useState<Producto[]>([]);
+    const [almacenSeleccionado, setAlmacenSeleccionado] = useState<string>('');
+    const [pago, setPago] = useState({
+        tipo_pago: '',
+        via_pago: '',
+        tipo_moneda: 'PEN',
+        monto: '',
+    });
 
-    const formatCurrency = (value: number | null) => {
-        if (value === null) return 'No definido';
-        return new Intl.NumberFormat('es-ES', {
-            style: 'currency',
-            currency: 'USD',
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        }).format(value);
+    // Función para agregar producto al carrito
+    const agregarProducto = (producto: Producto) => {
+        const existe = productosSeleccionados.some((p) => p.id === producto.id);
+        if (existe) return;
+
+        setProductosSeleccionados([
+            ...productosSeleccionados,
+            {
+                ...producto,
+                cantidad: 1,
+                precio_venta: producto.precio_venta || producto.precio_compra * 1.5,
+            },
+        ]);
     };
 
-    const openEditModal = (producto: Producto) => {
-        setSelectedProduct(producto);
-        setNewPrice(producto.precio_venta?.toString() || '');
-        setError(null);
-        setIsEditMode(true);
-        setIsModalOpen(true);
+    // Calcular total dinámicamente
+    const calcularTotal = () => {
+        return productosSeleccionados.reduce((acc, p) => acc + p.cantidad * p.precio_venta, 0);
     };
 
-    const openAddModal = (producto: Producto) => {
-        setSelectedProduct(producto);
-        setNewPrice('');
-        setError(null);
-        setIsEditMode(false);
-        setIsModalOpen(true);
-    };
-
-    const handleSubmit = async () => {
-        if (!selectedProduct || !newPrice) return;
-        const parsedPrice = parseFloat(newPrice);
-        if (isNaN(parsedPrice) || parsedPrice < 0.01) {
-            setError('El precio debe ser un número positivo mayor a 0.00');
+    // Enviar la venta al backend
+    const registrarVenta = async () => {
+        if (!almacenSeleccionado || productosSeleccionados.length === 0 || !pago.monto) {
+            alert('Faltan datos requeridos');
             return;
         }
-        setIsLoading(true);
-        setError(null);
-        try {
-            const response = await fetch(`/disponibles/${selectedProduct.id}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-                    'X-Requested-With': 'XMLHttpRequest',
+
+        const ventaData = {
+            almacen_id: almacenSeleccionado,
+            productos: productosSeleccionados.map((p) => ({
+                producto_id: p.id,
+                cantidad: p.cantidad,
+                precio_venta: p.precio_venta,
+            })),
+            pagos: [
+                {
+                    tipo_pago: pago.tipo_pago,
+                    via_pago: pago.via_pago,
+                    tipo_moneda: pago.tipo_moneda,
+                    monto: parseFloat(pago.monto),
                 },
-                body: JSON.stringify({ precio_venta: parsedPrice }),
-            });
-            console.log(await response.json());
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Error al actualizar el precio');
-            }
-            setProductos((prev) =>
-                prev.map((p) =>
-                    p.id === selectedProduct!.id
-                        ? {
-                              ...p,
-                              precio_venta: parsedPrice,
-                              ganancia: parsedPrice - p.precio_compra,
-                          }
-                        : p,
-                ),
-            );
-            setIsModalOpen(false);
-        } catch (err) {
-            console.error('Error en la solicitud:', err);
-            setError(err instanceof Error ? err.message : 'Error inesperado al procesar la solicitud');
-        } finally {
-            setIsLoading(false);
+            ],
+        };
+
+        try {
+            const response = await axios.post('/ventas', ventaData);
+            console.log('Venta registrada:', response.data);
+            alert('✅ Venta realizada con éxito');
+            // Reiniciar estados
+            setProductosSeleccionados([]);
+            setPago({ tipo_pago: '', via_pago: '', tipo_moneda: 'PEN', monto: '' });
+            setAlmacenSeleccionado('');
+        } catch (error) {
+            console.error('Error al registrar venta:', error.response?.data?.error || error.message);
+            alert(`❌ Error: ${error.response?.data?.error || 'No se pudo completar la venta'}`);
         }
     };
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Punto Venta" />
@@ -139,7 +128,7 @@ export default function PuntoVentaPage({
                     {/* Contenido principal */}
                     <HeadingSmall
                         title="Opciones Generales del Sistema"
-                        description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamineto"
+                        description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento."
                     />
                     {/* Ícono semitransparente */}
                     <ShoppingBag
@@ -163,7 +152,6 @@ export default function PuntoVentaPage({
                     </p>
                 </div>
                 <Separator className="col-span-4" />
-
                 {/* POS - Punto de Venta */}
                 <div className="grid gap-4 md:grid-cols-2">
                     {/* Columna 1: Productos Disponibles */}
@@ -177,20 +165,20 @@ export default function PuntoVentaPage({
                                     <TableHead>Marca</TableHead>
                                     <TableHead>Stock Actual</TableHead>
                                     <TableHead>Precio</TableHead>
-                                    <TableHead className="text-center">Acciones </TableHead>
+                                    <TableHead className="text-center">Acciones</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {productos.length > 0 ? (
-                                    productos.map((producto) => (
+                                {initialProductos.length > 0 ? (
+                                    initialProductos.map((producto) => (
                                         <TableRow key={producto.id}>
-                                            <TableCell>{producto.nombre_producto} </TableCell>
+                                            <TableCell>{producto.nombre_producto}</TableCell>
                                             <TableCell>{producto.marca_producto}</TableCell>
                                             <Badge variant="outline">{producto.stock_total}</Badge>
-                                            <TableCell>{producto.precio_venta}</TableCell>
+                                            <TableCell>{producto.precio_venta ?? 'No definido'}</TableCell>
                                             <TableCell className="text-center">
-                                                <Button variant="ghost">
-                                                    <ShoppingBag />
+                                                <Button variant="ghost" onClick={() => agregarProducto(producto)}>
+                                                    <ShoppingBag className="text-green-600" />
                                                 </Button>
                                             </TableCell>
                                         </TableRow>
@@ -208,14 +196,58 @@ export default function PuntoVentaPage({
 
                     {/* Columna 2: Productos Seleccionados y Resumen de Venta */}
                     <div className="flex flex-col space-y-4">
-                        {/* carrito para Productos seleccionados */}
+                        {/* Productos seleccionados */}
                         <div className="border-sidebar-border/70 dark:border-sidebar-border relative flex-1 overflow-hidden rounded-xl border">
                             <div className="p-4">
                                 <h3 className="mb-2 text-lg font-semibold">Productos Seleccionados</h3>
                                 <div className="space-y-2">
-                                    <div className="flex justify-between rounded bg-gray-100 p-2 dark:bg-gray-700">
-                                        {/* Productos seleccionados... */}
-                                    </div>
+                                    {productosSeleccionados.length > 0 ? (
+                                        productosSeleccionados.map((producto, index) => (
+                                            <div key={producto.id} className="rounded bg-gray-100 p-2 dark:bg-gray-700">
+                                                <div className="mb-2 flex items-center justify-between">
+                                                    <span className="font-medium">{producto.nombre_producto}</span>
+                                                    <Badge variant="outline">{producto.marca_producto}</Badge>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <label className="block text-xs text-gray-500 dark:text-gray-400">Cantidad</label>
+                                                        <input
+                                                            type="number"
+                                                            min="1"
+                                                            max={producto.stock_total}
+                                                            value={producto.cantidad}
+                                                            onChange={(e) => {
+                                                                const nuevaCantidad = parseInt(e.target.value) || 1;
+                                                                const nuevosProductos = [...productosSeleccionados];
+                                                                nuevosProductos[index].cantidad = Math.min(nuevaCantidad, producto.stock_total);
+                                                                setProductosSeleccionados(nuevosProductos);
+                                                            }}
+                                                            className="w-full rounded border border-gray-300 p-1 text-sm dark:border-gray-600 dark:bg-gray-800"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs text-gray-500 dark:text-gray-400">Precio</label>
+                                                        <input
+                                                            type="number"
+                                                            step="0.01"
+                                                            min="0"
+                                                            value={producto.precio_venta}
+                                                            onChange={(e) => {
+                                                                const nuevoPrecio = parseFloat(e.target.value) || 0;
+                                                                const nuevosProductos = [...productosSeleccionados];
+                                                                nuevosProductos[index].precio_venta = nuevoPrecio;
+                                                                setProductosSeleccionados(nuevosProductos);
+                                                            }}
+                                                            className="w-full rounded border border-gray-300 p-1 text-sm dark:border-gray-600 dark:bg-gray-800"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <p className="text-center text-sm text-gray-500 dark:text-gray-400">No hay productos seleccionados</p>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -225,10 +257,57 @@ export default function PuntoVentaPage({
                             <div className="p-4">
                                 <h3 className="mb-2 text-lg font-semibold">Resumen de Venta</h3>
                                 <div className="space-y-1">
-                                    <p>Total de productos: 2</p>
-                                    <p className="text-xl font-bold text-green-600 dark:text-green-400">Total: $20.00</p>
+                                    <p>Total de productos: {productosSeleccionados.length}</p>
+                                    <p className="text-xl font-bold text-green-600 dark:text-green-400">Total: S/. {calcularTotal().toFixed(2)}</p>
                                 </div>
-                                <button className="mt-4 w-full rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700">Proceder a Pagar</button>
+
+                                {/* Selección de almacén */}
+                                <select
+                                    value={almacenSeleccionado}
+                                    onChange={(e) => setAlmacenSeleccionado(e.target.value)}
+                                    className="mt-2 w-full rounded border-gray-300 p-2 dark:border-gray-600 dark:bg-gray-800"
+                                >
+                                    <option value="">Selecciona un almacén</option>
+                                    {meta.almacenes_usuario.map((almacen) => (
+                                        <option key={almacen.id} value={almacen.id}>
+                                            {almacen.nombre}
+                                        </option>
+                                    ))}
+                                </select>
+
+                                {/* Datos de pago */}
+                                <div className="mt-4 grid gap-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Tipo de pago"
+                                        value={pago.tipo_pago}
+                                        onChange={(e) => setPago({ ...pago, tipo_pago: e.target.value })}
+                                        className="w-full rounded border border-gray-300 p-2 dark:border-gray-600 dark:bg-gray-800"
+                                    />
+                                    <input
+                                        type="text"
+                                        placeholder="Vía de pago"
+                                        value={pago.via_pago}
+                                        onChange={(e) => setPago({ ...pago, via_pago: e.target.value })}
+                                        className="w-full rounded border border-gray-300 p-2 dark:border-gray-600 dark:bg-gray-800"
+                                    />
+                                    <input
+                                        type="number"
+                                        placeholder="Monto recibido"
+                                        value={pago.monto}
+                                        onChange={(e) => setPago({ ...pago, monto: e.target.value })}
+                                        className="w-full rounded border border-gray-300 p-2 dark:border-gray-600 dark:bg-gray-800"
+                                    />
+                                </div>
+
+                                {/* Botón de proceder a pagar */}
+                                <button
+                                    onClick={registrarVenta}
+                                    disabled={!almacenSeleccionado || productosSeleccionados.length === 0 || !pago.monto}
+                                    className="mt-4 w-full rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:bg-gray-400"
+                                >
+                                    Proceder a Pagar
+                                </button>
                             </div>
                         </div>
                     </div>
