@@ -1,11 +1,11 @@
-import { PinList } from '@/components/animated/pin-list';
 import HeadingSmall from '@/components/heading-small';
 import { CursorFollow, CursorProvider } from '@/components/ui/cursor';
+import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
 import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import { AlertTriangle, Box, GitCommit, KeyRound, Regex, ShoppingBag } from 'lucide-react';
+import { ShoppingBag } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -23,44 +23,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Realizar Venta',
         href: '#',
-    },
-];
-
-const ITEMS = [
-    {
-        id: 1,
-        name: 'Commit Zone',
-        info: 'Code updates · Closes 9:00 PM',
-        icon: GitCommit,
-        pinned: true,
-    },
-    {
-        id: 2,
-        name: '404 Room',
-        info: 'Fixing errors · Open 24 hours',
-        icon: AlertTriangle,
-        pinned: true,
-    },
-    {
-        id: 3,
-        name: 'NPM Stop',
-        info: 'Install stuff · Closes 8:00 PM',
-        icon: Box,
-        pinned: false,
-    },
-    {
-        id: 4,
-        name: 'Token Lock',
-        info: 'Login stuff · Open 24 hours',
-        icon: KeyRound,
-        pinned: false,
-    },
-    {
-        id: 5,
-        name: 'Regex Zone',
-        info: 'Find words · Closes 9:00 PM',
-        icon: Regex,
-        pinned: false,
     },
 ];
 
@@ -90,7 +52,16 @@ export default function PuntoVentaPage() {
                 </div>
                 <Separator className="col-span-4" />
                 {/* POS - Punto de Venta */}
-                <PinList items={ITEMS} />
+                <div className="grid auto-rows-min gap-4 md:grid-cols-2">
+                    {/* Prodecutos a Vender Vista */}
+                    <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border">
+                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
+                    </div>
+                    {/* Listado de Productos Disponibles */}
+                    <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border">
+                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
+                    </div>
+                </div>
             </div>
         </AppLayout>
     );
