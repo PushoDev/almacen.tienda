@@ -19,6 +19,8 @@ import { CuentaProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { Coins, CreditCard, Edit3, FileText, Landmark, Sheet, Trash2, Type, Wallet } from 'lucide-react';
 import { toast, Toaster } from 'sonner';
+import { useState } from 'react';
+import { Select, SelectContent, SelectItem } from '@/components/ui/select';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -49,6 +51,9 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
         return cuentas.reduce((total, cuenta) => total + (cuenta.saldo_cuenta || 0), 0).toFixed(2);
     };
 
+    // Filtro
+    const [filtroTipo, setFiltroTipo] = useState<string>('');
+
     console.log('Listado de Cuentas -> ', cuentas);
 
     return (
@@ -68,6 +73,19 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
 
                 {/* Acciones */}
                 <div className="flex justify-end gap-2">
+                    {/* Filtro*/}
+                    <select
+                        id="filtro-tipo"
+                        value={filtroTipo}
+                        onChange={(e) => setFiltroTipo(e.target.value)}
+                        className="border border-gray-300 rounded-md px-3 py-1  focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                        <option className='text-white bg-gray-700' value="">Todos</option>
+                        <option className='text-green-600 bg-gray-700' value="permanentes">Permanentes</option>
+                        <option className='text-amber-500 bg-gray-700' value="temporales">Temporales</option>
+                        <option className='text-red-500 bg-gray-700' value="deudas">Deudas</option>
+                    </select>
+
                     {/* Botón Crear nuevo */}
                     <Link href={route('cuentas.create')}>
                         <Button variant="default" className="flex cursor-pointer items-center gap-2">
@@ -91,132 +109,151 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                             Exportar Excel
                         </Button>
                     </Link>
+
+
+
+
                 </div>
 
                 {/* Tabla de Cuentas */}
-                <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
-                    <Table>
-                        <TableCaption>Lista de Cuentas</TableCaption>
-                        <TableHeader>
-                            <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
-                                <TableHead className="w-[100px]">Nombre</TableHead>
-                                <TableHead>Moneda</TableHead>
-                                <TableHead>Saldo</TableHead>
-                                <TableHead>Tipo de Cuenta</TableHead>
-                                <TableHead>Notas</TableHead>
-                                <TableHead className="text-right">Acciones</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {cuentas.map((cuenta) => (
-                                <TableRow key={cuenta.id}>
-                                    <TableCell className="min-w-[180px]">
-                                        <div className="flex items-center gap-2">
-                                            <Landmark size={14} className="text-primary shrink-0" />
-                                            <span className="text-primary truncate font-medium">{cuenta.nombre_cuenta}</span>
-                                        </div>
-                                    </TableCell>
+                <div
+                    className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
+                    <div>
 
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <Coins size={14} className="shrink-0 text-amber-500" />
-                                            <Badge variant="outline" className="font-mono">
-                                                {cuenta.tipo_moneda}
-                                            </Badge>
-                                        </div>
-                                    </TableCell>
+                        <Table>
+                            <TableCaption>Lista de Cuentas</TableCaption>
+                            <TableHeader>
+                                <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
+                                    <TableHead className="w-[100px]">Nombre</TableHead>
+                                    <TableHead>Moneda</TableHead>
+                                    <TableHead>Saldo</TableHead>
+                                    <TableHead>Tipo de Cuenta</TableHead>
+                                    <TableHead>Notas</TableHead>
+                                    <TableHead className="text-right">Acciones</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {cuentas
+                                    .filter((cuenta) => {
+                                        if (!filtroTipo) return true;
+                                        return cuenta.tipo_cuenta === filtroTipo;
+                                    })
+                                    .map((cuenta) => (
+                                        <TableRow key={cuenta.id}>
+                                            <TableCell className="min-w-[180px]">
+                                                <div className="flex items-center gap-2">
+                                                    <Landmark size={14} className="text-primary shrink-0" />
+                                                    <span
+                                                        className="text-primary truncate font-medium">{cuenta.nombre_cuenta}</span>
+                                                </div>
+                                            </TableCell>
 
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <Wallet size={14} className="shrink-0 text-emerald-500" />
-                                            <span className={cuenta.saldo_cuenta ? 'font-medium' : 'text-gray-400 italic'}>
+                                            <TableCell>
+                                                <div className="flex items-center gap-2">
+                                                    <Coins size={14} className="shrink-0 text-amber-500" />
+                                                    <Badge variant="outline" className="font-mono">
+                                                        {cuenta.tipo_moneda}
+                                                    </Badge>
+                                                </div>
+                                            </TableCell>
+
+                                            <TableCell>
+                                                <div className="flex items-center gap-2">
+                                                    <Wallet size={14} className="shrink-0 text-emerald-500" />
+                                                    <span
+                                                        className={cuenta.saldo_cuenta ? 'font-medium' : 'text-gray-400 italic'}>
                                                 {cuenta.saldo_cuenta ? `$${cuenta.saldo_cuenta.toFixed(2)}` : 'Sin saldo'}
                                             </span>
-                                        </div>
-                                    </TableCell>
+                                                </div>
+                                            </TableCell>
 
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <Type size={14} className="shrink-0 text-indigo-500" />
-                                            <Badge
-                                                variant="outline"
-                                                className={`font-medium ${
-                                                    cuenta.tipo_cuenta === 'permanentes'
-                                                        ? 'text-emerald-500'
-                                                        : cuenta.tipo_cuenta === 'temporales'
-                                                            ? 'text-amber-500'
-                                                            : 'text-red-500'
-                                                }`}
-                                            >
-                                                {cuenta.tipo_cuenta.charAt(0).toUpperCase() + cuenta.tipo_cuenta.slice(1)}
-                                            </Badge>
-                                        </div>
-                                    </TableCell>
-
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <FileText size={14} className="shrink-0 text-gray-500" />
-                                            <span className="max-w-[200px] truncate">
-                                                {cuenta.notas_cuenta || <span className="text-gray-400 italic">Sin notas</span>}
-                                            </span>
-                                        </div>
-                                    </TableCell>
-
-                                    <TableCell className="text-right">
-                                        {/* Botón Editar */}
-                                        <Link href={route('cuentas.edit', { cuenta: cuenta.id })}>
-                                            <Button
-                                                variant="outline"
-                                                className="cursor-pointer hover:bg-blue-900 hover:text-white dark:hover:bg-blue-700"
-                                            >
-                                                <Edit3 />
-                                            </Button>
-                                        </Link>
-
-                                        {/* Diálogo de Confirmación para Eliminar */}
-                                        <AlertDialog>
-                                            <AlertDialogTrigger asChild>
-                                                <Button
-                                                    variant="ghost"
-                                                    className="hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white"
-                                                >
-                                                    <Trash2 />
-                                                </Button>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                    <AlertDialogTitle className="text-center">Atención</AlertDialogTitle>
-                                                    <AlertDialogDescription>
-                                                        ¿Estás seguro de eliminar esta cuenta? Esta acción es irreversible.
-                                                    </AlertDialogDescription>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                    <AlertDialogAction
-                                                        onClick={() => deleteCuenta(cuenta.id)}
-                                                        className="bg-destructive cursor-pointer hover:bg-red-300"
+                                            <TableCell>
+                                                <div className="flex items-center gap-2">
+                                                    <Type size={14} className="shrink-0 text-indigo-500" />
+                                                    <Badge
+                                                        variant="outline"
+                                                        className={`font-medium ${
+                                                            cuenta.tipo_cuenta === 'permanentes'
+                                                                ? 'text-emerald-500'
+                                                                : cuenta.tipo_cuenta === 'temporales'
+                                                                    ? 'text-amber-500'
+                                                                    : 'text-red-500'
+                                                        }`}
                                                     >
-                                                        Aceptar
-                                                    </AlertDialogAction>
-                                                    <AlertDialogCancel className="cursor-pointer text-white hover:bg-emerald-300 hover:text-emerald-950 dark:hover:bg-emerald-300 dark:hover:text-emerald-950">
-                                                        Cancelar
-                                                    </AlertDialogCancel>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        </AlertDialog>
+                                                        {cuenta.tipo_cuenta.charAt(0).toUpperCase() + cuenta.tipo_cuenta.slice(1)}
+                                                    </Badge>
+                                                </div>
+                                            </TableCell>
+
+                                            <TableCell>
+                                                <div className="flex items-center gap-2">
+                                                    <FileText size={14} className="shrink-0 text-gray-500" />
+                                                    <span className="max-w-[200px] truncate">
+                                                {cuenta.notas_cuenta ||
+                                                    <span className="text-gray-400 italic">Sin notas</span>}
+                                            </span>
+                                                </div>
+                                            </TableCell>
+
+                                            <TableCell className="text-right">
+                                                {/* Botón Editar */}
+                                                <Link href={route('cuentas.edit', { cuenta: cuenta.id })}>
+                                                    <Button
+                                                        variant="outline"
+                                                        className="cursor-pointer hover:bg-blue-900 hover:text-white dark:hover:bg-blue-700"
+                                                    >
+                                                        <Edit3 />
+                                                    </Button>
+                                                </Link>
+
+                                                {/* Diálogo de Confirmación para Eliminar */}
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button
+                                                            variant="ghost"
+                                                            className="hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white"
+                                                        >
+                                                            <Trash2 />
+                                                        </Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle
+                                                                className="text-center">Atención</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                ¿Estás seguro de eliminar esta cuenta? Esta acción es
+                                                                irreversible.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogAction
+                                                                onClick={() => deleteCuenta(cuenta.id)}
+                                                                className="bg-destructive cursor-pointer hover:bg-red-300"
+                                                            >
+                                                                Aceptar
+                                                            </AlertDialogAction>
+                                                            <AlertDialogCancel
+                                                                className="cursor-pointer text-white hover:bg-emerald-300 hover:text-emerald-950 dark:hover:bg-emerald-300 dark:hover:text-emerald-950">
+                                                                Cancelar
+                                                            </AlertDialogCancel>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                            </TableBody>
+                            <TableFooter>
+                                <TableRow>
+                                    <TableCell colSpan={4} className="bg-gray-700">
+                                        Total de Cuentas
                                     </TableCell>
+                                    <TableCell className="bg-gray-500 text-center">{cuentas.length}</TableCell>
+                                    <TableCell className="bg-gray-500 text-center">${calcularSaldoTotal()}</TableCell>
                                 </TableRow>
-                            ))}
-                        </TableBody>
-                        <TableFooter>
-                            <TableRow>
-                                <TableCell colSpan={4} className="bg-gray-700">
-                                    Total de Cuentas
-                                </TableCell>
-                                <TableCell className="bg-gray-500 text-center">{cuentas.length}</TableCell>
-                                <TableCell className="bg-gray-500 text-center">${calcularSaldoTotal()}</TableCell>
-                            </TableRow>
-                        </TableFooter>
-                    </Table>
+                            </TableFooter>
+                        </Table>
+                    </div>
                 </div>
             </div>
             <Toaster position="top-center" />
