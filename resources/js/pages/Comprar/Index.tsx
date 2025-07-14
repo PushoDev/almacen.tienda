@@ -95,7 +95,7 @@ export default function ComprarPage() {
             .then((data) => setCategorias(data))
             .catch((err) => console.error(err));
 
-        fetch('/compras/cuentas')
+        fetch('/compras/cuentas/pago')
             .then((res) => res.json())
             .then((data) => setCuentas(data))
             .catch((err) => console.error(err));

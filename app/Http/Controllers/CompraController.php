@@ -39,7 +39,12 @@ class CompraController extends Controller
     // Obtener cuentas monetarias
     public function getCuentas()
     {
-        return response()->json(Cuenta::select('id', 'nombre_cuenta', 'saldo_cuenta')->get());
+        // return response()->json(Cuenta::select('id', 'nombre_cuenta', 'saldo_cuenta')->get());
+        return response()->json(
+            Cuenta::whereIn('tipo_cuenta', ['permanentes', 'temporales'])
+                ->select('id', 'nombre_cuenta', 'saldo_cuenta')
+                ->get()
+        );
     }
 
     /**

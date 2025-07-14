@@ -21,7 +21,8 @@ Route::middleware(['auth', 'verified'])->group(
             Route::get('/categorias', [CompraController::class, 'getCategorias']);
 
             // Ruta para obtener cuentas
-            Route::get('/cuentas', [CompraController::class, 'getCuentas']);
+            Route::get('/cuentas/pago', [CompraController::class, 'getCuentas']);
+            // Route::get('/cuentas/pago', [CompraController::class, 'getCuentasParaPago']);
 
             // Rutas para cargar datos iniciales
             Route::get('/datos', [CompraController::class, 'cargarDatos'])->name('compras.datos');
