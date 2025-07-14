@@ -124,6 +124,13 @@ export default function Dashboard() {
                     </div>
                 </div>
 
+                {/* Tablas */}
+
+                <div className="grid grid-cols-2 grid-rows-1 gap-6">
+                    <div>1</div>
+                    <div>2</div>
+                </div>
+
                 {/* Charts */}
                 <div>
                     <ComprasVentasCharts />

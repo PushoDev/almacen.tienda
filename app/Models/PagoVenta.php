@@ -16,6 +16,7 @@ class PagoVenta extends Model
         'via_pago',
         'tipo_moneda',
         'monto',
+        'cuenta_id'
     ];
 
     protected $casts = [

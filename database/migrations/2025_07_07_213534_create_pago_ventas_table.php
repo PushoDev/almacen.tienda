@@ -21,6 +21,8 @@ return new class extends Migration
 
             $table->enum('tipo_moneda', ['usd', 'euro', 'mlc', 'cup'])->default('usd');  // Tipo de moneda que paga el cliente (uds, mlc, euro, cup)
 
+            $table->foreignId('cuenta_id')->constrained('cuentas')->onDelete('cascade');
+
             $table->enum('via_pago', ['zelle', 'visa', 'paypal', 'mastercard', 'stripe', 'transfermovil', 'enzona', 'otros'])->default('zelle'); // Via de Pago
             $table->decimal('monto', 10, 2); // Monto pagado con ese método
             $table->timestamps();

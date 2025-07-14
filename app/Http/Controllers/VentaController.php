@@ -10,6 +10,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
+use Illuminate\Validation\Rule;
+use App\Models\Cuenta;
 
 class VentaController extends Controller
 {
@@ -69,21 +71,26 @@ class VentaController extends Controller
     }
 
     /**
-     * Registrar una nueva venta
+     * Registrar una nueva venta con varios productos y pago
      */
     public function store(Request $request)
     {
         $validated = $request->validate([
             'almacen_id' => 'required|exists:almacens,id',
-            'productos' => 'required|array',
+            'productos' => 'required|array|min:1',
             'productos.*.producto_id' => 'required|exists:productos,id',
             'productos.*.cantidad' => 'required|integer|min:1',
             'productos.*.precio_venta' => 'required|numeric|min:0.01',
-            'pagos' => 'required|array',
+            'pagos' => 'required|array|min:1',
             'pagos.*.tipo_pago' => 'required|string',
             'pagos.*.via_pago' => 'required|string',
             'pagos.*.tipo_moneda' => 'required|string',
             'pagos.*.monto' => 'required|numeric|min:0.01',
+            'pagos.*.cuenta_id' => [
+                'required',
+                'exists:cuentas,id',
+                Rule::in(Cuenta::whereIn('tipo_cuenta', ['permanentes', 'temporales'])->pluck('id'))
+            ],
         ]);
 
         $user = Auth::user();
@@ -125,6 +132,11 @@ class VentaController extends Controller
                     throw new \Exception("Stock insuficiente para {$producto->nombre_producto}");
                 }
 
+                // Validar que precio_venta sea mayor al costo
+                if ($precioVenta <= $producto->precio_compra_producto) {
+                    throw new \Exception("Precio de venta de '{$producto->nombre_producto}' debe ser mayor al costo");
+                }
+
                 // Registrar detalle
                 VentaDetalle::create([
                     'venta_id' => $venta->id,
@@ -134,7 +146,7 @@ class VentaController extends Controller
                     'subtotal' => $subtotal,
                 ]);
 
-                // Restar stock
+                // Actualizar stock
                 $producto->almacenes()
                     ->updateExistingPivot($almacenId, [
                         'cantidad' => $stockDisponible - $cantidad
@@ -149,6 +161,7 @@ class VentaController extends Controller
                     'via_pago' => $pago['via_pago'],
                     'tipo_moneda' => $pago['tipo_moneda'],
                     'monto' => $pago['monto'],
+                    'cuenta_id' => $pago['cuenta_id'],
                 ]);
             }
 
@@ -156,7 +169,7 @@ class VentaController extends Controller
 
             return response()->json([
                 'success' => true,
-                'venta' => $venta->load('detalles.producto', 'pagos')
+                'venta' => $venta->load(['detalles.producto', 'pagos.cuenta']),
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
