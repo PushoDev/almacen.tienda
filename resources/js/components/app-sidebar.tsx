@@ -6,7 +6,6 @@ import { type Auth, type NavItem } from '@/types';
 import type { PageProps as InertiaPageProps } from '@inertiajs/core';
 import { Link, usePage } from '@inertiajs/react';
 import {
-    ArrowUpNarrowWide,
     BookOpen,
     Cctv,
     ChartNoAxesCombinedIcon,
@@ -80,12 +79,12 @@ const allNavItems: NavItem[] = [
         icon: ShoppingBasket,
         roles: ['admin', 'vendedor'],
     },
-    {
-        title: 'Tops Productos',
-        href: '#',
-        icon: ArrowUpNarrowWide,
-        roles: ['admin'],
-    },
+    // {
+    //     title: 'Tops Productos',
+    //     href: '#',
+    //     icon: ArrowUpNarrowWide,
+    //     roles: ['admin'],
+    // },
     {
         title: 'Proveedores',
         href: '/proveedores',
@@ -129,7 +128,7 @@ const footerNavItems: NavItem[] = [
         title: 'Chat.POS',
         href: '#',
         icon: MessageSquare,
-        roles: ['admin', 'vendedor'],
+        roles: ['vendedor'],
     },
     {
         title: 'Repositorio',
