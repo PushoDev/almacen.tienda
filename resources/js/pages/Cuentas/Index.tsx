@@ -18,9 +18,8 @@ import AppLayout from '@/layouts/app-layout';
 import { CuentaProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { Coins, CreditCard, Edit3, FileText, Landmark, Sheet, Trash2, Type, Wallet } from 'lucide-react';
-import { toast, Toaster } from 'sonner';
 import { useState } from 'react';
-import { Select, SelectContent, SelectItem } from '@/components/ui/select';
+import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -38,7 +37,12 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
     const deleteCuenta = (id: number) => {
         router.delete(route('cuentas.destroy', { cuenta: id }), {
             onSuccess: () => {
-                toast.success('Cuenta eliminada correctamente');
+                toast.success(
+                    'Cuenta eliminada correctamente',
+                    //     {
+                    //     description: <Button>Prueba</Button>,
+                    // }
+                );
             },
             onError: () => {
                 toast.error('Error en el proceso, inténtelo nuevamente');
@@ -78,12 +82,20 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                         id="filtro-tipo"
                         value={filtroTipo}
                         onChange={(e) => setFiltroTipo(e.target.value)}
-                        className="border border-gray-300 rounded-md px-3 py-1  focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="rounded-md border border-gray-300 px-3 py-1 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     >
-                        <option className='text-white bg-gray-700' value="">Todos</option>
-                        <option className='text-green-600 bg-gray-700' value="permanentes">Permanentes</option>
-                        <option className='text-amber-500 bg-gray-700' value="temporales">Temporales</option>
-                        <option className='text-red-500 bg-gray-700' value="deudas">Deudas</option>
+                        <option className="bg-gray-700 text-white" value="">
+                            Todos
+                        </option>
+                        <option className="bg-gray-700 text-green-600" value="permanentes">
+                            Permanentes
+                        </option>
+                        <option className="bg-gray-700 text-amber-500" value="temporales">
+                            Temporales
+                        </option>
+                        <option className="bg-gray-700 text-red-500" value="deudas">
+                            Deudas
+                        </option>
                     </select>
 
                     {/* Botón Crear nuevo */}
@@ -109,17 +121,11 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                             Exportar Excel
                         </Button>
                     </Link>
-
-
-
-
                 </div>
 
                 {/* Tabla de Cuentas */}
-                <div
-                    className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
+                <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
                     <div>
-
                         <Table>
                             <TableCaption>Lista de Cuentas</TableCaption>
                             <TableHeader>
@@ -143,8 +149,7 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                                             <TableCell className="min-w-[180px]">
                                                 <div className="flex items-center gap-2">
                                                     <Landmark size={14} className="text-primary shrink-0" />
-                                                    <span
-                                                        className="text-primary truncate font-medium">{cuenta.nombre_cuenta}</span>
+                                                    <span className="text-primary truncate font-medium">{cuenta.nombre_cuenta}</span>
                                                 </div>
                                             </TableCell>
 
@@ -160,10 +165,9 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                                             <TableCell>
                                                 <div className="flex items-center gap-2">
                                                     <Wallet size={14} className="shrink-0 text-emerald-500" />
-                                                    <span
-                                                        className={cuenta.saldo_cuenta ? 'font-medium' : 'text-gray-400 italic'}>
-                                                {cuenta.saldo_cuenta ? `$${cuenta.saldo_cuenta.toFixed(2)}` : 'Sin saldo'}
-                                            </span>
+                                                    <span className={cuenta.saldo_cuenta ? 'font-medium' : 'text-gray-400 italic'}>
+                                                        {cuenta.saldo_cuenta ? `$${cuenta.saldo_cuenta.toFixed(2)}` : 'Sin saldo'}
+                                                    </span>
                                                 </div>
                                             </TableCell>
 
@@ -176,8 +180,8 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                                                             cuenta.tipo_cuenta === 'permanentes'
                                                                 ? 'text-emerald-500'
                                                                 : cuenta.tipo_cuenta === 'temporales'
-                                                                    ? 'text-amber-500'
-                                                                    : 'text-red-500'
+                                                                  ? 'text-amber-500'
+                                                                  : 'text-red-500'
                                                         }`}
                                                     >
                                                         {cuenta.tipo_cuenta.charAt(0).toUpperCase() + cuenta.tipo_cuenta.slice(1)}
@@ -189,9 +193,8 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                                                 <div className="flex items-center gap-2">
                                                     <FileText size={14} className="shrink-0 text-gray-500" />
                                                     <span className="max-w-[200px] truncate">
-                                                {cuenta.notas_cuenta ||
-                                                    <span className="text-gray-400 italic">Sin notas</span>}
-                                            </span>
+                                                        {cuenta.notas_cuenta || <span className="text-gray-400 italic">Sin notas</span>}
+                                                    </span>
                                                 </div>
                                             </TableCell>
 
@@ -218,11 +221,9 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                                                     </AlertDialogTrigger>
                                                     <AlertDialogContent>
                                                         <AlertDialogHeader>
-                                                            <AlertDialogTitle
-                                                                className="text-center">Atención</AlertDialogTitle>
+                                                            <AlertDialogTitle className="text-center">Atención</AlertDialogTitle>
                                                             <AlertDialogDescription>
-                                                                ¿Estás seguro de eliminar esta cuenta? Esta acción es
-                                                                irreversible.
+                                                                ¿Estás seguro de eliminar esta cuenta? Esta acción es irreversible.
                                                             </AlertDialogDescription>
                                                         </AlertDialogHeader>
                                                         <AlertDialogFooter>
@@ -232,8 +233,7 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                                                             >
                                                                 Aceptar
                                                             </AlertDialogAction>
-                                                            <AlertDialogCancel
-                                                                className="cursor-pointer text-white hover:bg-emerald-300 hover:text-emerald-950 dark:hover:bg-emerald-300 dark:hover:text-emerald-950">
+                                                            <AlertDialogCancel className="cursor-pointer text-white hover:bg-emerald-300 hover:text-emerald-950 dark:hover:bg-emerald-300 dark:hover:text-emerald-950">
                                                                 Cancelar
                                                             </AlertDialogCancel>
                                                         </AlertDialogFooter>
