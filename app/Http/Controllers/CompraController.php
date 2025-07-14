@@ -111,22 +111,22 @@ class CompraController extends Controller
             if ($validated['compra'] === 'deuda_proveedor') {
                 $nombreCuentaTemporal = "Deuda - {$proveedor->nombre_proveedor}";
 
-                $cuentaTemporal = Cuenta::firstOrCreate(
+                $cuentaDeuda = Cuenta::firstOrCreate(
                     ['nombre_cuenta' => $nombreCuentaTemporal],
                     [
-                        'tipo_cuenta' => 'temporales',
+                        'tipo_cuenta' => 'deudas',
                         'saldo_cuenta' => $total,
                         'tipo_moneda' => 'USD',
-                        'notas_cuenta' => "Deuda Pendiente del proveedor: {$proveedor->nombre_proveedor}",
+                        'notas_cuenta' => "Deuda Pendiente: {$proveedor->nombre_proveedor}",
                     ]
                 );
 
-                if (!$cuentaTemporal->wasRecentlyCreated) {
-                    $cuentaTemporal->saldo_cuenta += $total;
-                    $cuentaTemporal->save();
+                if (!$cuentaDeuda->wasRecentlyCreated) {
+                    $cuentaDeuda->saldo_cuenta += $total;
+                    $cuentaDeuda->save();
                 }
 
-                $compraData['cuenta_id'] = $cuentaTemporal->id;
+                $compraData['cuenta_id'] = $cuentaDeuda->id;
             } else {
                 // Pago múltiple: validar y restar de varias cuentas
 

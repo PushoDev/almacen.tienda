@@ -53,7 +53,7 @@ class CuentaController extends Controller
             'saldo_cuenta' => ['nullable', 'numeric'],
             'tipo_moneda' => ['required', 'in:USD,EUR,MLC,CUP'], // Agregamos validación para tipo_moneda
             'deuda' => ['nullable', 'numeric'],
-            'tipo_cuenta' => ['required', 'in:permanentes,temporales'],
+            'tipo_cuenta' => ['required', 'in:permanentes,temporales,deudas'],
             'notas_cuenta' => ['nullable', 'string'],
         ]);
 
@@ -125,7 +125,7 @@ class CuentaController extends Controller
             'saldo_cuenta' => ['nullable', 'numeric'],
             'tipo_moneda' => ['required', 'in:USD,EUR,MLC,CUP'], // Validación para tipo_moneda
             'deuda' => ['nullable', 'numeric'],
-            'tipo_cuenta' => ['required', 'in:permanentes,temporales'],
+            'tipo_cuenta' => ['required', 'in:permanentes,temporales,deudas'],
             'notas_cuenta' => ['nullable', 'string'],
         ]);
 
@@ -150,5 +150,10 @@ class CuentaController extends Controller
     {
         $cuenta->delete();
         return redirect()->route('cuentas.index')->with('success', 'Cuenta eliminada exitosamente.');
+    }
+
+    public function getDeudas()
+    {
+        return response()->json(Cuenta::where('tipo_cuenta', 'deudas')->get());
     }
 }

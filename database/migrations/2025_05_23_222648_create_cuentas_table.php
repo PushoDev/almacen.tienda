@@ -18,7 +18,7 @@ return new class extends Migration
             $table->enum('tipo_moneda', ['USD', 'EUR', 'MLC', 'CUP'])->default('USD');
             // Para deudas de proveedores
             $table->double('deuda', 15, 8)->default(0)->nullable();
-            $table->enum('tipo_cuenta', ['permanentes', 'temporales'])->default('permanentes');
+            $table->enum('tipo_cuenta', ['permanentes', 'temporales', 'deudas'])->default('permanentes');
             $table->text('notas_cuenta')->nullable();
             $table->timestamps();
         });

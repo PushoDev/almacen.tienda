@@ -140,7 +140,13 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                                             <Type size={14} className="shrink-0 text-indigo-500" />
                                             <Badge
                                                 variant="outline"
-                                                className={`font-medium ${cuenta.tipo_cuenta === 'permanentes' ? 'text-emerald-500' : 'text-red-400'}`}
+                                                className={`font-medium ${
+                                                    cuenta.tipo_cuenta === 'permanentes'
+                                                        ? 'text-emerald-500'
+                                                        : cuenta.tipo_cuenta === 'temporales'
+                                                            ? 'text-amber-500'
+                                                            : 'text-red-500'
+                                                }`}
                                             >
                                                 {cuenta.tipo_cuenta.charAt(0).toUpperCase() + cuenta.tipo_cuenta.slice(1)}
                                             </Badge>
