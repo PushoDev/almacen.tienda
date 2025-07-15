@@ -17,6 +17,7 @@ import AppLayout from '@/layouts/app-layout';
 import { ProductoProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { Edit3, Eye, FileText, Package2, Sheet, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -45,6 +46,9 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
         });
     };
 
+    // Filtro
+    const [filtroTipo, setFiltroTipo] = useState<string>('');
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Productos" />
@@ -68,6 +72,21 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
 
                 {/* Acciones */}
                 <div className="flex justify-end gap-2">
+                    {/* Filtro*/}
+                    <select
+                        id="filtro-tipo"
+                        value={filtroTipo}
+                        onChange={(e) => setFiltroTipo(e.target.value)}
+                        className="focus:ring-sidebar-accent rounded-md border border-gray-300 px-3 py-1 focus:ring-2 focus:outline-none"
+                    >
+                        <option className="bg-background text-sidebar-accent" value="">
+                            Todos
+                        </option>
+                        <option className="bg-background text-sidebar-accent" value="permanentes">
+                            Por Categorias
+                        </option>
+                    </select>
+
                     {/* Botón Exportar PDF */}
                     <Link href="#">
                         <Button variant="outline" className="hover:bg-chart-3 flex cursor-pointer items-center gap-2">

@@ -82,18 +82,18 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                         id="filtro-tipo"
                         value={filtroTipo}
                         onChange={(e) => setFiltroTipo(e.target.value)}
-                        className="rounded-md border border-gray-300 px-3 py-1 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        className="focus:ring-sidebar-accent rounded-md border border-gray-300 px-3 py-1 focus:ring-2 focus:outline-none"
                     >
-                        <option className="bg-gray-700 text-white" value="">
+                        <option className="bg-background text-sidebar-accent" value="">
                             Todos
                         </option>
-                        <option className="bg-gray-700 text-green-600" value="permanentes">
+                        <option className="bg-background text-green-600" value="permanentes">
                             Permanentes
                         </option>
-                        <option className="bg-gray-700 text-amber-500" value="temporales">
+                        <option className="bg-background text-amber-500" value="temporales">
                             Temporales
                         </option>
-                        <option className="bg-gray-700 text-red-500" value="deudas">
+                        <option className="bg-background text-red-500" value="deudas">
                             Deudas
                         </option>
                     </select>
