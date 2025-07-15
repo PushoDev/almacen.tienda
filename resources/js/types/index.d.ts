@@ -373,54 +373,7 @@ export interface HistorialPrecioRef {
     fecha: string;
 }
 
-// Para el Punto de Venta (POS)
 /**
- * Pata el Punto de Venta
- */
-
-/**
- * Producto a vender: datos básicos y stock por almacén
- */
-export interface ProductoVenta {
-    id: number;
-    nombre_producto: string;
-    marca_producto: string | null;
-    codigo_producto: string | null;
-    categoria: string;
-    caegoria_id: number;
-    precio_compra: number;
-    cantidad_producto: number;
-    imagen_producto: string | null;
-    precio_venta?: number | null; // Precio asignado por vendedor
-    stock_total: number; // Suma total del stock en sus almacenes
-    ganancia: number | null;
-    tiene_precio: boolean; // Indica si tiene un precio de venta definido
-    almacenes: Array<{
-        id: number;
-        nombre_almacen: string;
-        stock_disponible: number; // Stock en este almacén específico
-    }>;
-    cantidad: number;
-}
-
-/**
- * Formato de solicitud para registrar una venta
- */
-export interface VentaRequestProps {
-    almacen_id: number;
-    productos: Array<ProductoVentaItemProps>;
-    pagos: Array<PagoVentaProps>;
-}
-
-/**
- * Detalle de producto vendido
- */
-export interface ProductoVentaItemProps {
-    producto_id: number;
-    cantidad: number;
-    precio_venta: number;
-}
-
 /**
  * Forma de pago registrada
  */
@@ -429,6 +382,7 @@ export interface PagoVentaProps {
     via_pago: 'zelle' | 'visa' | 'paypal' | 'mastercard' | 'stripe' | 'transfermovil' | 'enzona' | 'otros';
     tipo_moneda: 'usd' | 'euro' | 'mlc' | 'cup';
     monto: number;
+    cuenta_id: number;
 }
 
 /**
@@ -438,15 +392,17 @@ export interface VentaResponseProps {
     id: number;
     user_id: number;
     almacen_id: number;
+    cliente_id: number | null;
     total: number;
+    detalles_venta: string | null;
     created_at: string;
     updated_at: string;
     detalles: Array<VentaDetalleProps>;
-    pagos: Array<PagoVentaProps>;
+    pagos: Array<PagoVentaResponseProps>;
 }
 
 /**
- * Detalles de los productos vendidos
+ * Detalles de los productos vendidos (respuesta del backend)
  */
 export interface VentaDetalleProps {
     id: number;
@@ -468,5 +424,24 @@ export interface VentaDetalleProps {
         imagen_producto: string | null;
         created_at: string;
         updated_at: string;
+    };
+}
+
+/**
+ * Datos del pago (respuesta del backend)
+ */
+export interface PagoVentaResponseProps {
+    id: number;
+    venta_id: number;
+    tipo_pago: string;
+    via_pago: string;
+    tipo_moneda: string;
+    monto: number;
+    cuenta_id: number;
+    cuenta: {
+        id: number;
+        nombre_cuenta: string;
+        tipo_cuenta: string;
+        saldo_cuenta: number;
     };
 }

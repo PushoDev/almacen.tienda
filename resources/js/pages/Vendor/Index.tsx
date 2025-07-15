@@ -1,7 +1,6 @@
 import HeadingSmall from '@/components/heading-small';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { CursorFollow, CursorProvider } from '@/components/ui/cursor';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -9,27 +8,13 @@ import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
-import { BreadcrumbItem, PagoVentaProps, ProductoVenta, VentaRequestProps } from '@/types';
+import { BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
-import { BadgeCheckIcon, PackagePlus, ShoppingBag, Trash2 } from 'lucide-react';
+import { PackagePlus, ShoppingBag, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Todos los Productos',
-        href: '/productos',
-    },
-    {
-        title: 'Logistica',
-        href: '/logistica',
-    },
-    {
-        title: 'Punto de Venta',
-        href: '#',
-    },
-];
 export default function PuntoVentaPage({
     meta,
 }: {
@@ -38,7 +23,7 @@ export default function PuntoVentaPage({
         almacenes_usuario: { id: string | number; nombre: string }[];
     };
 }) {
-    // Estados
+    // Estados principales
     const [almacenSeleccionado, setAlmacenSeleccionado] = useState<string>('');
     const [productosFiltrados, setProductosFiltrados] = useState<ProductoVenta[]>([]);
     const [productosSeleccionados, setProductosSeleccionados] = useState<ProductoVenta[]>([]);
@@ -47,8 +32,18 @@ export default function PuntoVentaPage({
         via_pago: 'transfermovil',
         tipo_moneda: 'cup',
         monto: 0,
+        cuenta_id: undefined,
     });
+    const [detallesVenta, setDetallesVenta] = useState<string>('');
     const [loading, setLoading] = useState<boolean>(false);
+    const [cuentas, setCuentas] = useState<{ id: number; nombre_cuenta: string; tipo_cuenta: string }[]>([]);
+
+    // Cargar cuentas desde la API (opcionalmente puedes pasarlas por Inertia)
+    useEffect(() => {
+        axios.get('/api/cuentas').then((res) => {
+            setCuentas(res.data);
+        });
+    }, []);
 
     // Cargar productos cuando se selecciona un almacén
     useEffect(() => {
@@ -98,24 +93,29 @@ export default function PuntoVentaPage({
 
     // Registrar venta
     const registrarVenta = async () => {
-        if (!almacenSeleccionado || productosSeleccionados.length === 0 || pago.monto <= 0) {
+        if (!almacenSeleccionado || productosSeleccionados.length === 0 || !pago.cuenta_id || pago.monto <= 0) {
             toast.error('Faltan datos requeridos para registrar la venta');
             return;
         }
 
+        const totalVenta = calcularTotal();
+
         const ventaData: VentaRequestProps = {
             almacen_id: parseInt(almacenSeleccionado),
+            cliente_id: null,
+            detalles_venta: detallesVenta || null,
             productos: productosSeleccionados.map((p) => ({
                 producto_id: p.id,
                 cantidad: p.cantidad,
-                precio_venta: p.precio_venta || 0,
+                precio_venta: p.precio_venta,
             })),
             pagos: [
                 {
                     tipo_pago: pago.tipo_pago,
                     via_pago: pago.via_pago,
                     tipo_moneda: pago.tipo_moneda,
-                    monto: parseFloat(pago.monto.toString()),
+                    monto: parseFloat(pago.monto.toFixed(2)),
+                    cuenta_id: pago.cuenta_id,
                 },
             ],
         };
@@ -125,7 +125,14 @@ export default function PuntoVentaPage({
             toast.success('✅ Venta realizada con éxito');
             // Reiniciar estados
             setProductosSeleccionados([]);
-            setPago({ tipo_pago: '', via_pago: '', tipo_moneda: 'cup', monto: 0 });
+            setPago({
+                tipo_pago: 'transferencia',
+                via_pago: 'transfermovil',
+                tipo_moneda: 'cup',
+                monto: 0,
+                cuenta_id: undefined,
+            });
+            setDetallesVenta('');
             setAlmacenSeleccionado('');
         } catch (error: any) {
             console.error(error.response?.data ?? error.message);
@@ -133,21 +140,27 @@ export default function PuntoVentaPage({
         }
     };
 
+    // Rutas breadcrumb
+    const breadcrumbs: BreadcrumbItem[] = [
+        {
+            title: 'Productos',
+            href: '/productos',
+        },
+        {
+            title: 'Ventas',
+            href: '#',
+        },
+    ];
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Punto Venta" />
+            <Head title="Punto de Venta" />
+
+            {/* Contenedor principal */}
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
-                    <CursorProvider>
-                        <CursorFollow>
-                            <div className="bg-sidebar-accent rounded-lg px-2 py-1 text-sm text-white shadow-lg">Punto de Venta</div>
-                        </CursorFollow>
-                    </CursorProvider>
-                    <HeadingSmall
-                        title="Opciones Generales del Sistema"
-                        description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento."
-                    />
+                    <HeadingSmall title="Punto de Venta" description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento." />
                     <ShoppingBag
                         size={70}
                         color="#d6d3d1"
@@ -155,12 +168,8 @@ export default function PuntoVentaPage({
                     />
                 </div>
                 <Separator />
-
-                {/* Resumen */}
+                {/* Resumen usuario */}
                 <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
-                    <p>
-                        Total de productos: <Badge variant="secondary">Cargado dinámicamente</Badge>
-                    </p>
                     <p>
                         Rol actual: <span className="text-primary font-medium">{meta.role_usuario === 'admin' ? 'Administrador' : 'Vendedor'}</span>
                     </p>
@@ -169,9 +178,10 @@ export default function PuntoVentaPage({
 
                 {/* POS - Punto de Venta */}
                 <div className="grid gap-4 md:grid-cols-2">
+                    {/* Columna 1: Productos Disponibles */}
                     <div>
                         {/* Seleccionar Almacén */}
-                        <div className="items-end">
+                        <div>
                             <Select onValueChange={(value) => setAlmacenSeleccionado(value)} value={almacenSeleccionado}>
                                 <SelectTrigger className="mt-4">
                                     <SelectValue placeholder="Selecciona un almacén" />
@@ -232,7 +242,7 @@ export default function PuntoVentaPage({
                                 ) : productosFiltrados.length > 0 ? (
                                     productosFiltrados.map((producto) => (
                                         <TableRow key={producto.id} className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800">
-                                            <TableCell className="font-medium">{producto.nombre_producto}</TableCell>
+                                            <TableCell>{producto.nombre_producto}</TableCell>
                                             <TableCell>{producto.marca_producto}</TableCell>
                                             <TableCell className="text-center">
                                                 <Badge variant="outline" className={producto.stock_total === 0 ? 'bg-red-100 text-red-800' : ''}>
@@ -249,9 +259,8 @@ export default function PuntoVentaPage({
                                                     <TooltipTrigger asChild>
                                                         <Button
                                                             variant="ghost"
-                                                            size="sm"
                                                             onClick={() => agregarProducto(producto)}
-                                                            className="hover:text-sidebar-accent hover:bg-sidebar cursor-pointer rounded-full p-2 text-green-600 focus:outline-none"
+                                                            className="hover:bg-green-100 hover:text-green-600 focus:outline-none"
                                                             title="Agregar producto"
                                                         >
                                                             <PackagePlus size={18} />
@@ -269,7 +278,7 @@ export default function PuntoVentaPage({
                                         <TableCell colSpan={5} className="py-10 text-center">
                                             <div className="flex flex-col items-center justify-center gap-2 text-gray-400">
                                                 <PackagePlus size={32} />
-                                                <p className="text-sm">No hay productos disponibles en este almacén</p>
+                                                <p>No hay productos disponibles en este almacén</p>
                                             </div>
                                         </TableCell>
                                     </TableRow>
@@ -287,22 +296,21 @@ export default function PuntoVentaPage({
                                     <PackagePlus className="text-green-600" size={18} />
                                     Productos Seleccionados
                                 </h3>
-
                                 <div className="max-h-[400px] space-y-3 overflow-y-auto">
                                     {productosSeleccionados.length > 0 ? (
                                         productosSeleccionados.map((producto, index) => {
                                             const subtotal = parseFloat((producto.cantidad * producto.precio_venta).toFixed(2));
-
                                             return (
                                                 <div
                                                     key={producto.id}
                                                     className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition-all hover:shadow dark:border-gray-700 dark:bg-gray-800"
                                                 >
                                                     <div className="mb-2 flex items-center justify-between">
-                                                        <span className="text-sidebar-accent font-medium">{producto.nombre_producto}</span>
+                                                        <span className="font-medium text-gray-800 dark:text-gray-100">
+                                                            {producto.nombre_producto}
+                                                        </span>
                                                         <div className="flex items-center gap-2">
-                                                            <Badge variant="secondary" className="bg-blue-500 text-xs text-white dark:bg-blue-600">
-                                                                <BadgeCheckIcon />
+                                                            <Badge variant="secondary" className="text-xs">
                                                                 {producto.marca_producto}
                                                             </Badge>
                                                             <Tooltip>
@@ -317,11 +325,11 @@ export default function PuntoVentaPage({
                                                                         className="cursor-pointer text-red-500 transition-colors hover:text-red-700 focus:outline-none"
                                                                         aria-label="Eliminar producto"
                                                                     >
-                                                                        <Trash2 />
+                                                                        <Trash2 size={16} />
                                                                     </button>
                                                                 </TooltipTrigger>
                                                                 <TooltipContent className="text-white">
-                                                                    <p>Quitar de la Lista</p>
+                                                                    <p>Quitar de la lista</p>
                                                                 </TooltipContent>
                                                             </Tooltip>
                                                         </div>
@@ -330,7 +338,7 @@ export default function PuntoVentaPage({
                                                     <div className="grid grid-cols-2 gap-3">
                                                         {/* Cantidad */}
                                                         <div>
-                                                            <label className="block text-xs text-gray-500 dark:text-gray-400">Cantidad</label>
+                                                            <Label className="block text-xs text-gray-500 dark:text-gray-400">Cantidad</Label>
                                                             <input
                                                                 type="number"
                                                                 min="1"
@@ -348,11 +356,11 @@ export default function PuntoVentaPage({
 
                                                         {/* Precio */}
                                                         <div>
-                                                            <label className="block text-xs text-gray-500 dark:text-gray-400">Precio unitario</label>
+                                                            <Label className="block text-xs text-gray-500 dark:text-gray-400">Precio unitario</Label>
                                                             <input
                                                                 type="number"
                                                                 step="0.01"
-                                                                min="0"
+                                                                min="0.01"
                                                                 value={producto.precio_venta}
                                                                 onChange={(e) => {
                                                                     const nuevoPrecio = parseFloat(e.target.value) || 0;
@@ -392,66 +400,148 @@ export default function PuntoVentaPage({
                                     <p>Total de productos: {productosSeleccionados.length}</p>
                                     <p className="text-xl font-bold text-green-600 dark:text-green-400">Total: S/. {calcularTotal().toFixed(2)}</p>
                                 </div>
+
+                                {/* Diálogo de finalizar venta */}
                                 <Dialog>
-                                    <form>
-                                        <DialogTrigger asChild>
-                                            <Button variant="outline" className="mt-4 w-full bg-green-600 px-4 py-2 text-white hover:bg-green-700">
-                                                Proceder Venta
-                                            </Button>
-                                        </DialogTrigger>
-                                        <DialogContent className="sm:max-w-[625px]">
-                                            <DialogHeader>
-                                                <DialogTitle className="text-green-600 dark:text-green-400">
-                                                    Monto de Venta: $ {calcularTotal().toFixed(2)}
-                                                </DialogTitle>
-                                                <DialogDescription className="text-sidebar-accent">
-                                                    Rellene los campos necesarios para realizar venta
-                                                </DialogDescription>
-                                            </DialogHeader>
-                                            <div className="grid gap-4">
-                                                <div className="grid gap-3">
-                                                    <Label htmlFor="tipo_pago">Tipo de Pago</Label>
-                                                    <input
-                                                        type="text"
-                                                        placeholder="Efectivo, transferencia..."
-                                                        value={pago.tipo_pago}
-                                                        onChange={(e) => setPago({ ...pago, tipo_pago: e.target.value })}
-                                                        className="w-full rounded border border-gray-300 p-2 dark:border-gray-600 dark:bg-gray-800"
-                                                    />
-                                                </div>
-                                                <div className="grid gap-3">
-                                                    <Label htmlFor="via_pago">Vía de Pago</Label>
-                                                    <input
-                                                        type="text"
-                                                        placeholder="TransferMóvil, efectivo..."
-                                                        value={pago.via_pago}
-                                                        onChange={(e) => setPago({ ...pago, via_pago: e.target.value })}
-                                                        className="w-full rounded border border-gray-300 p-2 dark:border-gray-600 dark:bg-gray-800"
-                                                    />
-                                                </div>
-                                                <div className="grid gap-3">
-                                                    <Label htmlFor="monto">Monto Recibido</Label>
-                                                    <input
-                                                        type="number"
-                                                        step="0.01"
-                                                        placeholder="Monto recibido"
-                                                        value={pago.monto}
-                                                        onChange={(e) => setPago({ ...pago, monto: parseFloat(e.target.value) || 0 })}
-                                                        className="w-full rounded border border-gray-300 p-2 dark:border-gray-600 dark:bg-gray-800"
-                                                    />
-                                                </div>
+                                    <DialogTrigger asChild>
+                                        <Button variant="outline" className="mt-4 w-full bg-green-600 px-4 py-2 text-white hover:bg-green-700">
+                                            Proceder Venta
+                                        </Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="sm:max-w-[625px]">
+                                        <DialogHeader>
+                                            <DialogTitle className="text-green-600 dark:text-green-400">
+                                                Finalizar Venta - $ {calcularTotal().toFixed(2)}
+                                            </DialogTitle>
+                                            <DialogDescription>Rellene los datos necesarios para registrar la venta.</DialogDescription>
+                                        </DialogHeader>
+
+                                        <div className="grid gap-4 py-4">
+                                            {/* Tipo de Pago */}
+                                            <div className="grid grid-cols-4 items-center gap-4">
+                                                <Label htmlFor="tipo_pago" className="col-span-1 text-right">
+                                                    Tipo de Pago
+                                                </Label>
+                                                <Select onValueChange={(value) => setPago({ ...pago, tipo_pago: value })} value={pago.tipo_pago}>
+                                                    <SelectTrigger className="col-span-3">
+                                                        <SelectValue placeholder="Selecciona un tipo de pago" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {['efectivo', 'tarjeta', 'transferencia', 'otros'].map((tipo) => (
+                                                            <SelectItem key={tipo} value={tipo}>
+                                                                {tipo.charAt(0).toUpperCase() + tipo.slice(1)}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
                                             </div>
-                                            <DialogFooter>
-                                                <button
-                                                    onClick={registrarVenta}
-                                                    disabled={!almacenSeleccionado || productosSeleccionados.length === 0 || pago.monto <= 0}
-                                                    className="mt-4 w-full rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:bg-gray-400"
+
+                                            {/* Vía de Pago */}
+                                            <div className="grid grid-cols-4 items-center gap-4">
+                                                <Label htmlFor="via_pago" className="col-span-1 text-right">
+                                                    Vía de Pago
+                                                </Label>
+                                                <Select onValueChange={(value) => setPago({ ...pago, via_pago: value })} value={pago.via_pago}>
+                                                    <SelectTrigger className="col-span-3">
+                                                        <SelectValue placeholder="Selecciona una vía de pago" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {['zelle', 'visa', 'paypal', 'mastercard', 'stripe', 'transfermovil', 'enzona', 'otros'].map(
+                                                            (via) => (
+                                                                <SelectItem key={via} value={via}>
+                                                                    {via.charAt(0).toUpperCase() + via.slice(1)}
+                                                                </SelectItem>
+                                                            ),
+                                                        )}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            {/* Tipo de Moneda */}
+                                            <div className="grid grid-cols-4 items-center gap-4">
+                                                <Label htmlFor="tipo_moneda" className="col-span-1 text-right">
+                                                    Moneda
+                                                </Label>
+                                                <Select onValueChange={(value) => setPago({ ...pago, tipo_moneda: value })} value={pago.tipo_moneda}>
+                                                    <SelectTrigger className="col-span-3">
+                                                        <SelectValue placeholder="Selecciona una moneda" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {['usd', 'euro', 'mlc', 'cup'].map((moneda) => (
+                                                            <SelectItem key={moneda} value={moneda}>
+                                                                {moneda.toUpperCase()}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            {/* Monto Recibido */}
+                                            <div className="grid grid-cols-4 items-center gap-4">
+                                                <Label htmlFor="monto" className="col-span-1 text-right">
+                                                    Monto
+                                                </Label>
+                                                <input
+                                                    id="monto"
+                                                    type="number"
+                                                    step="0.01"
+                                                    min="0.01"
+                                                    value={pago.monto || ''}
+                                                    onChange={(e) => setPago({ ...pago, monto: parseFloat(e.target.value) || 0 })}
+                                                    className="col-span-3 rounded border border-gray-300 p-2 dark:border-gray-600 dark:bg-gray-800"
+                                                />
+                                            </div>
+
+                                            {/* Cuenta Destino */}
+                                            <div className="grid grid-cols-4 items-center gap-4">
+                                                <Label htmlFor="cuenta_id" className="col-span-1 text-right">
+                                                    Cuenta Destino
+                                                </Label>
+                                                <Select
+                                                    onValueChange={(value) => setPago({ ...pago, cuenta_id: parseInt(value) })}
+                                                    value={pago.cuenta_id?.toString() || ''}
                                                 >
-                                                    Realizar Venta
-                                                </button>
-                                            </DialogFooter>
-                                        </DialogContent>
-                                    </form>
+                                                    <SelectTrigger className="col-span-3">
+                                                        <SelectValue placeholder="Selecciona una cuenta" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {cuentas.map((cuenta) => (
+                                                            <SelectItem key={cuenta.id} value={cuenta.id.toString()}>
+                                                                {cuenta.nombre_cuenta} ({cuenta.tipo_cuenta})
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            {/* Detalles de venta (opcional) */}
+                                            <div className="grid grid-cols-4 items-center gap-4">
+                                                <Label htmlFor="detalles_venta" className="col-span-1 text-right">
+                                                    Detalles
+                                                </Label>
+                                                <textarea
+                                                    id="detalles_venta"
+                                                    rows={2}
+                                                    placeholder="Ej: Cliente satisfecho, envío pendiente..."
+                                                    value={detallesVenta}
+                                                    onChange={(e) => setDetallesVenta(e.target.value)}
+                                                    className="col-span-3 rounded border border-gray-300 p-2 dark:border-gray-600 dark:bg-gray-800"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <DialogFooter>
+                                            <button
+                                                onClick={registrarVenta}
+                                                disabled={
+                                                    !almacenSeleccionado || productosSeleccionados.length === 0 || !pago.cuenta_id || pago.monto <= 0
+                                                }
+                                                className="mt-4 w-full rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:bg-gray-400"
+                                            >
+                                                Realizar Venta
+                                            </button>
+                                        </DialogFooter>
+                                    </DialogContent>
                                 </Dialog>
                             </div>
                         </div>
