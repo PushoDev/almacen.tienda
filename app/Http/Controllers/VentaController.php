@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Almacen;
+
 use App\Models\Producto;
 use App\Models\Venta;
 use App\Models\VentaDetalle;
@@ -15,6 +17,69 @@ use App\Models\Cuenta;
 
 class VentaController extends Controller
 {
+
+    /**
+     * Devuelve los almacenes permitidos para el usuario autenticado
+     */
+    public function getAlmacenes()
+    {
+        $user = Auth::user();
+
+        $almacenes = $user->role === 'admin'
+            ? Almacen::select('id', 'nombre_almacen')->get()
+            : $user->almacenes()->select('id', 'nombre_almacen')->get();
+
+        return response()->json($almacenes);
+    }
+
+    /**
+     * Devuelve los productos disponibles en un almacén
+     */
+    public function getProductosPorAlmacen($id)
+    {
+        $user = Auth::user();
+
+        // Verificar que el usuario tenga acceso al almacén
+        if ($user->role !== 'admin') {
+            $tieneAcceso = $user->almacenes->contains('id', $id);
+            if (!$tieneAcceso) {
+                return response()->json(['error' => 'Acceso denegado al almacén'], 403);
+            }
+        }
+
+        // Obtener productos del almacén
+        $productos = Producto::whereHas('almacenes', function ($q) use ($id) {
+            $q->where('almacens.id', $id);
+        })
+            ->with(['categoria', 'vendedores' => function ($q) use ($user) {
+                $q->where('user_id', $user->id)
+                    ->select('users.id', 'producto_vendedors.precio_venta', 'producto_vendedors.venta_ganancia');
+            }])
+            ->get()
+            ->map(function ($producto) use ($id) {
+                $vendedor = $producto->vendedores->first();
+
+                // Obtener stock en este almacén
+                $stock = $producto->almacenes->find($id)?->pivot->cantidad ?? 0;
+
+                return [
+                    'id' => $producto->id,
+                    'nombre_producto' => $producto->nombre_producto,
+                    'marca_producto' => $producto->marca_producto,
+                    'categoria' => $producto->categoria->nombre_categoria ?? 'Sin categoría',
+                    'precio_compra' => $producto->precio_compra_producto,
+                    'stock_total' => $stock,
+                    'precio_venta' => $vendedor?->pivot->precio_venta ?? null,
+                    'tiene_precio' => ($vendedor?->pivot->precio_venta ?? 0) > 0,
+                ];
+            });
+
+        return response()->json($productos);
+    }
+
+    /**
+     * Mostrar interfaz del punto de venta
+     */
     /**
      * Mostrar interfaz del punto de venta
      */
@@ -22,48 +87,10 @@ class VentaController extends Controller
     {
         $user = Auth::user();
 
-        // Consulta base de productos
-        $query = Producto::with(['categoria']);
-
-        // Filtrado por rol y almacenes
-        if ($user->role === 'admin') {
-            $query->with(['almacenes' => fn($q) => $q->withPivot('cantidad')]);
-        } else {
-            $almacenIds = $user->almacenes->pluck('id');
-            $query->whereHas('almacenes', fn($q) => $q->whereIn('almacens.id', $almacenIds))
-                ->with(['almacenes' => fn($q) => $q->whereIn('almacens.id', $almacenIds)->withPivot('cantidad')]);
-        }
-
-        // Cargar datos específicos del vendedor actual
-        $query->with(['vendedores' => function ($q) use ($user) {
-            $q->where('user_id', $user->id)
-                ->select('users.id', 'producto_vendedors.precio_venta', 'producto_vendedors.venta_ganancia');
-        }]);
-
-        // Obtener productos
-        $productos = $query->get();
-
-        // Transformar datos para el frontend
-        $productosTransformados = $productos->map(function ($producto) use ($user) {
-            $vendedor = $producto->vendedores->first();
-
-            return [
-                'id' => $producto->id,
-                'nombre_producto' => $producto->nombre_producto,
-                'marca_producto' => $producto->marca_producto,
-                'categoria' => $producto->categoria->nombre_categoria ?? 'Sin categoría',
-                'precio_compra' => $producto->precio_compra_producto,
-                'stock_total' => $producto->almacenes->sum('pivot.cantidad'),
-                'precio_venta' => $vendedor?->pivot->precio_venta ?? null,
-                'ganancia' => $vendedor?->pivot->venta_ganancia ?? null,
-                'tiene_precio' => ($vendedor?->pivot->precio_venta ?? 0) > 0,
-            ];
-        });
-
         return Inertia::render('Vendor/Index', [
-            'productos' => $productosTransformados,
+            'productos' => [], // Ya no necesitas pasar todos los productos aquí
             'meta' => [
-                'total_productos' => $productosTransformados->count(),
+                'total_productos' => 0, // Esto se actualizará en la vista
                 'role_usuario' => $user->role,
                 'almacenes_usuario' => $user->almacenes->map(fn($a) => ['id' => $a->id, 'nombre' => $a->nombre_almacen]),
             ],

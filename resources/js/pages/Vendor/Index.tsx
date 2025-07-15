@@ -7,35 +7,80 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
-import { PagoVentaProps, ProductoVenta, VentaRequestProps } from '@/types';
+import { BreadcrumbItem, PagoVentaProps, ProductoVenta, VentaRequestProps } from '@/types';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
-import { PackagePlus, ShoppingBag } from 'lucide-react';
-import { useState } from 'react';
+import { BadgeCheckIcon, PackagePlus, ShoppingBag, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+const breadcrumbs: BreadcrumbItem[] = [
+    {
+        title: 'Todos los Productos',
+        href: '/productos',
+    },
+    {
+        title: 'Logistica',
+        href: '/logistica',
+    },
+    {
+        title: 'Punto de Venta',
+        href: '#',
+    },
+];
 export default function PuntoVentaPage({
-    productos: initialProductos,
     meta,
 }: {
-    productos: ProductoVenta[];
-    meta: { total_productos: number; role_usuario: string; almacenes_usuario: { id: string | number; nombre: string }[] };
+    meta: {
+        role_usuario: string;
+        almacenes_usuario: { id: string | number; nombre: string }[];
+    };
 }) {
-    // Estados principales
-    const [productosSeleccionados, setProductosSeleccionados] = useState<ProductoVenta[]>([]);
+    // Estados
     const [almacenSeleccionado, setAlmacenSeleccionado] = useState<string>('');
+    const [productosFiltrados, setProductosFiltrados] = useState<ProductoVenta[]>([]);
+    const [productosSeleccionados, setProductosSeleccionados] = useState<ProductoVenta[]>([]);
     const [pago, setPago] = useState<PagoVentaProps>({
         tipo_pago: 'transferencia',
         via_pago: 'transfermovil',
         tipo_moneda: 'cup',
         monto: 0,
     });
+    const [loading, setLoading] = useState<boolean>(false);
 
-    // Función para agregar producto al carrito
+    // Cargar productos cuando se selecciona un almacén
+    useEffect(() => {
+        if (!almacenSeleccionado) return;
+
+        const almacenNombre = almacenSeleccionado;
+        const almacen = meta.almacenes_usuario.find((a) => a.nombre === almacenNombre);
+
+        if (!almacen) {
+            setProductosFiltrados([]);
+            return;
+        }
+
+        setLoading(true);
+
+        axios
+            .get(`/ventas/almacenes/${almacen.id}/productos`)
+            .then((res) => {
+                setProductosFiltrados(res.data);
+            })
+            .catch((err) => {
+                console.error('Error al cargar productos:', err);
+                toast.error('No se pudieron cargar los productos');
+            })
+            .finally(() => setLoading(false));
+    }, [almacenSeleccionado]);
+
+    // Agregar producto al carrito
     const agregarProducto = (producto: ProductoVenta) => {
         const existe = productosSeleccionados.some((p) => p.id === producto.id);
         if (existe) return;
+
         setProductosSeleccionados([
             ...productosSeleccionados,
             {
@@ -46,12 +91,12 @@ export default function PuntoVentaPage({
         ]);
     };
 
-    // Calcular total dinámicamente
+    // Calcular total
     const calcularTotal = () => {
         return productosSeleccionados.reduce((acc, p) => acc + p.cantidad * p.precio_venta, 0);
     };
 
-    // Enviar la venta al backend
+    // Registrar venta
     const registrarVenta = async () => {
         if (!almacenSeleccionado || productosSeleccionados.length === 0 || pago.monto <= 0) {
             toast.error('Faltan datos requeridos para registrar la venta');
@@ -89,7 +134,7 @@ export default function PuntoVentaPage({
     };
 
     return (
-        <AppLayout breadcrumbs={[]}>
+        <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Punto Venta" />
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
@@ -114,7 +159,7 @@ export default function PuntoVentaPage({
                 {/* Resumen */}
                 <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
                     <p>
-                        Total de productos: <Badge variant="secondary">{meta.total_productos}</Badge>
+                        Total de productos: <Badge variant="secondary">Cargado dinámicamente</Badge>
                     </p>
                     <p>
                         Rol actual: <span className="text-primary font-medium">{meta.role_usuario === 'admin' ? 'Administrador' : 'Vendedor'}</span>
@@ -125,7 +170,7 @@ export default function PuntoVentaPage({
                 {/* POS - Punto de Venta */}
                 <div className="grid gap-4 md:grid-cols-2">
                     <div>
-                        {/* Seleccionar Almacenes */}
+                        {/* Seleccionar Almacén */}
                         <div className="items-end">
                             <Select onValueChange={(value) => setAlmacenSeleccionado(value)} value={almacenSeleccionado}>
                                 <SelectTrigger className="mt-4">
@@ -140,40 +185,92 @@ export default function PuntoVentaPage({
                                 </SelectContent>
                             </Select>
                         </div>
+
                         <br />
-                        {/* Tabla para Productos Disponibles por almacenes seleccionados por roles */}
+
+                        {/* Tabla de Productos Disponibles */}
                         <Table>
-                            <TableCaption>Productos Disponibles</TableCaption>
+                            <TableCaption>Productos disponibles en el almacén seleccionado</TableCaption>
                             <TableHeader>
-                                <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
-                                    <TableHead>Producto</TableHead>
-                                    <TableHead>Marca</TableHead>
-                                    <TableHead>Stock Actual</TableHead>
-                                    <TableHead>Precio</TableHead>
-                                    <TableHead className="text-center">Acciones</TableHead>
+                                <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent transition-colors">
+                                    <TableHead className="text-white">Producto</TableHead>
+                                    <TableHead className="text-white">Marca</TableHead>
+                                    <TableHead className="text-center text-white">Stock</TableHead>
+                                    <TableHead className="text-center text-white">Precio</TableHead>
+                                    <TableHead className="text-center text-white">Acciones</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {initialProductos.length > 0 ? (
-                                    initialProductos.map((producto) => (
-                                        <TableRow key={producto.id}>
-                                            <TableCell>{producto.nombre_producto}</TableCell>
+                                {loading ? (
+                                    <TableRow>
+                                        <TableCell colSpan={5} className="py-6 text-center">
+                                            <span className="flex items-center justify-center gap-2 text-gray-500">
+                                                <svg
+                                                    className="h-5 w-5 animate-spin text-gray-500"
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                >
+                                                    <circle
+                                                        className="opacity-25"
+                                                        cx="12"
+                                                        cy="12"
+                                                        r="10"
+                                                        stroke="currentColor"
+                                                        strokeWidth="4"
+                                                    ></circle>
+                                                    <path
+                                                        className="opacity-75"
+                                                        fill="currentColor"
+                                                        d="M4 12a8 8 0 018-8V4a10 10 0 00-10 10h2z"
+                                                    ></path>
+                                                </svg>
+                                                Cargando productos...
+                                            </span>
+                                        </TableCell>
+                                    </TableRow>
+                                ) : productosFiltrados.length > 0 ? (
+                                    productosFiltrados.map((producto) => (
+                                        <TableRow key={producto.id} className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800">
+                                            <TableCell className="font-medium">{producto.nombre_producto}</TableCell>
                                             <TableCell>{producto.marca_producto}</TableCell>
-                                            <TableCell>
-                                                <Badge variant="outline">{producto.stock_total}</Badge>
-                                            </TableCell>
-                                            <TableCell>{producto.precio_venta ?? 'No definido'}</TableCell>
                                             <TableCell className="text-center">
-                                                <Button variant="ghost" onClick={() => agregarProducto(producto)}>
-                                                    <PackagePlus className="text-green-600" />
-                                                </Button>
+                                                <Badge variant="outline" className={producto.stock_total === 0 ? 'bg-red-100 text-red-800' : ''}>
+                                                    {producto.stock_total}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-center font-semibold">
+                                                {producto.precio_venta
+                                                    ? `$ ${parseFloat(producto.precio_venta.toString()).toFixed(2)}`
+                                                    : 'No definido'}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => agregarProducto(producto)}
+                                                            className="hover:text-sidebar-accent hover:bg-sidebar cursor-pointer rounded-full p-2 text-green-600 focus:outline-none"
+                                                            title="Agregar producto"
+                                                        >
+                                                            <PackagePlus size={18} />
+                                                        </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent className="text-white">
+                                                        <p>Agregar al Pedido</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
                                             </TableCell>
                                         </TableRow>
                                     ))
                                 ) : (
                                     <TableRow>
-                                        <TableCell colSpan={8} className="text-center">
-                                            No hay productos disponibles
+                                        <TableCell colSpan={5} className="py-10 text-center">
+                                            <div className="flex flex-col items-center justify-center gap-2 text-gray-400">
+                                                <PackagePlus size={32} />
+                                                <p className="text-sm">No hay productos disponibles en este almacén</p>
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 )}
@@ -184,59 +281,109 @@ export default function PuntoVentaPage({
                     {/* Columna 2: Productos Seleccionados y Resumen de Venta */}
                     <div className="flex flex-col space-y-4">
                         {/* Productos seleccionados */}
-                        <div className="border-sidebar-border/70 dark:border-sidebar-border relative flex-1 overflow-hidden rounded-xl border">
-                            <div className="p-4">
-                                <h3 className="mb-2 text-lg font-semibold">Productos Seleccionados</h3>
-                                <div className="space-y-2">
+                        <div className="border-sidebar-border/70 dark:border-sidebar-border relative flex-1 overflow-hidden rounded-xl border shadow-sm transition-shadow hover:shadow-md">
+                            <div className="bg-white p-4 dark:bg-gray-800">
+                                <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold">
+                                    <PackagePlus className="text-green-600" size={18} />
+                                    Productos Seleccionados
+                                </h3>
+
+                                <div className="max-h-[400px] space-y-3 overflow-y-auto">
                                     {productosSeleccionados.length > 0 ? (
-                                        productosSeleccionados.map((producto, index) => (
-                                            <div key={producto.id} className="rounded bg-gray-100 p-2 dark:bg-gray-700">
-                                                <div className="mb-2 flex items-center justify-between">
-                                                    <span className="font-medium">{producto.nombre_producto}</span>
-                                                    <Badge variant="outline">{producto.marca_producto}</Badge>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    <div>
-                                                        <label className="block text-xs text-gray-500 dark:text-gray-400">Cantidad</label>
-                                                        <input
-                                                            type="number"
-                                                            min="1"
-                                                            max={producto.stock_total}
-                                                            value={producto.cantidad}
-                                                            onChange={(e) => {
-                                                                const nuevaCantidad = parseInt(e.target.value) || 1;
-                                                                const nuevosProductos = [...productosSeleccionados];
-                                                                nuevosProductos[index].cantidad = Math.min(nuevaCantidad, producto.stock_total);
-                                                                setProductosSeleccionados(nuevosProductos);
-                                                            }}
-                                                            className="w-full rounded border border-gray-300 p-1 text-sm dark:border-gray-600 dark:bg-gray-800"
-                                                        />
+                                        productosSeleccionados.map((producto, index) => {
+                                            const subtotal = parseFloat((producto.cantidad * producto.precio_venta).toFixed(2));
+
+                                            return (
+                                                <div
+                                                    key={producto.id}
+                                                    className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition-all hover:shadow dark:border-gray-700 dark:bg-gray-800"
+                                                >
+                                                    <div className="mb-2 flex items-center justify-between">
+                                                        <span className="text-sidebar-accent font-medium">{producto.nombre_producto}</span>
+                                                        <div className="flex items-center gap-2">
+                                                            <Badge variant="secondary" className="bg-blue-500 text-xs text-white dark:bg-blue-600">
+                                                                <BadgeCheckIcon />
+                                                                {producto.marca_producto}
+                                                            </Badge>
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            const nuevosProductos = productosSeleccionados.filter(
+                                                                                (_, i) => i !== index,
+                                                                            );
+                                                                            setProductosSeleccionados(nuevosProductos);
+                                                                        }}
+                                                                        className="cursor-pointer text-red-500 transition-colors hover:text-red-700 focus:outline-none"
+                                                                        aria-label="Eliminar producto"
+                                                                    >
+                                                                        <Trash2 />
+                                                                    </button>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent className="text-white">
+                                                                    <p>Quitar de la Lista</p>
+                                                                </TooltipContent>
+                                                            </Tooltip>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <label className="block text-xs text-gray-500 dark:text-gray-400">Precio</label>
-                                                        <input
-                                                            type="number"
-                                                            step="0.01"
-                                                            min="0"
-                                                            value={producto.precio_venta}
-                                                            onChange={(e) => {
-                                                                const nuevoPrecio = parseFloat(e.target.value) || 0;
-                                                                const nuevosProductos = [...productosSeleccionados];
-                                                                nuevosProductos[index].precio_venta = nuevoPrecio;
-                                                                setProductosSeleccionados(nuevosProductos);
-                                                            }}
-                                                            className="w-full rounded border border-gray-300 p-1 text-sm dark:border-gray-600 dark:bg-gray-800"
-                                                        />
+
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        {/* Cantidad */}
+                                                        <div>
+                                                            <label className="block text-xs text-gray-500 dark:text-gray-400">Cantidad</label>
+                                                            <input
+                                                                type="number"
+                                                                min="1"
+                                                                max={producto.stock_total}
+                                                                value={producto.cantidad}
+                                                                onChange={(e) => {
+                                                                    const nuevaCantidad = parseInt(e.target.value) || 1;
+                                                                    const nuevosProductos = [...productosSeleccionados];
+                                                                    nuevosProductos[index].cantidad = Math.min(nuevaCantidad, producto.stock_total);
+                                                                    setProductosSeleccionados(nuevosProductos);
+                                                                }}
+                                                                className="w-full rounded border border-gray-300 p-1.5 text-sm outline-none focus:ring-2 focus:ring-green-400 dark:border-gray-600 dark:bg-gray-900"
+                                                            />
+                                                        </div>
+
+                                                        {/* Precio */}
+                                                        <div>
+                                                            <label className="block text-xs text-gray-500 dark:text-gray-400">Precio unitario</label>
+                                                            <input
+                                                                type="number"
+                                                                step="0.01"
+                                                                min="0"
+                                                                value={producto.precio_venta}
+                                                                onChange={(e) => {
+                                                                    const nuevoPrecio = parseFloat(e.target.value) || 0;
+                                                                    const nuevosProductos = [...productosSeleccionados];
+                                                                    nuevosProductos[index].precio_venta = nuevoPrecio;
+                                                                    setProductosSeleccionados(nuevosProductos);
+                                                                }}
+                                                                className="w-full rounded border border-gray-300 p-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-400 dark:border-gray-600 dark:bg-gray-900"
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Subtotal */}
+                                                    <div className="mt-2 text-right">
+                                                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                                            Subtotal: $ {subtotal.toFixed(2)}
+                                                        </span>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        ))
+                                            );
+                                        })
                                     ) : (
-                                        <p className="text-center text-sm text-gray-500 dark:text-red-400">No hay productos seleccionados</p>
+                                        <div className="px-4 py-6 text-center">
+                                            <PackagePlus className="mx-auto mb-2 text-gray-400" size={24} />
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">No hay productos seleccionados</p>
+                                        </div>
                                     )}
                                 </div>
                             </div>
                         </div>
+
                         {/* Resumen de venta */}
                         <div className="border-sidebar-border/70 dark:border-sidebar-border relative overflow-hidden rounded-xl border bg-green-50 dark:bg-green-900/20">
                             <div className="p-4">
@@ -262,31 +409,31 @@ export default function PuntoVentaPage({
                                                 </DialogDescription>
                                             </DialogHeader>
                                             <div className="grid gap-4">
-                                                {/* Datos de pago */}
                                                 <div className="grid gap-3">
-                                                    <Label htmlFor="name-1">Tipo de Pago</Label>
+                                                    <Label htmlFor="tipo_pago">Tipo de Pago</Label>
                                                     <input
                                                         type="text"
-                                                        placeholder="Tipo de pago"
+                                                        placeholder="Efectivo, transferencia..."
                                                         value={pago.tipo_pago}
                                                         onChange={(e) => setPago({ ...pago, tipo_pago: e.target.value })}
                                                         className="w-full rounded border border-gray-300 p-2 dark:border-gray-600 dark:bg-gray-800"
                                                     />
                                                 </div>
                                                 <div className="grid gap-3">
-                                                    <Label htmlFor="username-1">Via de Pago</Label>
+                                                    <Label htmlFor="via_pago">Vía de Pago</Label>
                                                     <input
                                                         type="text"
-                                                        placeholder="Vía de pago"
+                                                        placeholder="TransferMóvil, efectivo..."
                                                         value={pago.via_pago}
                                                         onChange={(e) => setPago({ ...pago, via_pago: e.target.value })}
                                                         className="w-full rounded border border-gray-300 p-2 dark:border-gray-600 dark:bg-gray-800"
                                                     />
                                                 </div>
                                                 <div className="grid gap-3">
-                                                    <Label htmlFor="username-1">Monto Recibido</Label>
+                                                    <Label htmlFor="monto">Monto Recibido</Label>
                                                     <input
                                                         type="number"
+                                                        step="0.01"
                                                         placeholder="Monto recibido"
                                                         value={pago.monto}
                                                         onChange={(e) => setPago({ ...pago, monto: parseFloat(e.target.value) || 0 })}
@@ -295,7 +442,6 @@ export default function PuntoVentaPage({
                                                 </div>
                                             </div>
                                             <DialogFooter>
-                                                {/* Botón de proceder a pagar */}
                                                 <button
                                                     onClick={registrarVenta}
                                                     disabled={!almacenSeleccionado || productosSeleccionados.length === 0 || pago.monto <= 0}
