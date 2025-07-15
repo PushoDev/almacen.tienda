@@ -48,6 +48,7 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
 
     // Filtro
     const [filtroTipo, setFiltroTipo] = useState<string>('');
+    const categoriasUnicas = [...new Set(productos.map((producto) => producto.categoria))];
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -80,11 +81,13 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                         className="focus:ring-sidebar-accent rounded-md border border-gray-300 px-3 py-1 focus:ring-2 focus:outline-none"
                     >
                         <option className="bg-background text-sidebar-accent" value="">
-                            Todos
+                            Todos los Productos
                         </option>
-                        <option className="bg-background text-sidebar-accent" value="permanentes">
-                            Por Categorias
-                        </option>
+                        {categoriasUnicas.map((categoria, index) => (
+                            <option key={index} className="bg-background text-sidebar-accent" value={categoria}>
+                                {categoria} ({productos.filter((p) => p.categoria === categoria).length})
+                            </option>
+                        ))}
                     </select>
 
                     {/* Botón Exportar PDF */}
@@ -130,80 +133,85 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {productos.map((producto) => (
-                                <TableRow key={producto.id}>
-                                    <TableCell>{producto.nombre_producto}</TableCell>
-                                    <TableCell>{producto.marca_producto || 'Sin marca'}</TableCell>
-                                    <TableCell>{producto.codigo_producto || 'Sin código'}</TableCell>
-                                    <TableCell>{producto.categoria || 'Sin categoría'}</TableCell>
-                                    <TableCell>
-                                        {typeof producto.precio_compra_producto === 'number'
-                                            ? `$${producto.precio_compra_producto.toFixed(2)}`
-                                            : 'Sin precio'}
-                                    </TableCell>
-                                    <TableCell>{producto.cantidad_producto}</TableCell>
-                                    <TableCell>$ {(producto.precio_compra_producto * producto.cantidad_producto).toFixed(2)}</TableCell>
-                                    <TableCell>
-                                        {producto.imagen_url ? (
-                                            <img
-                                                src={producto.imagen_url}
-                                                alt={producto.nombre_producto}
-                                                className="h-10 w-10 rounded-full object-cover"
-                                            />
-                                        ) : (
-                                            'Sin imagen'
-                                        )}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        {/* Boton Detalles */}
-                                        <Link href={route('productos.show', { producto: producto.id })}>
-                                            <Button variant="outline" className="hover:bg-chart-3 cursor-pointer hover:text-white">
-                                                <Eye />
-                                            </Button>
-                                        </Link>
-                                        {/* Botón Editar */}
-                                        <Link href={route('productos.edit', { producto: producto.id })}>
-                                            <Button
-                                                variant="outline"
-                                                className="cursor-pointer hover:bg-blue-900 hover:text-white dark:hover:bg-blue-700"
-                                            >
-                                                <Edit3 />
-                                            </Button>
-                                        </Link>
-
-                                        {/* Diálogo de Confirmación para Eliminar */}
-                                        <AlertDialog>
-                                            <AlertDialogTrigger asChild>
-                                                <Button
-                                                    variant="ghost"
-                                                    className="hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white"
-                                                >
-                                                    <Trash2 />
+                            {productos
+                                .filter((producto) => {
+                                    if (!filtroTipo) return true;
+                                    return producto.categoria === filtroTipo;
+                                })
+                                .map((producto) => (
+                                    <TableRow key={producto.id}>
+                                        <TableCell>{producto.nombre_producto}</TableCell>
+                                        <TableCell>{producto.marca_producto || 'Sin marca'}</TableCell>
+                                        <TableCell>{producto.codigo_producto || 'Sin código'}</TableCell>
+                                        <TableCell>{producto.categoria || 'Sin categoría'}</TableCell>
+                                        <TableCell>
+                                            {typeof producto.precio_compra_producto === 'number'
+                                                ? `$${producto.precio_compra_producto.toFixed(2)}`
+                                                : 'Sin precio'}
+                                        </TableCell>
+                                        <TableCell>{producto.cantidad_producto}</TableCell>
+                                        <TableCell>$ {(producto.precio_compra_producto * producto.cantidad_producto).toFixed(2)}</TableCell>
+                                        <TableCell>
+                                            {producto.imagen_url ? (
+                                                <img
+                                                    src={producto.imagen_url}
+                                                    alt={producto.nombre_producto}
+                                                    className="h-10 w-10 rounded-full object-cover"
+                                                />
+                                            ) : (
+                                                'Sin imagen'
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            {/* Boton Detalles */}
+                                            <Link href={route('productos.show', { producto: producto.id })}>
+                                                <Button variant="outline" className="hover:bg-chart-3 cursor-pointer hover:text-white">
+                                                    <Eye />
                                                 </Button>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                    <AlertDialogTitle className="text-center">Atención</AlertDialogTitle>
-                                                    <AlertDialogDescription>
-                                                        ¿Estás seguro de eliminar este producto? Esta acción es irreversible.
-                                                    </AlertDialogDescription>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                    <AlertDialogAction
-                                                        onClick={() => deleteProducto(producto.id)}
-                                                        className="bg-destructive cursor-pointer hover:bg-red-300"
+                                            </Link>
+                                            {/* Botón Editar */}
+                                            <Link href={route('productos.edit', { producto: producto.id })}>
+                                                <Button
+                                                    variant="outline"
+                                                    className="cursor-pointer hover:bg-blue-900 hover:text-white dark:hover:bg-blue-700"
+                                                >
+                                                    <Edit3 />
+                                                </Button>
+                                            </Link>
+
+                                            {/* Diálogo de Confirmación para Eliminar */}
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button
+                                                        variant="ghost"
+                                                        className="hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white"
                                                     >
-                                                        Aceptar
-                                                    </AlertDialogAction>
-                                                    <AlertDialogCancel className="cursor-pointer text-white hover:bg-emerald-300 hover:text-emerald-950 dark:hover:bg-emerald-300 dark:hover:text-emerald-950">
-                                                        Cancelar
-                                                    </AlertDialogCancel>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        </AlertDialog>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
+                                                        <Trash2 />
+                                                    </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle className="text-center">Atención</AlertDialogTitle>
+                                                        <AlertDialogDescription>
+                                                            ¿Estás seguro de eliminar este producto? Esta acción es irreversible.
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogAction
+                                                            onClick={() => deleteProducto(producto.id)}
+                                                            className="bg-destructive cursor-pointer hover:bg-red-300"
+                                                        >
+                                                            Aceptar
+                                                        </AlertDialogAction>
+                                                        <AlertDialogCancel className="cursor-pointer text-white hover:bg-emerald-300 hover:text-emerald-950 dark:hover:bg-emerald-300 dark:hover:text-emerald-950">
+                                                            Cancelar
+                                                        </AlertDialogCancel>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
                         </TableBody>
                         <TableFooter>
                             <TableRow>
