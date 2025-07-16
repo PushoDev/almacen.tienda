@@ -1,10 +1,6 @@
 import { LucideIcon } from 'lucide-react';
 import type { Config } from 'ziggy-js';
 
-// Import other types
-// POS - Venta
-import './import/pos';
-
 /**
  * Interfaces Proyect
  */
@@ -445,4 +441,3 @@ export interface PagoVentaResponseProps {
         saldo_cuenta: number;
     };
 }
-

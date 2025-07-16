@@ -16,13 +16,9 @@ use Illuminate\Validation\Rule;
 
 class VentaController extends Controller
 {
-    /**
-     * Devuelve los almacenes permitidos para el usuario autenticado
-     */
     public function getAlmacenes()
     {
         $user = Auth::user();
-
         $almacenes = $user->role === 'admin'
             ? Almacen::select('id', 'nombre_almacen')->get()
             : $user->almacenes()->select('id', 'nombre_almacen')->get();
@@ -30,19 +26,14 @@ class VentaController extends Controller
         return response()->json($almacenes);
     }
 
-    /**
-     * Devuelve los productos disponibles en un almacén específico
-     */
     public function getProductosPorAlmacen($id)
     {
         $user = Auth::user();
 
-        // Verificar acceso al almacén
         if ($user->role !== 'admin' && !$user->almacenes->contains('id', $id)) {
             return response()->json(['error' => 'Acceso denegado al almacén'], 403);
         }
 
-        // Obtener productos del almacén con categoría y precio del vendedor
         $productos = Producto::whereHas('almacenes', function ($q) use ($id) {
             $q->where('almacens.id', $id);
         })
@@ -77,31 +68,65 @@ class VentaController extends Controller
         return response()->json($productos);
     }
 
-    /**
-     * Mostrar interfaz del punto de venta
-     */
     public function index()
     {
         $user = Auth::user();
 
         return Inertia::render('Vendor/Index', [
-            'productos' => [], // Cargados dinámicamente desde la vista
+            'productos' => [],
             'meta' => [
                 'role_usuario' => $user->role,
                 'almacenes_usuario' => $user->almacenes->map(fn($a) => ['id' => $a->id, 'nombre' => $a->nombre_almacen]),
             ],
             'cuentas' => Cuenta::whereIn('tipo_cuenta', ['permanentes', 'temporales'])->get(),
-
-
         ]);
     }
 
-    /**
-     * Registrar una nueva venta con varios productos y pago
-     */
     public function store(Request $request)
     {
-        $validated = $request->validate([
+        $user = Auth::user();
+        $validated = $this->validarDatos($request);
+        $total = $this->calcularTotal($validated['productos']);
+        $almacenId = $validated['almacen_id'];
+
+        if ($user->role !== 'admin' && !$user->almacenes->contains('id', $almacenId)) {
+            return response()->json(['error' => 'No tienes acceso a este almacén'], 403);
+        }
+
+        DB::beginTransaction();
+
+        try {
+            // Crear venta
+            $venta = Venta::create([
+                'user_id' => $user->id,
+                'almacen_id' => $almacenId,
+                'cliente_id' => $validated['cliente_id'] ?? null,
+                'total' => round($total, 2),
+                'detalles_venta' => $validated['detalles_venta'] ?? null,
+            ]);
+
+            // Registrar detalles y actualizar stock
+            $this->registrarDetallesVenta($venta->id, $validated['productos'], $almacenId);
+
+            // Registrar pagos
+            $this->registrarPagos($venta->id, $validated['pagos']);
+
+            DB::commit();
+
+            // Cargar relaciones
+            $venta->load(['detalles.producto', 'pagos.cuenta']);
+
+            // Formatear respuesta
+            return $this->formatearVenta($venta);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    private function validarDatos(Request $request): array
+    {
+        return $request->validate([
             'almacen_id' => 'required|exists:almacens,id',
             'cliente_id' => 'nullable|exists:clientes,id',
             'detalles_venta' => 'nullable|string|max:255',
@@ -122,91 +147,131 @@ class VentaController extends Controller
                 Rule::in(Cuenta::whereIn('tipo_cuenta', ['permanentes', 'temporales'])->pluck('id'))
             ],
         ]);
+    }
 
-        $user = Auth::user();
-        $almacenId = $validated['almacen_id'];
-        $productosVendidos = collect($validated['productos']);
-        $pagos = $validated['pagos'];
+    private function calcularTotal(array $productos): float
+    {
+        return collect($productos)->sum(fn($p) => $p['cantidad'] * $p['precio_venta']);
+    }
 
-        // Verificar acceso al almacén
-        if ($user->role !== 'admin' && !$user->almacenes->contains('id', $almacenId)) {
-            return response()->json(['error' => 'No tienes acceso a este almacén'], 403);
-        }
+    private function registrarDetallesVenta(int $ventaId, array $productos, int $almacenId): void
+    {
+        foreach ($productos as $item) {
+            $producto = Producto::findOrFail($item['producto_id']);
+            $cantidad = $item['cantidad'];
+            $precioVenta = $item['precio_venta'];
+            $subtotal = round($cantidad * $precioVenta, 2);
 
-        DB::beginTransaction();
+            $this->validarStock($producto->id, $cantidad, $almacenId);
+            $this->validarPrecio($precioVenta, $producto->precio_compra_producto);
 
-        try {
-            // Calcular total
-            $total = $productosVendidos->sum(fn($p) => $p['cantidad'] * $p['precio_venta']);
-
-            // Crear venta
-            $venta = Venta::create([
-                'user_id' => $user->id,
-                'almacen_id' => $almacenId,
-                'cliente_id' => $validated['cliente_id'] ?? null,
-                'total' => round($total, 2),
-                'detalles_venta' => $validated['detalles_venta'] ?? null,
+            VentaDetalle::create([
+                'venta_id' => $ventaId,
+                'producto_id' => $producto->id,
+                'cantidad' => $cantidad,
+                'precio_venta' => $precioVenta,
+                'subtotal' => $subtotal,
             ]);
 
-            // Registrar cada producto vendido
-            foreach ($productosVendidos as $item) {
-                $producto = Producto::findOrFail($item['producto_id']);
-                $cantidad = $item['cantidad'];
-                $precioVenta = $item['precio_venta'];
-                $subtotal = round($cantidad * $precioVenta, 2);
-
-                // Validar stock disponible
-                $stockDisponible = $producto->almacenes()
-                    ->where('almacens.id', $almacenId)
-                    ->first()?->pivot->cantidad ?? 0;
-
-                if ($stockDisponible < $cantidad) {
-                    throw new \Exception("Stock insuficiente para {$producto->nombre_producto}");
-                }
-
-                // Validar que el precio de venta sea mayor al costo
-                if ($precioVenta <= $producto->precio_compra_producto) {
-                    throw new \Exception("Precio de venta de '{$producto->nombre_producto}' debe ser mayor al costo");
-                }
-
-                // Registrar detalle de venta
-                VentaDetalle::create([
-                    'venta_id' => $venta->id,
-                    'producto_id' => $producto->id,
-                    'cantidad' => $cantidad,
-                    'precio_venta' => $precioVenta,
-                    'subtotal' => $subtotal,
-                ]);
-
-                // Actualizar stock
-                $producto->almacenes()
-                    ->updateExistingPivot($almacenId, [
-                        'cantidad' => $stockDisponible - $cantidad
-                    ]);
-            }
-
-            // Registrar pagos
-            foreach ($pagos as $pago) {
-                PagoVenta::create([
-                    'venta_id' => $venta->id,
-                    'tipo_pago' => $pago['tipo_pago'],
-                    'via_pago' => $pago['via_pago'],
-                    'tipo_moneda' => $pago['tipo_moneda'],
-                    'monto' => $pago['monto'],
-                    'cuenta_id' => $pago['cuenta_id'],
-                ]);
-            }
-
-            DB::commit();
-
-            // Devolver venta completa con relaciones cargadas
-            return response()->json([
-                'success' => true,
-                'venta' => $venta->load(['detalles.producto', 'pagos.cuenta']),
-            ], 201);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json(['error' => $e->getMessage()], 500);
+            $this->actualizarStock($producto->id, $almacenId, $cantidad);
         }
+    }
+
+    private function validarStock(int $productoId, int $cantidad, int $almacenId): void
+    {
+        $stockDisponible = Producto::findOrFail($productoId)
+            ->almacenes()
+            ->where('almacens.id', $almacenId)
+            ->first()?->pivot->cantidad ?? 0;
+
+        if ($stockDisponible < $cantidad) {
+            throw new \Exception("Stock insuficiente para el producto ID: $productoId");
+        }
+    }
+
+    private function validarPrecio(float $precioVenta, float $precioCompra): void
+    {
+        if ($precioVenta <= $precioCompra) {
+            throw new \Exception("Precio de venta debe ser mayor al costo");
+        }
+    }
+
+    private function actualizarStock(int $productoId, int $almacenId, int $cantidad): void
+    {
+        $producto = Producto::findOrFail($productoId);
+        $stockActual = $producto->almacenes()
+            ->where('almacens.id', $almacenId)
+            ->first()->pivot->cantidad;
+
+        $producto->almacenes()->updateExistingPivot($almacenId, [
+            'cantidad' => $stockActual - $cantidad
+        ]);
+    }
+
+    private function registrarPagos(int $ventaId, array $pagos): void
+    {
+        foreach ($pagos as $pago) {
+            PagoVenta::create([
+                'venta_id' => $ventaId,
+                'tipo_pago' => $pago['tipo_pago'],
+                'via_pago' => $pago['via_pago'],
+                'tipo_moneda' => $pago['tipo_moneda'],
+                'monto' => $pago['monto'],
+                'cuenta_id' => $pago['cuenta_id'],
+            ]);
+        }
+    }
+
+    private function formatearVenta(Venta $venta): \Illuminate\Http\JsonResponse
+    {
+        $venta->load(['detalles.producto', 'pagos.cuenta']);
+
+        $detalles = $venta->detalles->map(function ($detalle) {
+            return [
+                'id' => $detalle->id,
+                'venta_id' => $detalle->venta_id,
+                'producto_id' => $detalle->producto_id,
+                'cantidad' => $detalle->cantidad,
+                'precio_venta' => number_format($detalle->precio_venta, 2),
+                'subtotal' => number_format($detalle->subtotal, 2),
+                'producto' => [
+                    'id' => $detalle->producto->id,
+                    'nombre_producto' => $detalle->producto->nombre_producto,
+                    'precio_compra_producto' => number_format($detalle->producto->precio_compra_producto, 2),
+                ],
+            ];
+        });
+
+        $pagosFormateados = $venta->pagos->map(function ($pago) {
+            return [
+                'id' => $pago->id,
+                'venta_id' => $pago->venta_id,
+                'tipo_pago' => $pago->tipo_pago,
+                'via_pago' => $pago->via_pago,
+                'tipo_moneda' => $pago->tipo_moneda,
+                'monto' => number_format($pago->monto, 2),
+                'cuenta_id' => $pago->cuenta_id,
+                'cuenta' => [
+                    'id' => $pago->cuenta->id,
+                    'nombre_cuenta' => $pago->cuenta->nombre_cuenta,
+                    'saldo_cuenta' => number_format($pago->cuenta->saldo_cuenta, 2),
+                    'tipo_cuenta' => $pago->cuenta->tipo_cuenta,
+                ],
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'venta' => [
+                'id' => $venta->id,
+                'user_id' => $venta->user_id,
+                'almacen_id' => $venta->almacen_id,
+                'total' => number_format($venta->total, 2),
+                'created_at' => $venta->created_at->toISOString(),
+                'updated_at' => $venta->updated_at->toISOString(),
+                'detalles' => $detalles,
+                'pagos' => $pagosFormateados,
+            ],
+        ], 201);
     }
 }
