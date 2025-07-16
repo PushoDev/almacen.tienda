@@ -68,7 +68,7 @@ class VentaController extends Controller
                     'marca_producto' => $producto->marca_producto,
                     'categoria_nombre' => $producto->categoria?->nombre_categoria ?? 'Sin categoría',
                     'precio_compra_producto' => $producto->precio_compra_producto,
-                    'stock_total' => $almacen?->pivot->stock_disponible ?? 0,
+                    'stock_total' => $producto->almacenes->sum('pivot.cantidad'),
                     'precio_venta' => $vendedor?->pivot->precio_venta ?? null,
                     'tiene_precio' => ($vendedor?->pivot->precio_venta ?? 0) > 0,
                 ];
@@ -90,6 +90,9 @@ class VentaController extends Controller
                 'role_usuario' => $user->role,
                 'almacenes_usuario' => $user->almacenes->map(fn($a) => ['id' => $a->id, 'nombre' => $a->nombre_almacen]),
             ],
+            'cuentas' => Cuenta::whereIn('tipo_cuenta', ['permanentes', 'temporales'])->get(),
+
+
         ]);
     }
 

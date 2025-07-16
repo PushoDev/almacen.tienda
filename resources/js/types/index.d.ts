@@ -445,3 +445,4 @@ export interface PagoVentaResponseProps {
         saldo_cuenta: number;
     };
 }
+

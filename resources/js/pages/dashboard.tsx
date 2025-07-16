@@ -5,10 +5,9 @@ import { ScrollProgress } from '@/components/ui/scroll';
 import AppLayout from '@/layouts/app-layout';
 import { ComprasVentasCharts } from '@/layouts/charts/ChartCompraVenta';
 import WidgetInventario from '@/layouts/home/WidgetInventario';
-import WidgetTransacciones from '@/layouts/home/WidgetTransacciones';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
-import { ComputerIcon, LucideBaggageClaim, ShoppingBagIcon } from 'lucide-react';
+import { ComputerIcon, DiamondPercent, LucideBaggageClaim, LucideClockArrowDown, ShoppingBagIcon } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -46,36 +45,38 @@ export default function Dashboard() {
                 {/* OPciones */}
                 <div className="animate__animated animate__flipInX grid auto-rows-min gap-4 md:grid-cols-4">
                     {/* Widget de Compra */}
-                    <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-red-800 to-red-400">
-                        <CursorProvider>
-                            <CursorFollow>
-                                <div className="rounded-lg bg-red-500 px-2 py-1 text-sm text-white shadow-lg">Comprar Nuevos Productos</div>
-                            </CursorFollow>
-                        </CursorProvider>
-                        {/* Ícono de fondo transparente */}
-                        <div id="compra-producto" className="absolute inset-0 flex items-center justify-center opacity-10">
-                            <ShoppingBagIcon className="h-48 w-48 text-white" />
-                        </div>
-                        {/* Contenido principal */}
-                        <div className="relative z-10 h-full p-6">
-                            {/* Ícono en la esquina superior izquierda */}
-                            <div className="absolute top-4 left-4">
-                                <LucideBaggageClaim className="h-8 w-8 text-white" />
+                    <div>
+                        <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-red-800 to-red-400">
+                            <CursorProvider>
+                                <CursorFollow>
+                                    <div className="rounded-lg bg-red-500 px-2 py-1 text-sm text-white shadow-lg">Comprar Nuevos Productos</div>
+                                </CursorFollow>
+                            </CursorProvider>
+                            {/* Ícono de fondo transparente */}
+                            <div id="compra-producto" className="absolute inset-0 flex items-center justify-center opacity-10">
+                                <ShoppingBagIcon className="h-48 w-48 text-white" />
                             </div>
-                            {/* Textos alineados a la derecha */}
-                            <div className="flex h-full flex-col items-end justify-center space-y-2">
-                                <h3 className="font-sans text-4xl font-bold text-white">Comprar</h3>
+                            {/* Contenido principal */}
+                            <div className="relative z-10 h-full p-6">
+                                {/* Ícono en la esquina superior izquierda */}
+                                <div className="absolute top-4 left-4">
+                                    <LucideBaggageClaim className="h-8 w-8 text-white" />
+                                </div>
+                                {/* Textos alineados a la derecha */}
+                                <div className="flex h-full flex-col items-end justify-center space-y-2">
+                                    <h3 className="font-sans text-4xl font-bold text-white">Comprar</h3>
+                                </div>
+                                {/* Link {route('comprar.index' */}
+                                <Link href={route('comprar.index')}>
+                                    <button className="absolute right-4 bottom-4 ms-2 rounded-md bg-red-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-red-800">
+                                        Acceder a Compra
+                                    </button>
+                                </Link>
                             </div>
-                            {/* Link {route('comprar.index' */}
-                            <Link href={route('comprar.index')}>
-                                <button className="absolute right-4 bottom-4 ms-2 rounded-md bg-red-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-red-800">
-                                    Acceder a Compra
-                                </button>
-                            </Link>
-                        </div>
 
-                        {/* Patrón de fondo adicional */}
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
+                            {/* Patrón de fondo adicional */}
+                            <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
+                        </div>
                     </div>
                     {/* Widget de Venta */}
                     <div>
@@ -116,7 +117,40 @@ export default function Dashboard() {
                     </div>
                     {/* Widget de Transacciones */}
                     <div>
-                        <WidgetTransacciones />
+                        <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-green-800 to-green-400">
+                            <CursorProvider>
+                                <CursorFollow>
+                                    <div className="rounded-lg bg-emerald-500 px-2 py-1 text-sm text-white shadow-lg">Movimientos Internos</div>
+                                </CursorFollow>
+                            </CursorProvider>
+                            {/* Ícono de fondo transparente */}
+                            <div className="absolute inset-0 flex items-center justify-center opacity-10">
+                                <DiamondPercent className="h-48 w-48 text-white" />
+                            </div>
+
+                            {/* Contenido principal */}
+                            <div className="relative z-10 h-full p-6">
+                                {/* Ícono en la esquina superior izquierda */}
+                                <div className="absolute top-4 left-4">
+                                    <LucideClockArrowDown className="h-8 w-8 text-white" />
+                                </div>
+
+                                {/* Textos alineados a la derecha */}
+                                <div className="flex h-full flex-col items-end justify-center space-y-2">
+                                    <h3 className="text-4xl font-bold text-white">Transacciones</h3>
+                                </div>
+
+                                {/* Botón pequeño */}
+                                <Link href={route('transacciones')}>
+                                    <button className="absolute right-4 bottom-4 rounded-md bg-green-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-green-800">
+                                        Transacciones
+                                    </button>
+                                </Link>
+                            </div>
+
+                            {/* Patrón de fondo adicional */}
+                            <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
+                        </div>
                     </div>
                     {/* Widget de Inventario */}
                     <div>

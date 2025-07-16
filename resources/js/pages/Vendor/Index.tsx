@@ -8,7 +8,7 @@ import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
-import { BreadcrumbItem } from '@/types';
+import { BreadcrumbItem, CuentaNegocioProps, PagoVentaProps } from '@/types';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import { PackagePlus, ShoppingBag, Trash2 } from 'lucide-react';
@@ -28,7 +28,7 @@ export default function PuntoVentaPage({
     const [productosFiltrados, setProductosFiltrados] = useState<ProductoVenta[]>([]);
     const [productosSeleccionados, setProductosSeleccionados] = useState<ProductoVenta[]>([]);
     const [pago, setPago] = useState<PagoVentaProps>({
-        tipo_pago: 'transferencia',
+        tipo_pago: 'efectivo',
         via_pago: 'transfermovil',
         tipo_moneda: 'cup',
         monto: 0,
@@ -36,7 +36,7 @@ export default function PuntoVentaPage({
     });
     const [detallesVenta, setDetallesVenta] = useState<string>('');
     const [loading, setLoading] = useState<boolean>(false);
-    const [cuentas, setCuentas] = useState<{ id: number; nombre_cuenta: string; tipo_cuenta: string }[]>([]);
+    const [cuentas, setCuentas] = useState<CuentaNegocioProps[]>([]);
 
     // Cargar cuentas desde la API (opcionalmente puedes pasarlas por Inertia)
     useEffect(() => {
@@ -243,9 +243,9 @@ export default function PuntoVentaPage({
                                     productosFiltrados.map((producto) => (
                                         <TableRow key={producto.id} className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800">
                                             <TableCell>{producto.nombre_producto}</TableCell>
-                                            <TableCell>{producto.marca_producto}</TableCell>
+                                            <TableCell>{producto.precio_compra}</TableCell>
                                             <TableCell className="text-center">
-                                                <Badge variant="outline" className={producto.stock_total === 0 ? 'bg-red-100 text-red-800' : ''}>
+                                                <Badge variant="secondary" className={producto.stock_total === 0 ? 'bg-red-100 text-red-800' : ''}>
                                                     {producto.stock_total}
                                                 </Badge>
                                             </TableCell>
@@ -492,11 +492,9 @@ export default function PuntoVentaPage({
                                                 />
                                             </div>
 
-                                            {/* Cuenta Destino */}
+                                            {/* Cuenta destino */}
                                             <div className="grid grid-cols-4 items-center gap-4">
-                                                <Label htmlFor="cuenta_id" className="col-span-1 text-right">
-                                                    Cuenta Destino
-                                                </Label>
+                                                <Label htmlFor="cuenta_id" className="col-span-1 text-right">Cuenta Destino</Label>
                                                 <Select
                                                     onValueChange={(value) => setPago({ ...pago, cuenta_id: parseInt(value) })}
                                                     value={pago.cuenta_id?.toString() || ''}

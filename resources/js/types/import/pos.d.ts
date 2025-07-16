@@ -23,6 +23,7 @@ export interface ProductoVenta {
 // Detalle de un producto vendido
 export interface ProductoVentaItemProps {
     producto_id: number;
+    precio_compra: number;
     cantidad: number;
     precio_venta: number | string;
 }

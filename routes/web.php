@@ -48,6 +48,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Comprar Productos
     require __DIR__ . '/acciones/compras.php';
 
+    // Transacciones
+    require __DIR__ . '/acciones/transacciones.php';
+
     // Venta Productos
     require __DIR__ . '/shop/puntoventa.php';
     // Reportes
