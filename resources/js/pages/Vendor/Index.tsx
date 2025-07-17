@@ -130,7 +130,7 @@ export default function PuntoVentaPage({
                 via_pago: 'transfermovil',
                 tipo_moneda: 'cup',
                 monto: 0,
-                cuenta_id: undefined,
+                cuenta_id: 1,
             });
             setDetallesVenta('');
             setAlmacenSeleccionado('');
@@ -494,7 +494,9 @@ export default function PuntoVentaPage({
 
                                             {/* Cuenta destino */}
                                             <div className="grid grid-cols-4 items-center gap-4">
-                                                <Label htmlFor="cuenta_id" className="col-span-1 text-right">Cuenta Destino</Label>
+                                                <Label htmlFor="cuenta_id" className="col-span-1 text-right">
+                                                    Cuenta Destino
+                                                </Label>
                                                 <Select
                                                     onValueChange={(value) => setPago({ ...pago, cuenta_id: parseInt(value) })}
                                                     value={pago.cuenta_id?.toString() || ''}
