@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+use App\Http\Controllers\AdminController;
 
 Route::get('/', function () {
     return Inertia::render('auth/login');
@@ -12,9 +13,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     /**
      * Administrador
      */
-    Route::get('dashboard', function () {
-        return Inertia::render('dashboard');
-    })->name('dashboard');
+    Route::middleware(['auth', 'verified'])->group(function () {
+        Route::get('dashboard', [AdminController::class, 'index'])->name('dashboard');
+    });
     /**
      * Vendedor
      */

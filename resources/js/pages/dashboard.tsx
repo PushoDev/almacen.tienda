@@ -18,7 +18,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function Dashboard() {
+export default function Dashboard({ tasa }: { tasa: { tasa_cambio: number } }) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Inventario" />
@@ -218,8 +218,7 @@ export default function Dashboard() {
                                         colSpan={2}
                                         className="hover:bg-sidebar-accent cursor-pointer text-center text-emerald-400 hover:text-white"
                                     >
-                                        {' '}
-                                        $ 330
+                                        $ {tasa.tasa_cambio}
                                     </TableCell>
                                 </TableRow>
                             </TableBody>
