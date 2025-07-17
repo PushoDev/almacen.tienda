@@ -12,6 +12,8 @@ class Cliente extends Model
     // Atributos que pueden ser asignados masivamente
     protected $fillable = [
         'nombre_cliente',
+        'tipo_cliente',
+        'deuda_pago_cliente',
         'telefono_cliente',
         'direccion_cliente',
         'ciudad_cliente',
@@ -21,5 +23,8 @@ class Cliente extends Model
     public $timestamps = true;
 
     // Relaciones (si las hay en el futuro)
-    // Ejemplo: public function ventas() { return $this->hasMany(Venta::class); }
+    public function ventas()
+    {
+        return $this->hasMany(Venta::class);
+    }
 }

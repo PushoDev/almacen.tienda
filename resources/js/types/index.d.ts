@@ -131,6 +131,8 @@ export interface ProductoProps {
 export interface ClienteProps {
     id: number;
     nombre_cliente: string;
+    tipo_cliente: 'fisico' | 'asociado';
+    deuda_pago_cliente?: number | null;
     telefono_cliente: string;
     direccion_cliente?: string | null;
     ciudad_cliente?: string | null;

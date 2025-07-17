@@ -37,6 +37,8 @@ class ClienteController extends Controller
         // Validación de datos
         $validator = Validator::make($request->all(), [
             'nombre_cliente' => ['required', 'string', 'unique:clientes,nombre_cliente'],
+            'tipo_cliente' => ['required', 'in:fisico,asociado'],
+            'deuda_pago_cliente' => ['nullable', 'numeric', 'between:0,9999999.99999999'],
             'telefono_cliente' => ['required', 'string', 'unique:clientes,telefono_cliente'],
             'direccion_cliente' => ['nullable', 'string'],
             'ciudad_cliente' => ['nullable', 'string'],
@@ -80,6 +82,8 @@ class ClienteController extends Controller
         // Validación de datos
         $validator = Validator::make($request->all(), [
             'nombre_cliente' => ['required', 'string', 'unique:clientes,nombre_cliente,' . $cliente->id],
+            'tipo_cliente' => ['required', 'in:fisico,asociado'],
+            'deuda_pago_cliente' => ['nullable', 'numeric', 'between:0,9999999.99999999'],
             'telefono_cliente' => ['required', 'string', 'unique:clientes,telefono_cliente,' . $cliente->id],
             'direccion_cliente' => ['nullable', 'string'],
             'ciudad_cliente' => ['nullable', 'string'],

@@ -31,7 +31,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function ClientesPage({ clientes }: { clientes: ClienteProps[] }) {
-    // Eliminar Cliente
     const deleteCliente = (id: number) => {
         router.delete(route('clientes.destroy', { cliente: id }), {
             onSuccess: () => {
@@ -43,18 +42,26 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
         });
     };
 
+    const formatearMoneda = (valor: number | null) => {
+        if (!valor) return '$0.00';
+        return new Intl.NumberFormat('es-MX', {
+            style: 'currency',
+            currency: 'MXN',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 8,
+        }).format(valor);
+    };
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Clientes" />
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
-                {/* Header */}
+                {/* Header Section */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
-                    {/* Contenido principal */}
                     <HeadingSmall
                         title="Logistica General del Sistema"
                         description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento"
                     />
-                    {/* Ícono semitransparente */}
                     <HandHeart
                         size={70}
                         color="#d6d3d1"
@@ -63,9 +70,8 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                 </div>
                 <Separator className="col-span-4" />
 
-                {/* Acciones */}
+                {/* Action Buttons */}
                 <div className="flex justify-end gap-2">
-                    {/* Botón Crear nuevo */}
                     <Link href={route('clientes.create')}>
                         <Button variant="default" className="flex cursor-pointer items-center gap-2">
                             <UserRoundPlus size={16} />
@@ -73,7 +79,6 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                         </Button>
                     </Link>
 
-                    {/* Botón Editar */}
                     <Link href="#">
                         <Button variant="outline" className="hover:bg-chart-5 flex cursor-pointer items-center gap-2">
                             <FileText size={16} />
@@ -81,7 +86,6 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                         </Button>
                     </Link>
 
-                    {/* Botón Regresar */}
                     <Link href="#">
                         <Button variant="secondary" className="hover:bg-chart-2 flex cursor-pointer items-center gap-2">
                             <Sheet size={16} />
@@ -90,12 +94,14 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                     </Link>
                 </div>
 
-                {/* Tabla de Clientes */}
+                {/* Clients Table */}
                 <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
                     <Table>
                         <TableHeader>
                             <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
                                 <TableHead>Nombre</TableHead>
+                                <TableHead>Tipo</TableHead>
+                                <TableHead>Deuda</TableHead>
                                 <TableHead>Teléfono</TableHead>
                                 <TableHead>Dirección</TableHead>
                                 <TableHead>Ciudad</TableHead>
@@ -105,6 +111,7 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                         <TableBody>
                             {clientes.map((cliente) => (
                                 <TableRow key={cliente.id}>
+                                    {/* Nombre */}
                                     <TableCell className="min-w-[180px]">
                                         <div className="flex items-center gap-2">
                                             <User size={14} className="text-primary shrink-0" />
@@ -112,6 +119,33 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                         </div>
                                     </TableCell>
 
+                                    {/* Tipo de Cliente */}
+                                    <TableCell>
+                                        <div
+                                            className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
+                                                cliente.tipo_cliente === 'asociado'
+                                                    ? 'bg-green-100 text-green-800 dark:bg-green-800/30 dark:text-green-500'
+                                                    : 'bg-blue-100 text-blue-800 dark:bg-blue-800/30 dark:text-blue-500'
+                                            }`}
+                                        >
+                                            {cliente.tipo_cliente === 'asociado' ? 'Asociado' : 'Físico'}
+                                        </div>
+                                    </TableCell>
+
+                                    {/* Deuda */}
+                                    <TableCell>
+                                        <div
+                                            className={`font-medium ${
+                                                (cliente.deuda_pago_cliente || 0) > 0
+                                                    ? 'text-red-600 dark:text-red-400'
+                                                    : 'text-green-600 dark:text-green-400'
+                                            }`}
+                                        >
+                                            {formatearMoneda(cliente.deuda_pago_cliente || 0)}
+                                        </div>
+                                    </TableCell>
+
+                                    {/* Teléfono */}
                                     <TableCell>
                                         <div className="flex items-center gap-2">
                                             <Phone size={14} className="shrink-0 text-gray-500" />
@@ -119,6 +153,7 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                         </div>
                                     </TableCell>
 
+                                    {/* Dirección */}
                                     <TableCell>
                                         <div className="flex items-center gap-2">
                                             <Home size={14} className="shrink-0 text-gray-500" />
@@ -130,6 +165,7 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                         </div>
                                     </TableCell>
 
+                                    {/* Ciudad */}
                                     <TableCell>
                                         <div className="flex items-center gap-2">
                                             <MapPin size={14} className="shrink-0 text-gray-500" />
@@ -141,46 +177,47 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                         </div>
                                     </TableCell>
 
+                                    {/* Acciones */}
                                     <TableCell className="text-right">
-                                        {/* Botón Editar */}
-                                        <Link href={route('clientes.edit', { cliente: cliente.id })}>
-                                            <Button
-                                                variant="outline"
-                                                className="cursor-pointer hover:bg-blue-900 hover:text-white dark:hover:bg-blue-700"
-                                            >
-                                                <Edit3 />
-                                            </Button>
-                                        </Link>
-                                        {/* Diálogo de Confirmación para Eliminar */}
-                                        <AlertDialog>
-                                            <AlertDialogTrigger asChild>
+                                        <div className="flex justify-end gap-2">
+                                            <Link href={route('clientes.edit', { cliente: cliente.id })}>
                                                 <Button
-                                                    variant="ghost"
-                                                    className="hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white"
+                                                    variant="outline"
+                                                    className="cursor-pointer hover:bg-blue-900 hover:text-white dark:hover:bg-blue-700"
                                                 >
-                                                    <Trash2 />
+                                                    <Edit3 />
                                                 </Button>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                    <AlertDialogTitle className="text-center">Atención</AlertDialogTitle>
-                                                    <AlertDialogDescription>
-                                                        ¿Estás seguro de eliminar este cliente? Esta acción es irreversible.
-                                                    </AlertDialogDescription>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                    <AlertDialogAction
-                                                        onClick={() => deleteCliente(cliente.id)}
-                                                        className="bg-destructive cursor-pointer hover:bg-red-300"
+                                            </Link>
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button
+                                                        variant="ghost"
+                                                        className="hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white"
                                                     >
-                                                        Aceptar
-                                                    </AlertDialogAction>
-                                                    <AlertDialogCancel className="cursor-pointer text-white hover:bg-emerald-300 hover:text-emerald-950 dark:hover:bg-emerald-300 dark:hover:text-emerald-950">
-                                                        Cancelar
-                                                    </AlertDialogCancel>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        </AlertDialog>
+                                                        <Trash2 />
+                                                    </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle className="text-center">Atención</AlertDialogTitle>
+                                                        <AlertDialogDescription>
+                                                            ¿Estás seguro de eliminar este cliente? Esta acción es irreversible.
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogAction
+                                                            onClick={() => deleteCliente(cliente.id)}
+                                                            className="bg-destructive cursor-pointer hover:bg-red-300"
+                                                        >
+                                                            Aceptar
+                                                        </AlertDialogAction>
+                                                        <AlertDialogCancel className="cursor-pointer text-white hover:bg-emerald-300 hover:text-emerald-950 dark:hover:bg-emerald-300 dark:hover:text-emerald-950">
+                                                            Cancelar
+                                                        </AlertDialogCancel>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
+                                        </div>
                                     </TableCell>
                                 </TableRow>
                             ))}

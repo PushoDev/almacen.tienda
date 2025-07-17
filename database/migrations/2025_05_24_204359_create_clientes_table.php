@@ -14,6 +14,8 @@ return new class extends Migration
         Schema::create('clientes', function (Blueprint $table) {
             $table->id();
             $table->string('nombre_cliente')->unique();
+            $table->enum('tipo_cliente', ['fisico', 'asociado'])->default('fisico');
+            $table->double('deuda_pago_cliente', 15, 8)->default(0)->nullable();
             $table->string('telefono_cliente')->unique();
             $table->string('direccion_cliente')->nullable();
             $table->string('ciudad_cliente')->nullable();
