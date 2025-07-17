@@ -180,20 +180,37 @@ export default function PuntoVentaPage({
                 <div className="grid gap-4 md:grid-cols-2">
                     {/* Columna 1: Productos Disponibles */}
                     <div>
-                        {/* Seleccionar Almacén */}
-                        <div>
-                            <Select onValueChange={(value) => setAlmacenSeleccionado(value)} value={almacenSeleccionado}>
-                                <SelectTrigger className="mt-4">
-                                    <SelectValue placeholder="Selecciona un almacén" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {meta.almacenes_usuario.map((almacen) => (
-                                        <SelectItem key={almacen.id} value={almacen.nombre}>
-                                            {almacen.nombre}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                        <div className="grid grid-cols-2 grid-rows-1 gap-6">
+                            {/* Seleccionar Almacén */}
+                            <div>
+                                <Select onValueChange={(value) => setAlmacenSeleccionado(value)} value={almacenSeleccionado}>
+                                    <SelectTrigger className="mt-4">
+                                        <SelectValue placeholder="Selecciona un almacén" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {meta.almacenes_usuario.map((almacen) => (
+                                            <SelectItem key={almacen.id} value={almacen.nombre}>
+                                                {almacen.nombre}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            {/* Seleccionar Cliente */}
+                            <div>
+                                <Select onValueChange={(value) => setAlmacenSeleccionado(value)} value={almacenSeleccionado}>
+                                    <SelectTrigger className="mt-4">
+                                        <SelectValue placeholder="Selecciona un cliente" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {meta.almacenes_usuario.map((almacen) => (
+                                            <SelectItem key={almacen.id} value={almacen.nombre}>
+                                                {almacen.nombre}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
 
                         <br />
@@ -243,7 +260,7 @@ export default function PuntoVentaPage({
                                     productosFiltrados.map((producto) => (
                                         <TableRow key={producto.id} className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800">
                                             <TableCell>{producto.nombre_producto}</TableCell>
-                                            <TableCell>{producto.precio_compra}</TableCell>
+                                            <TableCell>{producto.marca_producto}</TableCell>
                                             <TableCell className="text-center">
                                                 <Badge variant="secondary" className={producto.stock_total === 0 ? 'bg-red-100 text-red-800' : ''}>
                                                     {producto.stock_total}

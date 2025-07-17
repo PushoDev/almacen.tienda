@@ -20,8 +20,7 @@ const WidgetInventario = () => {
 
                     {/* Textos alineados a la derecha */}
                     <div className="flex h-full flex-col items-end justify-center space-y-2">
-                        <h3 className="text-4xl font-bold text-white">Caja</h3>
-                        <span className="text-lg text-white">Inventarios y cuadres</span>
+                        <h3 className="text-4xl font-bold text-white">Remesas</h3>
                     </div>
 
                     {/* Botón pequeño */}

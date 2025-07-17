@@ -2,6 +2,8 @@ import HeadingSmall from '@/components/heading-small';
 import { CursorFollow, CursorProvider } from '@/components/ui/cursor';
 import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
 import { ScrollProgress } from '@/components/ui/scroll';
+import { Separator } from '@/components/ui/separator';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { ComprasVentasCharts } from '@/layouts/charts/ChartCompraVenta';
 import WidgetInventario from '@/layouts/home/WidgetInventario';
@@ -158,13 +160,74 @@ export default function Dashboard() {
                     </div>
                 </div>
 
+                <Separator />
                 {/* Tablas */}
-
                 <div className="grid grid-cols-2 grid-rows-1 gap-6">
-                    <div>1</div>
-                    <div>2</div>
+                    <div>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead className="bg-sidebar text-white">DESCRIPCION</TableHead>
+                                    <TableHead className="bg-sidebar text-white">MONTO</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                <TableRow>
+                                    <TableCell>CAPITAL</TableCell>
+                                    <TableCell className="cursor-pointer">1</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                    <TableCell>CUP CAJA</TableCell>
+                                    <TableCell className="cursor-pointer">1</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                    <TableCell>USD CAJA</TableCell>
+                                    <TableCell className="cursor-pointer">1</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                    <TableCell>EURO CAJA</TableCell>
+                                    <TableCell className="cursor-pointer">1</TableCell>
+                                </TableRow>
+                            </TableBody>
+                        </Table>
+                    </div>
+                    <div>
+                        <Table>
+                            <TableBody>
+                                <TableRow>
+                                    <TableCell>TOTAL</TableCell>
+                                    <TableCell>$ 199559</TableCell>
+                                    <TableCell>$ 248 </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                    <TableCell>MES ANTERIOR</TableCell>
+                                    <TableCell>$ 190382</TableCell>
+                                    <TableCell>$ 9117</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                    <TableCell>TOTAL USD ACTIVO</TableCell>
+                                    <TableCell colSpan={2}>$ 195193</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                    <TableCell>FONDO CUP ACTIVO</TableCell>
+                                    <TableCell colSpan={2}>$ 1 440734</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                    <TableCell>TASA CAMBIO GENERAL</TableCell>
+                                    <TableCell
+                                        colSpan={2}
+                                        className="hover:bg-sidebar-accent cursor-pointer text-center text-emerald-400 hover:text-white"
+                                    >
+                                        {' '}
+                                        $ 330
+                                    </TableCell>
+                                </TableRow>
+                            </TableBody>
+                        </Table>
+                    </div>
                 </div>
 
+                <Separator />
                 {/* Charts */}
                 <div>
                     <ComprasVentasCharts />
