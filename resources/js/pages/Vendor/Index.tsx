@@ -8,7 +8,7 @@ import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
-import { BreadcrumbItem, CuentaNegocioProps, PagoVentaProps } from '@/types';
+import { BreadcrumbItem, CuentaNegocioProps, PagoVentaProps, ProductoVenta, VentaRequestProps } from '@/types';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import { PackagePlus, ShoppingBag, Trash2 } from 'lucide-react';
@@ -17,11 +17,13 @@ import { toast } from 'sonner';
 
 export default function PuntoVentaPage({
     meta,
+    cuentas: initialCuentas,
 }: {
     meta: {
         role_usuario: string;
         almacenes_usuario: { id: string | number; nombre: string }[];
     };
+    cuentas: CuentaNegocioProps[];
 }) {
     // Estados principales
     const [almacenSeleccionado, setAlmacenSeleccionado] = useState<string>('');
@@ -36,14 +38,7 @@ export default function PuntoVentaPage({
     });
     const [detallesVenta, setDetallesVenta] = useState<string>('');
     const [loading, setLoading] = useState<boolean>(false);
-    const [cuentas, setCuentas] = useState<CuentaNegocioProps[]>([]);
-
-    // Cargar cuentas desde la API (opcionalmente puedes pasarlas por Inertia)
-    useEffect(() => {
-        axios.get('/api/cuentas').then((res) => {
-            setCuentas(res.data);
-        });
-    }, []);
+    const [cuentas, setCuentas] = useState<CuentaNegocioProps[]>(initialCuentas);
 
     // Cargar productos cuando se selecciona un almacén
     useEffect(() => {
