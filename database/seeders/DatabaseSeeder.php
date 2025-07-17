@@ -38,6 +38,12 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
+        // Tasa de Cambio Inicial
+        DB::table('tasa_cambios')->insert([
+            'tasa' => 325.0,
+            'fecha_actualizacion' => now(),
+        ]);
+
         // Insertar categorías
         DB::table('categorias')->insert([
             [
