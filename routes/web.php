@@ -15,6 +15,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
      */
     Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('dashboard', [AdminController::class, 'index'])->name('dashboard');
+        Route::post('dashboard', [AdminController::class, 'update'])->name('dashboard.update');
     });
     /**
      * Vendedor

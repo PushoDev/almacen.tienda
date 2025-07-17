@@ -1,5 +1,18 @@
 import HeadingSmall from '@/components/heading-small';
+import { Button } from '@/components/ui/button';
 import { CursorFollow, CursorProvider } from '@/components/ui/cursor';
+import {
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
@@ -8,7 +21,7 @@ import AppLayout from '@/layouts/app-layout';
 import { ComprasVentasCharts } from '@/layouts/charts/ChartCompraVenta';
 import WidgetInventario from '@/layouts/home/WidgetInventario';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 import { ComputerIcon, DiamondPercent, LucideBaggageClaim, LucideClockArrowDown, ShoppingBagIcon } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -19,6 +32,10 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function Dashboard({ tasa }: { tasa: { tasa_cambio: number } }) {
+    const { data, setData, post, processing } = useForm({
+        tasa_cambio: tasa.tasa_cambio,
+    });
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Inventario" />
@@ -213,13 +230,52 @@ export default function Dashboard({ tasa }: { tasa: { tasa_cambio: number } }) {
                                     <TableCell colSpan={2}>$ 1 440734</TableCell>
                                 </TableRow>
                                 <TableRow>
-                                    <TableCell>TASA CAMBIO GENERAL</TableCell>
-                                    <TableCell
-                                        colSpan={2}
-                                        className="hover:bg-sidebar-accent cursor-pointer text-center text-emerald-400 hover:text-white"
-                                    >
-                                        $ {tasa.tasa_cambio}
+                                    <TableCell className="bg-sidebar text-white" colSpan={2}>
+                                        TASA CAMBIO GENERAL
                                     </TableCell>
+                                    <Dialog>
+                                        <DialogTrigger asChild>
+                                            <TableCell className="hover:bg-sidebar-accent cursor-pointer text-center text-emerald-400 hover:text-white">
+                                                $ {tasa.tasa_cambio}
+                                            </TableCell>
+                                        </DialogTrigger>
+                                        <DialogContent className="sm:max-w-[425px]">
+                                            <DialogHeader>
+                                                <DialogTitle>Tasa Cambio</DialogTitle>
+                                                <DialogDescription>
+                                                    Actualizar valor de la Tasa de Cambio para monedas CUP - Moneda Nacional
+                                                </DialogDescription>
+                                            </DialogHeader>
+                                            <div className="grid gap-4">
+                                                <div className="grid gap-3">
+                                                    <Label htmlFor="tasaCambio">Valor Actual a Cambiar</Label>
+                                                    <Input
+                                                        id="tasaCambio"
+                                                        name="tasa_cambio"
+                                                        type="number"
+                                                        step="0.00000001"
+                                                        value={data.tasa_cambio}
+                                                        onChange={(e) => setData('tasa_cambio', parseFloat(e.target.value) || 0)}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <DialogFooter>
+                                                <DialogClose asChild>
+                                                    <Button className="cursor-pointer" variant="outline">
+                                                        Cancelar
+                                                    </Button>
+                                                </DialogClose>
+                                                <Button
+                                                    className="cursor-pointer"
+                                                    type="button"
+                                                    disabled={processing}
+                                                    onClick={() => post(route('dashboard.update'))}
+                                                >
+                                                    {processing ? 'Guardando...' : 'Actualizar'}
+                                                </Button>
+                                            </DialogFooter>
+                                        </DialogContent>
+                                    </Dialog>
                                 </TableRow>
                             </TableBody>
                         </Table>
