@@ -22,7 +22,7 @@ import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, Tabl
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
-import { AlmacenProps, CategoriasProps, CuentaNegocioProps, ProductoComprarProps, ProveedorProps, type BreadcrumbItem } from '@/types';
+import { AlmacenProps, CategoriasProps, ClienteProps, CuentaNegocioProps, ProductoComprarProps, ProveedorProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { format } from 'date-fns';
 import { BookCheck, CalendarIcon, Edit2, PlusIcon, ShoppingBasket, Trash2Icon } from 'lucide-react';
@@ -53,6 +53,7 @@ export default function ComprarPage() {
     const [almacens, setAlmacens] = useState<AlmacenProps[]>([]);
     const [proveedors, setProveedors] = useState<ProveedorProps[]>([]);
     const [categorias, setCategorias] = useState<CategoriasProps[]>([]);
+    const [clientes, setClientes] = useState<ClienteProps[]>([]);
     const [cuentas, setCuentas] = useState<CuentaNegocioProps[]>([]);
     const [date, setDate] = useState<Date | undefined>(new Date());
     const [editingProductId, setEditingProductId] = useState<number | null>(null);
@@ -80,21 +81,27 @@ export default function ComprarPage() {
 
     // Cargar datos iniciales
     useEffect(() => {
+        // Obtener Almacenes
         fetch('/compras/almacenes')
             .then((res) => res.json())
             .then((data) => setAlmacens(data))
             .catch((err) => console.error(err));
-
+        // Obtener Proveedores
         fetch('/compras/proveedores')
             .then((res) => res.json())
             .then((data) => setProveedors(data))
             .catch((err) => console.error(err));
-
+        // Obtener Categorias
         fetch('/compras/categorias')
             .then((res) => res.json())
             .then((data) => setCategorias(data))
             .catch((err) => console.error(err));
-
+        // Obtener Clientes Fisicos
+        fetch('/compras/clientes/fisicos')
+            .then((res) => res.json())
+            .then((data) => console.log(data))
+            .catch((err) => console.error(err));
+        // Detalles de Pago
         fetch('/compras/cuentas/pago')
             .then((res) => res.json())
             .then((data) => setCuentas(data))
@@ -431,8 +438,8 @@ export default function ComprarPage() {
                                             <SelectValue placeholder="Seleccione tipo de compra" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="deuda_proveedor">Deuda con Proveedor</SelectItem>
-                                            <SelectItem value="pago_cash">Pago en Efectivo</SelectItem>
+                                            <SelectItem value="deuda_proveedor">Generar Deuda</SelectItem>
+                                            <SelectItem value="pago_cash">Pagar Ahora</SelectItem>
                                         </SelectContent>
                                     </Select>
                                     {errors.compra && <InputError message={errors.compra[0]} />}

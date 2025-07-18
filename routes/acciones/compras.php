@@ -19,10 +19,11 @@ Route::middleware(['auth', 'verified'])->group(
             Route::get('/almacenes', [CompraController::class, 'getAlmacen']);
             Route::get('/proveedores', [CompraController::class, 'getProveedor']);
             Route::get('/categorias', [CompraController::class, 'getCategorias']);
+            Route::get('/clientes/fisicos', [CompraController::class, 'getClientesFisicos']);
+
 
             // Ruta para obtener cuentas
             Route::get('/cuentas/pago', [CompraController::class, 'getCuentas']);
-            // Route::get('/cuentas/pago', [CompraController::class, 'getCuentasParaPago']);
 
             // Rutas para cargar datos iniciales
             Route::get('/datos', [CompraController::class, 'cargarDatos'])->name('compras.datos');
