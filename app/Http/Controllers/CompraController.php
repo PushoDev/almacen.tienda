@@ -21,31 +21,26 @@ class CompraController extends Controller
      * Opciones para Cargar los select
      * Almacenes, Proveedores, Categorias
      */
-    // Alamcenes
     public function getAlmacen()
     {
         return response()->json(Almacen::select('id', 'nombre_almacen')->get());
     }
 
-    // Proveedores
     public function getProveedor()
     {
         return response()->json(Proveedor::select('id', 'nombre_proveedor')->get());
     }
 
-    // Categorias
     public function getCategorias()
     {
         return response()->json(Categoria::select('id', 'nombre_categoria')->get());
     }
 
-    // Obtener clientes fisicos
     public function getClientesFisicos()
     {
         return response()->json(Cliente::where('tipo_cliente', 'fisico')->get());
     }
 
-    // Obtener cuentas monetarias
     public function getCuentas()
     {
         return response()->json(
@@ -57,8 +52,6 @@ class CompraController extends Controller
 
     /**
      * Inicio de las Compras
-     *
-     * @return void
      */
     public function index()
     {
@@ -71,20 +64,19 @@ class CompraController extends Controller
         return Inertia::render('Comprar/Index', compact('cuentas', 'almacenes', 'proveedores', 'categorias', 'clientes'));
     }
 
-
     /**
-     *
-     * Proceder Compra
-     * @param \Illuminate\Http\Request $request
-     * @throws \Exception
-     * @return \Symfony\Component\HttpFoundation\Response
+     * Registrar una nueva compra
      */
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'compra' => 'required|in:deuda_proveedor,pago_cash,pago_cliente',
+            'compra' => 'required|in:deuda_proveedor,pago_cash',
             'almacen' => 'required|string|max:255',
             'proveedor' => 'required|string|max:255',
+            'cliente' => [
+                'nullable',
+                'exists:clientes,id,tipo_cliente,fisico'
+            ],
             'fecha' => 'required|date',
             'productos' => 'required|array|min:1',
             'productos.*.producto' => 'required|string|max:255',
@@ -97,14 +89,6 @@ class CompraController extends Controller
             ],
             'productos.*.cantidad' => 'required|integer|min:1',
             'productos.*.precio' => 'required|numeric|min:0',
-            'cuenta_id' => [
-                Rule::requiredIf(fn() => $request->input('compra') === 'pago_cash'),
-                'exists:cuentas,id',
-            ],
-            'cliente' => [
-                Rule::requiredIf(fn() => $request->input('compra') === 'pago_cliente'),
-                'exists:clientes,id,tipo_cliente,fisico'
-            ],
             'pagos' => [
                 Rule::requiredIf(fn() => $request->input('compra') === 'pago_cash'),
                 'array',
@@ -133,7 +117,7 @@ class CompraController extends Controller
                 'tipo_compra' => $validated['compra'],
             ];
 
-            // Lógica según tipo de compra
+            // Lógica para 'deuda_proveedor'
             if ($validated['compra'] === 'deuda_proveedor') {
                 $nombreCuentaTemporal = "Deuda - {$proveedor->nombre_proveedor}";
 
@@ -153,16 +137,10 @@ class CompraController extends Controller
                 }
 
                 $compraData['cuenta_id'] = $cuentaDeuda->id;
-            } elseif ($validated['compra'] === 'pago_cliente') {
-                // Obtener cliente y actualizar deuda
-                $cliente = Cliente::findOrFail($validated['cliente']);
-                $cliente->deuda_pago_cliente += $total;
-                $cliente->save();
+            }
 
-                // Asignar cliente a la compra
-                $compraData['cliente_id'] = $cliente->id;
-            } else {
-                // Pago múltiple: validar y restar de varias cuentas
+            // Lógica para 'pago_cash'
+            if ($validated['compra'] === 'pago_cash') {
                 $sumaPagos = collect($validated['pagos'])->sum('monto');
 
                 if ($sumaPagos < $total) {
@@ -182,6 +160,15 @@ class CompraController extends Controller
 
                 // Usamos la primera cuenta como referencia
                 $compraData['cuenta_id'] = $validated['pagos'][0]['cuenta_id'];
+
+                // Si se seleccionó un cliente, actualizamos su deuda
+                if (!empty($validated['cliente'])) {
+                    $cliente = Cliente::findOrFail($validated['cliente']);
+                    $cliente->deuda_pago_cliente += $total;
+                    $cliente->save();
+
+                    $compraData['cliente_id'] = $cliente->id;
+                }
             }
 
             // Crear compra
@@ -230,7 +217,6 @@ class CompraController extends Controller
      */
     public function getProductos($id)
     {
-        // Cargar el almacén con sus compras y los productos asociados
         $almacen = Almacen::with('compras.productos')->find($id);
 
         if (!$almacen) {
@@ -239,7 +225,6 @@ class CompraController extends Controller
             ], 404);
         }
 
-        // Coleccionar todos los productos con su cantidad y precio por compra
         $productos = [];
 
         foreach ($almacen->compras as $compra) {
