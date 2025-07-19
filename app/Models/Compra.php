@@ -13,6 +13,7 @@ class Compra extends Model
         'almacen_id',
         'proveedor_id',
         'cuenta_id',
+        'cliente_id',
         'fecha_compra',
         'total_compra',
         'tipo_compra',
@@ -34,6 +35,12 @@ class Compra extends Model
     public function cuenta()
     {
         return $this->belongsTo(Cuenta::class);
+    }
+
+    // Relación con cliente
+    public function cliente()
+    {
+        return $this->belongsTo(Cliente::class);
     }
 
     public function cuentas()
