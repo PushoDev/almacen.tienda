@@ -74,7 +74,6 @@ export default function ComprarPage() {
         cuenta_id: 1,
         almacen: '',
         proveedor: '',
-        cliente: '',
         fecha: date ? date.toISOString().split('T')[0] : '',
         pagos: [] as Array<{ cuenta_id: number; monto: number }>,
         cliente_id: null as number | null,
@@ -157,6 +156,54 @@ export default function ComprarPage() {
 
     const calcularTotal = () => {
         return productos.reduce((total, p) => total + p.cantidad * p.precio, 0).toFixed(2);
+    };
+
+    const handleSubmit = () => {
+        // Validaciones antes de enviar
+        if (productos.length === 0) {
+            toast.warning('Debe agregar al menos un producto.');
+            return;
+        }
+
+        if (data.compra === 'pago_cash' && data.pagos.length === 0) {
+            toast.warning('Debe agregar al menos un pago.');
+            return;
+        }
+
+        if (data.cliente_id && !clientes.some((cliente) => cliente.id === data.cliente_id)) {
+            toast.warning('El cliente seleccionado no existe.');
+            return;
+        }
+
+        if (data.monto_cliente <= 0) {
+            toast.warning('El monto del cliente debe ser mayor que 0.');
+            return;
+        }
+
+        const compraData = {
+            ...data,
+            productos,
+            fecha: date?.toISOString().split('T')[0],
+        };
+
+        post('/comprar', {
+            preserveScroll: true,
+            data: compraData,
+            onSuccess: (response) => {
+                console.log('Respuesta del servidor:', response);
+                setProductos([]);
+                setTempFormData({
+                    producto: '',
+                    categoria: '',
+                    codigo: '',
+                    cantidad: 0,
+                    precio: 0,
+                });
+            },
+            onError: (error) => {
+                console.error('Error al realizar la compra:', error);
+            },
+        });
     };
 
     return (
@@ -426,10 +473,10 @@ export default function ComprarPage() {
                                         <Separator />
 
                                         <div className="grid w-full items-center gap-1.5">
-                                            <Label htmlFor="cliente">Cliente (Opcional)</Label>
+                                            <Label htmlFor="cliente_id">Cliente (Opcional)</Label>
                                             <Select
                                                 name="cliente_id"
-                                                value={data.cliente_id || ''}
+                                                value={data.cliente_id ? data.cliente_id.toString() : ''}
                                                 onValueChange={(value) => setData('cliente_id', value ? parseInt(value) : null)}
                                             >
                                                 <SelectTrigger>
@@ -443,7 +490,9 @@ export default function ComprarPage() {
                                                     ))}
                                                 </SelectContent>
                                             </Select>
-                                            {errors.cliente && <InputError message={errors.cliente} />}
+                                            {errors.cliente_id && <InputError message={errors.cliente_id[0]} />}
+
+                                            {/* Campo monto_cliente */}
                                             {data.cliente_id && (
                                                 <div className="mt-4">
                                                     <Label htmlFor="monto_cliente">Monto del cliente</Label>
@@ -510,9 +559,10 @@ export default function ComprarPage() {
                                         <div className="mt-2 text-right text-sm text-gray-600 dark:text-gray-400">
                                             Total pagado: ${data.pagos?.reduce((acc, pago) => acc + pago.monto, 0).toFixed(2) || '0.00'} / $
                                             {parseFloat(calcularTotal()).toFixed(2)}
-                                            {data.cliente && (
+                                            {data.cliente_id && (
                                                 <div className="text-amber-600 dark:text-amber-400">
-                                                    Cliente asociado: {clientes.find((c) => c.id.toString() === data.cliente)?.nombre_cliente}
+                                                    Cliente asociado:{' '}
+                                                    {clientes.find((c) => c.id.toString() === data.cliente_id?.toString())?.nombre_cliente}
                                                 </div>
                                             )}
                                         </div>
@@ -522,33 +572,7 @@ export default function ComprarPage() {
 
                             <AlertDialogFooter>
                                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <Button
-                                    type="button"
-                                    onClick={() => {
-                                        setData('productos', productos);
-                                        post('/comprar', {
-                                            preserveScroll: true,
-                                            data: {
-                                                ...data,
-                                                cliente: data.cliente || null,
-                                                productos: productos,
-                                                fecha: date?.toISOString().split('T')[0],
-                                            },
-                                            onSuccess: () => {
-                                                setProductos([]);
-                                                setTempFormData({
-                                                    producto: '',
-                                                    categoria: '',
-                                                    codigo: '',
-                                                    cantidad: 0,
-                                                    precio: 0,
-                                                });
-                                            },
-                                        });
-                                    }}
-                                    disabled={processing}
-                                    className="cursor-pointer bg-green-600 hover:bg-green-700"
-                                >
+                                <Button type="button" onClick={handleSubmit} disabled={processing} className="bg-green-600 hover:bg-green-700">
                                     {processing ? 'Registrando...' : 'Proceder Compra'}
                                 </Button>
                             </AlertDialogFooter>

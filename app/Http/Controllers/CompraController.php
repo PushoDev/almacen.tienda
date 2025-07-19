@@ -18,7 +18,6 @@ use Illuminate\Validation\Rule;
 
 class CompraController extends Controller
 {
-    // Métodos para obtener datos (sin cambios)
     public function getAlmacen()
     {
         return response()->json(Almacen::select('id', 'nombre_almacen')->get());
@@ -253,9 +252,7 @@ class CompraController extends Controller
             ])->toResponse($request)->setStatusCode(500);
         }
     }
-    /**
-     * Mostrar los productos de un almacén.
-     */
+
     public function getProductos($id)
     {
         $almacen = Almacen::with('compras.productos')->find($id);
