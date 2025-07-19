@@ -42,7 +42,8 @@ class CompraController extends Controller
     {
         return response()->json(
             Cuenta::whereIn('tipo_cuenta', ['permanentes', 'temporales'])
-                ->select('id', 'nombre_cuenta', 'saldo_cuenta')
+                ->whereIn('tipo_moneda', ['USD', 'EUR'])
+                ->select('id', 'nombre_cuenta', 'saldo_cuenta', 'tipo_moneda')
                 ->get()
         );
     }
