@@ -5,9 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Almacen;
 use App\Models\AlmacenProducto;
 use App\Models\Categoria;
-use App\Models\Cliente;
 use App\Models\Compra;
-use App\Models\CompraPago;
 use App\Models\Cuenta;
 use App\Models\Producto;
 use App\Models\Proveedor;
@@ -18,33 +16,30 @@ use Illuminate\Validation\Rule;
 
 class CompraController extends Controller
 {
-    // Métodos para obtener datos (sin cambios)
+    /**
+     * Opciones para Cargar los select
+     * Almacenes, Proveedores, Categorias
+     */
+    // Alamcenes
     public function getAlmacen()
     {
         return response()->json(Almacen::select('id', 'nombre_almacen')->get());
     }
-
+    // Proveedores
     public function getProveedor()
     {
         return response()->json(Proveedor::select('id', 'nombre_proveedor')->get());
     }
-
+    // Categorias
     public function getCategorias()
     {
         return response()->json(Categoria::select('id', 'nombre_categoria')->get());
     }
 
-    public function getClientesFisicos()
-    {
-        return response()->json(
-            Cliente::where('tipo_cliente', 'fisico')
-                ->select('id', 'nombre_cliente', 'deuda_pago_cliente')
-                ->get()
-        );
-    }
-
+    // Obtener cuentas monetarias
     public function getCuentas()
     {
+        // return response()->json(Cuenta::select('id', 'nombre_cuenta', 'saldo_cuenta')->get());
         return response()->json(
             Cuenta::whereIn('tipo_cuenta', ['permanentes', 'temporales'])
                 ->whereIn('tipo_moneda', ['USD', 'EUR'])
@@ -53,15 +48,19 @@ class CompraController extends Controller
         );
     }
 
+    /**
+     * Inicio de las Compras
+     *
+     * @return void
+     */
     public function index()
     {
         $cuentas = Cuenta::all();
         $almacenes = Almacen::all();
         $proveedores = Proveedor::all();
         $categorias = Categoria::all();
-        $clientes = Cliente::all();
 
-        return Inertia::render('Comprar/Index', compact('cuentas', 'almacenes', 'proveedores', 'categorias', 'clientes'));
+        return Inertia::render('Comprar/Index', compact('cuentas', 'almacenes', 'proveedores', 'categorias'));
     }
 
     public function store(Request $request)
@@ -93,15 +92,6 @@ class CompraController extends Controller
             ],
             'pagos.*.cuenta_id' => 'required|exists:cuentas,id',
             'pagos.*.monto' => 'required|numeric|min:0.01',
-            'cliente_id' => [
-                Rule::requiredIf(fn() => $request->input('compra') === 'pago_cash' && $request->has('cliente_id')),
-                'exists:clientes,id',
-            ],
-            'monto_cliente' => [
-                Rule::requiredIf(fn() => $request->input('compra') === 'pago_cash' && $request->has('cliente_id')),
-                'numeric',
-                'min:0.01',
-            ],
         ]);
 
         DB::beginTransaction();
@@ -147,25 +137,9 @@ class CompraController extends Controller
                 // Pago múltiple: validar y restar de varias cuentas
 
                 $sumaPagos = collect($validated['pagos'])->sum('monto');
-                $cliente_id = $request->input('cliente_id');
-                $monto_cliente = $request->input('monto_cliente', 0);
-
-                if ($cliente_id) {
-                    $cliente = Cliente::findOrFail($cliente_id);
-
-                    if ($cliente->tipo_cliente !== 'fisico') {
-                        throw new \Exception("Solo se pueden usar clientes de tipo físico.");
-                    }
-
-                    if ($monto_cliente <= 0) {
-                        throw new \Exception("El monto del cliente debe ser mayor a cero.");
-                    }
-
-                    $sumaPagos += $monto_cliente;
-                }
 
                 if ($sumaPagos < $total) {
-                    throw new \Exception("La suma de los pagos es menor al total de la compra.");
+                    throw new \Exception("La suma de los montos es menor al total de la compra.");
                 }
 
                 foreach ($validated['pagos'] as $pago) {
@@ -177,44 +151,14 @@ class CompraController extends Controller
 
                     $cuenta->saldo_cuenta -= $pago['monto'];
                     $cuenta->save();
-
-                    // Registrar pago en `compra_pago`
-                    CompraPago::create([
-                        'compra_id' => null, // Se asignará después
-                        'cuenta_id' => $cuenta->id,
-                        'cliente_id' => null,
-                        'monto' => $pago['monto'],
-                    ]);
                 }
 
                 // Usamos la primera cuenta como referencia
                 $compraData['cuenta_id'] = $validated['pagos'][0]['cuenta_id'];
-
-                if ($cliente_id) {
-                    $compraData['cliente_id'] = $cliente_id;
-                }
             }
 
             // Crear compra
             $compra = Compra::create($compraData);
-
-            // Actualizar los pagos con el `compra_id`
-            foreach ($validated['pagos'] as $key => $pago) {
-                $compra->pagos[$key]->update(['compra_id' => $compra->id]);
-            }
-
-            if ($cliente_id && $monto_cliente > 0) {
-                CompraPago::create([
-                    'compra_id' => $compra->id,
-                    'cuenta_id' => null,
-                    'cliente_id' => $cliente_id,
-                    'monto' => $monto_cliente,
-                ]);
-
-                // Actualizar deuda del cliente
-                $cliente->deuda_pago_cliente += ($monto_cliente - $total);
-                $cliente->save();
-            }
 
             // Procesar productos
             foreach ($validated['productos'] as $item) {
@@ -253,11 +197,15 @@ class CompraController extends Controller
             ])->toResponse($request)->setStatusCode(500);
         }
     }
+
+
+
     /**
      * Mostrar los productos de un almacén.
      */
     public function getProductos($id)
     {
+        // Cargar el almacén con sus compras y los productos asociados
         $almacen = Almacen::with('compras.productos')->find($id);
 
         if (!$almacen) {
@@ -266,6 +214,7 @@ class CompraController extends Controller
             ], 404);
         }
 
+        // Coleccionar todos los productos con su cantidad y precio por compra
         $productos = [];
 
         foreach ($almacen->compras as $compra) {

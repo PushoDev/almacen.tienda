@@ -27,6 +27,7 @@ import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { format } from 'date-fns';
 import { BookCheck, CalendarIcon, Edit2, PlusIcon, ShoppingBasket, Trash2Icon } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -76,6 +77,8 @@ export default function ComprarPage() {
         cliente: '',
         fecha: date ? date.toISOString().split('T')[0] : '',
         pagos: [] as Array<{ cuenta_id: number; monto: number }>,
+        cliente_id: null as number | null,
+        monto_cliente: 0,
     });
 
     useEffect(() => {
@@ -115,7 +118,7 @@ export default function ComprarPage() {
 
     const agregarProducto = () => {
         if (!tempFormData.producto || !tempFormData.categoria || !tempFormData.codigo || tempFormData.cantidad <= 0 || tempFormData.precio <= 0) {
-            alert('Por favor, completa todos los campos del formulario.');
+            toast.warning('Por favor rellene todos los campos');
             return;
         }
 
@@ -424,7 +427,11 @@ export default function ComprarPage() {
 
                                         <div className="grid w-full items-center gap-1.5">
                                             <Label htmlFor="cliente">Cliente (Opcional)</Label>
-                                            <Select name="cliente" value={data.cliente} onValueChange={(value) => setData('cliente', value)}>
+                                            <Select
+                                                name="cliente_id"
+                                                value={data.cliente_id || ''}
+                                                onValueChange={(value) => setData('cliente_id', value ? parseInt(value) : null)}
+                                            >
                                                 <SelectTrigger>
                                                     <SelectValue placeholder="Seleccione cliente" />
                                                 </SelectTrigger>
@@ -437,6 +444,20 @@ export default function ComprarPage() {
                                                 </SelectContent>
                                             </Select>
                                             {errors.cliente && <InputError message={errors.cliente} />}
+                                            {data.cliente_id && (
+                                                <div className="mt-4">
+                                                    <Label htmlFor="monto_cliente">Monto del cliente</Label>
+                                                    <Input
+                                                        type="number"
+                                                        step="0.01"
+                                                        name="monto_cliente"
+                                                        placeholder="Monto aportado por el cliente"
+                                                        value={data.monto_cliente || ''}
+                                                        onChange={(e) => setData('monto_cliente', parseFloat(e.target.value) || 0)}
+                                                    />
+                                                    {errors.monto_cliente && <InputError message={errors.monto_cliente[0]} />}
+                                                </div>
+                                            )}
                                         </div>
 
                                         <div className="space-y-3">
@@ -526,7 +547,7 @@ export default function ComprarPage() {
                                         });
                                     }}
                                     disabled={processing}
-                                    className="bg-green-600 hover:bg-green-700"
+                                    className="cursor-pointer bg-green-600 hover:bg-green-700"
                                 >
                                     {processing ? 'Registrando...' : 'Proceder Compra'}
                                 </Button>
@@ -550,6 +571,7 @@ export default function ComprarPage() {
                         </Tooltip>
                     </TooltipProvider>
                 </div>
+                <Toaster position="top-center" />
             </div>
         </AppLayout>
     );

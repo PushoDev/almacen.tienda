@@ -22,6 +22,11 @@ class Cliente extends Model
     // Desactivar marcas de tiempo si no son necesarias (opcional)
     public $timestamps = true;
 
+    public function compras()
+    {
+        return $this->hasMany(Compra::class);
+    }
+
     // Relaciones (si las hay en el futuro)
     public function ventas()
     {
