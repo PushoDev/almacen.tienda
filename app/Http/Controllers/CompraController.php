@@ -18,39 +18,21 @@ use Illuminate\Validation\Rule;
 
 class CompraController extends Controller
 {
-    /**
-     * Obtener lista de almacenes (id, nombre_almacen)
-     */
     public function getAlmacen()
     {
-        return response()->json(
-            Almacen::select('id', 'nombre_almacen')->get()
-        );
+        return response()->json(Almacen::select('id', 'nombre_almacen')->get());
     }
 
-    /**
-     * Obtener lista de proveedores (id, nombre_proveedor)
-     */
     public function getProveedor()
     {
-        return response()->json(
-            Proveedor::select('id', 'nombre_proveedor')->get()
-        );
+        return response()->json(Proveedor::select('id', 'nombre_proveedor')->get());
     }
 
-    /**
-     * Obtener lista de categorías (id, nombre_categoria)
-     */
     public function getCategorias()
     {
-        return response()->json(
-            Categoria::select('id', 'nombre_categoria')->get()
-        );
+        return response()->json(Categoria::select('id', 'nombre_categoria')->get());
     }
 
-    /**
-     * Obtener clientes físicos con su deuda
-     */
     public function getClientesFisicos()
     {
         return response()->json(
@@ -60,9 +42,6 @@ class CompraController extends Controller
         );
     }
 
-    /**
-     * Obtener cuentas válidas para pago (permanentes/temporales en USD/EUR)
-     */
     public function getCuentas()
     {
         return response()->json(
@@ -73,9 +52,6 @@ class CompraController extends Controller
         );
     }
 
-    /**
-     * Mostrar vista principal de compras
-     */
     public function index()
     {
         $cuentas = Cuenta::all();
@@ -84,18 +60,9 @@ class CompraController extends Controller
         $categorias = Categoria::all();
         $clientes = Cliente::all();
 
-        return Inertia::render('Comprar/Index', compact(
-            'cuentas',
-            'almacenes',
-            'proveedores',
-            'categorias',
-            'clientes'
-        ));
+        return Inertia::render('Comprar/Index', compact('cuentas', 'almacenes', 'proveedores', 'categorias', 'clientes'));
     }
 
-    /**
-     * Registrar una nueva compra
-     */
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -134,14 +101,10 @@ class CompraController extends Controller
         DB::beginTransaction();
 
         try {
-            // Crear/obtener almacén y proveedor
             $almacen = Almacen::firstOrCreate(['nombre_almacen' => $validated['almacen']]);
             $proveedor = Proveedor::firstOrCreate(['nombre_proveedor' => $validated['proveedor']]);
-
-            // Calcular total de la compra
             $total = collect($validated['productos'])->sum(fn($p) => $p['cantidad'] * $p['precio']);
 
-            // Datos base de la compra
             $compraData = [
                 'almacen_id' => $almacen->id,
                 'proveedor_id' => $proveedor->id,
@@ -150,7 +113,6 @@ class CompraController extends Controller
                 'tipo_compra' => $validated['compra'],
             ];
 
-            // --- LÓGICA POR TIPO DE COMPRA ---
             if ($validated['compra'] === 'deuda_proveedor') {
                 $nombreCuentaTemporal = "Deuda - {$proveedor->nombre_proveedor}";
 
@@ -188,18 +150,16 @@ class CompraController extends Controller
             } elseif ($validated['compra'] === 'pago_cliente_fisico') {
                 $cliente = Cliente::findOrFail($validated['cliente_id']);
 
-                // Incrementar deuda del cliente (él nos debe más)
-                $cliente->deuda_pago_cliente += $total;
+                // 🔥 CORREGIDO: La empresa recibe dinero del cliente → le debe
+                // Por tanto, restamos del campo (queda negativo si era 0)
+                $cliente->deuda_pago_cliente -= $total;
                 $cliente->save();
 
-                // Asociar cliente a la compra
                 $compraData['cliente_id'] = $cliente->id;
             }
 
-            // Crear la compra
             $compra = Compra::create($compraData);
 
-            // Registrar pago en compra_pago si fue con cliente físico
             if ($validated['compra'] === 'pago_cliente_fisico') {
                 CompraPago::create([
                     'compra_id' => $compra->id,
@@ -208,7 +168,6 @@ class CompraController extends Controller
                 ]);
             }
 
-            // Procesar cada producto
             foreach ($validated['productos'] as $item) {
                 $categoria = Categoria::firstOrCreate(['nombre_categoria' => $item['categoria']]);
                 $producto = Producto::firstOrCreate(
@@ -217,17 +176,15 @@ class CompraController extends Controller
                         'nombre_producto' => $item['producto'],
                         'categoria_id' => $categoria->id,
                         'precio_compra_producto' => $item['precio'],
-                        'cantidad_producto' => 0, // Se actualiza por almacén
+                        'cantidad_producto' => 0,
                     ]
                 );
 
-                // Asociar producto a la compra
                 $compra->productos()->attach($producto->id, [
                     'cantidad' => $item['cantidad'],
                     'precio' => $item['precio'],
                 ]);
 
-                // Actualizar inventario en el almacén
                 AlmacenProducto::updateOrCreate(
                     ['almacen_id' => $almacen->id, 'producto_id' => $producto->id],
                     ['cantidad' => DB::raw("cantidad + {$item['cantidad']}")]
@@ -236,21 +193,15 @@ class CompraController extends Controller
 
             DB::commit();
 
-            // Redirigir al dashboard
             return Inertia::location(route('dashboard'));
         } catch (\Exception $e) {
             DB::rollBack();
-
-            // Devolver errores a la vista
             return Inertia::render('Comprar/Index', [
                 'errors' => ['_error' => 'Error al procesar la compra: ' . $e->getMessage()]
             ])->toResponse($request)->setStatusCode(500);
         }
     }
 
-    /**
-     * Mostrar productos asociados a un almacén
-     */
     public function getProductos($id)
     {
         $almacen = Almacen::with('compras.productos')->find($id);
@@ -260,7 +211,6 @@ class CompraController extends Controller
         }
 
         $productos = [];
-
         foreach ($almacen->compras as $compra) {
             foreach ($compra->productos as $producto) {
                 $productos[] = [
