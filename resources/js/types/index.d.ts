@@ -151,6 +151,12 @@ export interface ProductoComprarProps {
     precio: number;
 }
 
+export interface PagoClienteFisicoProps {
+    id: number;
+    nombre_cliente: string;
+    deuda_pago_cliente: number;
+}
+
 // Interface para las cuentas del Negocio
 export interface CuentaNegocioProps {
     id: number;
