@@ -23,9 +23,9 @@ return new class extends Migration
             $table->id();
             // Estructura de la tabla
             $table->unsignedBigInteger('compra_id');
-            $table->unsignedBigInteger('cuenta_id');
+            $table->unsignedBigInteger('cuenta_id')->nullable();
             // En caso de compra sea pagada por cliente fisico
-            $table->unsignedBigInteger('cliente_id');
+            $table->unsignedBigInteger('cliente_id')->nullable();
             // Monto pagado desde esa cuenta
             $table->decimal('monto', 10, 2);
 

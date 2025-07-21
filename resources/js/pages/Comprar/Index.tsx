@@ -18,7 +18,7 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
@@ -30,22 +30,10 @@ import { useEffect, useState } from 'react';
 import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Caja Principal',
-        href: '/dashboard',
-    },
-    {
-        title: 'Productos',
-        href: '/productos',
-    },
-    {
-        title: 'Realizar Venta',
-        href: 'punto-venta',
-    },
-    {
-        title: 'Adquirir Nuevos Productos',
-        href: '/comprar',
-    },
+    { title: 'Caja Principal', href: '/dashboard' },
+    { title: 'Productos', href: '/productos' },
+    { title: 'Realizar Venta', href: 'punto-venta' },
+    { title: 'Adquirir Nuevos Productos', href: '/comprar' },
 ];
 
 export default function ComprarPage() {
@@ -70,14 +58,13 @@ export default function ComprarPage() {
     const [productos, setProductos] = useState<ProductoComprarProps[]>([]);
 
     const { data, setData, post, processing } = useForm({
-        compra: 'deuda_proveedor',
+        compra: 'deuda_proveedor', // Asegúrate de que este campo esté presente
         cuenta_id: 1,
         almacen: '',
         proveedor: '',
         fecha: date ? date.toISOString().split('T')[0] : '',
-        pagos: [] as Array<{ cuenta_id: number; monto: number }>,
         cliente_id: null as number | null,
-        monto_cliente: 0,
+        productos: [], // Asegúrate de incluir este campo
     });
 
     useEffect(() => {
@@ -160,31 +147,23 @@ export default function ComprarPage() {
 
     const handleSubmit = () => {
         // Validaciones antes de enviar
+        if (!data.proveedor || !data.almacen || !date) {
+            toast.warning('Por favor complete todos los campos requeridos antes de proceder.');
+            return;
+        }
+
         if (productos.length === 0) {
             toast.warning('Debe agregar al menos un producto.');
             return;
         }
 
-        if (data.compra === 'pago_cash' && data.pagos.length === 0) {
-            toast.warning('Debe agregar al menos un pago.');
-            return;
-        }
-
-        if (data.cliente_id && !clientes.some((cliente) => cliente.id === data.cliente_id)) {
-            toast.warning('El cliente seleccionado no existe.');
-            return;
-        }
-
-        if (data.monto_cliente <= 0) {
-            toast.warning('El monto del cliente debe ser mayor que 0.');
-            return;
-        }
-
         const compraData = {
             ...data,
-            productos,
+            productos, // Asegúrate de que los productos se envían
             fecha: date?.toISOString().split('T')[0],
         };
+
+        console.log('Datos de compra enviados:', compraData); // Log de datos de compra
 
         post('/comprar', {
             preserveScroll: true,
@@ -199,9 +178,12 @@ export default function ComprarPage() {
                     cantidad: 0,
                     precio: 0,
                 });
+                toast.success('Compra realizada con éxito.');
             },
             onError: (error) => {
                 console.error('Error al realizar la compra:', error);
+                toast.error('Error al realizar la compra. Verifique los datos.');
+                console.log('Detalles del error:', error); // Log de detalles del error
             },
         });
     };
@@ -385,7 +367,6 @@ export default function ComprarPage() {
 
                 <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
                     <Table>
-                        <TableCaption className="text-sidebar-accent">Lista de los Productos a Comprar</TableCaption>
                         <TableHeader>
                             <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
                                 <TableHead>Producto</TableHead>
@@ -429,7 +410,6 @@ export default function ComprarPage() {
                                 <TableCell className="bg-gray-600 text-amber-300">{productos.reduce((t, p) => t + p.cantidad, 0)} Unidades</TableCell>
                                 <TableCell colSpan={3} className="bg-gray-900 text-center font-bold text-emerald-300">
                                     Importe General: ${calcularTotal()}
-                                    {data.cliente && <span className="block text-xs text-amber-500">Deuda cliente: +${calcularTotal()}</span>}
                                 </TableCell>
                             </TableRow>
                         </TableFooter>
@@ -491,22 +471,6 @@ export default function ComprarPage() {
                                                 </SelectContent>
                                             </Select>
                                             {errors.cliente_id && <InputError message={errors.cliente_id[0]} />}
-
-                                            {/* Campo monto_cliente */}
-                                            {data.cliente_id && (
-                                                <div className="mt-4">
-                                                    <Label htmlFor="monto_cliente">Monto del cliente</Label>
-                                                    <Input
-                                                        type="number"
-                                                        step="0.01"
-                                                        name="monto_cliente"
-                                                        placeholder="Monto aportado por el cliente"
-                                                        value={data.monto_cliente || ''}
-                                                        onChange={(e) => setData('monto_cliente', parseFloat(e.target.value) || 0)}
-                                                    />
-                                                    {errors.monto_cliente && <InputError message={errors.monto_cliente[0]} />}
-                                                </div>
-                                            )}
                                         </div>
 
                                         <div className="space-y-3">
@@ -515,9 +479,6 @@ export default function ComprarPage() {
                                             </h3>
 
                                             {cuentas.map((cuenta) => {
-                                                const index = data.pagos?.findIndex((pago) => pago.cuenta_id === cuenta.id);
-                                                const pago = data.pagos?.[index] || null;
-
                                                 return (
                                                     <div key={cuenta.id} className="flex items-center gap-3">
                                                         <div className="flex-1">
@@ -533,7 +494,6 @@ export default function ComprarPage() {
                                                                 min="0.01"
                                                                 step="0.01"
                                                                 placeholder="Monto"
-                                                                value={pago?.monto ?? ''}
                                                                 onChange={(e) => {
                                                                     const monto = parseFloat(e.target.value) || 0;
                                                                     const updatedPagos = [...data.pagos];
@@ -552,19 +512,7 @@ export default function ComprarPage() {
                                                     </div>
                                                 );
                                             })}
-
                                             {errors.pagos && <InputError message={errors.pagos[0]} />}
-                                        </div>
-
-                                        <div className="mt-2 text-right text-sm text-gray-600 dark:text-gray-400">
-                                            Total pagado: ${data.pagos?.reduce((acc, pago) => acc + pago.monto, 0).toFixed(2) || '0.00'} / $
-                                            {parseFloat(calcularTotal()).toFixed(2)}
-                                            {data.cliente_id && (
-                                                <div className="text-amber-600 dark:text-amber-400">
-                                                    Cliente asociado:{' '}
-                                                    {clientes.find((c) => c.id.toString() === data.cliente_id?.toString())?.nombre_cliente}
-                                                </div>
-                                            )}
                                         </div>
                                     </>
                                 )}
