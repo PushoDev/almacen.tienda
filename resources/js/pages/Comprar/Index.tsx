@@ -22,15 +22,7 @@ import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, Tabl
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
-import {
-    AlmacenProps,
-    CategoriasProps,
-    CuentaNegocioProps,
-    PagoClienteFisicoProps,
-    ProductoComprarProps,
-    ProveedorProps,
-    type BreadcrumbItem,
-} from '@/types';
+import { AlmacenProps, CategoriasProps, CuentaNegocioProps, ProductoComprarProps, ProveedorProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { format } from 'date-fns';
 import { BookCheck, CalendarIcon, Edit2, PlusIcon, ShoppingBasket, Trash2Icon } from 'lucide-react';
@@ -62,7 +54,6 @@ export default function ComprarPage() {
     const [proveedors, setProveedors] = useState<ProveedorProps[]>([]);
     const [categorias, setCategorias] = useState<CategoriasProps[]>([]);
     const [cuentas, setCuentas] = useState<CuentaNegocioProps[]>([]);
-    const [clientesFisicos, setClientesFisicos] = useState<PagoClienteFisicoProps[]>([]);
     const [date, setDate] = useState<Date | undefined>(new Date());
     const [editingProductId, setEditingProductId] = useState<number | null>(null);
 
@@ -82,7 +73,6 @@ export default function ComprarPage() {
     const { data, setData, post, processing } = useForm({
         compra: 'deuda_proveedor',
         cuenta_id: 1,
-        cliente_id: null as number | null,
         almacen: '',
         proveedor: '',
         fecha: date ? date.toISOString().split('T')[0] : '',
@@ -108,11 +98,6 @@ export default function ComprarPage() {
         fetch('/compras/cuentas/pago')
             .then((res) => res.json())
             .then((data) => setCuentas(data))
-            .catch((err) => console.error(err));
-
-        fetch('/compras/clientes/fisicos')
-            .then((res) => res.json())
-            .then((data) => setClientesFisicos(data))
             .catch((err) => console.error(err));
     }, []);
 
@@ -440,15 +425,14 @@ export default function ComprarPage() {
                                     <Select
                                         name="compra"
                                         value={data.compra}
-                                        onValueChange={(value) => setData('compra', value as 'deuda_proveedor' | 'pago_cash' | 'pago_cliente_fisico')}
+                                        onValueChange={(value) => setData('compra', value as 'deuda_proveedor' | 'pago_cash')}
                                     >
                                         <SelectTrigger className="w-full">
                                             <SelectValue placeholder="Seleccione tipo de compra" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="pago_cash">Pagar Ahora</SelectItem>
-                                            <SelectItem value="pago_cliente_fisico">Mediante Cliente</SelectItem>
-                                            <SelectItem value="deuda_proveedor">Generar Deuda a Proveedor</SelectItem>
+                                            <SelectItem value="deuda_proveedor">Deuda con Proveedor</SelectItem>
+                                            <SelectItem value="pago_cash">Pago en Efectivo</SelectItem>
                                         </SelectContent>
                                     </Select>
                                     {errors.compra && <InputError message={errors.compra[0]} />}
@@ -516,43 +500,6 @@ export default function ComprarPage() {
                                         <div className="mt-2 text-right text-sm text-gray-600 dark:text-gray-400">
                                             Total pagado: ${data.pagos?.reduce((acc, pago) => acc + pago.monto, 0).toFixed(2) || '0.00'} / $
                                             {parseFloat(calcularTotal()).toFixed(2)}
-                                        </div>
-                                    </>
-                                )}
-
-                                {/* Mostrar si es pago_cliente_fisico */}
-                                {data.compra === 'pago_cliente_fisico' && (
-                                    <>
-                                        <Separator />
-                                        <div className="space-y-3">
-                                            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Seleccione un cliente físico</h3>
-                                            <Select
-                                                onValueChange={(value) => {
-                                                    const clienteId = parseInt(value);
-                                                    setData('cliente_id', clienteId);
-                                                }}
-                                            >
-                                                <SelectTrigger className="w-full">
-                                                    <SelectValue placeholder="Seleccione cliente físico" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {clientesFisicos.map((cliente) => (
-                                                        <SelectItem key={cliente.id} value={cliente.id.toString()}>
-                                                            <div className="flex w-full justify-between">
-                                                                <span>{cliente.nombre_cliente}</span>
-                                                                <span
-                                                                    className={`text-xs ${cliente.deuda_pago_cliente > 0 ? 'text-red-600' : 'text-green-600'}`}
-                                                                >
-                                                                    {cliente.deuda_pago_cliente > 0
-                                                                        ? `Debe: $${cliente.deuda_pago_cliente.toFixed(2)}`
-                                                                        : `Le debes: $${Math.abs(cliente.deuda_pago_cliente).toFixed(2)}`}
-                                                                </span>
-                                                            </div>
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            {errors.cliente_id && <InputError message={errors.cliente_id[0]} />}
                                         </div>
                                     </>
                                 )}
