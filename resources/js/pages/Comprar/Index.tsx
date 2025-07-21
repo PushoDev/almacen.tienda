@@ -18,22 +18,33 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
-import { AlmacenProps, CategoriasProps, ClienteProps, CuentaNegocioProps, ProductoComprarProps, ProveedorProps, type BreadcrumbItem } from '@/types';
+import { AlmacenProps, CategoriasProps, CuentaNegocioProps, ProductoComprarProps, ProveedorProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { format } from 'date-fns';
 import { BookCheck, CalendarIcon, Edit2, PlusIcon, ShoppingBasket, Trash2Icon } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Caja Principal', href: '/dashboard' },
-    { title: 'Productos', href: '/productos' },
-    { title: 'Realizar Venta', href: 'punto-venta' },
-    { title: 'Adquirir Nuevos Productos', href: '/comprar' },
+    {
+        title: 'Caja Principal',
+        href: '/dashboard',
+    },
+    {
+        title: 'Productos',
+        href: '/productos',
+    },
+    {
+        title: 'Realizar Venta',
+        href: 'punto-venta',
+    },
+    {
+        title: 'Adquirir Nuevos Productos',
+        href: '/comprar',
+    },
 ];
 
 export default function ComprarPage() {
@@ -42,11 +53,11 @@ export default function ComprarPage() {
     const [almacens, setAlmacens] = useState<AlmacenProps[]>([]);
     const [proveedors, setProveedors] = useState<ProveedorProps[]>([]);
     const [categorias, setCategorias] = useState<CategoriasProps[]>([]);
-    const [clientes, setClientes] = useState<ClienteProps[]>([]);
     const [cuentas, setCuentas] = useState<CuentaNegocioProps[]>([]);
     const [date, setDate] = useState<Date | undefined>(new Date());
     const [editingProductId, setEditingProductId] = useState<number | null>(null);
 
+    // Estado temporal para campos del producto
     const [tempFormData, setTempFormData] = useState<Omit<ProductoComprarProps, 'id'>>({
         producto: '',
         categoria: '',
@@ -55,18 +66,19 @@ export default function ComprarPage() {
         precio: 0,
     });
 
+    // Estado para productos en la tabla
     const [productos, setProductos] = useState<ProductoComprarProps[]>([]);
 
+    // Datos del formulario principal
     const { data, setData, post, processing } = useForm({
-        compra: 'deuda_proveedor', // Asegúrate de que este campo esté presente
+        compra: 'deuda_proveedor',
         cuenta_id: 1,
         almacen: '',
         proveedor: '',
         fecha: date ? date.toISOString().split('T')[0] : '',
-        cliente_id: null as number | null,
-        productos: [], // Asegúrate de incluir este campo
     });
 
+    // Cargar datos iniciales
     useEffect(() => {
         fetch('/compras/almacenes')
             .then((res) => res.json())
@@ -83,17 +95,13 @@ export default function ComprarPage() {
             .then((data) => setCategorias(data))
             .catch((err) => console.error(err));
 
-        fetch('/compras/clientes/fisicos')
-            .then((res) => res.json())
-            .then((data) => setClientes(data))
-            .catch((err) => console.error(err));
-
         fetch('/compras/cuentas/pago')
             .then((res) => res.json())
             .then((data) => setCuentas(data))
             .catch((err) => console.error(err));
     }, []);
 
+    // Manejar cambios en los campos temporales
     const handleTempInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         setTempFormData((prev) => ({
@@ -102,9 +110,10 @@ export default function ComprarPage() {
         }));
     };
 
+    // Agregar/Editar producto
     const agregarProducto = () => {
         if (!tempFormData.producto || !tempFormData.categoria || !tempFormData.codigo || tempFormData.cantidad <= 0 || tempFormData.precio <= 0) {
-            toast.warning('Por favor rellene todos los campos');
+            alert('Por favor, completa todos los campos del formulario.');
             return;
         }
 
@@ -120,13 +129,16 @@ export default function ComprarPage() {
             setProductos((prev) => [...prev, nuevoProducto]);
         }
 
+        // Limpiar campos temporales
         setTempFormData({ producto: '', categoria: '', codigo: '', cantidad: 0, precio: 0 });
     };
 
+    // Eliminar producto
     const eliminarProducto = (id: number) => {
         setProductos((prev) => prev.filter((p) => p.id !== id));
     };
 
+    // Editar producto
     const editarProducto = (id: number) => {
         const productoParaEditar = productos.find((p) => p.id === id);
         if (productoParaEditar) {
@@ -141,62 +153,23 @@ export default function ComprarPage() {
         }
     };
 
+    // Calcular total de la compra
     const calcularTotal = () => {
         return productos.reduce((total, p) => total + p.cantidad * p.precio, 0).toFixed(2);
-    };
-
-    const handleSubmit = () => {
-        // Validaciones antes de enviar
-        if (!data.proveedor || !data.almacen || !date) {
-            toast.warning('Por favor complete todos los campos requeridos antes de proceder.');
-            return;
-        }
-
-        if (productos.length === 0) {
-            toast.warning('Debe agregar al menos un producto.');
-            return;
-        }
-
-        const compraData = {
-            ...data,
-            productos, // Asegúrate de que los productos se envían
-            fecha: date?.toISOString().split('T')[0],
-        };
-
-        console.log('Datos de compra enviados:', compraData); // Log de datos de compra
-
-        post('/comprar', {
-            preserveScroll: true,
-            data: compraData,
-            onSuccess: (response) => {
-                console.log('Respuesta del servidor:', response);
-                setProductos([]);
-                setTempFormData({
-                    producto: '',
-                    categoria: '',
-                    codigo: '',
-                    cantidad: 0,
-                    precio: 0,
-                });
-                toast.success('Compra realizada con éxito.');
-            },
-            onError: (error) => {
-                console.error('Error al realizar la compra:', error);
-                toast.error('Error al realizar la compra. Verifique los datos.');
-                console.log('Detalles del error:', error); // Log de detalles del error
-            },
-        });
     };
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Comprar" />
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
+                {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                    {/* Contenido principal */}
                     <HeadingSmall
                         title="Opciones Generales del Sistema"
                         description="Comprar o adquirir nuevos productos para el negocio, antes de distribuir"
                     />
+                    {/* Ícono semitransparente */}
                     <ShoppingBasket
                         size={70}
                         color="#f59e0b"
@@ -206,6 +179,7 @@ export default function ComprarPage() {
 
                 <Separator className="col-span-4" />
 
+                {/* Formulario principal */}
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-sidebar-accent text-center">Nuevos Productos</CardTitle>
@@ -217,6 +191,7 @@ export default function ComprarPage() {
                     <CardContent>
                         <form onSubmit={(e) => e.preventDefault()}>
                             <div className="grid grid-cols-3 gap-4">
+                                {/* Fecha de la Compra */}
                                 <div className="grid w-full max-w-sm items-center gap-1.5">
                                     <Label htmlFor="fechaCompra">Fecha de la Compra</Label>
                                     <Popover>
@@ -236,6 +211,7 @@ export default function ComprarPage() {
                                     {errors.fecha && <InputError message={errors.fecha[0]} />}
                                 </div>
 
+                                {/* Proveedor */}
                                 <div className="grid w-full max-w-sm items-center gap-1.5">
                                     <Label htmlFor="proveedor">Proveedor</Label>
                                     <Select name="proveedor" value={data.proveedor} onValueChange={(value) => setData('proveedor', value)}>
@@ -253,6 +229,7 @@ export default function ComprarPage() {
                                     {errors.proveedor && <InputError message={errors.proveedor[0]} />}
                                 </div>
 
+                                {/* Almacén Destino */}
                                 <div className="grid w-full max-w-sm items-center gap-1.5">
                                     <Label htmlFor="almacen">Almacén</Label>
                                     <Select name="almacen" value={data.almacen} onValueChange={(value) => setData('almacen', value)}>
@@ -274,12 +251,14 @@ export default function ComprarPage() {
                     </CardContent>
                 </Card>
 
+                {/* Formulario de productos */}
                 <Card>
                     <CardHeader>
                         <CardDescription className="text-center dark:text-emerald-400">Ingrese Datos del Producto a Comprar</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="grid grid-cols-3 gap-4">
+                            {/* Nombre del Producto */}
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="nombre_producto">Nombre del Producto</Label>
                                 <Input
@@ -293,6 +272,7 @@ export default function ComprarPage() {
                                 {errors.producto && <InputError message={errors.producto[0]} />}
                             </div>
 
+                            {/* Código del Producto */}
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="codigo_producto">Código del Producto</Label>
                                 <Input
@@ -306,6 +286,7 @@ export default function ComprarPage() {
                                 {errors.codigo && <InputError message={errors.codigo[0]} />}
                             </div>
 
+                            {/* Categoría del Producto */}
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="categorias">Categoría</Label>
                                 <Select
@@ -327,6 +308,7 @@ export default function ComprarPage() {
                                 {errors.categorias && <InputError message={errors.categorias[0]} />}
                             </div>
 
+                            {/* Precio de Compra */}
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="precio_producto">Precio</Label>
                                 <Input
@@ -339,6 +321,7 @@ export default function ComprarPage() {
                                 {errors.precio && <InputError message={errors.precio[0]} />}
                             </div>
 
+                            {/* Cantidad de Productos */}
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="cantidad_producto">Cantidad</Label>
                                 <Input
@@ -351,6 +334,7 @@ export default function ComprarPage() {
                                 {errors.cantidad && <InputError message={errors.cantidad[0]} />}
                             </div>
 
+                            {/* Botón Agregar */}
                             <div className="mt-6 grid w-full max-w-sm items-center gap-1">
                                 <Button
                                     variant="secondary"
@@ -365,8 +349,10 @@ export default function ComprarPage() {
                     </CardContent>
                 </Card>
 
+                {/* Tabla de productos */}
                 <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
                     <Table>
+                        <TableCaption className="text-sidebar-accent">Lista de los Productos a Comprar</TableCaption>
                         <TableHeader>
                             <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
                                 <TableHead>Producto</TableHead>
@@ -416,6 +402,7 @@ export default function ComprarPage() {
                     </Table>
                 </div>
 
+                {/* Botones de acción */}
                 <div className="flex justify-center gap-4 p-4">
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
@@ -423,13 +410,16 @@ export default function ComprarPage() {
                                 Realizar Compra
                             </Button>
                         </AlertDialogTrigger>
+                        {/* Contenido */}
                         <AlertDialogContent>
                             <AlertDialogHeader>
                                 <AlertDialogTitle>Tipo de Compra</AlertDialogTitle>
                                 <AlertDialogDescription>Seleccione si desea pagar ahora o comprar y pagar luego</AlertDialogDescription>
                             </AlertDialogHeader>
 
+                            {/* Formulario dinámico */}
                             <div className="flex flex-col gap-4 pt-4">
+                                {/* Tipo de Compra (siempre visible) */}
                                 <div className="grid w-full items-center gap-1.5">
                                     <Label htmlFor="tipo_compra">Tipo de Compra</Label>
                                     <Select
@@ -441,44 +431,28 @@ export default function ComprarPage() {
                                             <SelectValue placeholder="Seleccione tipo de compra" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="deuda_proveedor">Generar Deuda</SelectItem>
-                                            <SelectItem value="pago_cash">Pagar Ahora</SelectItem>
+                                            <SelectItem value="deuda_proveedor">Deuda con Proveedor</SelectItem>
+                                            <SelectItem value="pago_cash">Pago en Efectivo</SelectItem>
                                         </SelectContent>
                                     </Select>
                                     {errors.compra && <InputError message={errors.compra[0]} />}
                                 </div>
 
+                                {/* Solo mostrar si es pago_cash */}
                                 {data.compra === 'pago_cash' && (
                                     <>
                                         <Separator />
-
-                                        <div className="grid w-full items-center gap-1.5">
-                                            <Label htmlFor="cliente_id">Cliente (Opcional)</Label>
-                                            <Select
-                                                name="cliente_id"
-                                                value={data.cliente_id ? data.cliente_id.toString() : ''}
-                                                onValueChange={(value) => setData('cliente_id', value ? parseInt(value) : null)}
-                                            >
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Seleccione cliente" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {clientes.map((cliente) => (
-                                                        <SelectItem key={cliente.id} value={cliente.id.toString()}>
-                                                            {cliente.nombre_cliente}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            {errors.cliente_id && <InputError message={errors.cliente_id[0]} />}
-                                        </div>
 
                                         <div className="space-y-3">
                                             <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                                 Seleccione las cuentas y el monto a usar
                                             </h3>
 
+                                            {/* Lista de cuentas con monto */}
                                             {cuentas.map((cuenta) => {
+                                                const index = data.pagos?.findIndex((pago) => pago.cuenta_id === cuenta.id);
+                                                const pago = data.pagos?.[index] || null;
+
                                                 return (
                                                     <div key={cuenta.id} className="flex items-center gap-3">
                                                         <div className="flex-1">
@@ -494,25 +468,38 @@ export default function ComprarPage() {
                                                                 min="0.01"
                                                                 step="0.01"
                                                                 placeholder="Monto"
+                                                                value={pago?.monto ?? ''}
                                                                 onChange={(e) => {
                                                                     const monto = parseFloat(e.target.value) || 0;
-                                                                    const updatedPagos = [...data.pagos];
-                                                                    const idx = updatedPagos.findIndex((p) => p.cuenta_id === cuenta.id);
-
-                                                                    if (idx > -1) {
-                                                                        updatedPagos[idx].monto = monto;
+                                                                    if (!data.pagos) {
+                                                                        setData('pagos', [{ cuenta_id: cuenta.id, monto }]);
                                                                     } else {
-                                                                        updatedPagos.push({ cuenta_id: cuenta.id, monto });
-                                                                    }
+                                                                        const updatedPagos = [...data.pagos];
+                                                                        const idx = updatedPagos.findIndex((p) => p.cuenta_id === cuenta.id);
 
-                                                                    setData('pagos', updatedPagos);
+                                                                        if (idx > -1) {
+                                                                            updatedPagos[idx].monto = monto;
+                                                                        } else {
+                                                                            updatedPagos.push({ cuenta_id: cuenta.id, monto });
+                                                                        }
+
+                                                                        setData('pagos', updatedPagos);
+                                                                    }
                                                                 }}
                                                             />
                                                         </div>
                                                     </div>
                                                 );
                                             })}
+
+                                            {/* Mostrar mensaje de error si hay */}
                                             {errors.pagos && <InputError message={errors.pagos[0]} />}
+                                        </div>
+
+                                        {/* Total acumulado */}
+                                        <div className="mt-2 text-right text-sm text-gray-600 dark:text-gray-400">
+                                            Total pagado: ${data.pagos?.reduce((acc, pago) => acc + pago.monto, 0).toFixed(2) || '0.00'} / $
+                                            {parseFloat(calcularTotal()).toFixed(2)}
                                         </div>
                                     </>
                                 )}
@@ -520,7 +507,27 @@ export default function ComprarPage() {
 
                             <AlertDialogFooter>
                                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <Button type="button" onClick={handleSubmit} disabled={processing} className="bg-green-600 hover:bg-green-700">
+                                <Button
+                                    type="button"
+                                    onClick={() => {
+                                        setData('productos', productos);
+                                        post('/comprar', {
+                                            preserveScroll: true,
+                                            onSuccess: () => {
+                                                setProductos([]);
+                                                setTempFormData({
+                                                    producto: '',
+                                                    categoria: '',
+                                                    codigo: '',
+                                                    cantidad: 0,
+                                                    precio: 0,
+                                                });
+                                            },
+                                        });
+                                    }}
+                                    disabled={processing}
+                                    className="bg-green-600 hover:bg-green-700"
+                                >
                                     {processing ? 'Registrando...' : 'Proceder Compra'}
                                 </Button>
                             </AlertDialogFooter>
@@ -543,7 +550,6 @@ export default function ComprarPage() {
                         </Tooltip>
                     </TooltipProvider>
                 </div>
-                <Toaster position="top-center" />
             </div>
         </AppLayout>
     );
