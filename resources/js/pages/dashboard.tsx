@@ -235,7 +235,7 @@ export default function Dashboard({ tasa }: { tasa: { tasa_cambio: number } }) {
                                     </TableCell>
                                     <Dialog>
                                         <DialogTrigger asChild>
-                                            <TableCell className="hover:bg-sidebar-accent cursor-pointer text-center text-emerald-400 hover:text-white">
+                                            <TableCell className="dark:hover:bg-sidebar-accent cursor-pointer text-center font-bold text-emerald-950 hover:bg-emerald-800 hover:text-white dark:text-emerald-400">
                                                 $ {tasa.tasa_cambio}
                                             </TableCell>
                                         </DialogTrigger>
@@ -261,7 +261,7 @@ export default function Dashboard({ tasa }: { tasa: { tasa_cambio: number } }) {
                                             </div>
                                             <DialogFooter>
                                                 <DialogClose asChild>
-                                                    <Button className="cursor-pointer" variant="outline">
+                                                    <Button className="cursor-pointer" variant="secondary">
                                                         Cancelar
                                                     </Button>
                                                 </DialogClose>
