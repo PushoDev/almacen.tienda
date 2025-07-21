@@ -7,6 +7,7 @@ use App\Models\AlmacenProducto;
 use App\Models\Categoria;
 use App\Models\Cliente;
 use App\Models\Compra;
+use App\Models\CompraPago;
 use App\Models\Cuenta;
 use App\Models\Producto;
 use App\Models\Proveedor;
@@ -15,24 +16,41 @@ use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Illuminate\Validation\Rule;
 
-
 class CompraController extends Controller
 {
+    /**
+     * Obtener lista de almacenes (id, nombre_almacen)
+     */
     public function getAlmacen()
     {
-        return response()->json(Almacen::select('id', 'nombre_almacen')->get());
+        return response()->json(
+            Almacen::select('id', 'nombre_almacen')->get()
+        );
     }
 
+    /**
+     * Obtener lista de proveedores (id, nombre_proveedor)
+     */
     public function getProveedor()
     {
-        return response()->json(Proveedor::select('id', 'nombre_proveedor')->get());
+        return response()->json(
+            Proveedor::select('id', 'nombre_proveedor')->get()
+        );
     }
 
+    /**
+     * Obtener lista de categorías (id, nombre_categoria)
+     */
     public function getCategorias()
     {
-        return response()->json(Categoria::select('id', 'nombre_categoria')->get());
+        return response()->json(
+            Categoria::select('id', 'nombre_categoria')->get()
+        );
     }
 
+    /**
+     * Obtener clientes físicos con su deuda
+     */
     public function getClientesFisicos()
     {
         return response()->json(
@@ -42,6 +60,9 @@ class CompraController extends Controller
         );
     }
 
+    /**
+     * Obtener cuentas válidas para pago (permanentes/temporales en USD/EUR)
+     */
     public function getCuentas()
     {
         return response()->json(
@@ -52,6 +73,9 @@ class CompraController extends Controller
         );
     }
 
+    /**
+     * Mostrar vista principal de compras
+     */
     public function index()
     {
         $cuentas = Cuenta::all();
@@ -60,13 +84,22 @@ class CompraController extends Controller
         $categorias = Categoria::all();
         $clientes = Cliente::all();
 
-        return Inertia::render('Comprar/Index', compact('cuentas', 'almacenes', 'proveedores', 'categorias', 'clientes'));
+        return Inertia::render('Comprar/Index', compact(
+            'cuentas',
+            'almacenes',
+            'proveedores',
+            'categorias',
+            'clientes'
+        ));
     }
 
+    /**
+     * Registrar una nueva compra
+     */
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'compra' => 'required|in:deuda_proveedor,pago_cash',
+            'compra' => 'required|in:deuda_proveedor,pago_cash,pago_cliente_fisico',
             'almacen' => 'required|string|max:255',
             'proveedor' => 'required|string|max:255',
             'fecha' => 'required|date',
@@ -92,6 +125,10 @@ class CompraController extends Controller
             ],
             'pagos.*.cuenta_id' => 'required|exists:cuentas,id',
             'pagos.*.monto' => 'required|numeric|min:0.01',
+            'cliente_id' => [
+                Rule::requiredIf(fn() => $request->input('compra') === 'pago_cliente_fisico'),
+                'exists:clientes,id',
+            ],
         ]);
 
         DB::beginTransaction();
@@ -101,10 +138,10 @@ class CompraController extends Controller
             $almacen = Almacen::firstOrCreate(['nombre_almacen' => $validated['almacen']]);
             $proveedor = Proveedor::firstOrCreate(['nombre_proveedor' => $validated['proveedor']]);
 
-            // Calcular total
+            // Calcular total de la compra
             $total = collect($validated['productos'])->sum(fn($p) => $p['cantidad'] * $p['precio']);
 
-            // Preparar datos de compra
+            // Datos base de la compra
             $compraData = [
                 'almacen_id' => $almacen->id,
                 'proveedor_id' => $proveedor->id,
@@ -113,7 +150,7 @@ class CompraController extends Controller
                 'tipo_compra' => $validated['compra'],
             ];
 
-            // Lógica según tipo de compra
+            // --- LÓGICA POR TIPO DE COMPRA ---
             if ($validated['compra'] === 'deuda_proveedor') {
                 $nombreCuentaTemporal = "Deuda - {$proveedor->nombre_proveedor}";
 
@@ -121,21 +158,17 @@ class CompraController extends Controller
                     ['nombre_cuenta' => $nombreCuentaTemporal],
                     [
                         'tipo_cuenta' => 'deudas',
-                        'saldo_cuenta' => $total,
+                        'saldo_cuenta' => 0,
                         'tipo_moneda' => 'USD',
                         'notas_cuenta' => "Deuda Pendiente: {$proveedor->nombre_proveedor}",
                     ]
                 );
 
-                if (!$cuentaDeuda->wasRecentlyCreated) {
-                    $cuentaDeuda->saldo_cuenta += $total;
-                    $cuentaDeuda->save();
-                }
+                $cuentaDeuda->saldo_cuenta += $total;
+                $cuentaDeuda->save();
 
                 $compraData['cuenta_id'] = $cuentaDeuda->id;
-            } else {
-                // Pago múltiple: validar y restar de varias cuentas
-
+            } elseif ($validated['compra'] === 'pago_cash') {
                 $sumaPagos = collect($validated['pagos'])->sum('monto');
 
                 if ($sumaPagos < $total) {
@@ -144,23 +177,38 @@ class CompraController extends Controller
 
                 foreach ($validated['pagos'] as $pago) {
                     $cuenta = Cuenta::findOrFail($pago['cuenta_id']);
-
                     if ($cuenta->saldo_cuenta < $pago['monto']) {
                         throw new \Exception("Saldo insuficiente en la cuenta: {$cuenta->nombre_cuenta}");
                     }
-
                     $cuenta->saldo_cuenta -= $pago['monto'];
                     $cuenta->save();
                 }
 
-                // Usamos la primera cuenta como referencia
                 $compraData['cuenta_id'] = $validated['pagos'][0]['cuenta_id'];
+            } elseif ($validated['compra'] === 'pago_cliente_fisico') {
+                $cliente = Cliente::findOrFail($validated['cliente_id']);
+
+                // Incrementar deuda del cliente (él nos debe más)
+                $cliente->deuda_pago_cliente += $total;
+                $cliente->save();
+
+                // Asociar cliente a la compra
+                $compraData['cliente_id'] = $cliente->id;
             }
 
-            // Crear compra
+            // Crear la compra
             $compra = Compra::create($compraData);
 
-            // Procesar productos
+            // Registrar pago en compra_pago si fue con cliente físico
+            if ($validated['compra'] === 'pago_cliente_fisico') {
+                CompraPago::create([
+                    'compra_id' => $compra->id,
+                    'cliente_id' => $cliente->id,
+                    'monto' => $total,
+                ]);
+            }
+
+            // Procesar cada producto
             foreach ($validated['productos'] as $item) {
                 $categoria = Categoria::firstOrCreate(['nombre_categoria' => $item['categoria']]);
                 $producto = Producto::firstOrCreate(
@@ -169,7 +217,7 @@ class CompraController extends Controller
                         'nombre_producto' => $item['producto'],
                         'categoria_id' => $categoria->id,
                         'precio_compra_producto' => $item['precio'],
-                        'cantidad_producto' => $item['cantidad'],
+                        'cantidad_producto' => 0, // Se actualiza por almacén
                     ]
                 );
 
@@ -179,7 +227,7 @@ class CompraController extends Controller
                     'precio' => $item['precio'],
                 ]);
 
-                // Actualizar inventario
+                // Actualizar inventario en el almacén
                 AlmacenProducto::updateOrCreate(
                     ['almacen_id' => $almacen->id, 'producto_id' => $producto->id],
                     ['cantidad' => DB::raw("cantidad + {$item['cantidad']}")]
@@ -188,33 +236,29 @@ class CompraController extends Controller
 
             DB::commit();
 
+            // Redirigir al dashboard
             return Inertia::location(route('dashboard'));
         } catch (\Exception $e) {
             DB::rollBack();
 
+            // Devolver errores a la vista
             return Inertia::render('Comprar/Index', [
                 'errors' => ['_error' => 'Error al procesar la compra: ' . $e->getMessage()]
             ])->toResponse($request)->setStatusCode(500);
         }
     }
 
-
-
     /**
-     * Mostrar los productos de un almacén.
+     * Mostrar productos asociados a un almacén
      */
     public function getProductos($id)
     {
-        // Cargar el almacén con sus compras y los productos asociados
         $almacen = Almacen::with('compras.productos')->find($id);
 
         if (!$almacen) {
-            return response()->json([
-                'message' => 'Almacén no encontrado'
-            ], 404);
+            return response()->json(['message' => 'Almacén no encontrado'], 404);
         }
 
-        // Coleccionar todos los productos con su cantidad y precio por compra
         $productos = [];
 
         foreach ($almacen->compras as $compra) {
@@ -223,17 +267,17 @@ class CompraController extends Controller
                     'compra_id' => $compra->id,
                     'producto_id' => $producto->id,
                     'nombre_producto' => $producto->nombre_producto,
-                    'marca_producto' => $producto->marca_producto,
+                    'marca_producto' => $producto->marca_producto ?? null,
                     'cantidad' => $producto->pivot->cantidad,
                     'precio' => $producto->pivot->precio,
-                    'fecha_compra' => $compra->fecha_compra
+                    'fecha_compra' => $compra->fecha_compra,
                 ];
             }
         }
 
         return response()->json([
             'almacen' => $almacen,
-            'productos' => $productos
+            'productos' => $productos,
         ]);
     }
 }

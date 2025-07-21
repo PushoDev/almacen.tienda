@@ -19,7 +19,7 @@ return new class extends Migration
             $table->unsignedBigInteger('cliente_id')->nullable();
             $table->date('fecha_compra');
             $table->decimal('total_compra', 10, 2)->default(0);
-            $table->string('tipo_compra'); // NUEVO: 'deuda_proveedor' o 'pago_cash'
+            $table->string('tipo_compra'); // NUEVO: 'deuda_proveedor' , 'pago_cash' 0 'pago_cliente_fisico'
             $table->timestamps();
 
             $table->foreign('almacen_id')->references('id')->on('almacens')->onDelete('cascade');

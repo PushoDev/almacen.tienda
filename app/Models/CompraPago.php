@@ -14,22 +14,23 @@ class CompraPago extends Model
         'monto',
     ];
 
+
     /**
      * Relaciones
      */
 
     public function compra()
     {
-        return $this->belongsTo(\App\Models\Compra::class);
+        return $this->belongsTo(Compra::class);
     }
 
     public function cuenta()
     {
-        return $this->belongsTo(\App\Models\Cuenta::class);
+        return $this->belongsTo(Cuenta::class);
     }
 
     public function cliente()
     {
-        return $this->belongsTo(\App\Models\Cliente::class);
+        return $this->belongsTo(Cliente::class);
     }
 }

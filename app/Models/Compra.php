@@ -55,4 +55,9 @@ class Compra extends Model
         return $this->belongsToMany(Producto::class, 'compra_producto')
             ->withPivot('cantidad', 'precio');
     }
+
+    public function pagos()
+    {
+        return $this->hasMany(CompraPago::class);
+    }
 }

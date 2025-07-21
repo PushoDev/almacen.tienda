@@ -22,6 +22,11 @@ class Cliente extends Model
     // Desactivar marcas de tiempo si no son necesarias (opcional)
     public $timestamps = true;
 
+    // Para forzar decimal
+    protected $casts = [
+        'deuda_pago_cliente' => 'decimal:2',
+    ];
+
     public function compras()
     {
         return $this->hasMany(Compra::class);
