@@ -175,9 +175,16 @@ export interface DeudasProveedoresProps {
     updated_at?: string;
 }
 
+// Para deuda con el cliente
+export interface DeudaClienteProps {
+    id: number;
+    nombre_cliente: string;
+    deuda_pago_cliente: number;
+}
+
 // Interface para la solicitud de compra
 export interface CompraRequest {
-    compra: 'deuda_proveedor' | 'pago_cash';
+    compra: 'deuda_proveedor' | 'pago_cash' | 'pago_cliente_fisico';
     cuenta_id: number;
     almacen: string;
     proveedor: string;
@@ -188,7 +195,7 @@ export interface CompraRequest {
 // Interface para respuesta de compra (si es necesario)
 export interface CompraResponse {
     id: number;
-    tipo_compra: 'deuda_proveedor' | 'pago_cash';
+    tipo_compra: 'deuda_proveedor' | 'pago_cash' | 'pago_cliente_fisico';
     cuenta: {
         id: number;
         saldo: number;
@@ -199,6 +206,7 @@ export interface CompraResponse {
     fecha: string;
     total: number;
     productos: ProductoComprarProps[];
+    cliente_id?: number | string;
 }
 
 // Interface Productos mas comprados

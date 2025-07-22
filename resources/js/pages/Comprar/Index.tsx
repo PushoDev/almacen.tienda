@@ -314,8 +314,8 @@ export default function ComprarPage() {
                                 <Input
                                     type="number"
                                     name="precio"
-                                    placeholder="Precio"
-                                    value={tempFormData.precio}
+                                    placeholder="$ 0.00"
+                                    value={tempFormData.precio || ''}
                                     onChange={handleTempInputChange}
                                 />
                                 {errors.precio && <InputError message={errors.precio[0]} />}
@@ -327,8 +327,8 @@ export default function ComprarPage() {
                                 <Input
                                     type="number"
                                     name="cantidad"
-                                    placeholder="Cantidad"
-                                    value={tempFormData.cantidad}
+                                    placeholder="0"
+                                    value={tempFormData.cantidad || ''}
                                     onChange={handleTempInputChange}
                                 />
                                 {errors.cantidad && <InputError message={errors.cantidad[0]} />}
