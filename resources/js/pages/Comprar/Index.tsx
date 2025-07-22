@@ -431,8 +431,8 @@ export default function ComprarPage() {
                                             <SelectValue placeholder="Seleccione tipo de compra" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="deuda_proveedor">Deuda con Proveedor</SelectItem>
-                                            <SelectItem value="pago_cash">Pago en Efectivo</SelectItem>
+                                            <SelectItem value="deuda_proveedor">Generar Deuda</SelectItem>
+                                            <SelectItem value="pago_cash">Pagar Ahora</SelectItem>
                                         </SelectContent>
                                     </Select>
                                     {errors.compra && <InputError message={errors.compra[0]} />}

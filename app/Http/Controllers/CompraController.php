@@ -129,7 +129,7 @@ class CompraController extends Controller
                         'notas_cuenta' => "Deuda con: {$proveedor->nombre_proveedor}",
                     ]
                 );
-                $cuentaDeuda->saldo_cuenta += $total;
+                $cuentaDeuda->saldo_cuenta += $total; // Aumentar la deuda
                 $cuentaDeuda->save();
                 $compraData['cuenta_id'] = $cuentaDeuda->id;
             }
@@ -146,7 +146,7 @@ class CompraController extends Controller
                     if ($cuenta->saldo_cuenta < $pago['monto']) {
                         throw new \Exception("Saldo insuficiente en la cuenta: {$cuenta->nombre_cuenta}");
                     }
-                    $cuenta->saldo_cuenta -= $pago['monto'];
+                    $cuenta->saldo_cuenta -= $pago['monto']; // Disminuir el saldo
                     $cuenta->save();
                 }
 
@@ -157,15 +157,15 @@ class CompraController extends Controller
             elseif ($validated['compra'] === 'pago_cliente_fisico') {
                 $cliente = Cliente::findOrFail($validated['cliente_id']);
 
-                // La empresa le debe al cliente por ayudar a gestionar la compra
-                $cliente->deuda_pago_cliente += $total;
-                $cliente->save();
+                // Actualizar la deuda del cliente
+                $cliente->deuda_pago_cliente += $total; // Incrementar la deuda
+                $cliente->save(); // Guardar cambios en el cliente
 
-                $compraData['cliente_id'] = $cliente->id;
+                $compraData['cliente_id'] = $cliente->id; // Asignar ID del cliente a los datos de compra
 
                 // Registrar el pago/compromiso con el cliente
                 CompraPago::create([
-                    'compra_id' => $compraData['compra_id'] ?? null, // Se asignará después
+                    'compra_id' => null, // Se asignará después
                     'cliente_id' => $cliente->id,
                     'monto' => $total,
                 ]);
@@ -174,9 +174,12 @@ class CompraController extends Controller
             // Crear la compra
             $compra = Compra::create($compraData);
 
-            // Si es pago_cliente_fisico, actualizamos el ID en CompraPago
+            // Si es pago_cliente_fisico, actualizar el ID en CompraPago
             if ($validated['compra'] === 'pago_cliente_fisico') {
-                $compra->pagos()->update(['compra_id' => $compra->id]);
+                // Actualizar el registro de CompraPago con el ID de la compra
+                CompraPago::where('cliente_id', $compraData['cliente_id'])
+                    ->where('monto', $total)
+                    ->update(['compra_id' => $compra->id]);
             }
 
             // Registrar productos
