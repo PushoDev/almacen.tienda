@@ -108,8 +108,9 @@ export default function CreateClientePage() {
                         <div className="space-y-4">
                             {/* Deuda Inicial */}
                             <div>
-                                <Label htmlFor="deuda_pago_cliente">Deuda Inicial (MXN)</Label>
+                                <Label htmlFor="deuda_pago_cliente">Deuda Inicial</Label>
                                 <Input
+                                    disabled
                                     id="deuda_pago_cliente"
                                     type="number"
                                     step="0.00000001"

@@ -125,6 +125,7 @@ export default function EditClientePage({ cliente }: { cliente: ClienteProps }) 
                                     <span className="ml-2 text-sm text-gray-500">({formatearMoneda(cliente.deuda_pago_cliente)})</span>
                                 </Label>
                                 <Input
+                                    disabled
                                     id="deuda_pago_cliente"
                                     type="number"
                                     step="0.00000001"
