@@ -98,10 +98,10 @@ export default function CreateCuentasPage() {
                                         type="number"
                                         step="0.00000001" // Para manejar decimales con precisión
                                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                        value={data.saldo_cuenta}
+                                        value={data.saldo_cuenta || ''}
                                         onChange={(e) => setData('saldo_cuenta', parseFloat(e.target.value))}
                                         autoComplete="saldo_cuenta"
-                                        placeholder="Saldo de la Cuenta"
+                                        placeholder="$ 0.00"
                                     />
                                     <InputError className="mt-2" message={errors.saldo_cuenta} />
                                 </div>

@@ -22,15 +22,7 @@ import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, Tabl
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
-import {
-    AlmacenProps,
-    CategoriasProps,
-    CuentaNegocioProps,
-    DeudaClienteProps,
-    ProductoComprarProps,
-    ProveedorProps,
-    type BreadcrumbItem,
-} from '@/types';
+import { AlmacenProps, CategoriasProps, CuentaNegocioProps, ProductoComprarProps, ProveedorProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { format } from 'date-fns';
 import { BookCheck, CalendarIcon, Edit2, PlusIcon, ShoppingBasket, Trash2Icon } from 'lucide-react';
@@ -64,7 +56,6 @@ export default function ComprarPage() {
     const [cuentas, setCuentas] = useState<CuentaNegocioProps[]>([]);
     const [date, setDate] = useState<Date | undefined>(new Date());
     const [editingProductId, setEditingProductId] = useState<number | null>(null);
-    const [clientes, setClientes] = useState<DeudaClienteProps[]>([]);
 
     // Estado temporal para campos del producto
     const [tempFormData, setTempFormData] = useState<Omit<ProductoComprarProps, 'id'>>({
@@ -85,42 +76,29 @@ export default function ComprarPage() {
         almacen: '',
         proveedor: '',
         fecha: date ? date.toISOString().split('T')[0] : '',
-        cliente_id: undefined as string | number | undefined,
     });
 
     // Cargar datos iniciales
     useEffect(() => {
-        // Almacenes
         fetch('/compras/almacenes')
             .then((res) => res.json())
             .then((data) => setAlmacens(data))
             .catch((err) => console.error(err));
-        // Proveedores
+
         fetch('/compras/proveedores')
             .then((res) => res.json())
             .then((data) => setProveedors(data))
             .catch((err) => console.error(err));
-        // Categorias
+
         fetch('/compras/categorias')
             .then((res) => res.json())
-            .then((data) => {
-                console.log('Categorias: ', data);
-                setCategorias(data);
-            })
+            .then((data) => setCategorias(data))
             .catch((err) => console.error(err));
-        // Cuenats
+
         fetch('/compras/cuentas/pago')
             .then((res) => res.json())
             .then((data) => setCuentas(data))
             .catch((err) => console.error(err));
-        // Clientes fisiscos
-        fetch('/compras/clientes/fisicos')
-            .then((res) => res.json())
-            .then((data) => {
-                console.log('Clientes físicos cargados:', data);
-                setClientes(data);
-            })
-            .catch((err) => console.error('Error fetching clientes:', err));
     }, []);
 
     // Manejar cambios en los campos temporales
@@ -447,15 +425,14 @@ export default function ComprarPage() {
                                     <Select
                                         name="compra"
                                         value={data.compra}
-                                        onValueChange={(value) => setData('compra', value as 'deuda_proveedor' | 'pago_cash' | 'pago_cliente_fisico')}
+                                        onValueChange={(value) => setData('compra', value as 'deuda_proveedor' | 'pago_cash')}
                                     >
                                         <SelectTrigger className="w-full">
                                             <SelectValue placeholder="Seleccione tipo de compra" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="deuda_proveedor">Generar Deuda</SelectItem>
+                                            <SelectItem value="deuda_proveedor">Generar Deuda a Proveedor</SelectItem>
                                             <SelectItem value="pago_cash">Pagar Ahora</SelectItem>
-                                            <SelectItem value="pago_cliente_fisico">Mediante un Cliente</SelectItem>
                                         </SelectContent>
                                     </Select>
                                     {errors.compra && <InputError message={errors.compra[0]} />}
@@ -525,31 +502,6 @@ export default function ComprarPage() {
                                             {parseFloat(calcularTotal()).toFixed(2)}
                                         </div>
                                     </>
-                                )}
-
-                                {/* --- Solo mostrar si es mediante */}
-                                {data.compra === 'pago_cliente_fisico' && (
-                                    <div className="grid w-full items-center gap-1.5">
-                                        <Label htmlFor="cliente_id">Cliente Físico</Label>
-                                        <Select
-                                            name="cliente_id"
-                                            value={data.cliente_id ? String(data.cliente_id) : ''}
-                                            onValueChange={(value) => setData('cliente_id', value ? Number(value) : undefined)}
-                                        >
-                                            <SelectTrigger className="w-full">
-                                                <SelectValue placeholder="Seleccione Cliente" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {/* Asegúrate de que 'clientes' esté cargado en el estado del componente */}
-                                                {clientes.map((cliente) => (
-                                                    <SelectItem key={cliente.id} value={String(cliente.id)}>
-                                                        {cliente.nombre_cliente}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        {errors.cliente_id && <InputError message={errors.cliente_id[0]} />}
-                                    </div>
                                 )}
                             </div>
 
