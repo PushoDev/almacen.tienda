@@ -457,49 +457,68 @@ export default function ComprarPage() {
 
                                         <div className="space-y-4">
                                             <div className="space-y-3">
-                                                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                    Pagar con Clientes (Opcional)
-                                                </h3>
+                                                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300"></h3>
 
-                                                {clientes.map((cliente) => {
-                                                    const index = data.pagos_clientes?.findIndex((pago) => pago.cliente_id === cliente.id);
-                                                    const pago = data.pagos_clientes?.[index] || null;
+                                                <Label htmlFor="cliente">Seleccione Clientes (Opcional)</Label>
+                                                <Select
+                                                    name="cliente"
+                                                    value={data.cliente}
+                                                    onValueChange={(value) => {
+                                                        setData('cliente', value);
+                                                        setData('montoVisible', value !== ''); // Muestra el input solo si hay un cliente seleccionado
+                                                    }}
+                                                >
+                                                    <SelectTrigger className="mt-2 w-full">
+                                                        <SelectValue placeholder="Seleccione Cliente" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {clientes.map((cliente) => (
+                                                            <SelectItem key={cliente.id} value={cliente.nombre_cliente}>
+                                                                {cliente.nombre_cliente}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                {errors.clientes && <InputError message={errors.clientes} />}
 
-                                                    return (
-                                                        <div key={cliente.id} className="flex items-center gap-3">
-                                                            <div className="flex-1">
-                                                                <span className="block font-medium">{cliente.nombre_cliente}</span>
-                                                            </div>
-
-                                                            <div className="flex-1">
-                                                                <Input
-                                                                    type="number"
-                                                                    min="0.01"
-                                                                    step="0.01"
-                                                                    placeholder="Monto"
-                                                                    value={pago?.monto ?? ''}
-                                                                    onChange={(e) => {
-                                                                        const monto = parseFloat(e.target.value) || 0;
-                                                                        if (!data.pagos_clientes) {
-                                                                            setData('pagos_clientes', [{ cliente_id: cliente.id, monto }]);
-                                                                        } else {
-                                                                            const updatedPagos = [...data.pagos_clientes];
-                                                                            const idx = updatedPagos.findIndex((p) => p.cliente_id === cliente.id);
-
-                                                                            if (idx > -1) {
-                                                                                updatedPagos[idx].monto = monto;
-                                                                            } else {
-                                                                                updatedPagos.push({ cliente_id: cliente.id, monto });
-                                                                            }
-
-                                                                            setData('pagos_clientes', updatedPagos);
-                                                                        }
-                                                                    }}
-                                                                />
-                                                            </div>
+                                                {data.cliente && ( // Solo muestra el nombre y el input si hay un cliente seleccionado
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="flex-1">
+                                                            <span className="block font-medium">{data.cliente}</span>
                                                         </div>
-                                                    );
-                                                })}
+                                                        <div className="flex-1">
+                                                            <Input
+                                                                type="number"
+                                                                min="0.01"
+                                                                step="0.01"
+                                                                placeholder="Monto"
+                                                                value={
+                                                                    data.pagos_clientes?.find(
+                                                                        (p) =>
+                                                                            p.cliente_id ===
+                                                                            clientes.find((c) => c.nombre_cliente === data.cliente)?.id,
+                                                                    )?.monto ?? ''
+                                                                }
+                                                                onChange={(e) => {
+                                                                    const monto = parseFloat(e.target.value) || 0;
+                                                                    const clienteId = clientes.find((c) => c.nombre_cliente === data.cliente)?.id;
+
+                                                                    // Actualizar el monto en el estado de pagos_clientes
+                                                                    const updatedPagos = [...(data.pagos_clientes || [])];
+                                                                    const idx = updatedPagos.findIndex((p) => p.cliente_id === clienteId);
+
+                                                                    if (idx > -1) {
+                                                                        updatedPagos[idx].monto = monto;
+                                                                    } else {
+                                                                        updatedPagos.push({ cliente_id: clienteId, monto });
+                                                                    }
+
+                                                                    setData('pagos_clientes', updatedPagos);
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
 
                                             <Separator />
