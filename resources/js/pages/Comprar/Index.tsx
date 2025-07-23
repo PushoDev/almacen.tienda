@@ -455,39 +455,58 @@ export default function ComprarPage() {
                                     <>
                                         <Separator />
 
-                                        {/* Tabs para seleccionar tipo de pago */}
-                                        <div className="flex space-x-2">
-                                            <Button
-                                                variant={activeTab === 'cuentas' ? 'default' : 'outline'}
-                                                onClick={() => setActiveTab('cuentas')}
-                                                className="flex-1"
-                                            >
-                                                Pagar con Cuentas
-                                            </Button>
-                                            <Button
-                                                variant={activeTab === 'clientes' ? 'default' : 'outline'}
-                                                onClick={() => setActiveTab('clientes')}
-                                                className="flex-1"
-                                            >
-                                                Pagar con Clientes
-                                            </Button>
-                                            <Button
-                                                variant={activeTab === 'combinado' ? 'default' : 'outline'}
-                                                onClick={() => setActiveTab('combinado')}
-                                                className="flex-1"
-                                            >
-                                                Combinado
-                                            </Button>
-                                        </div>
-
-                                        {/* Contenido según la pestaña activa */}
-                                        {activeTab === 'cuentas' && (
+                                        <div className="space-y-4">
                                             <div className="space-y-3">
                                                 <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                    Seleccione las cuentas y el monto a usar
+                                                    Pagar con Clientes (Opcional)
                                                 </h3>
 
-                                                {/* Lista de cuentas con monto */}
+                                                {clientes.map((cliente) => {
+                                                    const index = data.pagos_clientes?.findIndex((pago) => pago.cliente_id === cliente.id);
+                                                    const pago = data.pagos_clientes?.[index] || null;
+
+                                                    return (
+                                                        <div key={cliente.id} className="flex items-center gap-3">
+                                                            <div className="flex-1">
+                                                                <span className="block font-medium">{cliente.nombre_cliente}</span>
+                                                            </div>
+
+                                                            <div className="flex-1">
+                                                                <Input
+                                                                    type="number"
+                                                                    min="0.01"
+                                                                    step="0.01"
+                                                                    placeholder="Monto"
+                                                                    value={pago?.monto ?? ''}
+                                                                    onChange={(e) => {
+                                                                        const monto = parseFloat(e.target.value) || 0;
+                                                                        if (!data.pagos_clientes) {
+                                                                            setData('pagos_clientes', [{ cliente_id: cliente.id, monto }]);
+                                                                        } else {
+                                                                            const updatedPagos = [...data.pagos_clientes];
+                                                                            const idx = updatedPagos.findIndex((p) => p.cliente_id === cliente.id);
+
+                                                                            if (idx > -1) {
+                                                                                updatedPagos[idx].monto = monto;
+                                                                            } else {
+                                                                                updatedPagos.push({ cliente_id: cliente.id, monto });
+                                                                            }
+
+                                                                            setData('pagos_clientes', updatedPagos);
+                                                                        }
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            <Separator />
+
+                                            <div className="space-y-3">
+                                                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Pagar con Cuentas</h3>
+
                                                 {cuentas.map((cuenta) => {
                                                     const index = data.pagos?.findIndex((pago) => pago.cuenta_id === cuenta.id);
                                                     const pago = data.pagos?.[index] || null;
@@ -524,172 +543,14 @@ export default function ComprarPage() {
 
                                                                             setData('pagos', updatedPagos);
                                                                         }
-
-                                                                        // Limpiar pagos de clientes cuando se usa solo cuentas
-                                                                        setData('pagos_clientes', []);
                                                                     }}
                                                                 />
                                                             </div>
                                                         </div>
                                                     );
                                                 })}
-
-                                                {errors.pagos && <InputError message={errors.pagos[0]} />}
                                             </div>
-                                        )}
-
-                                        {activeTab === 'clientes' && (
-                                            <div className="space-y-3">
-                                                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                    Seleccione los clientes y el monto a usar
-                                                </h3>
-
-                                                {/* Lista de clientes con monto */}
-                                                {clientes.map((cliente) => {
-                                                    const index = data.pagos_clientes?.findIndex((pago) => pago.cliente_id === cliente.id);
-                                                    const pago = data.pagos_clientes?.[index] || null;
-
-                                                    return (
-                                                        <div key={cliente.id} className="flex items-center gap-3">
-                                                            <div className="flex-1">
-                                                                <span className="block font-medium">{cliente.nombre_cliente}</span>
-                                                            </div>
-
-                                                            <div className="flex-1">
-                                                                <Input
-                                                                    type="number"
-                                                                    min="0.01"
-                                                                    step="0.01"
-                                                                    placeholder="Monto"
-                                                                    value={pago?.monto ?? ''}
-                                                                    onChange={(e) => {
-                                                                        const monto = parseFloat(e.target.value) || 0;
-                                                                        if (!data.pagos_clientes) {
-                                                                            setData('pagos_clientes', [{ cliente_id: cliente.id, monto }]);
-                                                                        } else {
-                                                                            const updatedPagos = [...data.pagos_clientes];
-                                                                            const idx = updatedPagos.findIndex((p) => p.cliente_id === cliente.id);
-
-                                                                            if (idx > -1) {
-                                                                                updatedPagos[idx].monto = monto;
-                                                                            } else {
-                                                                                updatedPagos.push({ cliente_id: cliente.id, monto });
-                                                                            }
-
-                                                                            setData('pagos_clientes', updatedPagos);
-                                                                        }
-
-                                                                        // Limpiar pagos de cuentas cuando se usa solo clientes
-                                                                        setData('pagos', []);
-                                                                    }}
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-
-                                                {errors.pagos_clientes && <InputError message={errors.pagos_clientes[0]} />}
-                                            </div>
-                                        )}
-
-                                        {activeTab === 'combinado' && (
-                                            <div className="space-y-4">
-                                                <div className="space-y-3">
-                                                    <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Pagar con Cuentas</h3>
-
-                                                    {cuentas.map((cuenta) => {
-                                                        const index = data.pagos?.findIndex((pago) => pago.cuenta_id === cuenta.id);
-                                                        const pago = data.pagos?.[index] || null;
-
-                                                        return (
-                                                            <div key={cuenta.id} className="flex items-center gap-3">
-                                                                <div className="flex-1">
-                                                                    <span className="block font-medium">{cuenta.nombre_cuenta}</span>
-                                                                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                                                                        Saldo: ${cuenta.saldo_cuenta.toFixed(2)}
-                                                                    </span>
-                                                                </div>
-
-                                                                <div className="flex-1">
-                                                                    <Input
-                                                                        type="number"
-                                                                        min="0.01"
-                                                                        step="0.01"
-                                                                        placeholder="Monto"
-                                                                        value={pago?.monto ?? ''}
-                                                                        onChange={(e) => {
-                                                                            const monto = parseFloat(e.target.value) || 0;
-                                                                            if (!data.pagos) {
-                                                                                setData('pagos', [{ cuenta_id: cuenta.id, monto }]);
-                                                                            } else {
-                                                                                const updatedPagos = [...data.pagos];
-                                                                                const idx = updatedPagos.findIndex((p) => p.cuenta_id === cuenta.id);
-
-                                                                                if (idx > -1) {
-                                                                                    updatedPagos[idx].monto = monto;
-                                                                                } else {
-                                                                                    updatedPagos.push({ cuenta_id: cuenta.id, monto });
-                                                                                }
-
-                                                                                setData('pagos', updatedPagos);
-                                                                            }
-                                                                        }}
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-
-                                                <Separator />
-
-                                                <div className="space-y-3">
-                                                    <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Pagar con Clientes</h3>
-
-                                                    {clientes.map((cliente) => {
-                                                        const index = data.pagos_clientes?.findIndex((pago) => pago.cliente_id === cliente.id);
-                                                        const pago = data.pagos_clientes?.[index] || null;
-
-                                                        return (
-                                                            <div key={cliente.id} className="flex items-center gap-3">
-                                                                <div className="flex-1">
-                                                                    <span className="block font-medium">{cliente.nombre_cliente}</span>
-                                                                </div>
-
-                                                                <div className="flex-1">
-                                                                    <Input
-                                                                        type="number"
-                                                                        min="0.01"
-                                                                        step="0.01"
-                                                                        placeholder="Monto"
-                                                                        value={pago?.monto ?? ''}
-                                                                        onChange={(e) => {
-                                                                            const monto = parseFloat(e.target.value) || 0;
-                                                                            if (!data.pagos_clientes) {
-                                                                                setData('pagos_clientes', [{ cliente_id: cliente.id, monto }]);
-                                                                            } else {
-                                                                                const updatedPagos = [...data.pagos_clientes];
-                                                                                const idx = updatedPagos.findIndex(
-                                                                                    (p) => p.cliente_id === cliente.id,
-                                                                                );
-
-                                                                                if (idx > -1) {
-                                                                                    updatedPagos[idx].monto = monto;
-                                                                                } else {
-                                                                                    updatedPagos.push({ cliente_id: cliente.id, monto });
-                                                                                }
-
-                                                                                setData('pagos_clientes', updatedPagos);
-                                                                            }
-                                                                        }}
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-                                        )}
+                                        </div>
 
                                         {/* Total acumulado y validación */}
                                         <div className="mt-2 space-y-2">
