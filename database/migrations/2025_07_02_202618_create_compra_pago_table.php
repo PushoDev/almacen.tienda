@@ -28,6 +28,8 @@ return new class extends Migration
             $table->unsignedBigInteger('cliente_id')->nullable();
             // Monto pagado desde esa cuenta
             $table->decimal('monto', 10, 2);
+            // Tipo de Pago
+            $table->string('tipo_pago')->nullable(); // 'cuenta' o 'cliente'
 
             // Claves foráneas
             $table->foreign('compra_id')->references('id')->on('compras')->onDelete('cascade');

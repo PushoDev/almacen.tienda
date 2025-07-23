@@ -12,6 +12,7 @@ class CompraPago extends Model
         'cuenta_id',
         'cliente_id',
         'monto',
+        'tipo_pago'
     ];
 
 

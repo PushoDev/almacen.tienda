@@ -27,6 +27,13 @@ class Cliente extends Model
         'deuda_pago_cliente' => 'decimal:2',
     ];
 
+    // Relación con compras donde el cliente participa en el pago
+    public function comprasComoPagador()
+    {
+        return $this->belongsToMany(Compra::class, 'compra_pagos')
+            ->withPivot('monto');
+    }
+
     public function compras()
     {
         return $this->hasMany(Compra::class);
