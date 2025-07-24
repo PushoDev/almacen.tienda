@@ -18,6 +18,7 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Toaster } from '@/components/ui/sonner';
 import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
@@ -27,6 +28,7 @@ import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { format } from 'date-fns';
 import { BookCheck, CalendarIcon, Edit2, PlusIcon, ShoppingBasket, Trash2Icon } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -56,7 +58,6 @@ export default function ComprarPage() {
     const [cuentas, setCuentas] = useState<CuentaNegocioProps[]>([]);
     const [date, setDate] = useState<Date | undefined>(new Date());
     const [editingProductId, setEditingProductId] = useState<number | null>(null);
-    // Agrega este estado después de los otros estados existentes
     const [clientes, setClientes] = useState<ClienteProps[]>([]);
     const [activeTab, setActiveTab] = useState<'cuentas' | 'clientes' | 'combinado'>('cuentas');
 
@@ -84,29 +85,28 @@ export default function ComprarPage() {
         productos: [] as ProductoComprarProps[],
     });
 
+    // Estados para autocompletar
+    const [searchProveedor, setSearchProveedor] = useState('');
+    const [searchAlmacen, setSearchAlmacen] = useState('');
+
     // Cargar datos iniciales
     useEffect(() => {
-        // Alamacenes destino de Compra
         fetch('/compras/almacenes')
             .then((res) => res.json())
             .then((data) => setAlmacens(data))
             .catch((err) => console.error(err));
-        // PRoveedores
         fetch('/compras/proveedores')
             .then((res) => res.json())
             .then((data) => setProveedors(data))
             .catch((err) => console.error(err));
-        // Categorias de los Productos
         fetch('/compras/categorias')
             .then((res) => res.json())
             .then((data) => setCategorias(data))
             .catch((err) => console.error(err));
-        // Cuentas a PAgar
         fetch('/compras/cuentas/pago')
             .then((res) => res.json())
             .then((data) => setCuentas(data))
             .catch((err) => console.error(err));
-        // Clientes
         fetch('/compras/clientes/fisicos')
             .then((res) => res.json())
             .then((data) => setClientes(data))
@@ -170,18 +170,21 @@ export default function ComprarPage() {
         return productos.reduce((total, p) => total + p.cantidad * p.precio, 0).toFixed(2);
     };
 
+    // Filtrar proveedores y almacenes
+    const filteredProvedors = proveedors.filter((proveedor) => proveedor.nombre_proveedor.toLowerCase().includes(searchProveedor.toLowerCase()));
+
+    const filteredAlmacens = almacens.filter((almacen) => almacen.nombre_almacen.toLowerCase().includes(searchAlmacen.toLowerCase()));
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Comprar" />
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
-                    {/* Contenido principal */}
                     <HeadingSmall
                         title="Opciones Generales del Sistema"
                         description="Comprar o adquirir nuevos productos para el negocio, antes de distribuir"
                     />
-                    {/* Ícono semitransparente */}
                     <ShoppingBasket
                         size={70}
                         color="#f59e0b"
@@ -231,11 +234,22 @@ export default function ComprarPage() {
                                             <SelectValue placeholder="Seleccione Proveedor" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {proveedors.map((proveedor) => (
-                                                <SelectItem key={proveedor.id} value={proveedor.nombre_proveedor}>
-                                                    {proveedor.nombre_proveedor}
-                                                </SelectItem>
-                                            ))}
+                                            <input
+                                                type="text"
+                                                className="mb-2 w-full rounded border border-gray-300 p-2"
+                                                placeholder="Buscar proveedor..."
+                                                value={searchProveedor}
+                                                onChange={(e) => setSearchProveedor(e.target.value)}
+                                            />
+                                            {filteredProvedors.length > 0 ? (
+                                                filteredProvedors.map((proveedor) => (
+                                                    <SelectItem key={proveedor.id} value={proveedor.nombre_proveedor}>
+                                                        {proveedor.nombre_proveedor}
+                                                    </SelectItem>
+                                                ))
+                                            ) : (
+                                                <SelectItem disabled>No hay proveedores disponibles</SelectItem>
+                                            )}
                                         </SelectContent>
                                     </Select>
                                     {errors.proveedor && <InputError message={errors.proveedor[0]} />}
@@ -249,11 +263,22 @@ export default function ComprarPage() {
                                             <SelectValue placeholder="Seleccione Almacén" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {almacens.map((almacen) => (
-                                                <SelectItem key={almacen.id} value={almacen.nombre_almacen}>
-                                                    {almacen.nombre_almacen}
-                                                </SelectItem>
-                                            ))}
+                                            <input
+                                                type="text"
+                                                className="mb-2 w-full rounded border border-gray-300 p-2"
+                                                placeholder="Buscar almacén..."
+                                                value={searchAlmacen}
+                                                onChange={(e) => setSearchAlmacen(e.target.value)}
+                                            />
+                                            {filteredAlmacens.length > 0 ? (
+                                                filteredAlmacens.map((almacen) => (
+                                                    <SelectItem key={almacen.id} value={almacen.nombre_almacen}>
+                                                        {almacen.nombre_almacen}
+                                                    </SelectItem>
+                                                ))
+                                            ) : (
+                                                <SelectItem disabled>No hay almacenes disponibles</SelectItem>
+                                            )}
                                         </SelectContent>
                                     </Select>
                                     {errors.almacen && <InputError message={errors.almacen[0]} />}
@@ -611,6 +636,7 @@ export default function ComprarPage() {
                                                     cantidad: 0,
                                                     precio: 0,
                                                 });
+                                                toast.success('Compra Realizada con Exito');
                                                 // Resetear tabs
                                                 setActiveTab('cuentas');
                                             },
@@ -641,6 +667,7 @@ export default function ComprarPage() {
                         </Tooltip>
                     </TooltipProvider>
                 </div>
+                <Toaster position="top-center" />
             </div>
         </AppLayout>
     );
