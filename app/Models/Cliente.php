@@ -27,6 +27,15 @@ class Cliente extends Model
         'deuda_pago_cliente' => 'decimal:2',
     ];
 
+    // Validar antes de guardar
+    public function setDeudaPagoClienteAttribute($value)
+    {
+        if (!is_null($value) && (!is_numeric($value) || $value < -9999999 || $value > 9999999)) {
+            throw new \InvalidArgumentException('El valor de deuda debe estar entre -9999999 y 9999999');
+        }
+        $this->attributes['deuda_pago_cliente'] = $value;
+    }
+
     // Relación con compras donde el cliente participa en el pago
     public function comprasComoPagador()
     {
