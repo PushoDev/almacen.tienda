@@ -81,18 +81,10 @@ class CompraController extends Controller
             'productos.*.cantidad' => 'required|integer|min:1',
             'productos.*.precio' => 'required|numeric|min:0',
             // Validaciones para pago_cash
-            'pagos' => [
-                Rule::requiredIf(fn() => $request->input('compra') === 'pago_cash'),
-                'array',
-                'nullable',
-            ],
+            'pagos' => 'array|nullable',
             'pagos.*.cuenta_id' => 'required|exists:cuentas,id',
             'pagos.*.monto' => 'required|numeric|min:0.01',
-            'pagos_clientes' => [
-                Rule::requiredIf(fn() => $request->input('compra') === 'pago_cash'),
-                'array',
-                'nullable',
-            ],
+            'pagos_clientes' => 'array|nullable',
             'pagos_clientes.*.cliente_id' => 'required|exists:clientes,id',
             'pagos_clientes.*.monto' => 'required|numeric|min:0.01',
         ]);
