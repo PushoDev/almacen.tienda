@@ -17,6 +17,7 @@ import AppLayout from '@/layouts/app-layout';
 import { ProveedorProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { BadgePlus, Building, Edit3, FileText, Handshake, Mail, MapPin, Phone, Sheet, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -43,18 +44,28 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
         });
     };
 
+    // Paginación
+    const [paginaActual, setPaginaActual] = useState(1);
+    const elementosPorPagina = 5; // Cambia esto al número que desees
+    const indiceUltimoElemento = paginaActual * elementosPorPagina;
+    const indicePrimerElemento = indiceUltimoElemento - elementosPorPagina;
+
+    // Obtener los proveedores a mostrar en la página actual
+    const proveedoresAmostrar = proveedores.slice(indicePrimerElemento, indiceUltimoElemento);
+
+    // Calcular el número total de páginas
+    const totalPaginas = Math.ceil(proveedores.length / elementosPorPagina);
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Proveedores" />
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="bg-sidebar animate__animated animate__fadeIn border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
-                    {/* Contenido principal */}
                     <HeadingSmall
                         title="Opciones Generales del Sistema"
                         description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento"
                     />
-                    {/* Ícono semitransparente */}
                     <Handshake
                         size={70}
                         color="#d6d3d1"
@@ -66,7 +77,6 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
 
                 {/* Acciones */}
                 <div className="flex justify-end gap-2">
-                    {/* Botón Crear nuevo */}
                     <Link href={route('proveedores.create')}>
                         <Button variant="default" className="flex cursor-pointer items-center gap-2">
                             <BadgePlus size={16} />
@@ -74,7 +84,6 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                         </Button>
                     </Link>
 
-                    {/* Botón Editar */}
                     <Link href="#">
                         <Button variant="outline" className="hover:bg-chart-5 flex cursor-pointer items-center gap-2">
                             <FileText size={16} />
@@ -82,7 +91,6 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                         </Button>
                     </Link>
 
-                    {/* Botón Regresar */}
                     <Link href="#">
                         <Button variant="secondary" className="hover:bg-chart-2 flex cursor-pointer items-center gap-2">
                             <Sheet size={16} />
@@ -106,7 +114,7 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                         </TableHeader>
 
                         <TableBody>
-                            {proveedores.map((proveedor) => (
+                            {proveedoresAmostrar.map((proveedor) => (
                                 <TableRow key={proveedor.id}>
                                     <TableCell className="min-w-[180px]">
                                         <div className="flex items-center gap-2">
@@ -150,7 +158,6 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                                     </TableCell>
 
                                     <TableCell className="text-right">
-                                        {/* Botón Editar */}
                                         <Link href={route('proveedores.edit', { proveedor: proveedor.id })}>
                                             <Button
                                                 variant="outline"
@@ -160,7 +167,6 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                                             </Button>
                                         </Link>
 
-                                        {/* Diálogo de Confirmación para Eliminar */}
                                         <AlertDialog>
                                             <AlertDialogTrigger asChild>
                                                 <Button
@@ -203,6 +209,19 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                             </TableRow>
                         </TableFooter>
                     </Table>
+                </div>
+
+                {/* Controles de Paginación */}
+                <div className="mt-4 flex justify-between">
+                    <Button onClick={() => setPaginaActual((prev) => Math.max(prev - 1, 1))} disabled={paginaActual === 1}>
+                        Anterior
+                    </Button>
+                    <span>
+                        Página {paginaActual} de {totalPaginas}
+                    </span>
+                    <Button onClick={() => setPaginaActual((prev) => Math.min(prev + 1, totalPaginas))} disabled={paginaActual === totalPaginas}>
+                        Siguiente
+                    </Button>
                 </div>
             </div>
         </AppLayout>

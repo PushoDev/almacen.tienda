@@ -17,6 +17,7 @@ import AppLayout from '@/layouts/app-layout';
 import { ClienteProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { Edit3, FileText, HandHeart, Home, MapPin, Phone, Sheet, Trash2, User, UserRoundPlus } from 'lucide-react';
+import { useState } from 'react';
 import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -52,6 +53,24 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
         }).format(valor);
     };
 
+    // Filtros y Paginación
+    const [filtroTipo, setFiltroTipo] = useState<string>('');
+    const [paginaActual, setPaginaActual] = useState(1);
+    const elementosPorPagina = 5; // Cambia esto al número que desees
+    const indiceUltimoElemento = paginaActual * elementosPorPagina;
+    const indicePrimerElemento = indiceUltimoElemento - elementosPorPagina;
+
+    // Filtrar clientes
+    const clientesFiltrados = clientes.filter((cliente) => {
+        return !filtroTipo || cliente.tipo_cliente === filtroTipo;
+    });
+
+    // Obtener los clientes a mostrar en la página actual
+    const clientesAmostrar = clientesFiltrados.slice(indicePrimerElemento, indiceUltimoElemento);
+
+    // Calcular el número total de páginas
+    const totalPaginas = Math.ceil(clientesFiltrados.length / elementosPorPagina);
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Clientes" />
@@ -59,7 +78,7 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                 {/* Header Section */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     <HeadingSmall
-                        title="Logistica General del Sistema"
+                        title="Logística General del Sistema"
                         description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento"
                     />
                     <HandHeart
@@ -72,6 +91,26 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
 
                 {/* Action Buttons */}
                 <div className="flex justify-end gap-2">
+                    <select
+                        id="filtro-tipo"
+                        value={filtroTipo}
+                        onChange={(e) => {
+                            setFiltroTipo(e.target.value);
+                            setPaginaActual(1); // Resetear a la primera página al cambiar el filtro
+                        }}
+                        className="focus:ring-sidebar-accent rounded-md border border-gray-300 px-3 py-1 focus:ring-2 focus:outline-none"
+                    >
+                        <option className="bg-background text-sidebar-accent" value="">
+                            Todos los Tipos
+                        </option>
+                        <option className="bg-background text-emerald-500" value="asociado">
+                            Asociados
+                        </option>
+                        <option className="bg-background text-indigo-500" value="fisico">
+                            Físicos
+                        </option>
+                    </select>
+
                     <Link href={route('clientes.create')}>
                         <Button variant="default" className="flex cursor-pointer items-center gap-2">
                             <UserRoundPlus size={16} />
@@ -109,7 +148,7 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {clientes.map((cliente) => (
+                            {clientesAmostrar.map((cliente) => (
                                 <TableRow key={cliente.id}>
                                     {/* Nombre */}
                                     <TableCell className="min-w-[180px]">
@@ -223,6 +262,19 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                             ))}
                         </TableBody>
                     </Table>
+                </div>
+
+                {/* Controles de Paginación */}
+                <div className="mt-4 flex justify-between">
+                    <Button onClick={() => setPaginaActual((prev) => Math.max(prev - 1, 1))} disabled={paginaActual === 1}>
+                        Anterior
+                    </Button>
+                    <span>
+                        Página {paginaActual} de {totalPaginas}
+                    </span>
+                    <Button onClick={() => setPaginaActual((prev) => Math.min(prev + 1, totalPaginas))} disabled={paginaActual === totalPaginas}>
+                        Siguiente
+                    </Button>
                 </div>
             </div>
             <Toaster position="top-center" />

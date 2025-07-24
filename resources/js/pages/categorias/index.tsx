@@ -17,7 +17,8 @@ import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, Tabl
 import AppLayout from '@/layouts/app-layout';
 import { CategoriasProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { CheckIcon, Edit3, FileText, ListCheck, MessageCircleWarningIcon, MessageSquareDiff, Sheet, Trash2 } from 'lucide-react';
+import { CheckIcon, Edit3, FileText, Info, ListCheck, MessageCircleWarningIcon, MessageSquareDiff, Sheet, Tag, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -26,35 +27,46 @@ const breadcrumbs: BreadcrumbItem[] = [
         href: '/dashboard',
     },
     {
-        title: 'Categorias',
+        title: 'Categorías',
         href: '/categorias',
     },
 ];
 
 export default function CategoriasPage({ categorias }: { categorias: CategoriasProps[] }) {
-    // eliminar Categoria
+    // Eliminar Categoría
     const deleteCategoria = (id: number) => {
         router.delete(route('categorias.destroy', { categoria: id }), {
             onSuccess: () => {
-                toast.success('Categoria eliminada correctamente');
+                toast.success('Categoría eliminada correctamente');
             },
             onError: () => {
-                toast.error('Error en el proceso, intentelo nuevamente');
+                toast.error('Error en el proceso, inténtelo nuevamente');
             },
         });
     };
+
+    // Paginación
+    const [paginaActual, setPaginaActual] = useState(1);
+    const elementosPorPagina = 5; // Cambiado a 5 elementos por página
+    const indiceUltimoElemento = paginaActual * elementosPorPagina;
+    const indicePrimerElemento = indiceUltimoElemento - elementosPorPagina;
+
+    // Obtener las categorías a mostrar en la página actual
+    const categoriasAmostrar = categorias.slice(indicePrimerElemento, indiceUltimoElemento);
+
+    // Calcular el número total de páginas
+    const totalPaginas = Math.ceil(categorias.length / elementosPorPagina);
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Categorias" />
+            <Head title="Categorías" />
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
-                    {/* Contenido principal */}
                     <HeadingSmall
                         title="Opciones Generales del Sistema"
-                        description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamineto"
+                        description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento"
                     />
-                    {/* Ícono semitransparente */}
                     <ListCheck
                         size={70}
                         color="#d6d3d1"
@@ -90,7 +102,6 @@ export default function CategoriasPage({ categorias }: { categorias: CategoriasP
                     </Link>
                 </div>
 
-                {/* <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" /> */}
                 <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
                     <Table>
                         <TableCaption>Categorías de los Productos</TableCaption>
@@ -104,22 +115,34 @@ export default function CategoriasPage({ categorias }: { categorias: CategoriasP
                         </TableHeader>
 
                         <TableBody>
-                            {categorias.map((categoria) => (
+                            {categoriasAmostrar.map((categoria) => (
                                 <TableRow key={categoria.id}>
-                                    <TableCell>{categoria.nombre_categoria}</TableCell>
-                                    <TableCell>{categoria.descripcion_categoria || 'Sin descripción'}</TableCell>
                                     <TableCell>
-                                        {categoria.activar_categoria ? (
-                                            <Badge variant="outline" className="text-emerald-500">
-                                                <CheckIcon />
-                                                Categoria Activa
-                                            </Badge>
-                                        ) : (
-                                            <Badge variant="outline" className="text-red-700">
-                                                <MessageCircleWarningIcon />
-                                                Categoria Inactiva
-                                            </Badge>
-                                        )}
+                                        <div className="flex items-center gap-2">
+                                            <Tag size={14} className="text-primary shrink-0" />
+                                            <span className="truncate font-medium">{categoria.nombre_categoria}</span>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <Info size={14} className="shrink-0 text-gray-500" />
+                                            <span>{categoria.descripcion_categoria || 'Sin descripción'}</span>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            {categoria.activar_categoria ? (
+                                                <Badge variant="outline" className="text-emerald-500">
+                                                    <CheckIcon />
+                                                    Categoría Activa
+                                                </Badge>
+                                            ) : (
+                                                <Badge variant="outline" className="text-red-700">
+                                                    <MessageCircleWarningIcon />
+                                                    Categoría Inactiva
+                                                </Badge>
+                                            )}
+                                        </div>
                                     </TableCell>
                                     <TableCell className="text-right">
                                         {/* Botón Editar */}
@@ -175,6 +198,19 @@ export default function CategoriasPage({ categorias }: { categorias: CategoriasP
                             </TableRow>
                         </TableFooter>
                     </Table>
+                </div>
+
+                {/* Controles de Paginación */}
+                <div className="mt-4 flex justify-between">
+                    <Button onClick={() => setPaginaActual((prev) => Math.max(prev - 1, 1))} disabled={paginaActual === 1}>
+                        Anterior
+                    </Button>
+                    <span>
+                        Página {paginaActual} de {totalPaginas}
+                    </span>
+                    <Button onClick={() => setPaginaActual((prev) => Math.min(prev + 1, totalPaginas))} disabled={paginaActual === totalPaginas}>
+                        Siguiente
+                    </Button>
                 </div>
             </div>
             <Toaster position="top-center" />

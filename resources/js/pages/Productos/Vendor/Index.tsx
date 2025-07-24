@@ -52,6 +52,9 @@ export default function VendedorPage({
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isEditMode, setIsEditMode] = useState(true);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [searchTerm, setSearchTerm] = useState('');
+    const itemsPerPage = 10;
 
     const formatCurrency = (value: number | null) => {
         if (value === null) return 'No definido';
@@ -123,6 +126,13 @@ export default function VendedorPage({
         }
     };
 
+    // Filtrar productos por nombre
+    const filteredProductos = productos.filter((producto) => producto.nombre_producto.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    // Paginación
+    const totalPages = Math.ceil(filteredProductos.length / itemsPerPage);
+    const currentProducts = filteredProductos.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Productos Disponibles" />
@@ -138,6 +148,14 @@ export default function VendedorPage({
                 <Separator />
                 {/* Acciones */}
                 <div className="flex justify-end gap-2">
+                    {/* Campo de búsqueda */}
+                    <input
+                        type="text"
+                        placeholder="Buscar por nombre..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
                     <Button variant="outline" className="hover:bg-chart-5 gap-2">
                         <FileText size={16} />
                         Exportar PDF
@@ -177,11 +195,19 @@ export default function VendedorPage({
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {productos.length > 0 ? (
-                                productos.map((producto) => (
+                            {currentProducts.length > 0 ? (
+                                currentProducts.map((producto) => (
                                     <TableRow key={producto.id}>
-                                        <TableCell>{producto.nombre_producto}</TableCell>
-                                        <TableCell>{producto.marca_producto}</TableCell>
+                                        <TableCell className="flex items-center">
+                                            <BadgeDollarSign size={20} className="mr-2" />
+                                            {producto.nombre_producto}
+                                        </TableCell>
+                                        <TableCell>
+                                            <span className="flex items-center">
+                                                <ShoppingBag size={16} className="mr-1" />
+                                                {producto.marca_producto}
+                                            </span>
+                                        </TableCell>
                                         <TableCell>{producto.categoria || 'Sin categoría'}</TableCell>
                                         <TableCell>{formatCurrency(producto.precio_compra)}</TableCell>
                                         <TableCell>
@@ -227,6 +253,18 @@ export default function VendedorPage({
                             )}
                         </TableBody>
                     </Table>
+                </div>
+                {/* Paginación */}
+                <div className="mt-4 flex justify-between">
+                    <Button onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))} disabled={currentPage === 1}>
+                        Anterior
+                    </Button>
+                    <span>
+                        Página {currentPage} de {totalPages}
+                    </span>
+                    <Button onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>
+                        Siguiente
+                    </Button>
                 </div>
                 {/* AlertDialog de Precio */}
                 {selectedProduct && (

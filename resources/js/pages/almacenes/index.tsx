@@ -17,6 +17,7 @@ import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { Edit3, Eye, FileText, HousePlus, Mail, MapPin, Phone, Sheet, Trash2, Warehouse } from 'lucide-react';
+import { useState } from 'react';
 import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -35,7 +36,7 @@ export default function AlmacenesPage({ almacenes }: { almacenes: AlmacenProps[]
     const deleteAlmacen = (id: number) => {
         router.delete(route('almacenes.destroy', { almacen: id }), {
             onSuccess: () => {
-                toast.success('Almacen eliminado satisfacoriamente');
+                toast.success('Almacén eliminado satisfactoriamente');
             },
             onError: () => {
                 toast.error('Error en el proceso, inténtelo nuevamente');
@@ -43,18 +44,28 @@ export default function AlmacenesPage({ almacenes }: { almacenes: AlmacenProps[]
         });
     };
 
+    // Paginación
+    const [paginaActual, setPaginaActual] = useState(1);
+    const elementosPorPagina = 5; // Cambiado a 5 elementos por página
+    const indiceUltimoElemento = paginaActual * elementosPorPagina;
+    const indicePrimerElemento = indiceUltimoElemento - elementosPorPagina;
+
+    // Obtener los almacenes a mostrar en la página actual
+    const almacenesAmostrar = almacenes.slice(indicePrimerElemento, indiceUltimoElemento);
+
+    // Calcular el número total de páginas
+    const totalPaginas = Math.ceil(almacenes.length / elementosPorPagina);
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Almacenes" />
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
-                    {/* Contenido principal */}
                     <HeadingSmall
                         title="Opciones Generales del Sistema"
                         description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento"
                     />
-                    {/* Ícono semitransparente */}
                     <Warehouse
                         size={70}
                         color="#d6d3d1"
@@ -106,7 +117,7 @@ export default function AlmacenesPage({ almacenes }: { almacenes: AlmacenProps[]
                         </TableHeader>
 
                         <TableBody>
-                            {almacenes.map((almacen) => (
+                            {almacenesAmostrar.map((almacen) => (
                                 <TableRow key={almacen.id}>
                                     <TableCell className="min-w-[180px]">
                                         <div className="flex items-center gap-2">
@@ -209,6 +220,19 @@ export default function AlmacenesPage({ almacenes }: { almacenes: AlmacenProps[]
                             </TableRow>
                         </TableFooter>
                     </Table>
+                </div>
+
+                {/* Controles de Paginación */}
+                <div className="mt-4 flex justify-between">
+                    <Button onClick={() => setPaginaActual((prev) => Math.max(prev - 1, 1))} disabled={paginaActual === 1}>
+                        Anterior
+                    </Button>
+                    <span>
+                        Página {paginaActual} de {totalPaginas}
+                    </span>
+                    <Button onClick={() => setPaginaActual((prev) => Math.min(prev + 1, totalPaginas))} disabled={paginaActual === totalPaginas}>
+                        Siguiente
+                    </Button>
                 </div>
             </div>
             <Toaster position="top-center" />

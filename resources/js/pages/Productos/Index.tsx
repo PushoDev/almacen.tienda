@@ -10,13 +10,14 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { ProductoProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { Edit3, Eye, FileText, Package2, Sheet, Trash2 } from 'lucide-react';
+import { CopyX, DollarSign, Edit3, Eye, FileText, Hash, Package, Package2, QrCode, Sheet, Trash2, Wallet } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -48,7 +49,27 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
 
     // Filtro
     const [filtroTipo, setFiltroTipo] = useState<string>('');
+    const [busqueda, setBusqueda] = useState<string>(''); // Estado para el término de búsqueda
     const categoriasUnicas = [...new Set(productos.map((producto) => producto.categoria))];
+
+    // Paginación
+    const [paginaActual, setPaginaActual] = useState(1);
+    const elementosPorPagina = 8; // Cambiado a 8 elementos por página
+    const indiceUltimoElemento = paginaActual * elementosPorPagina;
+    const indicePrimerElemento = indiceUltimoElemento - elementosPorPagina;
+
+    // Filtrar productos según el filtro aplicado y la búsqueda
+    const productosFiltrados = productos.filter((producto) => {
+        const matchesCategoria = !filtroTipo || producto.categoria === filtroTipo;
+        const matchesBusqueda = producto.nombre_producto.toLowerCase().includes(busqueda.toLowerCase());
+        return matchesCategoria && matchesBusqueda;
+    });
+
+    // Obtener los productos a mostrar en la página actual
+    const productosAmostrar = productosFiltrados.slice(indicePrimerElemento, indiceUltimoElemento);
+
+    // Calcular el número total de páginas
+    const totalPaginas = Math.ceil(productosFiltrados.length / elementosPorPagina);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -56,12 +77,10 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
-                    {/* Contenido principal */}
                     <HeadingSmall
                         title="Opciones Generales del Sistema"
                         description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento. Listado de los Productos"
                     />
-                    {/* Ícono semitransparente */}
                     <Package2
                         size={70}
                         color="#d6d3d1"
@@ -73,6 +92,15 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
 
                 {/* Acciones */}
                 <div className="flex justify-end gap-2">
+                    {/* Buscador */}
+                    <input
+                        type="text"
+                        placeholder="Buscar productos..."
+                        value={busqueda}
+                        onChange={(e) => setBusqueda(e.target.value)}
+                        className="focus:ring-sidebar-accent rounded-md border border-gray-300 px-3 py-1 focus:ring-2 focus:outline-none"
+                    />
+
                     {/* Filtro*/}
                     <select
                         id="filtro-tipo"
@@ -133,85 +161,116 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {productos
-                                .filter((producto) => {
-                                    if (!filtroTipo) return true;
-                                    return producto.categoria === filtroTipo;
-                                })
-                                .map((producto) => (
-                                    <TableRow key={producto.id}>
-                                        <TableCell>{producto.nombre_producto}</TableCell>
-                                        <TableCell>{producto.marca_producto || 'Sin marca'}</TableCell>
-                                        <TableCell>{producto.codigo_producto || 'Sin código'}</TableCell>
-                                        <TableCell>{producto.categoria || 'Sin categoría'}</TableCell>
-                                        <TableCell>
-                                            {typeof producto.precio_compra_producto === 'number'
-                                                ? `$${producto.precio_compra_producto.toFixed(2)}`
-                                                : 'Sin precio'}
-                                        </TableCell>
-                                        <TableCell>{producto.cantidad_producto}</TableCell>
-                                        <TableCell>$ {(producto.precio_compra_producto * producto.cantidad_producto).toFixed(2)}</TableCell>
-                                        <TableCell>
-                                            {producto.imagen_url ? (
-                                                <img
-                                                    src={producto.imagen_url}
-                                                    alt={producto.nombre_producto}
-                                                    className="h-10 w-10 rounded-full object-cover"
-                                                />
-                                            ) : (
-                                                'Sin imagen'
-                                            )}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            {/* Boton Detalles */}
-                                            <Link href={route('productos.show', { producto: producto.id })}>
-                                                <Button variant="outline" className="hover:bg-chart-3 cursor-pointer hover:text-white">
-                                                    <Eye />
-                                                </Button>
-                                            </Link>
-                                            {/* Botón Editar */}
-                                            <Link href={route('productos.edit', { producto: producto.id })}>
-                                                <Button
-                                                    variant="outline"
-                                                    className="cursor-pointer hover:bg-blue-900 hover:text-white dark:hover:bg-blue-700"
-                                                >
-                                                    <Edit3 />
-                                                </Button>
-                                            </Link>
+                            {productosAmostrar.map((producto) => (
+                                <TableRow key={producto.id}>
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <Package size={14} className="text-primary shrink-0" />
+                                            <span className="text-primary truncate font-medium">{producto.nombre_producto}</span>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <Badge variant="outline" className="font-mono">
+                                                {producto.marca_producto || 'Sin marca'}
+                                            </Badge>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <QrCode size={14} className="shrink-0 text-gray-500" />
+                                            <span>{producto.codigo_producto || 'Sin código'}</span>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <CopyX size={14} className="shrink-0 text-indigo-500" />
+                                            <span>{producto.categoria || 'Sin categoría'}</span>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <Wallet size={14} className="shrink-0 text-emerald-500" />
+                                            <span>
+                                                {typeof producto.precio_compra_producto === 'number'
+                                                    ? `$${producto.precio_compra_producto.toFixed(2)}`
+                                                    : 'Sin precio'}
+                                            </span>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <Hash size={14} className="shrink-0 text-blue-500" />
+                                            <span>{producto.cantidad_producto}</span>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <DollarSign size={14} className="shrink-0 text-emerald-500" />
+                                            <span>$ {(producto.precio_compra_producto * producto.cantidad_producto).toFixed(2)}</span>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        {producto.imagen_url ? (
+                                            <img
+                                                src={producto.imagen_url}
+                                                alt={producto.nombre_producto}
+                                                className="h-10 w-10 rounded-full object-cover"
+                                            />
+                                        ) : (
+                                            'Sin imagen'
+                                        )}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        {/* Botón Detalles */}
+                                        <Link href={route('productos.show', { producto: producto.id })}>
+                                            <Button variant="outline" className="hover:bg-chart-3 cursor-pointer hover:text-white">
+                                                <Eye />
+                                            </Button>
+                                        </Link>
+                                        {/* Botón Editar */}
+                                        <Link href={route('productos.edit', { producto: producto.id })}>
+                                            <Button
+                                                variant="outline"
+                                                className="cursor-pointer hover:bg-blue-900 hover:text-white dark:hover:bg-blue-700"
+                                            >
+                                                <Edit3 />
+                                            </Button>
+                                        </Link>
 
-                                            {/* Diálogo de Confirmación para Eliminar */}
-                                            <AlertDialog>
-                                                <AlertDialogTrigger asChild>
-                                                    <Button
-                                                        variant="ghost"
-                                                        className="hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white"
+                                        {/* Diálogo de Confirmación para Eliminar */}
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button
+                                                    variant="ghost"
+                                                    className="hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white"
+                                                >
+                                                    <Trash2 />
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle className="text-center">Atención</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        ¿Estás seguro de eliminar este producto? Esta acción es irreversible.
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogAction
+                                                        onClick={() => deleteProducto(producto.id)}
+                                                        className="bg-destructive cursor-pointer hover:bg-red-300"
                                                     >
-                                                        <Trash2 />
-                                                    </Button>
-                                                </AlertDialogTrigger>
-                                                <AlertDialogContent>
-                                                    <AlertDialogHeader>
-                                                        <AlertDialogTitle className="text-center">Atención</AlertDialogTitle>
-                                                        <AlertDialogDescription>
-                                                            ¿Estás seguro de eliminar este producto? Esta acción es irreversible.
-                                                        </AlertDialogDescription>
-                                                    </AlertDialogHeader>
-                                                    <AlertDialogFooter>
-                                                        <AlertDialogAction
-                                                            onClick={() => deleteProducto(producto.id)}
-                                                            className="bg-destructive cursor-pointer hover:bg-red-300"
-                                                        >
-                                                            Aceptar
-                                                        </AlertDialogAction>
-                                                        <AlertDialogCancel className="cursor-pointer text-white hover:bg-emerald-300 hover:text-emerald-950 dark:hover:bg-emerald-300 dark:hover:text-emerald-950">
-                                                            Cancelar
-                                                        </AlertDialogCancel>
-                                                    </AlertDialogFooter>
-                                                </AlertDialogContent>
-                                            </AlertDialog>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
+                                                        Aceptar
+                                                    </AlertDialogAction>
+                                                    <AlertDialogCancel className="cursor-pointer text-white hover:bg-emerald-300 hover:text-emerald-950 dark:hover:bg-emerald-300 dark:hover:text-emerald-950">
+                                                        Cancelar
+                                                    </AlertDialogCancel>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
                         </TableBody>
                         <TableFooter>
                             <TableRow>
@@ -222,6 +281,19 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                             </TableRow>
                         </TableFooter>
                     </Table>
+                </div>
+
+                {/* Controles de Paginación */}
+                <div className="mt-4 flex justify-between">
+                    <Button onClick={() => setPaginaActual((prev) => Math.max(prev - 1, 1))} disabled={paginaActual === 1}>
+                        Anterior
+                    </Button>
+                    <span>
+                        Página {paginaActual} de {totalPaginas}
+                    </span>
+                    <Button onClick={() => setPaginaActual((prev) => Math.min(prev + 1, totalPaginas))} disabled={paginaActual === totalPaginas}>
+                        Siguiente
+                    </Button>
                 </div>
             </div>
         </AppLayout>

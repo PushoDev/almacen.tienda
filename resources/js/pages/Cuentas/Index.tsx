@@ -37,12 +37,7 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
     const deleteCuenta = (id: number) => {
         router.delete(route('cuentas.destroy', { cuenta: id }), {
             onSuccess: () => {
-                toast.success(
-                    'Cuenta eliminada correctamente',
-                    //     {
-                    //     description: <Button>Prueba</Button>,
-                    // }
-                );
+                toast.success('Cuenta eliminada correctamente');
             },
             onError: () => {
                 toast.error('Error en el proceso, inténtelo nuevamente');
@@ -55,8 +50,28 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
         return cuentas.reduce((total, cuenta) => total + (cuenta.saldo_cuenta || 0), 0).toFixed(2);
     };
 
-    // Filtro
+    // Filtros
     const [filtroTipo, setFiltroTipo] = useState<string>('');
+    const [filtroMoneda, setFiltroMoneda] = useState<string>('');
+
+    // Paginación
+    const [paginaActual, setPaginaActual] = useState(1);
+    const elementosPorPagina = 5; // Cambia esto al número que desees
+    const indiceUltimoElemento = paginaActual * elementosPorPagina;
+    const indicePrimerElemento = indiceUltimoElemento - elementosPorPagina;
+
+    // Filtrar cuentas
+    const cuentasFiltradas = cuentas.filter((cuenta) => {
+        const tipoCoincide = !filtroTipo || cuenta.tipo_cuenta === filtroTipo;
+        const monedaCoincide = !filtroMoneda || cuenta.tipo_moneda === filtroMoneda;
+        return tipoCoincide && monedaCoincide;
+    });
+
+    // Obtener las cuentas a mostrar en la página actual
+    const cuentasAmostrar = cuentasFiltradas.slice(indicePrimerElemento, indiceUltimoElemento);
+
+    // Calcular el número total de páginas
+    const totalPaginas = Math.ceil(cuentasFiltradas.length / elementosPorPagina);
 
     console.log('Listado de Cuentas -> ', cuentas);
 
@@ -77,7 +92,7 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
 
                 {/* Acciones */}
                 <div className="flex justify-end gap-2">
-                    {/* Filtro*/}
+                    {/* Filtro Tipo */}
                     <select
                         id="filtro-tipo"
                         value={filtroTipo}
@@ -98,6 +113,28 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                         </option>
                     </select>
 
+                    {/* Filtro Moneda */}
+                    <select
+                        id="filtro-moneda"
+                        value={filtroMoneda}
+                        onChange={(e) => setFiltroMoneda(e.target.value)}
+                        className="focus:ring-sidebar-accent rounded-md border border-gray-300 px-3 py-1 focus:ring-2 focus:outline-none"
+                    >
+                        <option className="bg-background text-sidebar-accent" value="">
+                            Todas las Monedas
+                        </option>
+                        <option className="bg-background text-emerald-500" value="USD">
+                            USD
+                        </option>
+                        <option className="bg-background text-amber-500" value="EUR">
+                            EUR
+                        </option>
+                        <option className="bg-background text-red-500" value="MXN">
+                            MXN
+                        </option>
+                        {/* Agrega más opciones según sea necesario */}
+                    </select>
+
                     {/* Botón Crear nuevo */}
                     <Link href={route('cuentas.create')}>
                         <Button variant="default" className="flex cursor-pointer items-center gap-2">
@@ -106,7 +143,7 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                         </Button>
                     </Link>
 
-                    {/* Botón Exportar PDF */}
+                    {/* Botones de Exportar */}
                     <Link href="#">
                         <Button variant="outline" className="hover:bg-chart-5 flex cursor-pointer items-center gap-2">
                             <FileText size={16} />
@@ -114,7 +151,6 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                         </Button>
                     </Link>
 
-                    {/* Botón Exportar Excel */}
                     <Link href="#">
                         <Button variant="secondary" className="hover:bg-chart-2 flex cursor-pointer items-center gap-2">
                             <Sheet size={16} />
@@ -130,130 +166,144 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                             <TableCaption>Lista de Cuentas</TableCaption>
                             <TableHeader>
                                 <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
-                                    <TableHead className="w-[100px]">Nombre</TableHead>
-                                    <TableHead>Moneda</TableHead>
-                                    <TableHead>Saldo</TableHead>
-                                    <TableHead>Tipo de Cuenta</TableHead>
-                                    <TableHead>Notas</TableHead>
-                                    <TableHead className="text-right">Acciones</TableHead>
+                                    <TableHead className="w-[100px]" aria-label="Nombre de la cuenta">
+                                        Nombre
+                                    </TableHead>
+                                    <TableHead aria-label="Moneda de la cuenta">Moneda</TableHead>
+                                    <TableHead aria-label="Saldo de la cuenta">Saldo</TableHead>
+                                    <TableHead aria-label="Tipo de cuenta">Tipo de Cuenta</TableHead>
+                                    <TableHead aria-label="Notas sobre la cuenta">Notas</TableHead>
+                                    <TableHead className="text-right" aria-label="Acciones disponibles">
+                                        Acciones
+                                    </TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {cuentas
-                                    .filter((cuenta) => {
-                                        if (!filtroTipo) return true;
-                                        return cuenta.tipo_cuenta === filtroTipo;
-                                    })
-                                    .map((cuenta) => (
-                                        <TableRow key={cuenta.id}>
-                                            <TableCell className="min-w-[180px]">
-                                                <div className="flex items-center gap-2">
-                                                    <Landmark size={14} className="text-primary shrink-0" />
-                                                    <span className="text-primary truncate font-medium">{cuenta.nombre_cuenta}</span>
-                                                </div>
-                                            </TableCell>
+                                {cuentasAmostrar.map((cuenta) => (
+                                    <TableRow key={cuenta.id}>
+                                        <TableCell className="min-w-[180px]" aria-label={`Nombre de la cuenta: ${cuenta.nombre_cuenta}`}>
+                                            <div className="flex items-center gap-2">
+                                                <Landmark size={14} className="text-primary shrink-0" />
+                                                <span className="text-primary truncate font-medium">{cuenta.nombre_cuenta}</span>
+                                            </div>
+                                        </TableCell>
 
-                                            <TableCell>
-                                                <div className="flex items-center gap-2">
-                                                    <Coins size={14} className="shrink-0 text-amber-500" />
-                                                    <Badge variant="outline" className="font-mono">
-                                                        {cuenta.tipo_moneda}
-                                                    </Badge>
-                                                </div>
-                                            </TableCell>
+                                        <TableCell aria-label={`Moneda de la cuenta: ${cuenta.tipo_moneda}`}>
+                                            <div className="flex items-center gap-2">
+                                                <Coins size={14} className="shrink-0 text-amber-500" />
+                                                <Badge variant="outline" className="font-mono">
+                                                    {cuenta.tipo_moneda}
+                                                </Badge>
+                                            </div>
+                                        </TableCell>
 
-                                            <TableCell>
-                                                <div className="flex items-center gap-2">
-                                                    <Wallet size={14} className="shrink-0 text-emerald-500" />
-                                                    <span className={cuenta.saldo_cuenta ? 'font-medium' : 'text-gray-400 italic'}>
-                                                        {cuenta.saldo_cuenta ? `$${cuenta.saldo_cuenta.toFixed(2)}` : 'Sin saldo'}
-                                                    </span>
-                                                </div>
-                                            </TableCell>
+                                        <TableCell
+                                            aria-label={`Saldo de la cuenta: ${cuenta.saldo_cuenta ? `$${cuenta.saldo_cuenta.toFixed(2)}` : 'Sin saldo'}`}
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <Wallet size={14} className="shrink-0 text-emerald-500" />
+                                                <span className={cuenta.saldo_cuenta ? 'font-medium' : 'text-gray-400 italic'}>
+                                                    {cuenta.saldo_cuenta ? `$${cuenta.saldo_cuenta.toFixed(2)}` : 'Sin saldo'}
+                                                </span>
+                                            </div>
+                                        </TableCell>
 
-                                            <TableCell>
-                                                <div className="flex items-center gap-2">
-                                                    <Type size={14} className="shrink-0 text-indigo-500" />
-                                                    <Badge
-                                                        variant="outline"
-                                                        className={`font-medium ${
-                                                            cuenta.tipo_cuenta === 'permanentes'
-                                                                ? 'text-emerald-500'
-                                                                : cuenta.tipo_cuenta === 'temporales'
-                                                                  ? 'text-amber-500'
-                                                                  : 'text-red-500'
-                                                        }`}
-                                                    >
-                                                        {cuenta.tipo_cuenta.charAt(0).toUpperCase() + cuenta.tipo_cuenta.slice(1)}
-                                                    </Badge>
-                                                </div>
-                                            </TableCell>
+                                        <TableCell aria-label={`Tipo de cuenta: ${cuenta.tipo_cuenta}`}>
+                                            <div className="flex items-center gap-2">
+                                                <Type size={14} className="shrink-0 text-indigo-500" />
+                                                <Badge
+                                                    variant="outline"
+                                                    className={`font-medium ${
+                                                        cuenta.tipo_cuenta === 'permanentes'
+                                                            ? 'text-emerald-500'
+                                                            : cuenta.tipo_cuenta === 'temporales'
+                                                              ? 'text-amber-500'
+                                                              : 'text-red-500'
+                                                    }`}
+                                                >
+                                                    {cuenta.tipo_cuenta.charAt(0).toUpperCase() + cuenta.tipo_cuenta.slice(1)}
+                                                </Badge>
+                                            </div>
+                                        </TableCell>
 
-                                            <TableCell>
-                                                <div className="flex items-center gap-2">
-                                                    <FileText size={14} className="shrink-0 text-gray-500" />
-                                                    <span className="max-w-[200px] truncate">
-                                                        {cuenta.notas_cuenta || <span className="text-gray-400 italic">Sin notas</span>}
-                                                    </span>
-                                                </div>
-                                            </TableCell>
+                                        <TableCell aria-label={`Notas sobre la cuenta: ${cuenta.notas_cuenta || 'Sin notas'}`}>
+                                            <div className="flex items-center gap-2">
+                                                <FileText size={14} className="shrink-0 text-gray-500" />
+                                                <span className="max-w-[200px] truncate">
+                                                    {cuenta.notas_cuenta || <span className="text-gray-400 italic">Sin notas</span>}
+                                                </span>
+                                            </div>
+                                        </TableCell>
 
-                                            <TableCell className="text-right">
-                                                {/* Botón Editar */}
-                                                <Link href={route('cuentas.edit', { cuenta: cuenta.id })}>
+                                        <TableCell className="text-right" aria-label="Acciones disponibles">
+                                            {/* Botón Editar */}
+                                            <Link href={route('cuentas.edit', { cuenta: cuenta.id })}>
+                                                <Button
+                                                    variant="outline"
+                                                    className="cursor-pointer hover:bg-blue-900 hover:text-white dark:hover:bg-blue-700"
+                                                >
+                                                    <Edit3 />
+                                                </Button>
+                                            </Link>
+
+                                            {/* Diálogo de Confirmación para Eliminar */}
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
                                                     <Button
-                                                        variant="outline"
-                                                        className="cursor-pointer hover:bg-blue-900 hover:text-white dark:hover:bg-blue-700"
+                                                        variant="ghost"
+                                                        className="hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white"
                                                     >
-                                                        <Edit3 />
+                                                        <Trash2 />
                                                     </Button>
-                                                </Link>
-
-                                                {/* Diálogo de Confirmación para Eliminar */}
-                                                <AlertDialog>
-                                                    <AlertDialogTrigger asChild>
-                                                        <Button
-                                                            variant="ghost"
-                                                            className="hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white"
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle className="text-center">Atención</AlertDialogTitle>
+                                                        <AlertDialogDescription>
+                                                            ¿Estás seguro de eliminar esta cuenta? Esta acción es irreversible.
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogAction
+                                                            onClick={() => deleteCuenta(cuenta.id)}
+                                                            className="bg-destructive cursor-pointer hover:bg-red-300"
                                                         >
-                                                            <Trash2 />
-                                                        </Button>
-                                                    </AlertDialogTrigger>
-                                                    <AlertDialogContent>
-                                                        <AlertDialogHeader>
-                                                            <AlertDialogTitle className="text-center">Atención</AlertDialogTitle>
-                                                            <AlertDialogDescription>
-                                                                ¿Estás seguro de eliminar esta cuenta? Esta acción es irreversible.
-                                                            </AlertDialogDescription>
-                                                        </AlertDialogHeader>
-                                                        <AlertDialogFooter>
-                                                            <AlertDialogAction
-                                                                onClick={() => deleteCuenta(cuenta.id)}
-                                                                className="bg-destructive cursor-pointer hover:bg-red-300"
-                                                            >
-                                                                Aceptar
-                                                            </AlertDialogAction>
-                                                            <AlertDialogCancel className="cursor-pointer text-white hover:bg-emerald-300 hover:text-emerald-950 dark:hover:bg-emerald-300 dark:hover:text-emerald-950">
-                                                                Cancelar
-                                                            </AlertDialogCancel>
-                                                        </AlertDialogFooter>
-                                                    </AlertDialogContent>
-                                                </AlertDialog>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
+                                                            Aceptar
+                                                        </AlertDialogAction>
+                                                        <AlertDialogCancel className="cursor-pointer text-white hover:bg-emerald-300 hover:text-emerald-950 dark:hover:bg-emerald-300 dark:hover:text-emerald-950">
+                                                            Cancelar
+                                                        </AlertDialogCancel>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
                             </TableBody>
                             <TableFooter>
                                 <TableRow>
                                     <TableCell colSpan={4} className="bg-gray-700">
                                         Total de Cuentas
                                     </TableCell>
-                                    <TableCell className="bg-gray-500 text-center">{cuentas.length}</TableCell>
+                                    <TableCell className="bg-gray-500 text-center">{cuentasFiltradas.length}</TableCell>
                                     <TableCell className="bg-gray-500 text-center">${calcularSaldoTotal()}</TableCell>
                                 </TableRow>
                             </TableFooter>
                         </Table>
                     </div>
+                </div>
+
+                {/* Controles de Paginación */}
+                <div className="mt-4 flex justify-between">
+                    <Button onClick={() => setPaginaActual((prev) => Math.max(prev - 1, 1))} disabled={paginaActual === 1}>
+                        Anterior
+                    </Button>
+                    <span>
+                        Página {paginaActual} de {totalPaginas}
+                    </span>
+                    <Button onClick={() => setPaginaActual((prev) => Math.min(prev + 1, totalPaginas))} disabled={paginaActual === totalPaginas}>
+                        Siguiente
+                    </Button>
                 </div>
             </div>
             <Toaster position="top-center" />
