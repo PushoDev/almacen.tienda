@@ -58,6 +58,11 @@ export default function LogisticaPage({
     productosTop,
     comprasPorProveedor,
     productosPorAlmacen,
+    montoUSD,
+    montoEUR,
+    montoMLC,
+    montoCUP,
+    tasaCambioGeneral,
 }: LogisticaProps) {
     // Calendario
     const [date, setDate] = React.useState<Date | undefined>(new Date());
@@ -88,6 +93,92 @@ export default function LogisticaPage({
                         <ComprasVentasCharts />
                     </div>
                     <Calendar mode="single" selected={date} onSelect={setDate} className="rounded-md border shadow" />
+                    {/* Cantidades por monedas */}
+                    {/* Saldo USD */}
+                    <Card className="@container/card">
+                        <CardHeader className="relative">
+                            <CardDescription>Monto General</CardDescription>
+                            <CardTitle className="text-2xl font-semibold text-emerald-500 tabular-nums @[250px]/card:text-3xl">
+                                $ <CountingNumber decimalPlaces={2} decimalSeparator="," className="text-4xl" inView number={montoUSD} />
+                            </CardTitle>
+                            <div className="absolute top-4 right-4">
+                                <Badge variant="outline" className="flex gap-1 rounded-lg text-xs">
+                                    <TrendingUpIcon className="size-3" />
+                                    {tasaCambioGeneral}
+                                </Badge>
+                            </div>
+                        </CardHeader>
+                        <CardFooter className="flex-col items-start gap-1 text-sm">
+                            <div className="line-clamp-1 flex gap-2 font-medium">
+                                Monto en Productos <TrendingUpIcon className="size-4" />
+                            </div>
+                            <div className="text-muted-foreground">Visitors for the last 6 months</div>
+                        </CardFooter>
+                    </Card>
+                    {/* Saldo EUR */}
+                    <Card className="@container/card">
+                        <CardHeader className="relative">
+                            <CardDescription>Monto General</CardDescription>
+                            <CardTitle className="text-2xl font-semibold text-emerald-500 tabular-nums @[250px]/card:text-3xl">
+                                $ <CountingNumber decimalPlaces={2} decimalSeparator="," className="text-4xl" inView number={montoEUR} />
+                            </CardTitle>
+                            <div className="absolute top-4 right-4">
+                                <Badge variant="outline" className="flex gap-1 rounded-lg text-xs">
+                                    <TrendingUpIcon className="size-3" />
+                                    {tasaCambioGeneral}
+                                </Badge>
+                            </div>
+                        </CardHeader>
+                        <CardFooter className="flex-col items-start gap-1 text-sm">
+                            <div className="line-clamp-1 flex gap-2 font-medium">
+                                Monto en Productos <TrendingUpIcon className="size-4" />
+                            </div>
+                            <div className="text-muted-foreground">Visitors for the last 6 months</div>
+                        </CardFooter>
+                    </Card>
+                    {/* Saldo MLC */}
+                    <Card className="@container/card">
+                        <CardHeader className="relative">
+                            <CardDescription>Monto General</CardDescription>
+                            <CardTitle className="text-2xl font-semibold text-emerald-500 tabular-nums @[250px]/card:text-3xl">
+                                $ <CountingNumber decimalPlaces={2} decimalSeparator="," className="text-4xl" inView number={montoMLC} />
+                            </CardTitle>
+                            <div className="absolute top-4 right-4">
+                                <Badge variant="outline" className="flex gap-1 rounded-lg text-xs">
+                                    <TrendingUpIcon className="size-3" />
+                                    {tasaCambioGeneral}
+                                </Badge>
+                            </div>
+                        </CardHeader>
+                        <CardFooter className="flex-col items-start gap-1 text-sm">
+                            <div className="line-clamp-1 flex gap-2 font-medium">
+                                Monto en Productos <TrendingUpIcon className="size-4" />
+                            </div>
+                            <div className="text-muted-foreground">Visitors for the last 6 months</div>
+                        </CardFooter>
+                    </Card>
+                    {/* Saldo CUP */}
+                    <Card className="@container/card">
+                        <CardHeader className="relative">
+                            <CardDescription>Monto General</CardDescription>
+                            <CardTitle className="text-2xl font-semibold text-emerald-500 tabular-nums @[250px]/card:text-3xl">
+                                $ <CountingNumber decimalPlaces={2} decimalSeparator="," className="text-4xl" inView number={montoCUP} />
+                            </CardTitle>
+                            <div className="absolute top-4 right-4">
+                                <Badge variant="outline" className="flex gap-1 rounded-lg text-xs">
+                                    <TrendingUpIcon className="size-3" />
+                                    {tasaCambioGeneral}
+                                </Badge>
+                            </div>
+                        </CardHeader>
+                        <CardFooter className="flex-col items-start gap-1 text-sm">
+                            <div className="line-clamp-1 flex gap-2 font-medium">
+                                Monto en Productos <TrendingUpIcon className="size-4" />
+                            </div>
+                            <div className="text-muted-foreground">Visitors for the last 6 months</div>
+                        </CardFooter>
+                    </Card>
+                    {/* Para Inversiones */}
                     {/* Total Monto */}
                     <Card className="@container/card">
                         <CardHeader className="relative">
@@ -98,7 +189,7 @@ export default function LogisticaPage({
                             <div className="absolute top-4 right-4">
                                 <Badge variant="outline" className="flex gap-1 rounded-lg text-xs">
                                     <TrendingUpIcon className="size-3" />
-                                    +12.5%
+                                    {tasaCambioGeneral}
                                 </Badge>
                             </div>
                         </CardHeader>
@@ -172,6 +263,7 @@ export default function LogisticaPage({
                             <div className="text-muted-foreground">Monto y Cantidad</div>
                         </CardFooter>
                     </Card>
+
                     <Separator className="col-span-full my-4" />
                     {/* Productos */}
                     <Card className="@container/card">

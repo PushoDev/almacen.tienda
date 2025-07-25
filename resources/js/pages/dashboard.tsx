@@ -255,7 +255,8 @@ export default function Dashboard({ tasa }: { tasa: { tasa_cambio: number } }) {
                                                         name="tasa_cambio"
                                                         type="number"
                                                         step="0.00000001"
-                                                        value={data.tasa_cambio}
+                                                        placeholder="$ 0.00"
+                                                        value={data.tasa_cambio || ''}
                                                         onChange={(e) => setData('tasa_cambio', parseFloat(e.target.value) || 0)}
                                                     />
                                                 </div>

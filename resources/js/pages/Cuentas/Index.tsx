@@ -129,10 +129,12 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                         <option className="bg-background text-amber-500" value="EUR">
                             EUR
                         </option>
-                        <option className="bg-background text-red-500" value="MXN">
-                            MXN
+                        <option className="bg-background text-red-500" value="MLC">
+                            MLC
                         </option>
-                        {/* Agrega más opciones según sea necesario */}
+                        <option className="bg-background text-indigo-500" value="CUP">
+                            CUP
+                        </option>
                     </select>
 
                     {/* Botón Crear nuevo */}

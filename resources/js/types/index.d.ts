@@ -291,6 +291,13 @@ export interface LogisticaProps {
     productosTop: ProductosMasCompradosRef[];
     comprasPorProveedor: CompraPorProveedorChartRef[];
     productosPorAlmacen: ProductoPorAlmacenRefCharts[];
+    // Monto por moneda
+    montoUSD: number;
+    montoEUR: number;
+    montoMLC: number;
+    montoCUP: number;
+    // Tasa de Cambio General
+    tasaCambioGeneral: number;
 }
 
 // Interface para Productos por Almacén (Detalles)

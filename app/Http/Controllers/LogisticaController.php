@@ -2,66 +2,118 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
+use App\Models\TasaCambio;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
 
 class LogisticaController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
 
-    public function index()
+    // Consultas
+    private function countCategorias()
     {
-        // Contar el total de categorías
-        $totalCategorias = DB::table('categorias')->count();
+        return DB::table('categorias')->count();
+    }
 
-        // Contar solo las categorías activas
-        $categoriasActivas = DB::table('categorias')
-            ->where('activar_categoria', true)
-            ->count();
+    private function countCategoriasActivas()
+    {
+        return DB::table('categorias')->where('activar_categoria', true)->count();
+    }
 
-        // Contar el total de proveedores
-        $totalProveedores = DB::table('proveedors')->count();
+    private function countProveedores()
+    {
+        return DB::table('proveedors')->count();
+    }
 
-        // Contar el total de clientes
-        $totalClientes = DB::table('clientes')->count();
+    private function countClientes()
+    {
+        return DB::table('clientes')->count();
+    }
 
-        // Contar el total de productos
-        $totalProductos = DB::table('productos')->count();
+    private function countProductos()
+    {
+        return DB::table('productos')->count();
+    }
 
-        // Calcular el total de unidades de productos
-        $totalUnidades = DB::table('productos')
-            ->sum('cantidad_producto'); // Suma directamente la columna 'cantidad_producto'
+    private function sumUnidadesProductos()
+    {
+        return DB::table('productos')->sum('cantidad_producto');
+    }
 
-        // Calcular la inversión total (precio_compra_producto * cantidad_producto)
-        $inversionTotal = DB::table('productos')
+    private function calculateInversionTotal()
+    {
+        return DB::table('productos')
             ->select(DB::raw('SUM(precio_compra_producto * cantidad_producto) as total_inversion'))
-            ->value('total_inversion'); // Obtiene el valor calculado
+            ->value('total_inversion');
+    }
 
-        // Contar Cuentas Monetarias Registradas
-        $totalCuentas = DB::table('cuentas')->count();
-
-        // Calcular el Saldo de las Cuentas
-        $saldoCuentas = DB::table('cuentas')
+    // Cuentas por Moneda
+    private function getMontoUSD()
+    {
+        return DB::table('cuentas')
+            ->where('tipo_moneda', 'USD')
+            ->where('tipo_cuenta', ['permanentes', 'temporales'])
             ->sum('saldo_cuenta');
+    }
 
-        // Total de Monto del Negocio tanto invertido como en las cuentas
-        $montoGeneralInvertido = ($saldoCuentas ?? 0) + ($inversionTotal ?? 0);
+    private function getMontoEUR()
+    {
+        return DB::table('cuentas')
+            ->where('tipo_moneda', 'EUR')
+            ->where('tipo_cuenta', ['permanentes', 'temporales'])
+            ->sum('saldo_cuenta');
+    }
 
-        // Total de Deudas a Proveedores
-        $deudaPendietesSaldo = DB::table('cuentas')
-            ->sum('deuda');
+    private function getMontoMLC()
+    {
+        return DB::table('cuentas')
+            ->where('tipo_moneda', 'MLC')
+            ->where('tipo_cuenta', ['permanentes', 'temporales'])
+            ->sum('saldo_cuenta');
+    }
 
-        // Contar deudas Pendietes
-        $deudaPendientes = DB::table('compras')
-            ->where('tipo_compra', 'deuda_proveedor')
-            ->count();
+    private function getMontoCUP()
+    {
+        return DB::table('cuentas')
+            ->where('tipo_moneda', 'CUP')
+            ->where('tipo_cuenta', ['permanentes', 'temporales'])
+            ->sum('saldo_cuenta');
+    }
 
-        // Datos Charts
-        // Reporte: Gastos Mensuales
-        $gastosMensuales = DB::table('compras')
+
+    private function countCuentas()
+    {
+        return DB::table('cuentas')->count();
+    }
+
+    private function sumSaldoCuentas()
+    {
+        return DB::table('cuentas')->sum('saldo_cuenta');
+    }
+
+    private function calculateMontoGeneralInvertido()
+    {
+        $saldoCuentas = $this->sumSaldoCuentas();
+        $inversionTotal = $this->calculateInversionTotal();
+        return ($saldoCuentas ?? 0) + ($inversionTotal ?? 0);
+    }
+
+    private function sumDeudaPendientesSaldo()
+    {
+        return DB::table('cuentas')
+            ->where('tipo_moneda', 'USD')
+            ->where('tipo_cuenta', ['deudas'])
+            ->sum('saldo_cuenta');
+    }
+
+    private function countDeudaPendientes()
+    {
+        return DB::table('compras')->where('tipo_compra', 'deuda_proveedor')->count();
+    }
+
+    private function getGastosMensuales()
+    {
+        return DB::table('compras')
             ->select(
                 DB::raw("DATE_FORMAT(compras.fecha_compra, '%Y-%m') as mes_anio"),
                 DB::raw('SUM(compras.total_compra) as total'),
@@ -70,8 +122,11 @@ class LogisticaController extends Controller
             ->groupBy('mes_anio')
             ->orderByDesc('mes_anio')
             ->get();
-        // Reporte: Productos mas Comprados
-        $productosTop = DB::table('compra_producto')
+    }
+
+    private function getProductosTop()
+    {
+        return DB::table('compra_producto')
             ->join('productos', 'compra_producto.producto_id', '=', 'productos.id')
             ->select(
                 'productos.nombre_producto',
@@ -82,8 +137,11 @@ class LogisticaController extends Controller
             ->orderByDesc('total_cantidad')
             ->take(10)
             ->get();
-        // Reporte: Compras por Proveedor
-        $comprasPorProveedor = DB::table('compras')
+    }
+
+    private function getComprasPorProveedor()
+    {
+        return DB::table('compras')
             ->join('proveedors', 'compras.proveedor_id', '=', 'proveedors.id')
             ->select(
                 'proveedors.nombre_proveedor',
@@ -93,8 +151,11 @@ class LogisticaController extends Controller
             ->groupBy('proveedors.id', 'proveedors.nombre_proveedor')
             ->orderByDesc('total_gastado')
             ->get();
-        // Reporte: Productos por Almacén
-        $productosPorAlmacen = DB::table('compra_producto')
+    }
+
+    private function getProductosPorAlmacen()
+    {
+        return DB::table('compra_producto')
             ->join('compras', 'compra_producto.compra_id', '=', 'compras.id')
             ->join('almacens', 'compras.almacen_id', '=', 'almacens.id')
             ->join('productos', 'compra_producto.producto_id', '=', 'productos.id')
@@ -106,28 +167,41 @@ class LogisticaController extends Controller
             ->groupBy('almacens.id', 'almacens.nombre_almacen')
             ->orderByDesc('total_productos')
             ->get();
+    }
 
+    private function tasaCambioGeneral()
+    {
+        return DB::table('tasa_cambios')->sum('tasa');
+    }
 
-        // Renderizar la vista con los datos
+    /**
+     * Display a listing of the resource.
+     */
+    public function index()
+    {
+        // Obtener todos los datos necesarios
         return Inertia::render('Logistica/Index', [
-            'totalCategorias' => $totalCategorias ?? 0,
-            'categoriasActivas' => $categoriasActivas ?? 0,
-            'totalProveedores' => $totalProveedores ?? 0,
-            'totalClientes' => $totalClientes ?? 0,
-            'totalProductos' => $totalProductos ?? 0,
-            'totalUnidades' => $totalUnidades ?? 0, // Total de unidades por porductos
-            'inversionTotal' => $inversionTotal ?? 0, // Inversión total de los productos
-            'totalCuentas' => $totalCuentas ?? 0,  // Cuentasa de Inversion y Ganancias
-            'saldoCuentas' => $saldoCuentas ?? 0,  // Saldo de las Cuentas Bancarias
-            'deudaPendientes' => $deudaPendientes ?? 0, // Deudas a Proveedores
-            'deudaPendietesSaldo' => $deudaPendietesSaldo ?? 0,
-            'montoGeneralInvertido' => $montoGeneralInvertido ?? 0, // Toda la plata limpia del negocio 💀
-
-            // Charts
-            'gastosMensuales' => $gastosMensuales,
-            'productosTop' => $productosTop,
-            'comprasPorProveedor' => $comprasPorProveedor,
-            'productosPorAlmacen' => $productosPorAlmacen,
+            'totalCategorias' => $this->countCategorias(),
+            'categoriasActivas' => $this->countCategoriasActivas(),
+            'totalProveedores' => $this->countProveedores(),
+            'totalClientes' => $this->countClientes(),
+            'totalProductos' => $this->countProductos(),
+            'totalUnidades' => $this->sumUnidadesProductos(),
+            'inversionTotal' => $this->calculateInversionTotal(),
+            'totalCuentas' => $this->countCuentas(),
+            'montoUSD' => $this->getMontoUSD(), // Monto en USD
+            'montoEUR' => $this->getMontoEUR(), // Monto en EUR
+            'montoMLC' => $this->getMontoMLC(), // Monto en MLC
+            'montoCUP' => $this->getMontoCUP(), // Monto en CUP
+            'tasaCambioGeneral' => $this->tasaCambioGeneral(), // Tasa Cambio
+            'saldoCuentas' => $this->sumSaldoCuentas(),
+            'deudaPendientes' => $this->countDeudaPendientes(),
+            'deudaPendietesSaldo' => $this->sumDeudaPendientesSaldo(),
+            'montoGeneralInvertido' => $this->calculateMontoGeneralInvertido(),
+            'gastosMensuales' => $this->getGastosMensuales(),
+            'productosTop' => $this->getProductosTop(),
+            'comprasPorProveedor' => $this->getComprasPorProveedor(),
+            'productosPorAlmacen' => $this->getProductosPorAlmacen(),
         ]);
     }
 }
