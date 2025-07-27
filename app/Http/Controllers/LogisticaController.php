@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\TasaCambio;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
 

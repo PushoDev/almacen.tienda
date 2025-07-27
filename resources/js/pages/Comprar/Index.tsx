@@ -125,7 +125,7 @@ export default function ComprarPage() {
     // Agregar/Editar producto
     const agregarProducto = () => {
         if (!tempFormData.producto || !tempFormData.categoria || !tempFormData.codigo || tempFormData.cantidad <= 0 || tempFormData.precio <= 0) {
-            alert('Por favor, completa todos los campos del formulario.');
+            toast.warning('Por favor, completa todos los campos del formulario.');
             return;
         }
 

@@ -6,11 +6,18 @@ use App\Models\Producto;
 use App\Models\Categoria;
 use App\Models\Almacen;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Storage;
 
 class ProductoController extends Controller
 {
+
+    private function stockProductos()
+    {
+        return DB::table('almacen_producto')
+            ->where('producto_id')->sum('cantidad');
+    }
     /**
      * Display a listing of the resource.
      */

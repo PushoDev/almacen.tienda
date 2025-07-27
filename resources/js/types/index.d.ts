@@ -303,6 +303,8 @@ export interface LogisticaProps {
     sumaDsiponible: number;
     deudaClienteFisico: number;
     clientesFisicos: number;
+//     Capital Dashboard
+    capital: number;
 }
 
 // Interface para Productos por Almacén (Detalles)
