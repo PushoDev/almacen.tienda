@@ -298,6 +298,11 @@ export interface LogisticaProps {
     montoCUP: number;
     // Tasa de Cambio General
     tasaCambioGeneral: number;
+    calculoCup: number;
+    // DisponibleCaja
+    sumaDsiponible: number;
+    deudaClienteFisico: number;
+    clientesFisicos: number;
 }
 
 // Interface para Productos por Almacén (Detalles)

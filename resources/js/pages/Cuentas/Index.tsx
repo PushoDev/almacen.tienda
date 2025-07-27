@@ -56,7 +56,7 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
 
     // Paginación
     const [paginaActual, setPaginaActual] = useState(1);
-    const elementosPorPagina = 5; // Cambia esto al número que desees
+    const elementosPorPagina = 10; // Cambia esto al número que desees
     const indiceUltimoElemento = paginaActual * elementosPorPagina;
     const indicePrimerElemento = indiceUltimoElemento - elementosPorPagina;
 

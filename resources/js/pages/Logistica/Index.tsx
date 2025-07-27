@@ -6,6 +6,7 @@ import { LogisticaProps, type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import {
     ChartPie,
+    Coffee,
     Handshake,
     Package,
     PackageOpen,
@@ -26,6 +27,7 @@ import { CountingNumber } from '@/components/animated/counter-number';
 import { Badge } from '@/components/ui/badge';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { CursorFollow, CursorProvider } from '@/components/ui/cursor';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { ComprasVentasCharts } from '@/layouts/charts/ChartCompraVenta';
 import React from 'react';
@@ -63,6 +65,10 @@ export default function LogisticaPage({
     montoMLC,
     montoCUP,
     tasaCambioGeneral,
+    calculoCup,
+    sumaDsiponible,
+    deudaClienteFisico,
+    clientesFisicos,
 }: LogisticaProps) {
     // Calendario
     const [date, setDate] = React.useState<Date | undefined>(new Date());
@@ -97,107 +103,125 @@ export default function LogisticaPage({
                     {/* Saldo USD */}
                     <Card className="@container/card">
                         <CardHeader className="relative">
-                            <CardDescription>Monto General</CardDescription>
+                            <CursorProvider>
+                                <CursorFollow>
+                                    <div className="rounded-lg bg-green-500 px-2 py-1 text-sm text-white shadow-lg">Valor Natural</div>
+                                </CursorFollow>
+                            </CursorProvider>
+                            <CardDescription className="text-emerald-400">Tipo de Moneda: USD</CardDescription>
                             <CardTitle className="text-2xl font-semibold text-emerald-500 tabular-nums @[250px]/card:text-3xl">
                                 $ <CountingNumber decimalPlaces={2} decimalSeparator="," className="text-4xl" inView number={montoUSD} />
                             </CardTitle>
                             <div className="absolute top-4 right-4">
-                                <Badge variant="outline" className="flex gap-1 rounded-lg text-xs">
-                                    <TrendingUpIcon className="size-3" />
-                                    {tasaCambioGeneral}
+                                <Badge variant="outline" className="flex gap-1 rounded-lg text-xs text-emerald-400">
+                                    <Coffee className="size-3" /> 1
                                 </Badge>
                             </div>
                         </CardHeader>
                         <CardFooter className="flex-col items-start gap-1 text-sm">
-                            <div className="line-clamp-1 flex gap-2 font-medium">
-                                Monto en Productos <TrendingUpIcon className="size-4" />
-                            </div>
-                            <div className="text-muted-foreground">Visitors for the last 6 months</div>
+                            <div className="line-clamp-1 flex gap-2 font-medium">Total USD (Dolar EEUU)</div>
+                            <div className="text-muted-foreground">Monto en las Cuentas del Negocio</div>
                         </CardFooter>
                     </Card>
                     {/* Saldo EUR */}
                     <Card className="@container/card">
                         <CardHeader className="relative">
-                            <CardDescription>Monto General</CardDescription>
-                            <CardTitle className="text-2xl font-semibold text-emerald-500 tabular-nums @[250px]/card:text-3xl">
+                            <CursorProvider>
+                                <CursorFollow>
+                                    <div className="rounded-lg bg-amber-500 px-2 py-1 text-sm text-white shadow-lg">Valor a 1 x 1 con el Dolar</div>
+                                </CursorFollow>
+                            </CursorProvider>
+                            <CardDescription className="text-amber-500">Tipo de Moneda: EUR</CardDescription>
+                            <CardTitle className="text-2xl font-semibold text-amber-500 tabular-nums @[250px]/card:text-3xl">
                                 $ <CountingNumber decimalPlaces={2} decimalSeparator="," className="text-4xl" inView number={montoEUR} />
                             </CardTitle>
                             <div className="absolute top-4 right-4">
-                                <Badge variant="outline" className="flex gap-1 rounded-lg text-xs">
-                                    <TrendingUpIcon className="size-3" />
-                                    {tasaCambioGeneral}
+                                <Badge variant="outline" className="flex gap-1 rounded-lg text-xs text-emerald-400">
+                                    <Coffee className="size-3" /> 1
                                 </Badge>
                             </div>
                         </CardHeader>
                         <CardFooter className="flex-col items-start gap-1 text-sm">
-                            <div className="line-clamp-1 flex gap-2 font-medium">
-                                Monto en Productos <TrendingUpIcon className="size-4" />
-                            </div>
-                            <div className="text-muted-foreground">Visitors for the last 6 months</div>
+                            <div className="line-clamp-1 flex gap-2 font-medium">Total EUR (EURO)</div>
+                            <div className="text-muted-foreground">Monto en las Cuentas del Negocio</div>
                         </CardFooter>
                     </Card>
                     {/* Saldo MLC */}
                     <Card className="@container/card">
                         <CardHeader className="relative">
-                            <CardDescription>Monto General</CardDescription>
-                            <CardTitle className="text-2xl font-semibold text-emerald-500 tabular-nums @[250px]/card:text-3xl">
+                            <CursorProvider>
+                                <CursorFollow>
+                                    <div className="rounded-lg bg-indigo-500 px-2 py-1 text-sm text-white shadow-lg">Pendiente Tasa del MLC</div>
+                                </CursorFollow>
+                            </CursorProvider>
+                            <CardDescription className="text-indigo-500">Tipo de Moneda: MLC</CardDescription>
+                            <CardTitle className="text-2xl font-semibold text-indigo-500 tabular-nums @[250px]/card:text-3xl">
                                 $ <CountingNumber decimalPlaces={2} decimalSeparator="," className="text-4xl" inView number={montoMLC} />
                             </CardTitle>
                             <div className="absolute top-4 right-4">
-                                <Badge variant="outline" className="flex gap-1 rounded-lg text-xs">
-                                    <TrendingUpIcon className="size-3" />
-                                    {tasaCambioGeneral}
+                                <Badge variant="outline" className="flex gap-1 rounded-lg text-xs text-emerald-400">
+                                    <Coffee className="size-3" /> MLC
                                 </Badge>
                             </div>
                         </CardHeader>
                         <CardFooter className="flex-col items-start gap-1 text-sm">
-                            <div className="line-clamp-1 flex gap-2 font-medium">
-                                Monto en Productos <TrendingUpIcon className="size-4" />
-                            </div>
-                            <div className="text-muted-foreground">Visitors for the last 6 months</div>
+                            <div className="line-clamp-1 flex gap-2 font-medium">Total MLC (Moneda Libre Convertible)</div>
+                            <div className="text-muted-foreground">Monto en las Cuentas del Negocio</div>
                         </CardFooter>
                     </Card>
                     {/* Saldo CUP */}
                     <Card className="@container/card">
                         <CardHeader className="relative">
-                            <CardDescription>Monto General</CardDescription>
-                            <CardTitle className="text-2xl font-semibold text-emerald-500 tabular-nums @[250px]/card:text-3xl">
+                            <CursorProvider>
+                                <CursorFollow>
+                                    <div className="rounded-lg bg-blue-500 px-2 py-1 text-sm text-white shadow-lg">
+                                        $ <CountingNumber decimalPlaces={2} decimalSeparator="," className="text-2xl" inView number={calculoCup} />
+                                    </div>
+                                </CursorFollow>
+                            </CursorProvider>
+                            <CardDescription className="text-blue-500">Tipo de Moneda: CUP</CardDescription>
+                            <CardTitle className="text-2xl font-semibold text-blue-500 tabular-nums @[250px]/card:text-3xl">
                                 $ <CountingNumber decimalPlaces={2} decimalSeparator="," className="text-4xl" inView number={montoCUP} />
                             </CardTitle>
                             <div className="absolute top-4 right-4">
-                                <Badge variant="outline" className="flex gap-1 rounded-lg text-xs">
-                                    <TrendingUpIcon className="size-3" />
-                                    {tasaCambioGeneral}
+                                <Badge variant="outline" className="flex gap-1 rounded-lg text-xs text-emerald-400">
+                                    <Coffee className="size-3" /> {tasaCambioGeneral}
                                 </Badge>
                             </div>
                         </CardHeader>
                         <CardFooter className="flex-col items-start gap-1 text-sm">
-                            <div className="line-clamp-1 flex gap-2 font-medium">
-                                Monto en Productos <TrendingUpIcon className="size-4" />
-                            </div>
-                            <div className="text-muted-foreground">Visitors for the last 6 months</div>
+                            <div className="line-clamp-1 flex gap-2 font-medium">Total CUP (Peso Moneda Nacional)</div>
+                            <div className="text-muted-foreground">Monto en las Cuentas del Negocio</div>
                         </CardFooter>
                     </Card>
+
                     {/* Para Inversiones */}
                     {/* Total Monto */}
                     <Card className="@container/card">
                         <CardHeader className="relative">
-                            <CardDescription>Monto General</CardDescription>
+                            <CursorProvider>
+                                <CursorFollow>
+                                    <div className="rounded-lg bg-green-500 px-2 py-1 text-sm text-white shadow-lg">
+                                        Monto General en las Cuentas en USD
+                                    </div>
+                                </CursorFollow>
+                            </CursorProvider>
+                            <CardDescription>Cantidad para Inversiones</CardDescription>
                             <CardTitle className="text-2xl font-semibold text-emerald-500 tabular-nums @[250px]/card:text-3xl">
-                                $ <CountingNumber decimalPlaces={2} decimalSeparator="," className="text-4xl" inView number={montoGeneralInvertido} />
+                                $ <CountingNumber decimalPlaces={2} decimalSeparator="," className="text-4xl" inView number={sumaDsiponible} />
                             </CardTitle>
                             <div className="absolute top-4 right-4">
                                 <Badge variant="outline" className="flex gap-1 rounded-lg text-xs">
                                     <TrendingUpIcon className="size-3" />
-                                    {tasaCambioGeneral}
+                                    {montoGeneralInvertido}
                                 </Badge>
                             </div>
                         </CardHeader>
                         <CardFooter className="flex-col items-start gap-1 text-sm">
                             <div className="line-clamp-1 flex gap-2 font-medium">
-                                Monto en Productos <TrendingUpIcon className="size-4" />
+                                Monto en Cuentas <TrendingUpIcon className="size-4" />
                             </div>
-                            <div className="text-muted-foreground">Visitors for the last 6 months</div>
+                            <div className="text-muted-foreground">Suma USD + EUR + CUP(tasa)</div>
                         </CardFooter>
                     </Card>
                     {/* Total Inversion */}
@@ -242,9 +266,40 @@ export default function LogisticaPage({
                             <div className="text-muted-foreground">Visitors for the last 6 months</div>
                         </CardFooter>
                     </Card>
+                    {/* Total Deudas Clientes fisicos */}
+                    <Card className="@container/card">
+                        <CardHeader className="relative">
+                            <CursorProvider>
+                                <CursorFollow>
+                                    <div className="rounded-lg bg-red-500 px-2 py-1 text-sm text-white shadow-lg">Deudas a Clients Fisicos</div>
+                                </CursorFollow>
+                            </CursorProvider>
+                            <CardDescription>Deudas a Clientes Fisicos</CardDescription>
+                            <CardTitle className="text-2xl font-semibold text-red-400 tabular-nums @[250px]/card:text-3xl">
+                                $ <CountingNumber number={deudaClienteFisico} decimalPlaces={2} decimalSeparator="," className="text-4xl" inView />
+                            </CardTitle>
+                            <div className="absolute top-4 right-4">
+                                <Badge variant="outline" className="flex gap-1 rounded-lg text-xs text-red-500">
+                                    <TrendingDownIcon className="size-3" />
+                                    {clientesFisicos}
+                                </Badge>
+                            </div>
+                        </CardHeader>
+                        <CardFooter className="flex-col items-start gap-1 text-sm">
+                            <div className="line-clamp-1 flex gap-2 font-medium text-red-500">
+                                Monto de las Deudas <TrendingDownIcon className="size-4" />
+                            </div>
+                            <div className="text-muted-foreground">Monto y Cantidad</div>
+                        </CardFooter>
+                    </Card>
                     {/* Total Deudas */}
                     <Card className="@container/card">
                         <CardHeader className="relative">
+                            <CursorProvider>
+                                <CursorFollow>
+                                    <div className="rounded-lg bg-red-500 px-2 py-1 text-sm text-white shadow-lg">Deudas a Proveedores</div>
+                                </CursorFollow>
+                            </CursorProvider>
                             <CardDescription>Deudas a Proveedor</CardDescription>
                             <CardTitle className="text-2xl font-semibold text-red-400 tabular-nums @[250px]/card:text-3xl">
                                 $ <CountingNumber number={deudaPendietesSaldo} decimalPlaces={2} decimalSeparator="," className="text-4xl" inView />

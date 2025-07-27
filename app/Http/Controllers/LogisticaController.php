@@ -111,6 +111,20 @@ class LogisticaController extends Controller
         return DB::table('compras')->where('tipo_compra', 'deuda_proveedor')->count();
     }
 
+    private function sumDeudaClienteFisico()
+    {
+        return DB::table('clientes')
+            ->where('tipo_cliente', 'fisico')
+            ->sum('deuda_pago_cliente');
+    }
+
+    private function countClientesFisicos()
+    {
+        return DB::table('clientes')
+            ->where('tipo_cliente', 'fisico')
+            ->count();
+    }
+
     private function getGastosMensuales()
     {
         return DB::table('compras')
@@ -174,6 +188,9 @@ class LogisticaController extends Controller
         return DB::table('tasa_cambios')->sum('tasa');
     }
 
+
+
+
     /**
      * Display a listing of the resource.
      */
@@ -189,11 +206,17 @@ class LogisticaController extends Controller
             'totalUnidades' => $this->sumUnidadesProductos(),
             'inversionTotal' => $this->calculateInversionTotal(),
             'totalCuentas' => $this->countCuentas(),
-            'montoUSD' => $this->getMontoUSD(), // Monto en USD
+            'montoUSD' => $this->getMontoUSD() ?? 0, // Monto en USD
             'montoEUR' => $this->getMontoEUR(), // Monto en EUR
             'montoMLC' => $this->getMontoMLC(), // Monto en MLC
             'montoCUP' => $this->getMontoCUP(), // Monto en CUP
             'tasaCambioGeneral' => $this->tasaCambioGeneral(), // Tasa Cambio
+            'calculoCup' => $this->getMontoCUP() / $this->tasaCambioGeneral(), // Valor Tasa de Cambio del Cup
+            // Suma General Disponible Caja
+            'sumaDsiponible' => ($this->getMontoCUP() / $this->tasaCambioGeneral()) + $this->getMontoUSD() + $this->getMontoEUR(),
+            // Deudas con Clientes fisicos
+            'deudaClienteFisico' => $this->sumDeudaClienteFisico(),
+            'clientesFisicos' => $this->countClientesFisicos(), // Contar Clientes Fisicos
             'saldoCuentas' => $this->sumSaldoCuentas(),
             'deudaPendientes' => $this->countDeudaPendientes(),
             'deudaPendietesSaldo' => $this->sumDeudaPendientesSaldo(),
