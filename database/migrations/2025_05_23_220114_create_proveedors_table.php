@@ -15,9 +15,9 @@ return new class extends Migration
             $table->id();
             // Detalles de los Proveedores
             $table->string('nombre_proveedor');
-            $table->string('telefono_proveedor')->unique();
+            $table->string('telefono_proveedor')->unique()->nullable();
             $table->string('correo_proveedor')->nullable()->unique();
-            $table->string('localidad_proveedor');
+            $table->string('localidad_proveedor')->nullable();
             $table->text('notas_proveedor')->nullable();
             $table->timestamps();
         });

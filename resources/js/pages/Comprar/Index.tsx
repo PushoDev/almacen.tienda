@@ -88,6 +88,7 @@ export default function ComprarPage() {
     // Estados para autocompletar
     const [searchProveedor, setSearchProveedor] = useState('');
     const [searchAlmacen, setSearchAlmacen] = useState('');
+    const [searchCategoria, setSearchCategoria] = useState('');
 
     // Cargar datos iniciales
     useEffect(() => {
@@ -150,6 +151,8 @@ export default function ComprarPage() {
         setProductos((prev) => prev.filter((p) => p.id !== id));
     };
 
+    const [editingProduct, setEditingProduct] = useState<ProductoComprarProps | null>(null);
+
     // Editar producto
     const editarProducto = (id: number) => {
         const productoParaEditar = productos.find((p) => p.id === id);
@@ -170,10 +173,14 @@ export default function ComprarPage() {
         return productos.reduce((total, p) => total + p.cantidad * p.precio, 0).toFixed(2);
     };
 
-    // Filtrar proveedores y almacenes
+    // Filtrar proveedores, almacenes y categorias
     const filteredProvedors = proveedors.filter((proveedor) => proveedor.nombre_proveedor.toLowerCase().includes(searchProveedor.toLowerCase()));
 
     const filteredAlmacens = almacens.filter((almacen) => almacen.nombre_almacen.toLowerCase().includes(searchAlmacen.toLowerCase()));
+
+    const filteredCategorias = categorias.filter((cat) =>
+        cat.nombre_categoria.toLowerCase().includes(searchCategoria.toLowerCase())
+    );
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -229,7 +236,14 @@ export default function ComprarPage() {
                                 {/* Proveedor */}
                                 <div className="grid w-full max-w-sm items-center gap-1.5">
                                     <Label htmlFor="proveedor">Proveedor</Label>
-                                    <Select name="proveedor" value={data.proveedor} onValueChange={(value) => setData('proveedor', value)}>
+                                    <Select
+                                        name="proveedor"
+                                        value={data.proveedor}
+                                        onValueChange={(value) => {
+                                            setData('proveedor', value);
+                                            setSearchProveedor('');
+                                        }}
+                                    >
                                         <SelectTrigger className="mt-2 w-full">
                                             <SelectValue placeholder="Seleccione Proveedor" />
                                         </SelectTrigger>
@@ -237,16 +251,43 @@ export default function ComprarPage() {
                                             <input
                                                 type="text"
                                                 className="mb-2 w-full rounded border border-gray-300 p-2"
-                                                placeholder="Buscar proveedor..."
+                                                placeholder="Buscar o crear proveedor..."
                                                 value={searchProveedor}
                                                 onChange={(e) => setSearchProveedor(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        const trimmed = searchProveedor.trim();
+                                                        if (trimmed && !filteredProvedors.some(p => p.nombre_proveedor === trimmed)) {
+                                                            setData('proveedor', trimmed);
+                                                            setSearchProveedor('');
+                                                        }
+                                                    }
+                                                }}
                                             />
                                             {filteredProvedors.length > 0 ? (
                                                 filteredProvedors.map((proveedor) => (
-                                                    <SelectItem key={proveedor.id} value={proveedor.nombre_proveedor}>
+                                                    <SelectItem
+                                                        key={proveedor.id}
+                                                        value={proveedor.nombre_proveedor}
+                                                        onSelect={() => {
+                                                            setData('proveedor', proveedor.nombre_proveedor);
+                                                            setSearchProveedor('');
+                                                        }}
+                                                    >
                                                         {proveedor.nombre_proveedor}
                                                     </SelectItem>
                                                 ))
+                                            ) : searchProveedor.trim() ? (
+                                                <SelectItem
+                                                    value={searchProveedor.trim()}
+                                                    onSelect={() => {
+                                                        setData('proveedor', searchProveedor.trim());
+                                                        setSearchProveedor('');
+                                                    }}
+                                                >
+                                                    ➕ Crear nuevo proveedor: <strong>{searchProveedor.trim()}</strong>
+                                                </SelectItem>
                                             ) : (
                                                 <SelectItem disabled>No hay proveedores disponibles</SelectItem>
                                             )}
@@ -258,7 +299,8 @@ export default function ComprarPage() {
                                 {/* Almacén Destino */}
                                 <div className="grid w-full max-w-sm items-center gap-1.5">
                                     <Label htmlFor="almacen">Almacén</Label>
-                                    <Select name="almacen" value={data.almacen} onValueChange={(value) => setData('almacen', value)}>
+                                    <Select name="almacen" value={data.almacen}
+                                            onValueChange={(value) => setData('almacen', value)}>
                                         <SelectTrigger className="mt-2 w-full">
                                             <SelectValue placeholder="Seleccione Almacén" />
                                         </SelectTrigger>
@@ -291,7 +333,8 @@ export default function ComprarPage() {
                 {/* Formulario de productos */}
                 <Card>
                     <CardHeader>
-                        <CardDescription className="text-center dark:text-emerald-400">Ingrese Datos del Producto a Comprar</CardDescription>
+                        <CardDescription className="text-center dark:text-emerald-400">Ingrese Datos del Producto a
+                            Comprar</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="grid grid-cols-3 gap-4">
@@ -329,17 +372,65 @@ export default function ComprarPage() {
                                 <Select
                                     name="categoria"
                                     value={tempFormData.categoria}
-                                    onValueChange={(value) => setTempFormData({ ...tempFormData, categoria: value })}
+                                    onValueChange={(value) => {
+                                        setTempFormData({ ...tempFormData, categoria: value });
+                                        setSearchCategoria(''); // Limpiar búsqueda al seleccionar
+                                    }}
                                 >
                                     <SelectTrigger className="w-full">
                                         <SelectValue placeholder="Seleccione Categoría" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {categorias.map((categoria) => (
-                                            <SelectItem key={categoria.id} value={categoria.nombre_categoria}>
-                                                {categoria.nombre_categoria}
+                                        <input
+                                            type="text"
+                                            className="mb-2 w-full rounded border border-gray-300 p-2"
+                                            placeholder="Buscar o crear categoría..."
+                                            value={searchCategoria}
+                                            onChange={(e) => setSearchCategoria(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    const trimmed = searchCategoria.trim();
+                                                    if (trimmed && !filteredCategorias.some(c => c.nombre_categoria === trimmed)) {
+                                                        setTempFormData({ ...tempFormData, categoria: trimmed });
+                                                        setSearchCategoria('');
+                                                    }
+                                                }
+                                            }}
+                                        />
+
+                                        {filteredCategorias.length > 0 ? (
+                                            filteredCategorias.map((categoria) => (
+                                                <SelectItem
+                                                    key={categoria.id}
+                                                    value={categoria.nombre_categoria}
+                                                    onSelect={() => {
+                                                        setTempFormData({
+                                                            ...tempFormData,
+                                                            categoria: categoria.nombre_categoria
+                                                        });
+                                                        setSearchCategoria('');
+                                                    }}
+                                                >
+                                                    {categoria.nombre_categoria}
+                                                </SelectItem>
+                                            ))
+                                        ) : searchCategoria.trim() ? (
+                                            <SelectItem
+                                                value={searchCategoria.trim()}
+                                                onSelect={() => {
+                                                    setTempFormData({
+                                                        ...tempFormData,
+                                                        categoria: searchCategoria.trim()
+                                                    });
+                                                    setSearchCategoria('');
+                                                }}
+                                            >
+                                                ➕ Crear nueva categoría: <strong>{searchCategoria.trim()}</strong>
                                             </SelectItem>
-                                        ))}
+                                        ) : (
+                                            <SelectItem disabled>No hay categorías disponibles</SelectItem>
+                                        )}
                                     </SelectContent>
                                 </Select>
                                 {errors.categorias && <InputError message={errors.categorias[0]} />}
@@ -387,7 +478,8 @@ export default function ComprarPage() {
                 </Card>
 
                 {/* Tabla de productos */}
-                <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
+                <div
+                    className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
                     <Table>
                         <TableCaption className="text-sidebar-accent">Lista de los Productos a Comprar</TableCaption>
                         <TableHeader>
@@ -411,7 +503,8 @@ export default function ComprarPage() {
                                     <TableCell>${p.precio.toFixed(2)}</TableCell>
                                     <TableCell>${(p.cantidad * p.precio).toFixed(2)}</TableCell>
                                     <TableCell className="text-right">
-                                        <Button variant="link" onClick={() => editarProducto(p.id)} className="text-blue-600 hover:text-blue-800">
+                                        <Button variant="link" onClick={() => editarProducto(p.id)}
+                                                className="text-blue-600 hover:text-blue-800">
                                             <Edit2 />
                                         </Button>
                                         <Button
@@ -438,6 +531,9 @@ export default function ComprarPage() {
                         </TableFooter>
                     </Table>
                 </div>
+
+                {/* Dialog Editar Producto */}
+                
 
                 {/* Botones de acción */}
                 <div className="flex justify-center gap-4 p-4">

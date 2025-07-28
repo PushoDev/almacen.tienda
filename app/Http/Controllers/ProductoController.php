@@ -34,7 +34,7 @@ class ProductoController extends Controller
                     'codigo_producto' => $producto->codigo_producto,
                     'categoria' => $producto->categoria ? $producto->categoria->nombre_categoria : null,
                     'precio_compra_producto' => (float) $producto->precio_compra_producto,
-                    'cantidad_producto' => $producto->cantidad_producto,
+                    'cantidad_producto' => $producto->almacenes->sum('pivot.cantidad'),
                     'imagen_url' => $producto->imagen_producto ? Storage::url($producto->imagen_producto) : null,
                 ];
             }),

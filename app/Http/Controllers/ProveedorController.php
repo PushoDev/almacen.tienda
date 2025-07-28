@@ -14,7 +14,7 @@ class ProveedorController extends Controller
      */
     public function index()
     {
-        return Inertia::render('Proveedores/Index', [
+        return Inertia::render('Proveedores/index', [
             'proveedores' => Proveedor::all(),
         ]);
     }
