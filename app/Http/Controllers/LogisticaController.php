@@ -187,6 +187,11 @@ class LogisticaController extends Controller
         return DB::table('tasa_cambios')->sum('tasa');
     }
 
+    private function getTasaMlcTemp()
+    {
+        return DB::table('tasamlc_temp')->sum('tasa_mlc');
+    }
+
 
 
 
@@ -197,33 +202,35 @@ class LogisticaController extends Controller
     {
         // Obtener todos los datos necesarios
         return Inertia::render('Logistica/Index', [
-            'totalCategorias' => $this->countCategorias(),
-            'categoriasActivas' => $this->countCategoriasActivas(),
-            'totalProveedores' => $this->countProveedores(),
-            'totalClientes' => $this->countClientes(),
-            'totalProductos' => $this->countProductos(),
-            'totalUnidades' => $this->sumUnidadesProductos(),
-            'inversionTotal' => $this->calculateInversionTotal(),
-            'totalCuentas' => $this->countCuentas(),
+            'totalCategorias' => $this->countCategorias() ?? 0,
+            'categoriasActivas' => $this->countCategoriasActivas() ?? 0,
+            'totalProveedores' => $this->countProveedores() ?? 0,
+            'totalClientes' => $this->countClientes() ?? 0,
+            'totalProductos' => $this->countProductos() ?? 0,
+            'totalUnidades' => $this->sumUnidadesProductos() ?? 0,
+            'inversionTotal' => $this->calculateInversionTotal() ?? 0,
+            'totalCuentas' => $this->countCuentas() ?? 0,
             'montoUSD' => $this->getMontoUSD() ?? 0, // Monto en USD
-            'montoEUR' => $this->getMontoEUR(), // Monto en EUR
-            'montoMLC' => $this->getMontoMLC(), // Monto en MLC
-            'montoCUP' => $this->getMontoCUP(), // Monto en CUP
-            'tasaCambioGeneral' => $this->tasaCambioGeneral(), // Tasa Cambio
-            'calculoCup' => $this->getMontoCUP() / $this->tasaCambioGeneral(), // Valor Tasa de Cambio del Cup
+            'montoEUR' => $this->getMontoEUR() ?? 0, // Monto en EUR
+            'montoMLC' => $this->getMontoMLC() ?? 0, // Monto en MLC
+            'montoCUP' => $this->getMontoCUP() ?? 0, // Monto en CUP
+            'tasaCambioGeneral' => $this->tasaCambioGeneral() ?? 0, // Tasa Cambio
+            'calculoCup' => $this->getMontoCUP() / $this->tasaCambioGeneral() ?? 0, // Valor Tasa de Cambio del Cup
             // Suma General Disponible Caja
-            'sumaDsiponible' => ($this->getMontoCUP() / $this->tasaCambioGeneral()) + $this->getMontoUSD() + $this->getMontoEUR(),
+            'sumaDsiponible' => ($this->getMontoCUP() / $this->tasaCambioGeneral()) + ($this->getMontoMLC() / $this->getTasaMlcTemp()) + $this->getMontoUSD() + $this->getMontoEUR(),
             // Deudas con Clientes fisicos
-            'deudaClienteFisico' => $this->sumDeudaClienteFisico(),
-            'clientesFisicos' => $this->countClientesFisicos(), // Contar Clientes Fisicos
-            'saldoCuentas' => $this->sumSaldoCuentas(),
-            'deudaPendientes' => $this->countDeudaPendientes(),
-            'deudaPendietesSaldo' => $this->sumDeudaPendientesSaldo(),
-            'montoGeneralInvertido' => $this->calculateMontoGeneralInvertido(),
-            'gastosMensuales' => $this->getGastosMensuales(),
-            'productosTop' => $this->getProductosTop(),
-            'comprasPorProveedor' => $this->getComprasPorProveedor(),
-            'productosPorAlmacen' => $this->getProductosPorAlmacen(),
+            'deudaClienteFisico' => $this->sumDeudaClienteFisico() ?? 0,
+            'clientesFisicos' => $this->countClientesFisicos() ?? 0, // Contar Clientes Fisicos
+            'saldoCuentas' => $this->sumSaldoCuentas() ?? 0,
+            'deudaPendientes' => $this->countDeudaPendientes() ?? 0,
+            'deudaPendietesSaldo' => $this->sumDeudaPendientesSaldo() ?? 0,
+            'montoGeneralInvertido' => $this->calculateMontoGeneralInvertido() ?? 0,
+            'gastosMensuales' => $this->getGastosMensuales() ?? 0,
+            'productosTop' => $this->getProductosTop() ?? 0,
+            'comprasPorProveedor' => $this->getComprasPorProveedor() ?? 0,
+            'productosPorAlmacen' => $this->getProductosPorAlmacen() ?? 0,
+            'tasaMLC' => $this->getTasaMlcTemp() ?? 0,
+            'calcTasaMLC' => $this->getMontoMLC() / $this->getTasaMlcTemp(),
         ]);
     }
 }

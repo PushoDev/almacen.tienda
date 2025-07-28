@@ -69,6 +69,8 @@ export default function LogisticaPage({
     sumaDsiponible,
     deudaClienteFisico,
     clientesFisicos,
+    tasaMLC,
+    calcTasaMLC,
 }: LogisticaProps) {
     // Calendario
     const [date, setDate] = React.useState<Date | undefined>(new Date());
@@ -151,7 +153,9 @@ export default function LogisticaPage({
                         <CardHeader className="relative">
                             <CursorProvider>
                                 <CursorFollow>
-                                    <div className="rounded-lg bg-indigo-500 px-2 py-1 text-sm text-white shadow-lg">Pendiente Tasa del MLC</div>
+                                    <div className="rounded-lg bg-indigo-500 px-2 py-1 text-sm text-white shadow-lg">
+                                        $ <CountingNumber decimalPlaces={2} decimalSeparator="," className="text-2xl" inView number={calcTasaMLC} />
+                                    </div>
                                 </CursorFollow>
                             </CursorProvider>
                             <CardDescription className="text-indigo-500">Tipo de Moneda: MLC</CardDescription>
@@ -160,7 +164,7 @@ export default function LogisticaPage({
                             </CardTitle>
                             <div className="absolute top-4 right-4">
                                 <Badge variant="outline" className="flex gap-1 rounded-lg text-xs text-emerald-400">
-                                    <Coffee className="size-3" /> MLC
+                                    <Coffee className="size-3" /> {tasaMLC}
                                 </Badge>
                             </div>
                         </CardHeader>
@@ -202,7 +206,7 @@ export default function LogisticaPage({
                             <CursorProvider>
                                 <CursorFollow>
                                     <div className="rounded-lg bg-green-500 px-2 py-1 text-sm text-white shadow-lg">
-                                        Monto General en las Cuentas en USD
+                                        Monto General en todas las cuentas valoradas en USD
                                     </div>
                                 </CursorFollow>
                             </CursorProvider>

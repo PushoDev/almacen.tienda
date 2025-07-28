@@ -43,6 +43,11 @@ class DatabaseSeeder extends Seeder
             'tasa' => 325.0,
             'fecha_actualizacion' => now(),
         ]);
+        // Tasa de Cambio para MLC Temporales
+        DB::table('tasamlc_temp')->insert([
+            'tasa_mlc' => 1.50,
+            'fecha_actualizacion' => now(),
+        ]);
 
         // Insertar categorías
         DB::table('categorias')->insert([
