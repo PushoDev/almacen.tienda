@@ -26,7 +26,7 @@ import { cn } from '@/lib/utils';
 import { AlmacenProps, CategoriasProps, ClienteProps, CuentaNegocioProps, ProductoComprarProps, ProveedorProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { format } from 'date-fns';
-import { BookCheck, CalendarIcon, Edit2, PlusIcon, ShoppingBasket, Trash2Icon } from 'lucide-react';
+import { BookCheck, CalendarIcon, Edit2, HardDriveUpload, PlusIcon, ShoppingBasket, Trash2Icon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -72,6 +72,9 @@ export default function ComprarPage() {
 
     // Estado para productos en la tabla
     const [productos, setProductos] = useState<ProductoComprarProps[]>([]);
+
+    // Estado para controlar la apertura del diálogo
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
 
     // Datos del formulario principal
     const { data, setData, post, processing } = useForm({
@@ -151,8 +154,6 @@ export default function ComprarPage() {
         setProductos((prev) => prev.filter((p) => p.id !== id));
     };
 
-    const [editingProduct, setEditingProduct] = useState<ProductoComprarProps | null>(null);
-
     // Editar producto
     const editarProducto = (id: number) => {
         const productoParaEditar = productos.find((p) => p.id === id);
@@ -165,6 +166,7 @@ export default function ComprarPage() {
                 precio: productoParaEditar.precio,
             });
             setEditingProductId(id);
+            setIsDialogOpen(true); // Abrir el diálogo
         }
     };
 
@@ -175,12 +177,8 @@ export default function ComprarPage() {
 
     // Filtrar proveedores, almacenes y categorias
     const filteredProvedors = proveedors.filter((proveedor) => proveedor.nombre_proveedor.toLowerCase().includes(searchProveedor.toLowerCase()));
-
     const filteredAlmacens = almacens.filter((almacen) => almacen.nombre_almacen.toLowerCase().includes(searchAlmacen.toLowerCase()));
-
-    const filteredCategorias = categorias.filter((cat) =>
-        cat.nombre_categoria.toLowerCase().includes(searchCategoria.toLowerCase())
-    );
+    const filteredCategorias = categorias.filter((cat) => cat.nombre_categoria.toLowerCase().includes(searchCategoria.toLowerCase()));
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -258,7 +256,7 @@ export default function ComprarPage() {
                                                     if (e.key === 'Enter') {
                                                         e.preventDefault();
                                                         const trimmed = searchProveedor.trim();
-                                                        if (trimmed && !filteredProvedors.some(p => p.nombre_proveedor === trimmed)) {
+                                                        if (trimmed && !filteredProvedors.some((p) => p.nombre_proveedor === trimmed)) {
                                                             setData('proveedor', trimmed);
                                                             setSearchProveedor('');
                                                         }
@@ -299,8 +297,7 @@ export default function ComprarPage() {
                                 {/* Almacén Destino */}
                                 <div className="grid w-full max-w-sm items-center gap-1.5">
                                     <Label htmlFor="almacen">Almacén</Label>
-                                    <Select name="almacen" value={data.almacen}
-                                            onValueChange={(value) => setData('almacen', value)}>
+                                    <Select name="almacen" value={data.almacen} onValueChange={(value) => setData('almacen', value)}>
                                         <SelectTrigger className="mt-2 w-full">
                                             <SelectValue placeholder="Seleccione Almacén" />
                                         </SelectTrigger>
@@ -333,8 +330,7 @@ export default function ComprarPage() {
                 {/* Formulario de productos */}
                 <Card>
                     <CardHeader>
-                        <CardDescription className="text-center dark:text-emerald-400">Ingrese Datos del Producto a
-                            Comprar</CardDescription>
+                        <CardDescription className="text-center dark:text-emerald-400">Ingrese Datos del Producto a Comprar</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="grid grid-cols-3 gap-4">
@@ -391,7 +387,7 @@ export default function ComprarPage() {
                                                 if (e.key === 'Enter') {
                                                     e.preventDefault();
                                                     const trimmed = searchCategoria.trim();
-                                                    if (trimmed && !filteredCategorias.some(c => c.nombre_categoria === trimmed)) {
+                                                    if (trimmed && !filteredCategorias.some((c) => c.nombre_categoria === trimmed)) {
                                                         setTempFormData({ ...tempFormData, categoria: trimmed });
                                                         setSearchCategoria('');
                                                     }
@@ -407,7 +403,7 @@ export default function ComprarPage() {
                                                     onSelect={() => {
                                                         setTempFormData({
                                                             ...tempFormData,
-                                                            categoria: categoria.nombre_categoria
+                                                            categoria: categoria.nombre_categoria,
                                                         });
                                                         setSearchCategoria('');
                                                     }}
@@ -421,7 +417,7 @@ export default function ComprarPage() {
                                                 onSelect={() => {
                                                     setTempFormData({
                                                         ...tempFormData,
-                                                        categoria: searchCategoria.trim()
+                                                        categoria: searchCategoria.trim(),
                                                     });
                                                     setSearchCategoria('');
                                                 }}
@@ -478,8 +474,7 @@ export default function ComprarPage() {
                 </Card>
 
                 {/* Tabla de productos */}
-                <div
-                    className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
+                <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
                     <Table>
                         <TableCaption className="text-sidebar-accent">Lista de los Productos a Comprar</TableCaption>
                         <TableHeader>
@@ -503,14 +498,226 @@ export default function ComprarPage() {
                                     <TableCell>${p.precio.toFixed(2)}</TableCell>
                                     <TableCell>${(p.cantidad * p.precio).toFixed(2)}</TableCell>
                                     <TableCell className="text-right">
-                                        <Button variant="link" onClick={() => editarProducto(p.id)}
-                                                className="text-blue-600 hover:text-blue-800">
-                                            <Edit2 />
-                                        </Button>
+                                        {/* Dialog para Editar */}
+                                        <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                                            <AlertDialogTrigger asChild>
+                                                <Button
+                                                    variant="link"
+                                                    className="cursor-pointer text-blue-600 hover:text-blue-800"
+                                                    onClick={() => editarProducto(p.id)} // Cargar datos para editar
+                                                >
+                                                    <Edit2 />
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Editar Producto</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        Modifica los datos del producto y guarda los cambios.
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+
+                                                {/* Formulario de edición */}
+                                                <div className="grid gap-4 py-4">
+                                                    {/* Nombre del Producto */}
+                                                    <div className="grid grid-cols-4 items-center gap-4">
+                                                        <Label htmlFor="edit-producto" className="text-right">
+                                                            Nombre
+                                                        </Label>
+                                                        <Input
+                                                            id="edit-producto"
+                                                            value={tempFormData.producto}
+                                                            onChange={(e) =>
+                                                                setTempFormData({
+                                                                    ...tempFormData,
+                                                                    producto: e.target.value,
+                                                                })
+                                                            }
+                                                            className="col-span-3"
+                                                        />
+                                                    </div>
+
+                                                    {/* Código del Producto */}
+                                                    <div className="grid grid-cols-4 items-center gap-4">
+                                                        <Label htmlFor="edit-codigo" className="text-right">
+                                                            Código
+                                                        </Label>
+                                                        <Input
+                                                            id="edit-codigo"
+                                                            value={tempFormData.codigo}
+                                                            onChange={(e) =>
+                                                                setTempFormData({
+                                                                    ...tempFormData,
+                                                                    codigo: e.target.value,
+                                                                })
+                                                            }
+                                                            className="col-span-3"
+                                                        />
+                                                    </div>
+
+                                                    {/* Categoría del Producto */}
+                                                    <div className="grid grid-cols-4 items-center gap-4">
+                                                        <Label htmlFor="edit-categoria" className="text-right">
+                                                            Categoría
+                                                        </Label>
+                                                        <Select
+                                                            value={tempFormData.categoria}
+                                                            onValueChange={(value) =>
+                                                                setTempFormData({
+                                                                    ...tempFormData,
+                                                                    categoria: value,
+                                                                })
+                                                            }
+                                                        >
+                                                            <SelectTrigger className="col-span-3">
+                                                                <SelectValue placeholder="Seleccione o cree una categoría" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <input
+                                                                    type="text"
+                                                                    className="mb-2 w-full rounded border border-gray-300 p-2"
+                                                                    placeholder="Buscar o crear categoría..."
+                                                                    value={searchCategoria}
+                                                                    onChange={(e) => setSearchCategoria(e.target.value)}
+                                                                    onKeyDown={(e) => {
+                                                                        if (e.key === 'Enter') {
+                                                                            e.preventDefault();
+                                                                            const trimmed = searchCategoria.trim();
+                                                                            if (trimmed) {
+                                                                                setTempFormData({
+                                                                                    ...tempFormData,
+                                                                                    categoria: trimmed,
+                                                                                });
+                                                                                setSearchCategoria('');
+                                                                            }
+                                                                        }
+                                                                    }}
+                                                                />
+                                                                {filteredCategorias.length > 0 ? (
+                                                                    filteredCategorias.map((cat) => (
+                                                                        <SelectItem
+                                                                            key={cat.id}
+                                                                            value={cat.nombre_categoria}
+                                                                            onSelect={() =>
+                                                                                setTempFormData({
+                                                                                    ...tempFormData,
+                                                                                    categoria: cat.nombre_categoria,
+                                                                                })
+                                                                            }
+                                                                        >
+                                                                            {cat.nombre_categoria}
+                                                                        </SelectItem>
+                                                                    ))
+                                                                ) : searchCategoria.trim() ? (
+                                                                    <SelectItem
+                                                                        value={searchCategoria.trim()}
+                                                                        onSelect={() =>
+                                                                            setTempFormData({
+                                                                                ...tempFormData,
+                                                                                categoria: searchCategoria.trim(),
+                                                                            })
+                                                                        }
+                                                                    >
+                                                                        ➕ Crear: <strong>{searchCategoria.trim()}</strong>
+                                                                    </SelectItem>
+                                                                ) : (
+                                                                    <SelectItem disabled>Sin categorías</SelectItem>
+                                                                )}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+
+                                                    {/* Precio */}
+                                                    <div className="grid grid-cols-4 items-center gap-4">
+                                                        <Label htmlFor="edit-precio" className="text-right">
+                                                            Precio
+                                                        </Label>
+                                                        <Input
+                                                            id="edit-precio"
+                                                            type="number"
+                                                            step="0.01"
+                                                            value={tempFormData.precio || ''}
+                                                            onChange={(e) =>
+                                                                setTempFormData({
+                                                                    ...tempFormData,
+                                                                    precio: parseFloat(e.target.value) || 0,
+                                                                })
+                                                            }
+                                                            className="col-span-3"
+                                                        />
+                                                    </div>
+
+                                                    {/* Cantidad */}
+                                                    <div className="grid grid-cols-4 items-center gap-4">
+                                                        <Label htmlFor="edit-cantidad" className="text-right">
+                                                            Cantidad
+                                                        </Label>
+                                                        <Input
+                                                            id="edit-cantidad"
+                                                            type="number"
+                                                            value={tempFormData.cantidad || ''}
+                                                            onChange={(e) =>
+                                                                setTempFormData({
+                                                                    ...tempFormData,
+                                                                    cantidad: parseInt(e.target.value) || 0,
+                                                                })
+                                                            }
+                                                            className="col-span-3"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel onClick={() => setIsDialogOpen(false)}>Cancelar</AlertDialogCancel>
+                                                    <Button
+                                                        className="cursor-pointer"
+                                                        onClick={() => {
+                                                            if (
+                                                                !tempFormData.producto.trim() ||
+                                                                !tempFormData.categoria.trim() ||
+                                                                !tempFormData.codigo.trim() ||
+                                                                tempFormData.cantidad <= 0 ||
+                                                                tempFormData.precio <= 0
+                                                            ) {
+                                                                toast.warning('Por favor, completa todos los campos válidos.');
+                                                                return;
+                                                            }
+
+                                                            // Actualizar producto
+                                                            setProductos((prev) =>
+                                                                prev.map((prod) =>
+                                                                    prod.id === p.id
+                                                                        ? {
+                                                                              ...tempFormData,
+                                                                              id: p.id,
+                                                                          }
+                                                                        : prod,
+                                                                ),
+                                                            );
+
+                                                            // Resetear tempFormData después de guardar
+                                                            setTempFormData({
+                                                                producto: '',
+                                                                categoria: '',
+                                                                codigo: '',
+                                                                cantidad: 0,
+                                                                precio: 0,
+                                                            });
+
+                                                            toast.success('Producto actualizado correctamente');
+                                                            setIsDialogOpen(false); // Cerrar el diálogo
+                                                        }}
+                                                    >
+                                                        <HardDriveUpload className="mr-2 h-4 w-4" />
+                                                        Actualizar
+                                                    </Button>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
                                         <Button
                                             variant="link"
                                             onClick={() => eliminarProducto(p.id)}
-                                            className="ms-2 text-red-600 hover:text-red-800"
+                                            className="ms-2 cursor-pointer text-red-600 hover:text-red-800"
                                         >
                                             <Trash2Icon />
                                         </Button>
@@ -531,9 +738,6 @@ export default function ComprarPage() {
                         </TableFooter>
                     </Table>
                 </div>
-
-                {/* Dialog Editar Producto */}
-                
 
                 {/* Botones de acción */}
                 <div className="flex justify-center gap-4 p-4">
