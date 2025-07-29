@@ -185,6 +185,7 @@ class CompraController extends Controller
                         'categoria_id' => $categoria->id,
                         'precio_compra_producto' => $item['precio'],
                         'cantidad_producto' => 0, // El stock se maneja en AlmacenProducto
+                        'imagen_producto' => 'productos/producto-default.png', // ✅ Imagen por defecto
                     ]
                 );
 

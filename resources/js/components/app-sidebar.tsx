@@ -138,9 +138,9 @@ const footerNavItems: NavItem[] = [
     },
     {
         title: 'Documentación',
-        href: 'https://laravel.com/docs/starter-kits#react',
+        href: 'https://documentacion-posglorieta.vercel.app/',
         icon: BookOpen,
-        roles: ['vendedor'],
+        roles: ['admin', 'vendedor'],
     },
 ];
 

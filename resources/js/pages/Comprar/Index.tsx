@@ -31,22 +31,10 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Caja Principal',
-        href: '/dashboard',
-    },
-    {
-        title: 'Productos',
-        href: '/productos',
-    },
-    {
-        title: 'Realizar Venta',
-        href: 'punto-venta',
-    },
-    {
-        title: 'Adquirir Nuevos Productos',
-        href: '/comprar',
-    },
+    { title: 'Caja Principal', href: '/dashboard' },
+    { title: 'Productos', href: '/productos' },
+    { title: 'Realizar Venta', href: 'punto-venta' },
+    { title: 'Adquirir Nuevos Productos', href: '/comprar' },
 ];
 
 export default function ComprarPage() {
@@ -61,7 +49,6 @@ export default function ComprarPage() {
     const [clientes, setClientes] = useState<ClienteProps[]>([]);
     const [activeTab, setActiveTab] = useState<'cuentas' | 'clientes' | 'combinado'>('cuentas');
 
-    // Estado temporal para campos del producto
     const [tempFormData, setTempFormData] = useState<Omit<ProductoComprarProps, 'id'>>({
         producto: '',
         categoria: '',
@@ -70,13 +57,9 @@ export default function ComprarPage() {
         precio: 0,
     });
 
-    // Estado para productos en la tabla
     const [productos, setProductos] = useState<ProductoComprarProps[]>([]);
-
-    // Estado para controlar la apertura del diálogo
     const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-    // Datos del formulario principal
     const { data, setData, post, processing } = useForm({
         compra: 'deuda_proveedor',
         cuenta_id: 1,
@@ -88,36 +71,33 @@ export default function ComprarPage() {
         productos: [] as ProductoComprarProps[],
     });
 
-    // Estados para autocompletar
     const [searchProveedor, setSearchProveedor] = useState('');
     const [searchAlmacen, setSearchAlmacen] = useState('');
     const [searchCategoria, setSearchCategoria] = useState('');
 
-    // Cargar datos iniciales
     useEffect(() => {
         fetch('/compras/almacenes')
             .then((res) => res.json())
-            .then((data) => setAlmacens(data))
-            .catch((err) => console.error(err));
+            .then(setAlmacens)
+            .catch(console.error);
         fetch('/compras/proveedores')
             .then((res) => res.json())
-            .then((data) => setProveedors(data))
-            .catch((err) => console.error(err));
+            .then(setProveedors)
+            .catch(console.error);
         fetch('/compras/categorias')
             .then((res) => res.json())
-            .then((data) => setCategorias(data))
-            .catch((err) => console.error(err));
+            .then(setCategorias)
+            .catch(console.error);
         fetch('/compras/cuentas/pago')
             .then((res) => res.json())
-            .then((data) => setCuentas(data))
-            .catch((err) => console.error(err));
+            .then(setCuentas)
+            .catch(console.error);
         fetch('/compras/clientes/fisicos')
             .then((res) => res.json())
-            .then((data) => setClientes(data))
-            .catch((err) => console.error(err));
+            .then(setClientes)
+            .catch(console.error);
     }, []);
 
-    // Manejar cambios en los campos temporales
     const handleTempInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         setTempFormData((prev) => ({
@@ -126,7 +106,6 @@ export default function ComprarPage() {
         }));
     };
 
-    // Agregar/Editar producto
     const agregarProducto = () => {
         if (!tempFormData.producto || !tempFormData.categoria || !tempFormData.codigo || tempFormData.cantidad <= 0 || tempFormData.precio <= 0) {
             toast.warning('Por favor, completa todos los campos del formulario.');
@@ -145,16 +124,13 @@ export default function ComprarPage() {
             setProductos((prev) => [...prev, nuevoProducto]);
         }
 
-        // Limpiar campos temporales
         setTempFormData({ producto: '', categoria: '', codigo: '', cantidad: 0, precio: 0 });
     };
 
-    // Eliminar producto
     const eliminarProducto = (id: number) => {
         setProductos((prev) => prev.filter((p) => p.id !== id));
     };
 
-    // Editar producto
     const editarProducto = (id: number) => {
         const productoParaEditar = productos.find((p) => p.id === id);
         if (productoParaEditar) {
@@ -166,16 +142,14 @@ export default function ComprarPage() {
                 precio: productoParaEditar.precio,
             });
             setEditingProductId(id);
-            setIsDialogOpen(true); // Abrir el diálogo
+            setIsDialogOpen(true);
         }
     };
 
-    // Calcular total de la compra
     const calcularTotal = () => {
         return productos.reduce((total, p) => total + p.cantidad * p.precio, 0).toFixed(2);
     };
 
-    // Filtrar proveedores, almacenes y categorias
     const filteredProvedors = proveedors.filter((proveedor) => proveedor.nombre_proveedor.toLowerCase().includes(searchProveedor.toLowerCase()));
     const filteredAlmacens = almacens.filter((almacen) => almacen.nombre_almacen.toLowerCase().includes(searchAlmacen.toLowerCase()));
     const filteredCategorias = categorias.filter((cat) => cat.nombre_categoria.toLowerCase().includes(searchCategoria.toLowerCase()));
@@ -498,13 +472,12 @@ export default function ComprarPage() {
                                     <TableCell>${p.precio.toFixed(2)}</TableCell>
                                     <TableCell>${(p.cantidad * p.precio).toFixed(2)}</TableCell>
                                     <TableCell className="text-right">
-                                        {/* Dialog para Editar */}
                                         <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                                             <AlertDialogTrigger asChild>
                                                 <Button
                                                     variant="link"
                                                     className="cursor-pointer text-blue-600 hover:text-blue-800"
-                                                    onClick={() => editarProducto(p.id)} // Cargar datos para editar
+                                                    onClick={() => editarProducto(p.id)}
                                                 >
                                                     <Edit2 />
                                                 </Button>
@@ -517,7 +490,6 @@ export default function ComprarPage() {
                                                     </AlertDialogDescription>
                                                 </AlertDialogHeader>
 
-                                                {/* Formulario de edición */}
                                                 <div className="grid gap-4 py-4">
                                                     {/* Nombre del Producto */}
                                                     <div className="grid grid-cols-4 items-center gap-4">
@@ -686,16 +658,15 @@ export default function ComprarPage() {
                                                             // Actualizar producto
                                                             setProductos((prev) =>
                                                                 prev.map((prod) =>
-                                                                    prod.id === p.id
+                                                                    prod.id === editingProductId
                                                                         ? {
                                                                               ...tempFormData,
-                                                                              id: p.id,
+                                                                              id: editingProductId,
                                                                           }
                                                                         : prod,
                                                                 ),
                                                             );
 
-                                                            // Resetear tempFormData después de guardar
                                                             setTempFormData({
                                                                 producto: '',
                                                                 categoria: '',
@@ -705,7 +676,7 @@ export default function ComprarPage() {
                                                             });
 
                                                             toast.success('Producto actualizado correctamente');
-                                                            setIsDialogOpen(false); // Cerrar el diálogo
+                                                            setIsDialogOpen(false);
                                                         }}
                                                     >
                                                         <HardDriveUpload className="mr-2 h-4 w-4" />
@@ -747,16 +718,13 @@ export default function ComprarPage() {
                                 Realizar Compra
                             </Button>
                         </AlertDialogTrigger>
-                        {/* Contenido */}
                         <AlertDialogContent>
                             <AlertDialogHeader>
                                 <AlertDialogTitle>Tipo de Compra</AlertDialogTitle>
                                 <AlertDialogDescription>Seleccione si desea pagar ahora o comprar y pagar luego</AlertDialogDescription>
                             </AlertDialogHeader>
 
-                            {/* Formulario dinámico */}
                             <div className="flex flex-col gap-4 pt-4">
-                                {/* Tipo de Compra (siempre visible) */}
                                 <div className="grid w-full items-center gap-1.5">
                                     <Label htmlFor="tipo_compra">Tipo de Compra</Label>
                                     <Select
@@ -775,22 +743,18 @@ export default function ComprarPage() {
                                     {errors.compra && <InputError message={errors.compra[0]} />}
                                 </div>
 
-                                {/* Solo mostrar si es pago_cash */}
                                 {data.compra === 'pago_cash' && (
                                     <>
                                         <Separator />
-
                                         <div className="space-y-4">
                                             <div className="space-y-3">
-                                                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300"></h3>
-
                                                 <Label htmlFor="cliente">Seleccione Clientes (Opcional)</Label>
                                                 <Select
                                                     name="cliente"
                                                     value={data.cliente}
                                                     onValueChange={(value) => {
                                                         setData('cliente', value);
-                                                        setData('montoVisible', value !== ''); // Muestra el input solo si hay un cliente seleccionado
+                                                        setData('montoVisible', value !== '');
                                                     }}
                                                 >
                                                     <SelectTrigger className="mt-2 w-full">
@@ -805,8 +769,7 @@ export default function ComprarPage() {
                                                     </SelectContent>
                                                 </Select>
                                                 {errors.clientes && <InputError message={errors.clientes} />}
-
-                                                {data.cliente && ( // Solo muestra el nombre y el input si hay un cliente seleccionado
+                                                {data.cliente && (
                                                     <div className="flex items-center gap-3">
                                                         <div className="flex-1">
                                                             <span className="block font-medium">{data.cliente}</span>
@@ -828,7 +791,6 @@ export default function ComprarPage() {
                                                                     const monto = parseFloat(e.target.value) || 0;
                                                                     const clienteId = clientes.find((c) => c.nombre_cliente === data.cliente)?.id;
 
-                                                                    // Actualizar el monto en el estado de pagos_clientes
                                                                     const updatedPagos = [...(data.pagos_clientes || [])];
                                                                     const idx = updatedPagos.findIndex((p) => p.cliente_id === clienteId);
 
@@ -850,7 +812,6 @@ export default function ComprarPage() {
 
                                             <div className="space-y-3">
                                                 <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Pagar con Cuentas</h3>
-
                                                 {cuentas.map((cuenta) => {
                                                     const index = data.pagos?.findIndex((pago) => pago.cuenta_id === cuenta.id);
                                                     const pago = data.pagos?.[index] || null;
@@ -863,7 +824,6 @@ export default function ComprarPage() {
                                                                     Saldo: ${cuenta.saldo_cuenta.toFixed(2)}
                                                                 </span>
                                                             </div>
-
                                                             <div className="flex-1">
                                                                 <Input
                                                                     type="number"
@@ -896,7 +856,6 @@ export default function ComprarPage() {
                                             </div>
                                         </div>
 
-                                        {/* Total acumulado y validación */}
                                         <div className="mt-2 space-y-2">
                                             <div className="text-right text-sm text-gray-600 dark:text-gray-400">
                                                 Total pagado con cuentas: $
@@ -924,6 +883,19 @@ export default function ComprarPage() {
                                 <Button
                                     type="button"
                                     onClick={() => {
+                                        // Verificar si hay productos
+                                        if (productos.length === 0) {
+                                            toast.warning('Debe agregar al menos un producto para realizar la compra.');
+                                            return;
+                                        }
+
+                                        // Verificar que todos los campos necesarios están llenos
+                                        if (!data.proveedor || !data.almacen || !data.fecha) {
+                                            toast.warning('Por favor, complete todos los campos necesarios.');
+                                            return;
+                                        }
+
+                                        // Establecer los productos en el data y enviar la compra
                                         setData('productos', productos);
                                         post('/comprar', {
                                             preserveScroll: true,
@@ -936,8 +908,7 @@ export default function ComprarPage() {
                                                     cantidad: 0,
                                                     precio: 0,
                                                 });
-                                                toast.success('Compra Realizada con Exito');
-                                                // Resetear tabs
+                                                toast.success('Compra Realizada con Éxito');
                                                 setActiveTab('cuentas');
                                             },
                                         });

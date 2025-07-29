@@ -124,6 +124,16 @@ class LogisticaController extends Controller
             ->count();
     }
 
+    private function tasaCambioGeneral()
+    {
+        return DB::table('tasa_cambios')->sum('tasa');
+    }
+
+    private function getTasaMlcTemp()
+    {
+        return DB::table('tasamlc_temp')->sum('tasa_mlc');
+    }
+
     private function getGastosMensuales()
     {
         return DB::table('compras')
@@ -182,15 +192,7 @@ class LogisticaController extends Controller
             ->get();
     }
 
-    private function tasaCambioGeneral()
-    {
-        return DB::table('tasa_cambios')->sum('tasa');
-    }
 
-    private function getTasaMlcTemp()
-    {
-        return DB::table('tasamlc_temp')->sum('tasa_mlc');
-    }
 
 
 

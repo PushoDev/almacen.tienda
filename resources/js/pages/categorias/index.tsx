@@ -47,7 +47,7 @@ export default function CategoriasPage({ categorias }: { categorias: CategoriasP
 
     // Paginación
     const [paginaActual, setPaginaActual] = useState(1);
-    const elementosPorPagina = 5; // Cambiado a 5 elementos por página
+    const elementosPorPagina = 10; // Cambiado a 5 elementos por página
     const indiceUltimoElemento = paginaActual * elementosPorPagina;
     const indicePrimerElemento = indiceUltimoElemento - elementosPorPagina;
 

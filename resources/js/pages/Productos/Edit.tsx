@@ -119,22 +119,6 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                                     />
                                     <InputError className="mt-2" message={errors.marca_producto} />
                                 </div>
-
-                                {/* Campo Código del Producto */}
-                                <div>
-                                    <Label htmlFor="codigo_producto" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        Código del Producto:
-                                    </Label>
-                                    <Input
-                                        id="codigo_producto"
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                        value={data.codigo_producto}
-                                        onChange={(e) => setData('codigo_producto', e.target.value)}
-                                        autoComplete="codigo_producto"
-                                        placeholder="Código del Producto"
-                                    />
-                                    <InputError className="mt-2" message={errors.codigo_producto} />
-                                </div>
                             </div>
 
                             {/* Columna 2 */}
@@ -159,8 +143,24 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                                     <InputError className="mt-2" message={errors.categoria_id} />
                                 </div>
 
-                                {/* Campo Precio de Compra */}
+                                {/* Campo Código del Producto */}
                                 <div>
+                                    <Label htmlFor="codigo_producto" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        Código del Producto:
+                                    </Label>
+                                    <Input
+                                        id="codigo_producto"
+                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                        value={data.codigo_producto}
+                                        onChange={(e) => setData('codigo_producto', e.target.value)}
+                                        autoComplete="codigo_producto"
+                                        placeholder="Código del Producto"
+                                    />
+                                    <InputError className="mt-2" message={errors.codigo_producto} />
+                                </div>
+
+                                {/* Campo Precio de Compra */}
+                                {/* <div>
                                     <Label htmlFor="precio_compra_producto" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                         Precio de Compra:
                                     </Label>
@@ -175,9 +175,9 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                                         placeholder="Precio de Compra"
                                     />
                                     <InputError className="mt-2" message={errors.precio_compra_producto} />
-                                </div>
+                                </div> */}
 
-                                {/* Campo Cantidad */}
+                                {/* Campo Cantidad
                                 <div>
                                     <Label htmlFor="cantidad_producto" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                         Cantidad:
@@ -192,10 +192,10 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                                         placeholder="Cantidad"
                                     />
                                     <InputError className="mt-2" message={errors.cantidad_producto} />
-                                </div>
+                                </div> */}
 
                                 {/* Campo Imagen */}
-                                <div>
+                                {/* <div>
                                     <Label htmlFor="imagen_producto" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                         Imagen del Producto:
                                     </Label>
@@ -215,7 +215,7 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                                             />
                                         </div>
                                     )}
-                                </div>
+                                </div> */}
                             </div>
                         </div>
 
