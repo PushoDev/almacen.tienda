@@ -39,7 +39,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 export default function ComprarPage() {
     const { props } = usePage();
-    const { errors } = props;
+    const { errors, success } = props;
     const [almacens, setAlmacens] = useState<AlmacenProps[]>([]);
     const [proveedors, setProveedors] = useState<ProveedorProps[]>([]);
     const [categorias, setCategorias] = useState<CategoriasProps[]>([]);
@@ -908,7 +908,13 @@ export default function ComprarPage() {
                                                     cantidad: 0,
                                                     precio: 0,
                                                 });
-                                                toast.success('Compra Realizada con Éxito');
+                                                toast('Event has been created', {
+                                                    description: 'Sunday, December 03, 2023 at 9:00 AM',
+                                                    action: {
+                                                        label: 'Undo',
+                                                        onClick: () => console.log('Undo'),
+                                                    },
+                                                });
                                                 setActiveTab('cuentas');
                                             },
                                         });
