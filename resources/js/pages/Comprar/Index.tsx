@@ -26,7 +26,7 @@ import { cn } from '@/lib/utils';
 import { AlmacenProps, CategoriasProps, ClienteProps, CuentaNegocioProps, ProductoComprarProps, ProveedorProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { format } from 'date-fns';
-import { BookCheck, CalendarIcon, Edit2, HardDriveUpload, PlusIcon, ShoppingBasket, Trash2Icon } from 'lucide-react';
+import { BadgeMinus, BookCheck, CalendarIcon, Edit2, HardDriveUpload, PlusIcon, ShoppingBasket, Trash2Icon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -39,7 +39,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 export default function ComprarPage() {
     const { props } = usePage();
-    const { errors, success } = props;
+    const { errors } = props;
     const [almacens, setAlmacens] = useState<AlmacenProps[]>([]);
     const [proveedors, setProveedors] = useState<ProveedorProps[]>([]);
     const [categorias, setCategorias] = useState<CategoriasProps[]>([]);
@@ -47,7 +47,7 @@ export default function ComprarPage() {
     const [date, setDate] = useState<Date | undefined>(new Date());
     const [editingProductId, setEditingProductId] = useState<number | null>(null);
     const [clientes, setClientes] = useState<ClienteProps[]>([]);
-    const [activeTab, setActiveTab] = useState<'cuentas' | 'clientes' | 'combinado'>('cuentas');
+    const [setActiveTab] = useState<'cuentas' | 'clientes' | 'combinado'>('cuentas');
 
     const [tempFormData, setTempFormData] = useState<Omit<ProductoComprarProps, 'id'>>({
         producto: '',
@@ -747,112 +747,163 @@ export default function ComprarPage() {
                                     <>
                                         <Separator />
                                         <div className="space-y-4">
+                                            {/* Detalles de Clientes */}
                                             <div className="space-y-3">
-                                                <Label htmlFor="cliente">Seleccione Clientes (Opcional)</Label>
+                                                <Label htmlFor="clientes">Seleccione Clientes (Opcional)</Label>
                                                 <Select
-                                                    name="cliente"
-                                                    value={data.cliente}
+                                                    name="clientes"
+                                                    value={data.pagos_clientes.map((p) => p.cliente_id.toString())} // Asegúrate de que sea un array de strings
                                                     onValueChange={(value) => {
-                                                        setData('cliente', value);
-                                                        setData('montoVisible', value !== '');
+                                                        const selectedClientes = Array.isArray(value) ? value : [value];
+                                                        const updatedClientes = [
+                                                            ...new Set([
+                                                                ...data.pagos_clientes.map((p) => p.cliente_id),
+                                                                ...selectedClientes.map((id) => parseInt(id)),
+                                                            ]),
+                                                        ]; // Evitar duplicados
+                                                        const updatedPagosClientes = updatedClientes.map((cliente_id) => ({
+                                                            cliente_id,
+                                                            monto: data.pagos_clientes.find((p) => p.cliente_id === cliente_id)?.monto || 0,
+                                                        }));
+                                                        setData('pagos_clientes', updatedPagosClientes);
                                                     }}
+                                                    multiple // Habilitar selección múltiple
                                                 >
                                                     <SelectTrigger className="mt-2 w-full">
-                                                        <SelectValue placeholder="Seleccione Cliente" />
+                                                        <SelectValue placeholder="Seleccione Clientes" />
                                                     </SelectTrigger>
                                                     <SelectContent>
                                                         {clientes.map((cliente) => (
-                                                            <SelectItem key={cliente.id} value={cliente.nombre_cliente}>
+                                                            <SelectItem key={cliente.id} value={cliente.id.toString()}>
                                                                 {cliente.nombre_cliente}
                                                             </SelectItem>
                                                         ))}
                                                     </SelectContent>
                                                 </Select>
                                                 {errors.clientes && <InputError message={errors.clientes} />}
-                                                {data.cliente && (
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="flex-1">
-                                                            <span className="block font-medium">{data.cliente}</span>
-                                                        </div>
-                                                        <div className="flex-1">
-                                                            <Input
-                                                                type="number"
-                                                                min="0.01"
-                                                                step="0.01"
-                                                                placeholder="Monto"
-                                                                value={
-                                                                    data.pagos_clientes?.find(
-                                                                        (p) =>
-                                                                            p.cliente_id ===
-                                                                            clientes.find((c) => c.nombre_cliente === data.cliente)?.id,
-                                                                    )?.monto ?? ''
-                                                                }
-                                                                onChange={(e) => {
-                                                                    const monto = parseFloat(e.target.value) || 0;
-                                                                    const clienteId = clientes.find((c) => c.nombre_cliente === data.cliente)?.id;
-
-                                                                    const updatedPagos = [...(data.pagos_clientes || [])];
-                                                                    const idx = updatedPagos.findIndex((p) => p.cliente_id === clienteId);
-
-                                                                    if (idx > -1) {
-                                                                        updatedPagos[idx].monto = monto;
-                                                                    } else {
-                                                                        updatedPagos.push({ cliente_id: clienteId, monto });
-                                                                    }
-
-                                                                    setData('pagos_clientes', updatedPagos);
-                                                                }}
-                                                            />
-                                                        </div>
+                                                {data.pagos_clientes.length > 0 && (
+                                                    <div className="flex flex-col gap-3">
+                                                        {data.pagos_clientes.map((pago) => (
+                                                            <div key={pago.cliente_id} className="flex items-center gap-3">
+                                                                <div className="flex-1">
+                                                                    <span className="block font-medium">
+                                                                        {clientes.find((c) => c.id === pago.cliente_id)?.nombre_cliente}
+                                                                    </span>
+                                                                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                                                                        Pendiente: ${' '}
+                                                                        {clientes.find((c) => c.id === pago.cliente_id)?.deuda_pago_cliente}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex-1">
+                                                                    <Input
+                                                                        type="number"
+                                                                        min="0.01"
+                                                                        step="0.01"
+                                                                        placeholder="$ 0.00"
+                                                                        value={pago.monto || ''}
+                                                                        onChange={(e) => {
+                                                                            const monto = parseFloat(e.target.value) || 0;
+                                                                            const updatedPagos = data.pagos_clientes.map((p) =>
+                                                                                p.cliente_id === pago.cliente_id ? { ...p, monto } : p,
+                                                                            );
+                                                                            setData('pagos_clientes', updatedPagos);
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                                <Button
+                                                                    variant="link"
+                                                                    className="cursor-pointer text-red-600 hover:text-red-800"
+                                                                    onClick={() => {
+                                                                        const updatedPagos = data.pagos_clientes.filter(
+                                                                            (p) => p.cliente_id !== pago.cliente_id,
+                                                                        );
+                                                                        setData('pagos_clientes', updatedPagos);
+                                                                    }}
+                                                                >
+                                                                    <BadgeMinus />
+                                                                    Quitar
+                                                                </Button>
+                                                            </div>
+                                                        ))}
                                                     </div>
                                                 )}
                                             </div>
-
-                                            <Separator />
-
+                                            {/* Detalles de Cuentas */}
                                             <div className="space-y-3">
-                                                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Pagar con Cuentas</h3>
-                                                {cuentas.map((cuenta) => {
-                                                    const index = data.pagos?.findIndex((pago) => pago.cuenta_id === cuenta.id);
-                                                    const pago = data.pagos?.[index] || null;
-
-                                                    return (
-                                                        <div key={cuenta.id} className="flex items-center gap-3">
-                                                            <div className="flex-1">
-                                                                <span className="block font-medium">{cuenta.nombre_cuenta}</span>
-                                                                <span className="text-xs text-gray-500 dark:text-gray-400">
-                                                                    Saldo: ${cuenta.saldo_cuenta.toFixed(2)}
-                                                                </span>
-                                                            </div>
-                                                            <div className="flex-1">
-                                                                <Input
-                                                                    type="number"
-                                                                    min="0.01"
-                                                                    step="0.01"
-                                                                    placeholder="Monto"
-                                                                    value={pago?.monto ?? ''}
-                                                                    onChange={(e) => {
-                                                                        const monto = parseFloat(e.target.value) || 0;
-                                                                        if (!data.pagos) {
-                                                                            setData('pagos', [{ cuenta_id: cuenta.id, monto }]);
-                                                                        } else {
-                                                                            const updatedPagos = [...data.pagos];
-                                                                            const idx = updatedPagos.findIndex((p) => p.cuenta_id === cuenta.id);
-
-                                                                            if (idx > -1) {
-                                                                                updatedPagos[idx].monto = monto;
-                                                                            } else {
-                                                                                updatedPagos.push({ cuenta_id: cuenta.id, monto });
-                                                                            }
-
+                                                <Label htmlFor="cuentas">Seleccione Cuentas (Opcional)</Label>
+                                                <Select
+                                                    name="cuentas"
+                                                    value={data.pagos.map((p) => p.cuenta_id.toString())} // Asegúrate de que sea un array de strings
+                                                    onValueChange={(value) => {
+                                                        const selectedCuentas = Array.isArray(value) ? value : [value];
+                                                        const updatedCuentas = [
+                                                            ...new Set([
+                                                                ...data.pagos.map((p) => p.cuenta_id),
+                                                                ...selectedCuentas.map((id) => parseInt(id)),
+                                                            ]),
+                                                        ]; // Evitar duplicados
+                                                        const updatedPagos = updatedCuentas.map((cuenta_id) => ({
+                                                            cuenta_id,
+                                                            monto: data.pagos.find((p) => p.cuenta_id === cuenta_id)?.monto || 0,
+                                                        }));
+                                                        setData('pagos', updatedPagos);
+                                                    }}
+                                                    multiple // Habilitar selección múltiple
+                                                >
+                                                    <SelectTrigger className="mt-2 w-full">
+                                                        <SelectValue placeholder="Seleccione Cuentas" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {cuentas.map((cuenta) => (
+                                                            <SelectItem key={cuenta.id} value={cuenta.id.toString()}>
+                                                                {cuenta.nombre_cuenta}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                {data.pagos.length > 0 && (
+                                                    <div className="flex flex-col gap-3">
+                                                        {data.pagos.map((pago) => (
+                                                            <div key={pago.cuenta_id} className="flex items-center gap-3">
+                                                                <div className="flex-1">
+                                                                    <span className="block font-medium">
+                                                                        {cuentas.find((c) => c.id === pago.cuenta_id)?.nombre_cuenta}
+                                                                    </span>
+                                                                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                                                                        Saldo: $ {cuentas.find((c) => c.id === pago.cuenta_id)?.saldo_cuenta}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex-1">
+                                                                    <Input
+                                                                        type="number"
+                                                                        min="0.01"
+                                                                        step="0.01"
+                                                                        placeholder="$ 0.00"
+                                                                        value={pago.monto || ''}
+                                                                        onChange={(e) => {
+                                                                            const monto = parseFloat(e.target.value) || 0;
+                                                                            const updatedPagos = data.pagos.map((p) =>
+                                                                                p.cuenta_id === pago.cuenta_id ? { ...p, monto } : p,
+                                                                            );
                                                                             setData('pagos', updatedPagos);
-                                                                        }
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                                <Button
+                                                                    variant="link"
+                                                                    className="cursor-pointer text-red-600 hover:text-red-800"
+                                                                    onClick={() => {
+                                                                        const updatedPagos = data.pagos.filter((p) => p.cuenta_id !== pago.cuenta_id);
+                                                                        setData('pagos', updatedPagos);
                                                                     }}
-                                                                />
+                                                                >
+                                                                    <BadgeMinus />
+                                                                    Quitar
+                                                                </Button>
                                                             </div>
-                                                        </div>
-                                                    );
-                                                })}
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
 
