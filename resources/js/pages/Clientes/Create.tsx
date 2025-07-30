@@ -69,7 +69,7 @@ export default function CreateClientePage() {
                                     id="nombre_cliente"
                                     value={data.nombre_cliente}
                                     onChange={(e) => setData('nombre_cliente', e.target.value)}
-                                    placeholder="Ej: Juan Pérez López"
+                                    placeholder="Ej: Luis A. Pushodev"
                                     className="mt-1"
                                 />
                                 <InputError message={errors.nombre_cliente} />
@@ -114,9 +114,9 @@ export default function CreateClientePage() {
                                     id="deuda_pago_cliente"
                                     type="number"
                                     step="0.00000001"
-                                    value={data.deuda_pago_cliente}
+                                    value={data.deuda_pago_cliente || ''}
                                     onChange={(e) => setData('deuda_pago_cliente', parseFloat(e.target.value))}
-                                    placeholder="Ej: 1500.00"
+                                    placeholder="$ 0.00"
                                     className="mt-1 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                 />
                                 <InputError message={errors.deuda_pago_cliente} />
@@ -142,7 +142,7 @@ export default function CreateClientePage() {
                                     id="ciudad_cliente"
                                     value={data.ciudad_cliente}
                                     onChange={(e) => setData('ciudad_cliente', e.target.value)}
-                                    placeholder="Ej: Ciudad de México"
+                                    placeholder="Ej: Ciudad de Manzanillo"
                                     className="mt-1"
                                 />
                                 <InputError message={errors.ciudad_cliente} />
