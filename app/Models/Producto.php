@@ -27,6 +27,7 @@ class Producto extends Model
         'precio_compra_producto' => 'decimal:2',
         'cantidad_producto' => 'integer',
     ];
+    protected $appends = ['imagen_url', 'cantidad_producto'];
 
     // Relación con categorías
     public function categoria()
@@ -40,6 +41,17 @@ class Producto extends Model
         return $this->imagen_producto
             ? asset('storage/' . $this->imagen_producto)
             : null;
+    }
+
+
+    // public function getImagenUrlAttribute()
+    // {
+    //     return $this->imagen_producto ? Storage::url($this->imagen_producto) : null;
+    // }
+
+    public function getCantidadProductoAttribute()
+    {
+        return $this->almacenes->sum('pivot.cantidad');
     }
 
     // Relación con compras (many-to-many)

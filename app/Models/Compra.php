@@ -58,6 +58,6 @@ class Compra extends Model
 
     public function pagos()
     {
-        return $this->hasMany(CompraPago::class);
+        return $this->hasMany(CompraPago::class, 'compra_id');
     }
 }

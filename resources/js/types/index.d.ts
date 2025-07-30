@@ -149,6 +149,8 @@ export interface ProductoComprarProps {
     codigo: string;
     cantidad: number;
     precio: number;
+    // Firma de indice (Opcional)
+    [key: string]: string | number | undefined; // Esto permite que el objeto tenga otras propiedades
 }
 
 // Interface para las cuentas del Negocio
