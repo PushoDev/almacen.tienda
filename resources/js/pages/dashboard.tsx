@@ -1,3 +1,4 @@
+import { CountingNumber } from '@/components/animated/counter-number';
 import HeadingSmall from '@/components/heading-small';
 import { Button } from '@/components/ui/button';
 import { CursorFollow, CursorProvider } from '@/components/ui/cursor';
@@ -21,11 +22,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppLayout from '@/layouts/app-layout';
 import { ComprasVentasCharts } from '@/layouts/charts/ChartCompraVenta';
 import WidgetInventario from '@/layouts/home/WidgetInventario';
-import { type BreadcrumbItem, LogisticaProps } from '@/types';
+import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { ComputerIcon, DiamondPercent, LucideBaggageClaim, LucideClockArrowDown, ShoppingBagIcon } from 'lucide-react';
-import { CountingNumber } from '@/components/animated/counter-number';
-import React from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -34,7 +33,19 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function Dashboard({ tasa, montoCUP, montoUSD, montoEUR, capital }: { tasa: { tasa_cambio: number }, montoCUP, montoUSD, montoEUR, capital: LogisticaProps}) {
+export default function Dashboard({
+    tasa,
+    montoCUP,
+    montoUSD,
+    montoEUR,
+    capital,
+}: {
+    tasa: { tasa_cambio: number };
+    montoCUP: number;
+    montoUSD: number;
+    montoEUR: number;
+    capital: number;
+}) {
     const { data, setData, post, processing } = useForm({
         tasa_cambio: tasa.tasa_cambio,
     });
@@ -195,19 +206,31 @@ export default function Dashboard({ tasa, montoCUP, montoUSD, montoEUR, capital 
                                 <TableRow>
                                     <TableCell>CAPITAL</TableCell>
                                     <TableCell className="cursor-pointer">
-                                        <CountingNumber decimalPlaces={2} decimalSeparator="," className=" text-sidebar-accent" inView number={capital} />
+                                        <CountingNumber
+                                            decimalPlaces={2}
+                                            decimalSeparator=","
+                                            className="text-sidebar-accent"
+                                            inView
+                                            number={capital}
+                                        />
                                     </TableCell>
                                 </TableRow>
                                 <TableRow>
                                     <TableCell>CUP CAJA</TableCell>
                                     <TableCell className="cursor-pointer">
-                                        <CountingNumber decimalPlaces={2} decimalSeparator="," className=" text-indigo-600" inView number={montoCUP} />
+                                        <CountingNumber decimalPlaces={2} decimalSeparator="," className="text-indigo-600" inView number={montoCUP} />
                                     </TableCell>
                                 </TableRow>
                                 <TableRow>
                                     <TableCell>USD CAJA</TableCell>
                                     <TableCell className="cursor-pointer">
-                                        <CountingNumber decimalPlaces={2} decimalSeparator="," className=" text-emerald-600" inView number={montoUSD} />
+                                        <CountingNumber
+                                            decimalPlaces={2}
+                                            decimalSeparator=","
+                                            className="text-emerald-600"
+                                            inView
+                                            number={montoUSD}
+                                        />
                                     </TableCell>
                                 </TableRow>
                                 <TableRow>

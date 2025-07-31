@@ -204,7 +204,9 @@ class CompraController extends Controller
 
             DB::commit();
 
+
             return redirect()->route('dashboard')->with('success', 'Compra registrada correctamente');
+            // return Inertia::location(route('dashboard'))->with('success', 'Compra registrada correctamente');
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->withErrors(['error' => 'Error al procesar la compra: ' . $e->getMessage()]);
