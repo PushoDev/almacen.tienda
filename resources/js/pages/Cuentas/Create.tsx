@@ -81,7 +81,7 @@ export default function CreateCuentasPage() {
                                         id="nombre_cuenta"
                                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                         value={data.nombre_cuenta}
-                                        onChange={(e) => setData('nombre_cuenta', e.target.value)}
+                                        onChange={(e) => setData('nombre_cuenta', e.target.value.toUpperCase())}
                                         autoComplete="nombre_cuenta"
                                         placeholder="Nombre de la Cuenta"
                                     />
@@ -162,7 +162,7 @@ export default function CreateCuentasPage() {
                                         id="notas_cuenta"
                                         className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                         value={data.notas_cuenta}
-                                        onChange={(e) => setData('notas_cuenta', e.target.value)}
+                                        onChange={(e) => setData('notas_cuenta', e.target.value.toUpperCase())}
                                         autoComplete="notas_cuenta"
                                         placeholder="Notas adicionales sobre la cuenta"
                                     />

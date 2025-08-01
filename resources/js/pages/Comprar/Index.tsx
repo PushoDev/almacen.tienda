@@ -225,7 +225,7 @@ export default function ComprarPage() {
                                                 className="mb-2 w-full rounded border border-gray-300 p-2"
                                                 placeholder="Buscar o crear proveedor..."
                                                 value={searchProveedor}
-                                                onChange={(e) => setSearchProveedor(e.target.value)}
+                                                onChange={(e) => setSearchProveedor(e.target.value.toUpperCase())}
                                                 onKeyDown={(e) => {
                                                     if (e.key === 'Enter') {
                                                         e.preventDefault();
@@ -281,7 +281,7 @@ export default function ComprarPage() {
                                                 className="mb-2 w-full rounded border border-gray-300 p-2"
                                                 placeholder="Buscar almacén..."
                                                 value={searchAlmacen}
-                                                onChange={(e) => setSearchAlmacen(e.target.value)}
+                                                onChange={(e) => setSearchAlmacen(e.target.value.toUpperCase())}
                                             />
                                             {filteredAlmacens.length > 0 ? (
                                                 filteredAlmacens.map((almacen) => (
@@ -356,7 +356,7 @@ export default function ComprarPage() {
                                             className="mb-2 w-full rounded border border-gray-300 p-2"
                                             placeholder="Buscar o crear categoría..."
                                             value={searchCategoria}
-                                            onChange={(e) => setSearchCategoria(e.target.value)}
+                                            onChange={(e) => setSearchCategoria(e.target.value.toUpperCase())}
                                             onKeyDown={(e) => {
                                                 if (e.key === 'Enter') {
                                                     e.preventDefault();

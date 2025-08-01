@@ -44,7 +44,7 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
     };
 
     const formatearMoneda = (valor: number | null) => {
-        if (!valor) return '$0.00';
+        if (valor === null || valor === undefined) return '$0.00';
         return new Intl.NumberFormat('es-MX', {
             style: 'currency',
             currency: 'MXN',
@@ -175,9 +175,11 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                     <TableCell>
                                         <div
                                             className={`font-medium ${
-                                                (cliente.deuda_pago_cliente || 0) > 0
-                                                    ? 'text-red-600 dark:text-red-400'
-                                                    : 'text-green-600 dark:text-green-400'
+                                                (cliente.deuda_pago_cliente || 0) < 0
+                                                    ? 'text-red-600 dark:text-red-400' // Rojo para valores negativos
+                                                    : (cliente.deuda_pago_cliente || 0) === 0
+                                                      ? 'text-green-600 dark:text-green-400' // Verde para cero
+                                                      : 'text-orange-600 dark:text-orange-400' // Naranja para valores positivos
                                             }`}
                                         >
                                             {formatearMoneda(cliente.deuda_pago_cliente || 0)}

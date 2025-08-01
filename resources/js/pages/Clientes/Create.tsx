@@ -68,7 +68,7 @@ export default function CreateClientePage() {
                                 <Input
                                     id="nombre_cliente"
                                     value={data.nombre_cliente}
-                                    onChange={(e) => setData('nombre_cliente', e.target.value)}
+                                    onChange={(e) => setData('nombre_cliente', e.target.value.toUpperCase())}
                                     placeholder="Ej: Luis A. Pushodev"
                                     className="mt-1"
                                 />
@@ -128,7 +128,7 @@ export default function CreateClientePage() {
                                 <Input
                                     id="direccion_cliente"
                                     value={data.direccion_cliente}
-                                    onChange={(e) => setData('direccion_cliente', e.target.value)}
+                                    onChange={(e) => setData('direccion_cliente', e.target.value.toUpperCase())}
                                     placeholder="Ej: Calle Principal #123"
                                     className="mt-1"
                                 />
@@ -141,7 +141,7 @@ export default function CreateClientePage() {
                                 <Input
                                     id="ciudad_cliente"
                                     value={data.ciudad_cliente}
-                                    onChange={(e) => setData('ciudad_cliente', e.target.value)}
+                                    onChange={(e) => setData('ciudad_cliente', e.target.value.toUpperCase())}
                                     placeholder="Ej: Ciudad de Manzanillo"
                                     className="mt-1"
                                 />

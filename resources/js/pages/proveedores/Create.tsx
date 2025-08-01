@@ -84,7 +84,7 @@ export default function CreateProveedoresPage() {
                                         id="nombre_proveedor"
                                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                         value={data.nombre_proveedor}
-                                        onChange={(e) => setData('nombre_proveedor', e.target.value)}
+                                        onChange={(e) => setData('nombre_proveedor', e.target.value.toUpperCase())}
                                         autoComplete="nombre_proveedor"
                                         placeholder="Nombre del Proveedor"
                                     />
@@ -136,7 +136,7 @@ export default function CreateProveedoresPage() {
                                         id="localidad_proveedor"
                                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                         value={data.localidad_proveedor}
-                                        onChange={(e) => setData('localidad_proveedor', e.target.value)}
+                                        onChange={(e) => setData('localidad_proveedor', e.target.value.toUpperCase())}
                                         autoComplete="localidad_proveedor"
                                         placeholder="Localidad"
                                     />
@@ -152,7 +152,7 @@ export default function CreateProveedoresPage() {
                                         id="notas_proveedor"
                                         className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                         value={data.notas_proveedor}
-                                        onChange={(e) => setData('notas_proveedor', e.target.value)}
+                                        onChange={(e) => setData('notas_proveedor', e.target.value.toUpperCase())}
                                         autoComplete="notas_proveedor"
                                         placeholder="Notas adicionales sobre el proveedor"
                                     />
