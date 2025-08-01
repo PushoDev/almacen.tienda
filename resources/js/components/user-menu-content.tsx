@@ -36,13 +36,13 @@ export function UserMenuContent({ user }: UserMenuContentProps) {
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
                 <Link
-                    className="text-destructive block w-full cursor-pointer"
+                    className="text-sidebar-accent block w-full cursor-pointer"
                     method="post"
                     href={route('logout')}
                     as="button"
                     onClick={handleLogout}
                 >
-                    <LogOut className="text-destructive mr-2" />
+                    <LogOut className="text-sidebar-accent mr-2" />
                     Salir
                 </Link>
             </DropdownMenuItem>
