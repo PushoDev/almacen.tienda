@@ -25,6 +25,7 @@ import WidgetInventario from '@/layouts/home/WidgetInventario';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { ComputerIcon, DiamondPercent, LucideBaggageClaim, LucideClockArrowDown, ShoppingBagIcon } from 'lucide-react';
+import { useState } from 'react'; // Importar useState
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -50,6 +51,16 @@ export default function Dashboard({
         tasa_cambio: tasa.tasa_cambio,
     });
 
+    const [dialogOpen, setDialogOpen] = useState(false); // Estado para controlar el diálogo
+
+    const handleUpdate = () => {
+        post(route('dashboard.update'), {
+            onSuccess: () => {
+                setDialogOpen(false); // Cierra el diálogo al éxito
+            },
+        });
+    };
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Inventario" />
@@ -65,7 +76,7 @@ export default function Dashboard({
                     {/* Contenido principal */}
                     <HeadingSmall
                         title="Opciones Generales del Sistema"
-                        description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamineto"
+                        description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento"
                     />
                     {/* Ícono semitransparente */}
                     <ComputerIcon
@@ -99,7 +110,7 @@ export default function Dashboard({
                                 <div className="flex h-full flex-col items-end justify-center space-y-2">
                                     <h3 className="font-sans text-4xl font-bold text-white">Comprar</h3>
                                 </div>
-                                {/* Link {route('comprar.index' */}
+                                {/* Link */}
                                 <Link href={route('comprar.index')}>
                                     <button className="absolute right-4 bottom-4 ms-2 rounded-md bg-red-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-red-800">
                                         Acceder a Compra
@@ -267,7 +278,7 @@ export default function Dashboard({
                                     <TableCell className="bg-sidebar text-white" colSpan={2}>
                                         TASA CAMBIO GENERAL
                                     </TableCell>
-                                    <Dialog>
+                                    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                                         <DialogTrigger asChild>
                                             <TableCell className="dark:hover:bg-sidebar-accent cursor-pointer text-center font-bold text-emerald-950 hover:bg-emerald-800 hover:text-white dark:text-emerald-400">
                                                 $ {tasa.tasa_cambio}
@@ -304,7 +315,7 @@ export default function Dashboard({
                                                     className="cursor-pointer"
                                                     type="button"
                                                     disabled={processing}
-                                                    onClick={() => post(route('dashboard.update'))}
+                                                    onClick={handleUpdate} // Llama a la función de actualización
                                                 >
                                                     {processing ? 'Guardando...' : 'Actualizar'}
                                                 </Button>

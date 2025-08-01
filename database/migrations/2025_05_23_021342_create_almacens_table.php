@@ -16,6 +16,7 @@ return new class extends Migration
             // Usuario responsable
             // Detalles del Almacen
             $table->string('nombre_almacen');
+            $table->enum('tipo_almacen', ['almacen', 'punto_venta', 'transportacion'])->default('punto_venta');
             $table->string('telefono_almacen')->unique();
             $table->string('correo_almacen')->nullable();
             $table->string('provincia_almacen')->nullable();

@@ -64,6 +64,7 @@ export interface CategoriasProps {
 export interface AlmacenProps {
     id: number;
     nombre_almacen: string;
+    tipo_almacen: string;
     telefono_almacen: string;
     correo_almacen?: string | null;
     provincia_almacen?: string | null;

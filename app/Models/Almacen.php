@@ -15,6 +15,7 @@ class Almacen extends Model
 
     protected $fillable = [
         'nombre_almacen',
+        'tipo_almacen',
         'telefono_almacen',
         'correo_almacen',
         'provincia_almacen',

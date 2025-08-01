@@ -56,6 +56,32 @@ export default function AlmacenesPage({ almacenes }: { almacenes: AlmacenProps[]
     // Calcular el número total de páginas
     const totalPaginas = Math.ceil(almacenes.length / elementosPorPagina);
 
+    // Función para obtener el texto y estilos del badge según el tipo de almacén
+    const getBadge = (tipo: string) => {
+        switch (tipo) {
+            case 'almacen':
+                return {
+                    text: 'Almacén',
+                    styles: 'bg-green-100 text-green-800 dark:bg-green-800/30 dark:text-green-500',
+                };
+            case 'punto_venta':
+                return {
+                    text: 'Punto de Venta',
+                    styles: 'bg-blue-100 text-blue-800 dark:bg-blue-800/30 dark:text-blue-500',
+                };
+            case 'transportacion':
+                return {
+                    text: 'Transportación',
+                    styles: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800/30 dark:text-yellow-500',
+                };
+            default:
+                return {
+                    text: 'Desconocido',
+                    styles: 'bg-gray-100 text-gray-800 dark:bg-gray-800/30 dark:text-gray-500',
+                };
+        }
+    };
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Almacenes" />
@@ -112,104 +138,114 @@ export default function AlmacenesPage({ almacenes }: { almacenes: AlmacenProps[]
                                 <TableHead>Teléfono</TableHead>
                                 <TableHead>Correo</TableHead>
                                 <TableHead>Ubicación</TableHead>
+                                <TableHead>Tipo de Almacén</TableHead> {/* Nueva columna */}
                                 <TableHead className="text-right">Acciones</TableHead>
                             </TableRow>
                         </TableHeader>
 
                         <TableBody>
-                            {almacenesAmostrar.map((almacen) => (
-                                <TableRow key={almacen.id}>
-                                    <TableCell className="min-w-[180px]">
-                                        <div className="flex items-center gap-2">
-                                            <Warehouse size={14} className="text-primary shrink-0" />
-                                            <span className="truncate font-medium">{almacen.nombre_almacen}</span>
-                                        </div>
-                                    </TableCell>
+                            {almacenesAmostrar.map((almacen) => {
+                                const badge = getBadge(almacen.tipo_almacen);
+                                return (
+                                    <TableRow key={almacen.id}>
+                                        <TableCell className="min-w-[180px]">
+                                            <div className="flex items-center gap-2">
+                                                <Warehouse size={14} className="text-primary shrink-0" />
+                                                <span className="truncate font-medium">{almacen.nombre_almacen}</span>
+                                            </div>
+                                        </TableCell>
 
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <Phone size={14} className="shrink-0 text-gray-500" />
-                                            {almacen.telefono_almacen || <span className="text-gray-400 italic">Sin teléfono</span>}
-                                        </div>
-                                    </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <Phone size={14} className="shrink-0 text-gray-500" />
+                                                {almacen.telefono_almacen || <span className="text-gray-400 italic">Sin teléfono</span>}
+                                            </div>
+                                        </TableCell>
 
-                                    <TableCell>
-                                        <div className="flex min-w-[200px] items-center gap-2">
-                                            <Mail size={14} className="shrink-0 text-gray-500" />
-                                            {almacen.correo_almacen ? (
-                                                <a
-                                                    href={`mailto:${almacen.correo_almacen}`}
-                                                    className="max-w-[160px] truncate text-blue-600 hover:underline"
-                                                >
-                                                    {almacen.correo_almacen}
-                                                </a>
-                                            ) : (
-                                                <span className="text-gray-400 italic">Sin correo</span>
-                                            )}
-                                        </div>
-                                    </TableCell>
-
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <MapPin size={14} className="shrink-0 text-gray-500" />
-                                            {almacen.provincia_almacen && almacen.ciudad_almacen ? (
-                                                <span className="truncate">{`${almacen.ciudad_almacen}, ${almacen.provincia_almacen}`}</span>
-                                            ) : (
-                                                <span className="text-gray-400 italic">Sin ubicación</span>
-                                            )}
-                                        </div>
-                                    </TableCell>
-
-                                    <TableCell className="text-right">
-                                        {/* Boton Detalles */}
-                                        <Link href={route('almacenes.show', { almacen: almacen.id })}>
-                                            <Button variant="outline" className="hover:bg-chart-3 cursor-pointer hover:text-white">
-                                                <Eye />
-                                            </Button>
-                                        </Link>
-                                        {/* Botón Editar */}
-                                        <Link href={route('almacenes.edit', { almacen: almacen.id })}>
-                                            <Button
-                                                variant="outline"
-                                                className="cursor-pointer hover:bg-blue-900 hover:text-white dark:hover:bg-blue-700"
-                                            >
-                                                <Edit3 />
-                                            </Button>
-                                        </Link>
-
-                                        {/* Diálogo de Confirmación para Eliminar */}
-                                        <AlertDialog>
-                                            <AlertDialogTrigger asChild>
-                                                <Button
-                                                    variant="ghost"
-                                                    className="hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white"
-                                                >
-                                                    <Trash2 />
-                                                </Button>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                    <AlertDialogTitle className="text-center">Atención</AlertDialogTitle>
-                                                    <AlertDialogDescription>
-                                                        ¿Estás seguro de eliminar el almacén? Esta acción es irreversible.
-                                                    </AlertDialogDescription>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                    <AlertDialogAction
-                                                        onClick={() => deleteAlmacen(almacen.id)}
-                                                        className="bg-destructive cursor-pointer hover:bg-red-300"
+                                        <TableCell>
+                                            <div className="flex min-w-[200px] items-center gap-2">
+                                                <Mail size={14} className="shrink-0 text-gray-500" />
+                                                {almacen.correo_almacen ? (
+                                                    <a
+                                                        href={`mailto:${almacen.correo_almacen}`}
+                                                        className="max-w-[160px] truncate text-blue-600 hover:underline"
                                                     >
-                                                        Aceptar
-                                                    </AlertDialogAction>
-                                                    <AlertDialogCancel className="cursor-pointer text-white hover:bg-emerald-300 hover:text-emerald-950 dark:hover:bg-emerald-300 dark:hover:text-emerald-950">
-                                                        Cancelar
-                                                    </AlertDialogCancel>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        </AlertDialog>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
+                                                        {almacen.correo_almacen}
+                                                    </a>
+                                                ) : (
+                                                    <span className="text-gray-400 italic">Sin correo</span>
+                                                )}
+                                            </div>
+                                        </TableCell>
+
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <MapPin size={14} className="shrink-0 text-gray-500" />
+                                                {almacen.provincia_almacen && almacen.ciudad_almacen ? (
+                                                    <span className="truncate">{`${almacen.ciudad_almacen}, ${almacen.provincia_almacen}`}</span>
+                                                ) : (
+                                                    <span className="text-gray-400 italic">Sin ubicación</span>
+                                                )}
+                                            </div>
+                                        </TableCell>
+
+                                        <TableCell>
+                                            <div className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${badge.styles}`}>
+                                                {badge.text}
+                                            </div>
+                                        </TableCell>
+
+                                        <TableCell className="text-right">
+                                            {/* Boton Detalles */}
+                                            <Link href={route('almacenes.show', { almacen: almacen.id })}>
+                                                <Button variant="outline" className="hover:bg-chart-3 cursor-pointer hover:text-white">
+                                                    <Eye />
+                                                </Button>
+                                            </Link>
+                                            {/* Botón Editar */}
+                                            <Link href={route('almacenes.edit', { almacen: almacen.id })}>
+                                                <Button
+                                                    variant="outline"
+                                                    className="cursor-pointer hover:bg-blue-900 hover:text-white dark:hover:bg-blue-700"
+                                                >
+                                                    <Edit3 />
+                                                </Button>
+                                            </Link>
+
+                                            {/* Diálogo de Confirmación para Eliminar */}
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button
+                                                        variant="ghost"
+                                                        className="hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white"
+                                                    >
+                                                        <Trash2 />
+                                                    </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle className="text-center">Atención</AlertDialogTitle>
+                                                        <AlertDialogDescription>
+                                                            ¿Estás seguro de eliminar el almacén? Esta acción es irreversible.
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogAction
+                                                            onClick={() => deleteAlmacen(almacen.id)}
+                                                            className="bg-destructive cursor-pointer hover:bg-red-300"
+                                                        >
+                                                            Aceptar
+                                                        </AlertDialogAction>
+                                                        <AlertDialogCancel className="cursor-pointer text-white hover:bg-emerald-300 hover:text-emerald-950 dark:hover:bg-emerald-300 dark:hover:text-emerald-950">
+                                                            Cancelar
+                                                        </AlertDialogCancel>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
                         </TableBody>
                         <TableFooter>
                             <TableRow>

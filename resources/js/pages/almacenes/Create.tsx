@@ -3,6 +3,7 @@ import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
@@ -34,6 +35,7 @@ export default function CreateAlmacenesPage() {
         provincia_almacen: '',
         ciudad_almacen: '',
         notas_almacen: '',
+        tipo_almacen: '', // Campo para el tipo de almacén
     });
 
     // Función para enviar el formulario
@@ -56,12 +58,10 @@ export default function CreateAlmacenesPage() {
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
-                    {/* Contenido principal */}
                     <HeadingSmall
                         title="Opciones Generales del Sistema"
                         description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento"
                     />
-                    {/* Ícono semitransparente */}
                     <Warehouse
                         size={70}
                         color="#d6d3d1"
@@ -85,7 +85,7 @@ export default function CreateAlmacenesPage() {
                                         id="nombre_almacen"
                                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                         value={data.nombre_almacen}
-                                        onChange={(e) => setData('nombre_almacen', e.target.value)}
+                                        onChange={(e) => setData('nombre_almacen', e.target.value.toUpperCase())} // Convertir a mayúsculas
                                         autoComplete="nombre_almacen"
                                         placeholder="Nombre del Almacén"
                                     />
@@ -101,7 +101,7 @@ export default function CreateAlmacenesPage() {
                                         id="telefono_almacen"
                                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                         value={data.telefono_almacen}
-                                        onChange={(e) => setData('telefono_almacen', e.target.value)}
+                                        onChange={(e) => setData('telefono_almacen', e.target.value.toUpperCase())} // Convertir a mayúsculas
                                         autoComplete="telefono_almacen"
                                         placeholder="Teléfono del Almacén"
                                     />
@@ -118,7 +118,7 @@ export default function CreateAlmacenesPage() {
                                         type="email"
                                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                         value={data.correo_almacen}
-                                        onChange={(e) => setData('correo_almacen', e.target.value)}
+                                        onChange={(e) => setData('correo_almacen', e.target.value)} // Sin conversión a mayúsculas
                                         autoComplete="correo_almacen"
                                         placeholder="Correo Electrónico"
                                     />
@@ -128,6 +128,24 @@ export default function CreateAlmacenesPage() {
 
                             {/* Columna 2 */}
                             <div className="space-y-4">
+                                {/* Campo Tipo de Almacén */}
+                                <div>
+                                    <Label htmlFor="tipo_almacen" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        Tipo de Almacén:
+                                    </Label>
+                                    <Select value={data.tipo_almacen} onValueChange={(value) => setData('tipo_almacen', value)}>
+                                        <SelectTrigger className="mt-1">
+                                            <SelectValue placeholder="Seleccione un tipo" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="almacen">Almacén</SelectItem>
+                                            <SelectItem value="punto_venta">Punto de Venta</SelectItem>
+                                            <SelectItem value="transportacion">Transportación</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <InputError className="mt-2" message={errors.tipo_almacen} />
+                                </div>
+
                                 {/* Campo Provincia del Almacén */}
                                 <div>
                                     <Label htmlFor="provincia_almacen" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -137,7 +155,7 @@ export default function CreateAlmacenesPage() {
                                         id="provincia_almacen"
                                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                         value={data.provincia_almacen}
-                                        onChange={(e) => setData('provincia_almacen', e.target.value)}
+                                        onChange={(e) => setData('provincia_almacen', e.target.value.toUpperCase())} // Convertir a mayúsculas
                                         autoComplete="provincia_almacen"
                                         placeholder="Provincia"
                                     />
@@ -153,7 +171,7 @@ export default function CreateAlmacenesPage() {
                                         id="ciudad_almacen"
                                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                         value={data.ciudad_almacen}
-                                        onChange={(e) => setData('ciudad_almacen', e.target.value)}
+                                        onChange={(e) => setData('ciudad_almacen', e.target.value.toUpperCase())} // Convertir a mayúsculas
                                         autoComplete="ciudad_almacen"
                                         placeholder="Ciudad"
                                     />
@@ -169,7 +187,7 @@ export default function CreateAlmacenesPage() {
                                         id="notas_almacen"
                                         className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                         value={data.notas_almacen}
-                                        onChange={(e) => setData('notas_almacen', e.target.value)}
+                                        onChange={(e) => setData('notas_almacen', e.target.value.toUpperCase())} // Convertir a mayúsculas
                                         autoComplete="notas_almacen"
                                         placeholder="Notas adicionales sobre el almacén"
                                     />

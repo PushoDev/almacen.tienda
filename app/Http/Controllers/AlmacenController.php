@@ -6,7 +6,6 @@ use App\Models\Almacen;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
-use Illuminate\Support\Facades\DB;
 
 class AlmacenController extends Controller
 {
@@ -28,7 +27,6 @@ class AlmacenController extends Controller
         ]);
     }
 
-
     /**
      * Show the form for creating a new resource.
      * Ruta para crear un nuevo almacén
@@ -46,6 +44,7 @@ class AlmacenController extends Controller
         // Validamos los datos del formulario
         $request->validate([
             'nombre_almacen' => ['required', 'string', 'max:255'],
+            'tipo_almacen' => ['required', 'in:almacen,punto_venta,transportacion'], // Validación para tipo_almacen
             'telefono_almacen' => ['required', 'string', 'unique:almacens,telefono_almacen'],
             'correo_almacen' => ['nullable', 'email'],
             'provincia_almacen' => ['nullable', 'string'],
@@ -56,6 +55,7 @@ class AlmacenController extends Controller
         // Nuevo almacén en la base de datos
         Almacen::create([
             'nombre_almacen' => $request->nombre_almacen,
+            'tipo_almacen' => $request->tipo_almacen, // Guardar el nuevo campo
             'telefono_almacen' => $request->telefono_almacen,
             'correo_almacen' => $request->correo_almacen,
             'provincia_almacen' => $request->provincia_almacen,
@@ -93,7 +93,6 @@ class AlmacenController extends Controller
      */
     public function edit(Almacen $almacen)
     {
-        // dd($almacen);
         return Inertia::render('Almacenes/Edit', [
             'almacen' => $almacen,
         ]);
@@ -112,6 +111,7 @@ class AlmacenController extends Controller
                 'max:255',
                 'unique:almacens,nombre_almacen,' . $almacen->id
             ],
+            'tipo_almacen' => ['required', 'in:almacen,punto_venta,transportacion'], // Validación para tipo_almacen
             'telefono_almacen' => [
                 'required',
                 'string',
@@ -126,6 +126,7 @@ class AlmacenController extends Controller
         // Actualizar el almacén en la base de datos
         $almacen->update([
             'nombre_almacen' => $request->nombre_almacen,
+            'tipo_almacen' => $request->tipo_almacen, // Actualizar el nuevo campo
             'telefono_almacen' => $request->telefono_almacen,
             'correo_almacen' => $request->correo_almacen,
             'provincia_almacen' => $request->provincia_almacen,
