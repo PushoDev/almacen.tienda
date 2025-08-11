@@ -16,7 +16,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppLayout from '@/layouts/app-layout';
 import { ClienteProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { Edit3, FileText, HandHeart, Home, MapPin, Phone, Sheet, Trash2, User, UserRoundPlus } from 'lucide-react';
+import {
+    AlertCircle,
+    ArrowDownCircle,
+    CheckCircle,
+    Edit3,
+    FileText,
+    HandHeart,
+    Home,
+    MapPin,
+    Phone,
+    Sheet,
+    Trash2,
+    User,
+    UserRoundPlus,
+} from 'lucide-react';
 import { useState } from 'react';
 import { toast, Toaster } from 'sonner';
 
@@ -172,17 +186,48 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                     </TableCell>
 
                                     {/* Deuda */}
-                                    <TableCell>
-                                        <div
-                                            className={`font-medium ${
-                                                (cliente.deuda_pago_cliente || 0) < 0
-                                                    ? 'text-red-600 dark:text-red-400' // Rojo para valores negativos
-                                                    : (cliente.deuda_pago_cliente || 0) === 0
-                                                      ? 'text-green-600 dark:text-green-400' // Verde para cero
-                                                      : 'text-orange-600 dark:text-orange-400' // Naranja para valores positivos
-                                            }`}
-                                        >
-                                            {formatearMoneda(cliente.deuda_pago_cliente || 0)}
+                                    <TableCell
+                                        aria-label={`Deuda del cliente: ${
+                                            cliente.deuda_pago_cliente !== null && cliente.deuda_pago_cliente !== undefined
+                                                ? cliente.deuda_pago_cliente < 0
+                                                    ? `-${formatearMoneda(Math.abs(cliente.deuda_pago_cliente))} (crédito)`
+                                                    : cliente.deuda_pago_cliente === 0
+                                                      ? 'Sin deuda'
+                                                      : `${formatearMoneda(cliente.deuda_pago_cliente)} (pendiente)`
+                                                : 'Sin información'
+                                        }`}
+                                    >
+                                        <div className={`flex items-center gap-1 font-medium`}>
+                                            {/* Icono opcional para hacerlo más visual */}
+                                            {cliente.deuda_pago_cliente !== null && cliente.deuda_pago_cliente !== undefined ? (
+                                                cliente.deuda_pago_cliente < 0 ? (
+                                                    <ArrowDownCircle size={14} className="shrink-0 text-red-600 dark:text-red-400" />
+                                                ) : cliente.deuda_pago_cliente === 0 ? (
+                                                    <CheckCircle size={14} className="shrink-0 text-green-600 dark:text-green-400" />
+                                                ) : (
+                                                    <AlertCircle size={14} className="shrink-0 text-orange-600 dark:text-orange-400" />
+                                                )
+                                            ) : null}
+
+                                            <span
+                                                className={
+                                                    cliente.deuda_pago_cliente !== null && cliente.deuda_pago_cliente !== undefined
+                                                        ? cliente.deuda_pago_cliente < 0
+                                                            ? 'text-red-600 dark:text-red-400'
+                                                            : cliente.deuda_pago_cliente === 0
+                                                              ? 'text-green-600 dark:text-green-400'
+                                                              : 'text-orange-600 dark:text-orange-400'
+                                                        : 'text-gray-400 italic'
+                                                }
+                                            >
+                                                {cliente.deuda_pago_cliente !== null && cliente.deuda_pago_cliente !== undefined
+                                                    ? cliente.deuda_pago_cliente < 0
+                                                        ? `-${formatearMoneda(Math.abs(cliente.deuda_pago_cliente))}`
+                                                        : cliente.deuda_pago_cliente === 0
+                                                          ? 'Sin deuda'
+                                                          : formatearMoneda(cliente.deuda_pago_cliente)
+                                                    : 'Sin dato'}
+                                            </span>
                                         </div>
                                     </TableCell>
 

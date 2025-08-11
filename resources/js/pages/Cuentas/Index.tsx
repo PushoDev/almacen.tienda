@@ -200,12 +200,34 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                                         </TableCell>
 
                                         <TableCell
-                                            aria-label={`Saldo de la cuenta: ${cuenta.saldo_cuenta ? `$${cuenta.saldo_cuenta.toFixed(2)}` : 'Sin saldo'}`}
+                                            aria-label={`Saldo de la cuenta: ${
+                                                cuenta.saldo_cuenta
+                                                    ? cuenta.saldo_cuenta < 0
+                                                        ? `-$${Math.abs(cuenta.saldo_cuenta).toFixed(2)} (negativo)`
+                                                        : `$${cuenta.saldo_cuenta.toFixed(2)}`
+                                                    : 'Sin saldo'
+                                            }`}
                                         >
                                             <div className="flex items-center gap-2">
                                                 <Wallet size={14} className="shrink-0 text-emerald-500" />
-                                                <span className={cuenta.saldo_cuenta ? 'font-medium' : 'text-gray-400 italic'}>
-                                                    {cuenta.saldo_cuenta ? `$${cuenta.saldo_cuenta.toFixed(2)}` : 'Sin saldo'}
+                                                <span
+                                                    className={
+                                                        cuenta.saldo_cuenta
+                                                            ? cuenta.saldo_cuenta > 0
+                                                                ? 'font-medium text-emerald-600'
+                                                                : cuenta.saldo_cuenta < 0
+                                                                  ? 'font-medium text-red-600 dark:text-red-400'
+                                                                  : 'text-gray-400 italic'
+                                                            : 'text-gray-400 italic'
+                                                    }
+                                                >
+                                                    {cuenta.saldo_cuenta !== null && cuenta.saldo_cuenta !== undefined
+                                                        ? cuenta.saldo_cuenta > 0
+                                                            ? `$ ${cuenta.saldo_cuenta.toFixed(2)}`
+                                                            : cuenta.saldo_cuenta < 0
+                                                              ? `$ -${Math.abs(cuenta.saldo_cuenta).toFixed(2)}`
+                                                              : 'Sin saldo'
+                                                        : 'Sin saldo'}
                                                 </span>
                                             </div>
                                         </TableCell>
