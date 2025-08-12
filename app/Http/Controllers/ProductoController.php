@@ -12,12 +12,6 @@ use Illuminate\Support\Facades\Storage;
 
 class ProductoController extends Controller
 {
-
-    private function stockProductos()
-    {
-        return DB::table('almacen_producto')
-            ->where('producto_id')->sum('cantidad');
-    }
     /**
      * Display a listing of the resource.
      */
@@ -77,7 +71,6 @@ class ProductoController extends Controller
             'codigo_producto' => $request->codigo_producto,
             'categoria_id' => $request->categoria_id,
             'precio_compra_producto' => $request->precio_compra_producto,
-            'cantidad_producto' => $request->cantidad_producto,
             'imagen_producto' => $imagenPath,
         ]);
 
@@ -93,7 +86,7 @@ class ProductoController extends Controller
             ]);
         }
 
-        // Asociar el producto al almacén
+        // Asociar el producto al almacén con la cantidad
         $almacen->productos()->attach($producto->id, [
             'cantidad' => $request->cantidad_producto,
         ]);
@@ -103,28 +96,14 @@ class ProductoController extends Controller
 
     /**
      * Display the specified resource.
-     * Detalle del Producto
      */
     public function show(Producto $producto)
     {
-        // Cargar relaciones de categorias y almacenes
         $producto->load(['categoria', 'almacenes']);
-
-        // Verificar si hay almacenes asociados
-        $almacenes = $producto->getAlmacenesConCantidad();
-        if ($almacenes->isEmpty()) {
-            $almacenes = collect([[
-                'id' => null,
-                'nombre_almacen' => 'Sin almacén asociado',
-                'pivot' => [
-                    'cantidad' => 0,
-                ],
-            ]]);
-        }
 
         return Inertia::render('Productos/Show', [
             'producto' => $producto,
-            'almacenes' => $almacenes,
+            'almacenes' => $producto->getAlmacenesConCantidad(),
         ]);
     }
 
@@ -154,7 +133,6 @@ class ProductoController extends Controller
             ],
             'categoria_id' => ['required', 'exists:categorias,id'],
             'precio_compra_producto' => ['required', 'numeric', 'min:0'],
-            'cantidad_producto' => ['required', 'integer', 'min:0'],
             'imagen_producto' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'],
         ]);
 
@@ -172,15 +150,10 @@ class ProductoController extends Controller
             'codigo_producto' => $request->codigo_producto,
             'categoria_id' => $request->categoria_id,
             'precio_compra_producto' => $request->precio_compra_producto,
-            'cantidad_producto' => $request->cantidad_producto,
             'imagen_producto' => $imagenPath,
         ]);
 
-        // Actualizar cantidad en almacen_producto
-        $almacen = Almacen::getDefault();
-        $almacen->productos()->updateExistingPivot($producto->id, [
-            'cantidad' => $request->cantidad_producto,
-        ]);
+        // No se actualiza la cantidad aquí
 
         return redirect()->route('productos.index')->with('success', 'Producto actualizado exitosamente.');
     }

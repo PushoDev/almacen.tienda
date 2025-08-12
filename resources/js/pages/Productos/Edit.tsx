@@ -8,7 +8,6 @@ import AppLayout from '@/layouts/app-layout';
 import { CategoriasProps, ProductoProps, type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
 import { FileBox } from 'lucide-react';
-import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -33,7 +32,6 @@ export default function EditarProductosPage({ producto, categorias }: { producto
         codigo_producto: producto.codigo_producto || '',
         categoria_id: producto.categoria_id.toString(), // ID de la categoría seleccionada
         precio_compra_producto: producto.precio_compra_producto,
-        cantidad_producto: producto.cantidad_producto,
         imagen_producto: null as File | null,
     });
 
@@ -47,17 +45,17 @@ export default function EditarProductosPage({ producto, categorias }: { producto
         formData.append('codigo_producto', data.codigo_producto);
         formData.append('categoria_id', data.categoria_id);
         formData.append('precio_compra_producto', data.precio_compra_producto.toString());
-        formData.append('cantidad_producto', data.cantidad_producto.toString());
         if (data.imagen_producto) {
             formData.append('imagen_producto', data.imagen_producto);
         }
 
         put(route('productos.update', { producto: producto.id }), {
+            data: formData,
             onSuccess: () => {
-                toast.success('Producto actualizado correctamente');
+                alert('Producto actualizado correctamente');
             },
             onError: () => {
-                toast.error('Error al actualizar el producto');
+                alert('Error al actualizar el producto');
             },
         });
     };
@@ -68,12 +66,10 @@ export default function EditarProductosPage({ producto, categorias }: { producto
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
-                    {/* Contenido principal */}
                     <HeadingSmall
                         title="Opciones Generales del Sistema"
                         description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento"
                     />
-                    {/* Ícono semitransparente */}
                     <FileBox
                         size={70}
                         color="#d6d3d1"
@@ -159,25 +155,7 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                                     <InputError className="mt-2" message={errors.codigo_producto} />
                                 </div>
 
-                                {/* Campo Precio de Compra */}
-                                {/* <div>
-                                    <Label htmlFor="precio_compra_producto" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        Precio de Compra:
-                                    </Label>
-                                    <Input
-                                        id="precio_compra_producto"
-                                        type="number"
-                                        step="0.01"
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                        value={data.precio_compra_producto}
-                                        onChange={(e) => setData('precio_compra_producto', parseFloat(e.target.value))}
-                                        autoComplete="precio_compra_producto"
-                                        placeholder="Precio de Compra"
-                                    />
-                                    <InputError className="mt-2" message={errors.precio_compra_producto} />
-                                </div> */}
-
-                                {/* Campo Cantidad
+                                {/* Campo Cantidad (solo lectura) */}
                                 <div>
                                     <Label htmlFor="cantidad_producto" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                         Cantidad:
@@ -186,16 +164,13 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                                         id="cantidad_producto"
                                         type="number"
                                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                        value={data.cantidad_producto}
-                                        onChange={(e) => setData('cantidad_producto', parseInt(e.target.value))}
-                                        autoComplete="cantidad_producto"
-                                        placeholder="Cantidad"
+                                        value={producto.almacenes.reduce((total, almacen) => total + almacen.pivot.cantidad, 0)} // Mostrar cantidad total
+                                        readOnly // Campo solo de lectura
                                     />
-                                    <InputError className="mt-2" message={errors.cantidad_producto} />
-                                </div> */}
+                                </div>
 
                                 {/* Campo Imagen */}
-                                {/* <div>
+                                <div>
                                     <Label htmlFor="imagen_producto" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                         Imagen del Producto:
                                     </Label>
@@ -215,7 +190,7 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                                             />
                                         </div>
                                     )}
-                                </div> */}
+                                </div>
                             </div>
                         </div>
 
