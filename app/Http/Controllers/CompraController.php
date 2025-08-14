@@ -160,7 +160,7 @@ class CompraController extends Controller
                     $cliente = Cliente::findOrFail($pagoCliente['cliente_id']);
 
                     // Aumentar la deuda del cliente (nosotros le debemos dinero)
-                    $cliente->increment('deuda_pago_cliente', $pagoCliente['monto']);
+                    $cliente->decrement('deuda_pago_cliente', $pagoCliente['monto']);
                 }
 
                 // Usar la primera cuenta como referencia principal, si existe
