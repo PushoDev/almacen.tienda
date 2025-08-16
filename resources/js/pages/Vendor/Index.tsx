@@ -1,12 +1,17 @@
 import HeadingSmall from '@/components/heading-small';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Table, TableBody, TableCaption, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
 import axios from 'axios';
-import { Minus, Plus, Search, ShoppingBag, Trash2, X } from 'lucide-react';
+import { BoxesIcon, Minus, Plus, Search, ShoppingBag, ShoppingCart, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { Toaster } from '@/components/ui/sonner';
+import { toast } from 'sonner';
 
 // Tipos para los datos
 interface Almacen {
@@ -45,7 +50,7 @@ const breadcrumbs: BreadcrumbItem[] = [
         href: '/productos',
     },
     {
-        title: 'Ventas',
+        title: 'Punto de Ventas',
         href: '#',
     },
 ];
@@ -273,17 +278,17 @@ export default function PuntoVentaOficial({
     const procesarVenta = () => {
         // Validaciones
         if (carrito.length === 0) {
-            alert('El carrito está vacío');
+            toast.warning('El carrito está vacío');
             return;
         }
 
         if (!almacenSeleccionado) {
-            alert('Por favor seleccione un almacén');
+            toast.warning('Por favor seleccione un almacén');
             return;
         }
 
         if (!clienteSeleccionado) {
-            alert('Por favor seleccione un cliente');
+            toast.warning('Por favor seleccione un cliente');
             return;
         }
 
@@ -328,217 +333,236 @@ export default function PuntoVentaOficial({
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     <HeadingSmall title="Punto de Venta" description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento." />
+
                     <ShoppingBag
                         size={70}
                         color="#d6d3d1"
-                        className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
+                        className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-20] transform animate-pulse opacity-40"
                     />
                 </div>
-
-                <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
+                <div className="flex items-center justify-between text-sm text-gray-600">
                     <p>
-                        Rol actual: <span className="text-primary font-medium">{meta.role_usuario === 'admin' ? 'Administrador' : 'Vendedor'}</span>
+                        Rol Actual del Vendedor:{' '}
+                        <span className="text-primary font-medium">{meta.role_usuario === 'admin' ? 'Administrador' : 'Vendedor'}</span>
                     </p>
                 </div>
-
-                <Separator />
+                <Separator className="bg-sidebar-accent" />
 
                 {/* Punto de venta */}
                 <div className="grid gap-4 md:grid-cols-2">
                     {/* Columna 1: Select almacenes, clientes, mostrar productos */}
                     <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            {/* Seleccionar Almacén */}
-                            <div>
-                                <label className="mb-1 block text-sm font-medium text-gray-700">Almacén</label>
-                                <Select value={almacenSeleccionado} onValueChange={handleAlmacenChange} disabled={loadingAlmacenes}>
-                                    <SelectTrigger className="w-full">
-                                        <SelectValue placeholder="Seleccionar almacén" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {almacenes.map((almacen) => (
-                                            <SelectItem key={almacen.id} value={almacen.id.toString()}>
-                                                {almacen.nombre_almacen}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                {loadingAlmacenes && <p className="mt-1 text-xs text-gray-500">Cargando almacenes...</p>}
-                            </div>
-
-                            {/* Seleccionar Cliente */}
-                            <div>
-                                <label className="mb-1 block text-sm font-medium text-gray-700">Cliente</label>
-                                <Select value={clienteSeleccionado} onValueChange={handleClienteChange} disabled={loadingClientes}>
-                                    <SelectTrigger className="w-full">
-                                        <SelectValue placeholder="Seleccionar cliente" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {clientes.map((cliente) => (
-                                            <SelectItem key={cliente.id} value={cliente.id.toString()}>
-                                                {cliente.nombre_cliente}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                {loadingClientes && <p className="mt-1 text-xs text-gray-500">Cargando clientes...</p>}
-                            </div>
-                        </div>
+                        <Card className="border-sidebar-accent @container/card">
+                            <CardHeader className="relative">
+                                <CardTitle className="text-sidebar-accent">
+                                    <div className="text-sidebar-accent flex items-center gap-2">
+                                        <ShoppingBag className="shrink-0" />
+                                        Iniciar Venta
+                                    </div>
+                                </CardTitle>
+                                <CardDescription>
+                                    Origenes y Recepción del Producto.
+                                    <span className="text-sidebar-accent animate-pulse"> Seleccione Primero *</span>
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="grid grid-cols-2 gap-4">
+                                    {/* Seleccionar Almacén */}
+                                    <div>
+                                        <Select value={almacenSeleccionado} onValueChange={handleAlmacenChange} disabled={loadingAlmacenes}>
+                                            <SelectTrigger className="border-sidebar-accent w-full dark:border-white">
+                                                <SelectValue placeholder="Seleccionar Almacén" />
+                                            </SelectTrigger>
+                                            <SelectContent className="border-sidebar-accent">
+                                                {almacenes.map((almacen) => (
+                                                    <SelectItem key={almacen.id} value={almacen.id.toString()}>
+                                                        {almacen.nombre_almacen}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {loadingAlmacenes && <p className="mt-1 text-xs text-gray-500">Cargando almacenes...</p>}
+                                    </div>
+                                    {/* Seleccionar Cliente */}
+                                    <div>
+                                        <Select value={clienteSeleccionado} onValueChange={handleClienteChange} disabled={loadingClientes}>
+                                            <SelectTrigger className="border-sidebar-accent w-full dark:border-white">
+                                                <SelectValue placeholder="Seleccionar cliente" />
+                                            </SelectTrigger>
+                                            <SelectContent className="border-sidebar-accent">
+                                                {clientes.map((cliente) => (
+                                                    <SelectItem key={cliente.id} value={cliente.id.toString()}>
+                                                        {cliente.nombre_cliente}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {loadingClientes && <p className="mt-1 text-xs text-gray-500">Cargando clientes...</p>}
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
 
                         <Separator />
 
                         {/* Tabla para Mostrar los Productos */}
-                        <div className="rounded-lg border">
-                            <div className="border-b bg-gray-50 px-4 py-3">
-                                <h3 className="font-medium text-gray-900">Productos Disponibles</h3>
-                            </div>
-
-                            {/* Barra de búsqueda */}
-                            {almacenSeleccionado && (
-                                <div className="border-b bg-white p-4">
-                                    <div className="relative max-w-md">
-                                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                            <Search className="h-4 w-4 text-gray-400" />
+                        <Card className="border-sidebar-accent @container/card">
+                            <CardHeader className="relative">
+                                <CardTitle>
+                                    <div className="text-sidebar-accent flex items-center gap-2">
+                                        <BoxesIcon className="shrink-0" />
+                                        Productos Disponibles
+                                    </div>
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                {/* Barra de búsqueda */}
+                                {almacenSeleccionado && (
+                                    <div className="border-b p-4">
+                                        <div className="relative max-w-md">
+                                            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                                <Search className="h-4 w-4 text-gray-400" />
+                                            </div>
+                                            <input
+                                                type="text"
+                                                className="border-sidebar-accent block w-full rounded-md border py-2 pr-10 pl-10 text-sm shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                                placeholder="Buscar productos..."
+                                                value={busqueda}
+                                                onChange={(e) => setBusqueda(e.target.value)}
+                                            />
+                                            {busqueda && (
+                                                <button
+                                                    type="button"
+                                                    onClick={limpiarBusqueda}
+                                                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </button>
+                                            )}
                                         </div>
-                                        <input
-                                            type="text"
-                                            className="block w-full rounded-md border border-gray-300 py-2 pr-10 pl-10 text-sm shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                                            placeholder="Buscar productos..."
-                                            value={busqueda}
-                                            onChange={(e) => setBusqueda(e.target.value)}
-                                        />
-                                        {busqueda && (
-                                            <button
-                                                type="button"
-                                                onClick={limpiarBusqueda}
-                                                className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
-                                            >
-                                                <X className="h-4 w-4" />
-                                            </button>
+                                        {busqueda && productos.length > 0 && (
+                                            <p className="mt-1 text-xs text-gray-500">
+                                                {productosFiltrados.length} de {productos.length} productos encontrados
+                                            </p>
                                         )}
                                     </div>
-                                    {busqueda && productos.length > 0 && (
-                                        <p className="mt-1 text-xs text-gray-500">
-                                            {productosFiltrados.length} de {productos.length} productos encontrados
-                                        </p>
-                                    )}
-                                </div>
-                            )}
+                                )}
 
-                            {loadingProductos ? (
-                                <div className="p-8 text-center">
-                                    <div className="inline-block h-6 w-6 animate-spin rounded-full border-b-2 border-blue-500"></div>
-                                    <p className="mt-2 text-gray-500">Cargando productos...</p>
-                                </div>
-                            ) : almacenSeleccionado ? (
-                                productosFiltrados && productosFiltrados.length > 0 ? (
-                                    <div className="overflow-x-auto">
-                                        <table className="min-w-full divide-y divide-gray-200">
-                                            <thead className="bg-gray-50">
-                                                <tr>
-                                                    <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
-                                                        Producto
-                                                    </th>
-                                                    <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
-                                                        Stock
-                                                    </th>
-                                                    <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
-                                                        Precio
-                                                    </th>
-                                                    <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
-                                                        Acción
-                                                    </th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-200 bg-white">
-                                                {productosFiltrados.map((producto) => (
-                                                    <tr key={producto.id} className="hover:bg-gray-50">
-                                                        <td className="px-4 py-3">
-                                                            <div>
-                                                                <div className="text-sm font-medium text-gray-900">{producto.nombre_producto}</div>
-                                                                <div className="text-sm text-gray-500">
-                                                                    {producto.marca_producto || 'Sin marca'} -{' '}
-                                                                    {producto.categoria_nombre || 'Sin categoría'}
-                                                                </div>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-4 py-3 text-sm whitespace-nowrap text-gray-500">
-                                                            <span
-                                                                className={`inline-flex rounded-full px-2 text-xs leading-5 font-semibold ${
-                                                                    producto.stock_total > 5
-                                                                        ? 'bg-green-100 text-green-800'
-                                                                        : producto.stock_total > 0
-                                                                          ? 'bg-yellow-100 text-yellow-800'
-                                                                          : 'bg-red-100 text-red-800'
-                                                                }`}
-                                                            >
-                                                                {producto.stock_total}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-4 py-3 text-sm whitespace-nowrap text-gray-900">
-                                                            {producto.precio_venta && producto.precio_venta > 0 ? (
-                                                                `$${producto.precio_venta.toFixed(2)}`
-                                                            ) : (
-                                                                <span className="text-red-500">Sin precio</span>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-4 py-3 text-sm whitespace-nowrap">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => agregarAlCarrito(producto)}
-                                                                className="flex items-center gap-1 rounded bg-blue-500 px-3 py-1 text-xs text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
-                                                                disabled={
-                                                                    !producto.tiene_precio ||
-                                                                    producto.stock_total <= 0 ||
-                                                                    !producto.precio_venta ||
-                                                                    producto.precio_venta <= 0
-                                                                }
-                                                            >
-                                                                <Plus className="h-3 w-3" />
-                                                                Agregar
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                                {loadingProductos ? (
+                                    <div className="p-8 text-center">
+                                        <div className="inline-block h-6 w-6 animate-spin rounded-full border-b-2 border-blue-500"></div>
+                                        <p className="mt-2 text-gray-500">Cargando productos...</p>
                                     </div>
+                                ) : almacenSeleccionado ? (
+                                    productosFiltrados && productosFiltrados.length > 0 ? (
+                                        <div className="overflow-x-auto">
+                                            <Table className='rounded-t-lg'>
+                                                <TableCaption>Productos disponibles en el almacén seleccionado</TableCaption>
+                                                <TableHeader className='border-1  border-t-white rounded-t-lg'>
+                                                    <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent transition-colors">
+                                                        <TableHead className="text-white uppercase">Producto</TableHead>
+                                                        <TableHead className="text-center text-white uppercase">Stock</TableHead>
+                                                        <TableHead className="text-center text-white uppercase">Precio</TableHead>
+                                                        <TableHead className="text-center text-white uppercase">Acción</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody className='rounded-b-md border-1 border-b-white border-solid'>
+                                                    {productosFiltrados.map((producto) => (
+                                                        <tr key={producto.id} className="hover:bg-sidebar cursor-pointer">
+                                                            <td className="px-4 py-3">
+                                                                <div>
+                                                                    <div className="text-sidebar-accent text-sm font-medium">
+                                                                        {producto.nombre_producto}
+                                                                    </div>
+                                                                    <div className="text-sm text-gray-500">
+                                                                        {producto.marca_producto || 'Sin marca'} -{' '}
+                                                                        {producto.categoria_nombre || 'Sin categoría'}
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-sm whitespace-nowrap text-gray-500">
+                                                                <span
+                                                                    className={`inline-flex rounded-full px-2 text-xs leading-5 font-semibold ${
+                                                                        producto.stock_total > 5
+                                                                            ? 'bg-green-100 text-green-800'
+                                                                            : producto.stock_total > 0
+                                                                              ? 'bg-yellow-100 text-yellow-800'
+                                                                              : 'bg-red-100 text-red-800'
+                                                                    }`}
+                                                                >
+                                                                    {producto.stock_total}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-sm whitespace-nowrap text-emerald-600">
+                                                                {producto.precio_venta && producto.precio_venta > 0 ? (
+                                                                    `$ ${producto.precio_venta.toFixed(2)}`
+                                                                ) : (
+                                                                    <span className="text-red-500">Sin precio</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-center text-sm whitespace-nowrap">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => agregarAlCarrito(producto)}
+                                                                    className="flex cursor-pointer items-center gap-1 rounded bg-blue-500 px-3 py-1 text-xs text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+                                                                    disabled={
+                                                                        !producto.tiene_precio ||
+                                                                        producto.stock_total <= 0 ||
+                                                                        !producto.precio_venta ||
+                                                                        producto.precio_venta <= 0
+                                                                    }
+                                                                >
+                                                                    <Plus className="h-3 w-3" />
+                                                                    Agregar
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    ) : (
+                                        <div className="p-8 text-center">
+                                            <p className="text-gray-500">
+                                                {busqueda && productos.length > 0
+                                                    ? 'No se encontraron productos que coincidan con la búsqueda'
+                                                    : productos.length === 0 && !loadingProductos
+                                                      ? 'No hay productos disponibles en este almacén'
+                                                      : 'No hay productos para mostrar'}
+                                            </p>
+                                            {busqueda && productos.length > 0 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={limpiarBusqueda}
+                                                    className="mt-2 text-sm font-medium text-blue-600 hover:text-blue-800"
+                                                >
+                                                    Limpiar búsqueda
+                                                </button>
+                                            )}
+                                        </div>
+                                    )
                                 ) : (
                                     <div className="p-8 text-center">
-                                        <p className="text-gray-500">
-                                            {busqueda && productos.length > 0
-                                                ? 'No se encontraron productos que coincidan con la búsqueda'
-                                                : productos.length === 0 && !loadingProductos
-                                                  ? 'No hay productos disponibles en este almacén'
-                                                  : 'No hay productos para mostrar'}
-                                        </p>
-                                        {busqueda && productos.length > 0 && (
-                                            <button
-                                                type="button"
-                                                onClick={limpiarBusqueda}
-                                                className="mt-2 text-sm font-medium text-blue-600 hover:text-blue-800"
-                                            >
-                                                Limpiar búsqueda
-                                            </button>
-                                        )}
+                                        <p className="text-gray-500">Seleccione un almacén para ver los productos</p>
                                     </div>
-                                )
-                            ) : (
-                                <div className="p-8 text-center">
-                                    <p className="text-gray-500">Seleccione un almacén para ver los productos</p>
-                                </div>
-                            )}
-                        </div>
+                                )}
+                            </CardContent>
+                        </Card>
                     </div>
 
                     {/* Columna 2: Carrito de Compras */}
                     <div>
                         <div className="flex h-full flex-col rounded-lg border">
-                            <div className="flex items-center justify-between border-b bg-gray-50 px-4 py-3">
-                                <h3 className="font-medium text-gray-900">Carrito de Compras</h3>
+                            <div className="bg-sidebar-accent flex items-center justify-between rounded-t-lg  border-1 border-solid px-4 py-3 dark:border-zinc-300">
+                                <div>
+                                    <div className="flex items-center gap-2 text-white">
+                                        <ShoppingCart className="shrink-0" />
+                                        <h3 className="font-medium text-white uppercase">Carrito de Compras</h3>
+                                    </div>
+                                </div>
                                 {carrito.length > 0 && (
                                     <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800">
-                                        {carrito.length} items
+                                        {carrito.length} producto seleccionado
                                     </span>
                                 )}
                             </div>
@@ -552,19 +576,19 @@ export default function PuntoVentaOficial({
                                 ) : (
                                     <div className="divide-y divide-gray-200">
                                         {carrito.map((item) => (
-                                            <div key={item.id} className="p-4 hover:bg-gray-50">
+                                            <div key={item.id} className="hover:bg-sidebar cursor-pointer p-4">
                                                 <div className="mb-2 flex items-start justify-between">
                                                     <div className="flex-1">
-                                                        <h4 className="text-sm font-medium text-gray-900">{item.producto.nombre_producto}</h4>
+                                                        <h4 className="text-sidebar-accent text-sm font-medium">{item.producto.nombre_producto}</h4>
                                                         <p className="text-xs text-gray-500">{item.producto.marca_producto || 'Sin marca'}</p>
                                                     </div>
-                                                    <button
-                                                        type="button"
+                                                    <Button
+                                                        variant='ghost'
                                                         onClick={() => quitarDelCarrito(item.id)}
-                                                        className="ml-2 text-red-400 hover:text-red-600"
+                                                        className="ml-2 cursor-pointer  text-red-400 hover:text-white hover:bg-red-900"
                                                     >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </button>
+                                                        <Trash2  className="h-4 w-4" />
+                                                    </Button>
                                                 </div>
 
                                                 <div className="mt-2 flex items-center justify-between">
@@ -572,18 +596,18 @@ export default function PuntoVentaOficial({
                                                         <button
                                                             type="button"
                                                             onClick={() => decrementarCantidad(item.id)}
-                                                            className="rounded-md border border-gray-300 p-1 text-gray-600 hover:bg-gray-100"
+                                                            className="rounded-md border border-sidebar-accent bg-sidebar p-1 text-white hover:bg-sidebar-accent cursor-pointer"
                                                             disabled={item.cantidad <= 1}
                                                         >
                                                             <Minus className="h-3 w-3" />
                                                         </button>
 
-                                                        <span className="w-8 text-center text-sm font-medium">{item.cantidad}</span>
+                                                        <span className="w-8 text-center font-bold text-sm text-amber-500 font-medium">{item.cantidad}</span>
 
                                                         <button
                                                             type="button"
                                                             onClick={() => incrementarCantidad(item.id)}
-                                                            className="rounded-md border border-gray-300 p-1 text-gray-600 hover:bg-gray-100"
+                                                            className="rounded-md border border-sidebar-accent bg-sidebar p-1 text-white hover:bg-sidebar-accent cursor-pointer"
                                                             disabled={item.cantidad >= item.producto.stock_total}
                                                         >
                                                             <Plus className="h-3 w-3" />
@@ -595,19 +619,19 @@ export default function PuntoVentaOficial({
                                                     <div className="text-right">
                                                         <input
                                                             type="number"
-                                                            value={item.precio_venta || 0}
+                                                            value={item.precio_venta || ''}
                                                             onChange={(e) => {
                                                                 const value = parseFloat(e.target.value);
                                                                 if (!isNaN(value)) {
                                                                     actualizarPrecio(item.id, value);
                                                                 }
                                                             }}
-                                                            className="w-20 rounded border border-gray-300 px-2 py-1 text-right text-sm"
+                                                            className="w-20 rounded border text-emerald-600 border-sidebar-accent hover:border-emerald-300 px-2 py-1 text-right text-sm"
                                                             min="0"
                                                             step="0.01"
                                                         />
-                                                        <p className="mt-1 text-sm font-medium text-gray-900">
-                                                            ${(isNaN(item.subtotal) ? 0 : item.subtotal).toFixed(2)}
+                                                        <p className="mt-1 text-sm font-medium text-emerald-700">
+                                                            $ {(isNaN(item.subtotal) ? 0 : item.subtotal).toFixed(2)}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -619,16 +643,17 @@ export default function PuntoVentaOficial({
 
                             {/* Resumen del carrito */}
                             {carrito.length > 0 && (
-                                <div className="border-t border-gray-200 bg-gray-50 p-4">
+
+                                <div className="border-t border-gray-200 bg-gray-50 p-4 rounded-b-lg  border-1 border-solid">
                                     <div className="mb-2 flex items-center justify-between">
                                         <span className="text-sm font-medium text-gray-700">Total:</span>
-                                        <span className="text-lg font-bold text-gray-900">${calcularTotal.toFixed(2)}</span>
+                                        <span className="text-lg font-bold text-emerald-700">$ {calcularTotal.toFixed(2)}</span>
                                     </div>
                                     <button
                                         type="button"
                                         onClick={procesarVenta}
                                         disabled={procesandoVenta}
-                                        className="flex w-full items-center justify-center rounded-md bg-green-600 px-4 py-2 font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                        className="flex w-full items-center justify-center cursor-pointer rounded-md bg-green-600 px-4 py-2 font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
                                     >
                                         {procesandoVenta ? (
                                             <>
@@ -645,6 +670,7 @@ export default function PuntoVentaOficial({
                         </div>
                     </div>
                 </div>
+                <Toaster position='top-center' />
             </div>
         </AppLayout>
     );

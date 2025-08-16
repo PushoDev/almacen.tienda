@@ -714,7 +714,7 @@ export default function ComprarPage() {
                 <div className="flex justify-center gap-4 p-4">
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
-                            <Button variant="outline" className="bg-green-600 text-white hover:bg-green-700">
+                            <Button variant="outline" className="bg-green-600 text-white hover:bg-green-700 cursor-pointer">
                                 Realizar Compra
                             </Button>
                         </AlertDialogTrigger>
@@ -732,7 +732,7 @@ export default function ComprarPage() {
                                         value={data.compra}
                                         onValueChange={(value) => setData('compra', value as 'deuda_proveedor' | 'pago_cash')}
                                     >
-                                        <SelectTrigger className="w-full">
+                                        <SelectTrigger className="w-full border-4 border-double border-sidebar-accent">
                                             <SelectValue placeholder="Seleccione tipo de compra" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -769,7 +769,7 @@ export default function ComprarPage() {
                                                     }}
                                                     multiple // Habilitar selección múltiple
                                                 >
-                                                    <SelectTrigger className="mt-2 w-full">
+                                                    <SelectTrigger className="mt-2 w-full border-zinc-500">
                                                         <SelectValue placeholder="Seleccione Clientes" />
                                                     </SelectTrigger>
                                                     <SelectContent>
@@ -782,7 +782,7 @@ export default function ComprarPage() {
                                                 </Select>
                                                 {errors.clientes && <InputError message={errors.clientes} />}
                                                 {data.pagos_clientes.length > 0 && (
-                                                    <div className="flex flex-col gap-3">
+                                                    <div className="flex flex-col gap-3 border-zinc-500">
                                                         {data.pagos_clientes.map((pago) => (
                                                             <div key={pago.cliente_id} className="flex items-center gap-3">
                                                                 <div className="flex-1">
@@ -811,8 +811,8 @@ export default function ComprarPage() {
                                                                     />
                                                                 </div>
                                                                 <Button
-                                                                    variant="link"
-                                                                    className="cursor-pointer text-red-600 hover:text-red-800"
+                                                                    variant='destructive'
+                                                                    className="cursor-pointer"
                                                                     onClick={() => {
                                                                         const updatedPagos = data.pagos_clientes.filter(
                                                                             (p) => p.cliente_id !== pago.cliente_id,
@@ -850,7 +850,7 @@ export default function ComprarPage() {
                                                     }}
                                                     multiple // Habilitar selección múltiple
                                                 >
-                                                    <SelectTrigger className="mt-2 w-full">
+                                                    <SelectTrigger className="mt-2 w-full border-zinc-500">
                                                         <SelectValue placeholder="Seleccione Cuentas" />
                                                     </SelectTrigger>
                                                     <SelectContent>
@@ -890,8 +890,8 @@ export default function ComprarPage() {
                                                                     />
                                                                 </div>
                                                                 <Button
-                                                                    variant="link"
-                                                                    className="cursor-pointer text-red-600 hover:text-red-800"
+                                                                    variant='destructive'
+                                                                    className="cursor-pointer"
                                                                     onClick={() => {
                                                                         const updatedPagos = data.pagos.filter((p) => p.cuenta_id !== pago.cuenta_id);
                                                                         setData('pagos', updatedPagos);
@@ -930,7 +930,7 @@ export default function ComprarPage() {
                             </div>
 
                             <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogCancel className='cursor-pointer'>Cancelar</AlertDialogCancel>
                                 <Button
                                     type="button"
                                     onClick={() => {
@@ -971,7 +971,7 @@ export default function ComprarPage() {
                                         });
                                     }}
                                     disabled={processing}
-                                    className="bg-green-600 hover:bg-green-700"
+                                    className="bg-green-600 hover:bg-green-700 cursor-pointer text-white"
                                 >
                                     {processing ? 'Registrando...' : 'Proceder Compra'}
                                 </Button>
@@ -983,7 +983,7 @@ export default function ComprarPage() {
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <Link href="/dashboard">
-                                    <Button variant="secondary" className="ms-2">
+                                    <Button variant="secondary" className="ms-2 cursor-pointer">
                                         <BookCheck />
                                         Cancelar Compra
                                     </Button>
