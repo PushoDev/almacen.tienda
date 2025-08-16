@@ -203,8 +203,8 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaProps[] }) {
                                             aria-label={`Saldo de la cuenta: ${
                                                 cuenta.saldo_cuenta
                                                     ? cuenta.saldo_cuenta < 0
-                                                        ? `-$${Math.abs(cuenta.saldo_cuenta).toFixed(2)} (negativo)`
-                                                        : `$${cuenta.saldo_cuenta.toFixed(2)}`
+                                                        ? `-$ ${Math.abs(cuenta.saldo_cuenta).toFixed(2)} (negativo)`
+                                                        : `$ ${cuenta.saldo_cuenta.toFixed(2)}`
                                                     : 'Sin saldo'
                                             }`}
                                         >

@@ -222,7 +222,7 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                             >
                                                 {cliente.deuda_pago_cliente !== null && cliente.deuda_pago_cliente !== undefined
                                                     ? cliente.deuda_pago_cliente < 0
-                                                        ? `-${formatearMoneda(Math.abs(cliente.deuda_pago_cliente))}`
+                                                        ? `- ${formatearMoneda(Math.abs(cliente.deuda_pago_cliente))}`
                                                         : cliente.deuda_pago_cliente === 0
                                                           ? 'Sin deuda'
                                                           : formatearMoneda(cliente.deuda_pago_cliente)

@@ -8,10 +8,13 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
 import axios from 'axios';
-import { BoxesIcon, Minus, Plus, Search, ShoppingBag, ShoppingCart, Trash2, X } from 'lucide-react';
+import { BoxesIcon, Minus, Plus, Search, ShoppingBag, ShoppingCart, Trash, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 
 // Tipos para los datos
 interface Almacen {
@@ -513,7 +516,7 @@ export default function PuntoVentaOficial({
                                                                     }
                                                                 >
                                                                     <Plus className="h-3 w-3" />
-                                                                    Agregar
+                                                                    Agregar al Carrito
                                                                 </button>
                                                             </td>
                                                         </tr>
@@ -570,25 +573,32 @@ export default function PuntoVentaOficial({
                             <div className="max-h-96 flex-1 overflow-y-auto">
                                 {carrito.length === 0 ? (
                                     <div className="p-8 text-center">
-                                        <p className="text-gray-500">Carrito vacío</p>
+                                        <p className="text-red-500">Carrito vacío</p>
                                         <p className="mt-2 text-sm text-gray-400">Agregue productos del almacén seleccionado</p>
                                     </div>
                                 ) : (
                                     <div className="divide-y divide-gray-200">
                                         {carrito.map((item) => (
-                                            <div key={item.id} className="hover:bg-sidebar cursor-pointer p-4">
+                                            <div key={item.id} className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition-all hover:shadow dark:border-gray-700 dark:bg-gray-800">
                                                 <div className="mb-2 flex items-start justify-between">
                                                     <div className="flex-1">
                                                         <h4 className="text-sidebar-accent text-sm font-medium">{item.producto.nombre_producto}</h4>
                                                         <p className="text-xs text-gray-500">{item.producto.marca_producto || 'Sin marca'}</p>
                                                     </div>
-                                                    <Button
-                                                        variant='ghost'
-                                                        onClick={() => quitarDelCarrito(item.id)}
-                                                        className="ml-2 cursor-pointer  text-red-400 hover:text-white hover:bg-red-900"
-                                                    >
-                                                        <Trash2  className="h-4 w-4" />
-                                                    </Button>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Button
+                                                                variant='ghost'
+                                                                onClick={() => quitarDelCarrito(item.id)}
+                                                                className="ml-2 cursor-pointer  text-red-400 hover:text-white hover:bg-red-900"
+                                                            >
+                                                                <Trash2 size={16}  className="h-4 w-4" />
+                                                            </Button>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent className="text-white">
+                                                            <p>Quitar de la lista</p>
+                                                        </TooltipContent>
+                                                    </Tooltip>
                                                 </div>
 
                                                 <div className="mt-2 flex items-center justify-between">
@@ -602,7 +612,17 @@ export default function PuntoVentaOficial({
                                                             <Minus className="h-3 w-3" />
                                                         </button>
 
-                                                        <span className="w-8 text-center font-bold text-sm text-amber-500 font-medium">{item.cantidad}</span>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Badge variant="secondary" className="text-xs">
+                                                                    <span
+                                                                        className="w-8 text-center font-bold text-sm text-amber-500 cursor-help font-medium">{item.cantidad}</span>
+                                                                </Badge>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent className="text-white">
+                                                            <p>Cantidad de Productos</p>
+                                                            </TooltipContent>
+                                                        </Tooltip>
 
                                                         <button
                                                             type="button"
@@ -617,19 +637,28 @@ export default function PuntoVentaOficial({
                                                     </div>
 
                                                     <div className="text-right">
-                                                        <input
-                                                            type="number"
-                                                            value={item.precio_venta || ''}
-                                                            onChange={(e) => {
-                                                                const value = parseFloat(e.target.value);
-                                                                if (!isNaN(value)) {
-                                                                    actualizarPrecio(item.id, value);
-                                                                }
-                                                            }}
-                                                            className="w-20 rounded border text-emerald-600 border-sidebar-accent hover:border-emerald-300 px-2 py-1 text-right text-sm"
-                                                            min="0"
-                                                            step="0.01"
-                                                        />
+
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Input
+                                                                    type="number"
+                                                                    value={item.precio_venta || ''}
+                                                                    onChange={(e) => {
+                                                                        const value = parseFloat(e.target.value);
+                                                                        if (!isNaN(value)) {
+                                                                            actualizarPrecio(item.id, value);
+                                                                        }
+                                                                    }}
+                                                                    className="w-20 rounded border text-emerald-600 border-sidebar-accent hover:border-emerald-300 px-2 py-1 text-left text-sm"
+
+                                                                    placeholder='$ 0.00'
+                                                                />
+                                                            </TooltipTrigger>
+                                                            <TooltipContent className="text-white">
+                                                                <p>Editar Precio de Venta</p>
+                                                            </TooltipContent>
+                                                        </Tooltip>
+
                                                         <p className="mt-1 text-sm font-medium text-emerald-700">
                                                             $ {(isNaN(item.subtotal) ? 0 : item.subtotal).toFixed(2)}
                                                         </p>
