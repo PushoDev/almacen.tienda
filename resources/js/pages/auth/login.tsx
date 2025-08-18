@@ -52,7 +52,8 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                             autoComplete="email"
                             value={data.email}
                             onChange={(e) => setData('email', e.target.value)}
-                            placeholder="email@example.com"
+                            placeholder="email@posglorieta.com"
+                            className="border-sidebar-accent"
                         />
                         <InputError message={errors.email} />
                     </div>
@@ -74,7 +75,8 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                             autoComplete="current-password"
                             value={data.password}
                             onChange={(e) => setData('password', e.target.value)}
-                            placeholder="Password"
+                            placeholder="Contra************seña"
+                            className="border-sidebar-accent"
                         />
                         <InputError message={errors.password} />
                     </div>
@@ -90,7 +92,12 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                         <Label htmlFor="remember">Recuerdar mi Cuenta</Label>
                     </div>
 
-                    <LiquidButton tabIndex={4} type="submit" className="cursor-pointer hover:animate-pulse  dark:text-white" disabled={processing}>
+                    <LiquidButton
+                        tabIndex={4}
+                        type="submit"
+                        className="border-sidebar cursor-pointer border-1 hover:animate-pulse dark:text-white"
+                        disabled={processing}
+                    >
                         {processing && <LoaderCircle className="h-4 w-4" />}
                         <DoorOpen />
                         Loguearse

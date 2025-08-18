@@ -8,6 +8,7 @@ import AppLayout from '@/layouts/app-layout';
 import { CategoriasProps, ProductoProps, type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
 import { FileBox } from 'lucide-react';
+import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -52,7 +53,7 @@ export default function EditarProductosPage({ producto, categorias }: { producto
         put(route('productos.update', { producto: producto.id }), {
             data: formData,
             onSuccess: () => {
-                alert('Producto actualizado correctamente');
+                toast.success('Producto actualizado correctamente');
             },
             onError: () => {
                 alert('Error al actualizar el producto');
@@ -107,7 +108,7 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                                     </Label>
                                     <Input
                                         id="marca_producto"
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                        className="mt-1 block w-full rounded-md border-gray-300 uppercase shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                         value={data.marca_producto}
                                         onChange={(e) => setData('marca_producto', e.target.value)}
                                         autoComplete="marca_producto"
@@ -206,6 +207,7 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                         </div>
                     </form>
                 </div>
+                <Toaster position="top-center" className="bg-emerald-600 text-emerald-950" />
             </div>
         </AppLayout>
     );

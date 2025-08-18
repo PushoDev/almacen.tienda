@@ -1,20 +1,30 @@
 import HeadingSmall from '@/components/heading-small';
+import {
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Toaster } from '@/components/ui/sonner';
 import { Table, TableBody, TableCaption, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
+import { AlertDialog } from '@radix-ui/react-alert-dialog';
 import axios from 'axios';
-import { BoxesIcon, Minus, PackagePlus, Plus, Search, ShoppingBag, ShoppingCart, Trash, Trash2, X } from 'lucide-react';
+import { BoxesIcon, Minus, PackagePlus, Plus, Search, ShoppingBag, ShoppingCart, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 
 // Tipos para los datos
 interface Almacen {
@@ -459,9 +469,9 @@ export default function PuntoVentaOficial({
                                 ) : almacenSeleccionado ? (
                                     productosFiltrados && productosFiltrados.length > 0 ? (
                                         <div className="overflow-x-auto">
-                                            <Table className='rounded-t-lg'>
+                                            <Table className="rounded-t-lg">
                                                 <TableCaption>Productos disponibles en el almacén seleccionado</TableCaption>
-                                                <TableHeader className='border-1  border-t-white rounded-t-lg'>
+                                                <TableHeader className="rounded-t-lg border-1 border-t-white">
                                                     <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent transition-colors">
                                                         <TableHead className="text-white uppercase">Producto</TableHead>
                                                         <TableHead className="text-center text-white uppercase">Stock</TableHead>
@@ -469,7 +479,7 @@ export default function PuntoVentaOficial({
                                                         <TableHead className="text-center text-white uppercase">Acción</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
-                                                <TableBody className='rounded-b-md border-1 border-b-white border-solid'>
+                                                <TableBody className="rounded-b-md border-1 border-solid border-b-white">
                                                     {productosFiltrados.map((producto) => (
                                                         <tr key={producto.id} className="hover:bg-sidebar cursor-pointer">
                                                             <td className="px-4 py-3">
@@ -509,7 +519,7 @@ export default function PuntoVentaOficial({
                                                                         <button
                                                                             type="button"
                                                                             onClick={() => agregarAlCarrito(producto)}
-                                                                            className="flex cursor-pointer gap-1 items-center rounded bg-blue-500 px-3 py-1 text-xs text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+                                                                            className="flex cursor-pointer items-center gap-1 rounded bg-blue-500 px-3 py-1 text-xs text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
                                                                             disabled={
                                                                                 !producto.tiene_precio ||
                                                                                 producto.stock_total <= 0 ||
@@ -525,7 +535,6 @@ export default function PuntoVentaOficial({
                                                                         <p>Agregar al Pedido</p>
                                                                     </TooltipContent>
                                                                 </Tooltip>
-
                                                             </td>
                                                         </tr>
                                                     ))}
@@ -538,7 +547,7 @@ export default function PuntoVentaOficial({
                                                 {busqueda && productos.length > 0
                                                     ? 'No se encontraron productos que coincidan con la búsqueda'
                                                     : productos.length === 0 && !loadingProductos
-                                                        ? 'No hay productos disponibles en este almacén'
+                                                      ? 'No hay productos disponibles en este almacén'
                                                       : 'No hay productos para mostrar'}
                                             </p>
                                             {busqueda && productos.length > 0 && (
@@ -564,7 +573,7 @@ export default function PuntoVentaOficial({
                     {/* Columna 2: Carrito de Compras */}
                     <div>
                         <div className="flex h-full flex-col rounded-lg border">
-                            <div className="bg-sidebar-accent flex items-center justify-between rounded-t-lg  border-1 border-solid px-4 py-3 dark:border-zinc-300">
+                            <div className="bg-sidebar-accent flex items-center justify-between rounded-t-lg border-1 border-solid px-4 py-3 dark:border-zinc-300">
                                 <div>
                                     <div className="flex items-center gap-2 text-white">
                                         <ShoppingCart className="shrink-0" />
@@ -572,8 +581,8 @@ export default function PuntoVentaOficial({
                                     </div>
                                 </div>
                                 {carrito.length > 0 && (
-                                    <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800">
-                                        {carrito.length} producto seleccionado
+                                    <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-red-800">
+                                        {carrito.length} producto(s) seleccionado
                                     </span>
                                 )}
                             </div>
@@ -587,7 +596,10 @@ export default function PuntoVentaOficial({
                                 ) : (
                                     <div className="divide-y divide-gray-200">
                                         {carrito.map((item) => (
-                                            <div key={item.id} className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition-all hover:shadow dark:border-gray-700 dark:bg-gray-800">
+                                            <div
+                                                key={item.id}
+                                                className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition-all hover:shadow dark:border-gray-700 dark:bg-gray-800"
+                                            >
                                                 <div className="mb-2 flex items-start justify-between">
                                                     <div className="flex-1">
                                                         <h4 className="text-sidebar-accent text-sm font-medium">{item.producto.nombre_producto}</h4>
@@ -596,11 +608,11 @@ export default function PuntoVentaOficial({
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
                                                             <Button
-                                                                variant='ghost'
+                                                                variant="ghost"
                                                                 onClick={() => quitarDelCarrito(item.id)}
-                                                                className="ml-2 cursor-pointer  text-red-400 hover:text-white hover:bg-red-900"
+                                                                className="ml-2 cursor-pointer text-red-400 hover:bg-red-900 hover:text-white"
                                                             >
-                                                                <Trash2 size={16}  className="h-4 w-4" />
+                                                                <Trash2 size={16} className="h-4 w-4" />
                                                             </Button>
                                                         </TooltipTrigger>
                                                         <TooltipContent className="text-white">
@@ -614,7 +626,7 @@ export default function PuntoVentaOficial({
                                                         <button
                                                             type="button"
                                                             onClick={() => decrementarCantidad(item.id)}
-                                                            className="rounded-md border border-sidebar-accent bg-sidebar p-1 text-white hover:bg-sidebar-accent cursor-pointer"
+                                                            className="border-sidebar-accent bg-sidebar hover:bg-sidebar-accent cursor-pointer rounded-md border p-1 text-white"
                                                             disabled={item.cantidad <= 1}
                                                         >
                                                             <Minus className="h-3 w-3" />
@@ -623,19 +635,20 @@ export default function PuntoVentaOficial({
                                                         <Tooltip>
                                                             <TooltipTrigger asChild>
                                                                 <Badge variant="secondary" className="text-xs">
-                                                                    <span
-                                                                        className="w-8 text-center font-bold text-sm text-amber-500 cursor-help font-medium">{item.cantidad}</span>
+                                                                    <span className="w-8 cursor-help text-center text-sm font-medium text-amber-500">
+                                                                        {item.cantidad}
+                                                                    </span>
                                                                 </Badge>
                                                             </TooltipTrigger>
                                                             <TooltipContent className="text-white">
-                                                            <p>Cantidad de Productos</p>
+                                                                <p>Cantidad de Productos</p>
                                                             </TooltipContent>
                                                         </Tooltip>
 
                                                         <button
                                                             type="button"
                                                             onClick={() => incrementarCantidad(item.id)}
-                                                            className="rounded-md border border-sidebar-accent bg-sidebar p-1 text-white hover:bg-sidebar-accent cursor-pointer"
+                                                            className="border-sidebar-accent bg-sidebar hover:bg-sidebar-accent cursor-pointer rounded-md border p-1 text-white"
                                                             disabled={item.cantidad >= item.producto.stock_total}
                                                         >
                                                             <Plus className="h-3 w-3" />
@@ -645,7 +658,6 @@ export default function PuntoVentaOficial({
                                                     </div>
 
                                                     <div className="text-right">
-
                                                         <Tooltip>
                                                             <TooltipTrigger asChild>
                                                                 <Input
@@ -657,9 +669,8 @@ export default function PuntoVentaOficial({
                                                                             actualizarPrecio(item.id, value);
                                                                         }
                                                                     }}
-                                                                    className="w-20 rounded border text-emerald-600 border-sidebar-accent hover:border-emerald-300 px-2 py-1 text-left text-sm"
-
-                                                                    placeholder='$ 0.00'
+                                                                    className="border-sidebar-accent w-20 rounded border px-2 py-1 text-left text-sm text-emerald-600 hover:border-emerald-300"
+                                                                    placeholder="$ 0.00"
                                                                 />
                                                             </TooltipTrigger>
                                                             <TooltipContent className="text-white">
@@ -680,34 +691,61 @@ export default function PuntoVentaOficial({
 
                             {/* Resumen del carrito */}
                             {carrito.length > 0 && (
-
-                                <div className="border-t border-gray-200 bg-gray-50 p-4 rounded-b-lg  border-1 border-solid">
+                                <div className="rounded-b-lg border-1 border-t border-solid border-gray-200 bg-gray-50 p-4">
                                     <div className="mb-2 flex items-center justify-between">
                                         <span className="text-sm font-medium text-gray-700">Total:</span>
                                         <span className="text-lg font-bold text-emerald-700">$ {calcularTotal.toFixed(2)}</span>
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={procesarVenta}
-                                        disabled={procesandoVenta}
-                                        className="flex w-full items-center justify-center cursor-pointer rounded-md bg-green-600 px-4 py-2 font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
-                                    >
-                                        {procesandoVenta ? (
-                                            <>
-                                                <div className="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-white"></div>
-                                                Procesando...
-                                            </>
-                                        ) : (
-                                            'Procesar Venta'
-                                        )}
-                                    </button>
+
+                                    <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                            <button
+                                                type="button"
+                                                disabled={procesandoVenta}
+                                                className="flex w-full cursor-pointer items-center justify-center rounded-md bg-green-600 px-4 py-2 font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                            >
+                                                {procesandoVenta ? (
+                                                    <>
+                                                        <div className="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-white"></div>
+                                                        Procesando...
+                                                    </>
+                                                ) : (
+                                                    'Procesar Venta'
+                                                )}
+                                            </button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                                <AlertDialogTitle className="text-center">Proceso de Compra</AlertDialogTitle>
+                                                <AlertDialogDescription className="animate-pulse">
+                                                    Métodos y procesamiento de la compra de artículos por parte del Cliente
+                                                </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <div className="mb-2 flex items-center justify-between">
+                                                <span className="text-sidebar-accent text-sm font-medium">Cliente a Pagar:</span>
+                                                <span className="text-lg font-bold text-emerald-600">$ {calcularTotal.toFixed(2)}</span>
+                                            </div>
+                                            <span>Aqui va todo lo relacionado al proceso de venta</span>
+                                            <AlertDialogFooter>
+                                                <Button
+                                                    className="flex w-full cursor-pointer items-center justify-center rounded-md bg-green-600 px-4 py-2 font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                                    onClick={procesarVenta}
+                                                >
+                                                    Realizar la Venta
+                                                </Button>
+                                                <AlertDialogCancel className="bg-destructive-foreground hover:bg-destructive cursor-pointer text-white">
+                                                    Cancelar
+                                                </AlertDialogCancel>
+                                            </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
                                     <p className="mt-2 text-center text-xs text-gray-500">Se enviarán {carrito.length} productos para procesar</p>
                                 </div>
                             )}
                         </div>
                     </div>
                 </div>
-                <Toaster position='top-center' />
+                <Toaster position="top-center" />
             </div>
         </AppLayout>
     );

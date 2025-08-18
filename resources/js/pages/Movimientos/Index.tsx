@@ -72,7 +72,7 @@ export default function MovimientosPage() {
 
         if (!almacenEmisorId || !almacenReceptorId) {
             console.warn('⚠️ Almacén emisor o receptor no seleccionado');
-            alert('Debes seleccionar un almacén emisor y un almacén receptor.');
+            toast.warning('Debes seleccionar un almacén emisor y un almacén receptor.');
             return;
         }
 

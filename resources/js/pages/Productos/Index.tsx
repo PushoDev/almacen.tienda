@@ -19,7 +19,7 @@ import { ProductoProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { CopyX, DollarSign, Edit3, Eye, FileText, Hash, Package, Package2, QrCode, Sheet, Trash2, Wallet } from 'lucide-react';
 import { useState } from 'react';
-import { toast } from 'sonner';
+import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -98,7 +98,7 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                         placeholder="Buscar productos..."
                         value={busqueda}
                         onChange={(e) => setBusqueda(e.target.value)}
-                        className="focus:ring-sidebar-accent rounded-md border border-gray-300 px-3 py-1 focus:ring-2 focus:outline-none"
+                        className="focus:ring-sidebar-accent border-primary rounded-md border px-3 py-1 focus:ring-2 focus:outline-none"
                     />
 
                     {/* Filtro*/}
@@ -106,7 +106,7 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                         id="filtro-tipo"
                         value={filtroTipo}
                         onChange={(e) => setFiltroTipo(e.target.value)}
-                        className="focus:ring-sidebar-accent rounded-md border border-gray-300 px-3 py-1 focus:ring-2 focus:outline-none"
+                        className="focus:ring-sidebar-accent border-primary rounded-md border px-3 py-1 focus:ring-2 focus:outline-none"
                     >
                         <option className="bg-background text-sidebar-accent" value="">
                             Todos los Productos
@@ -171,7 +171,7 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex items-center gap-2">
-                                            <Badge variant="outline" className="font-mono">
+                                            <Badge variant="outline" className="font-mono uppercase">
                                                 {producto.marca_producto || 'Sin marca'}
                                             </Badge>
                                         </div>
@@ -295,6 +295,7 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                         Siguiente
                     </Button>
                 </div>
+                <Toaster position="top-center" />
             </div>
         </AppLayout>
     );
