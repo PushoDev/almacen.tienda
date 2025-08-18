@@ -8,7 +8,7 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
 import axios from 'axios';
-import { BoxesIcon, Minus, Plus, Search, ShoppingBag, ShoppingCart, Trash, Trash2, X } from 'lucide-react';
+import { BoxesIcon, Minus, PackagePlus, Plus, Search, ShoppingBag, ShoppingCart, Trash, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
@@ -504,20 +504,28 @@ export default function PuntoVentaOficial({
                                                                 )}
                                                             </td>
                                                             <td className="px-4 py-3 text-center text-sm whitespace-nowrap">
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => agregarAlCarrito(producto)}
-                                                                    className="flex cursor-pointer items-center gap-1 rounded bg-blue-500 px-3 py-1 text-xs text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
-                                                                    disabled={
-                                                                        !producto.tiene_precio ||
-                                                                        producto.stock_total <= 0 ||
-                                                                        !producto.precio_venta ||
-                                                                        producto.precio_venta <= 0
-                                                                    }
-                                                                >
-                                                                    <Plus className="h-3 w-3" />
-                                                                    Agregar al Carrito
-                                                                </button>
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => agregarAlCarrito(producto)}
+                                                                            className="flex cursor-pointer gap-1 items-center rounded bg-blue-500 px-3 py-1 text-xs text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+                                                                            disabled={
+                                                                                !producto.tiene_precio ||
+                                                                                producto.stock_total <= 0 ||
+                                                                                !producto.precio_venta ||
+                                                                                producto.precio_venta <= 0
+                                                                            }
+                                                                        >
+                                                                            <PackagePlus size={22} className="h-3 w-3" />
+                                                                            Vender
+                                                                        </button>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent className="text-white">
+                                                                        <p>Agregar al Pedido</p>
+                                                                    </TooltipContent>
+                                                                </Tooltip>
+
                                                             </td>
                                                         </tr>
                                                     ))}
@@ -530,7 +538,7 @@ export default function PuntoVentaOficial({
                                                 {busqueda && productos.length > 0
                                                     ? 'No se encontraron productos que coincidan con la búsqueda'
                                                     : productos.length === 0 && !loadingProductos
-                                                      ? 'No hay productos disponibles en este almacén'
+                                                        ? 'No hay productos disponibles en este almacén'
                                                       : 'No hay productos para mostrar'}
                                             </p>
                                             {busqueda && productos.length > 0 && (

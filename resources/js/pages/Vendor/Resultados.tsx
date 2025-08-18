@@ -16,7 +16,7 @@ const breadcrumbs: BreadcrumbItem[] = [
         href: '/punto-venta',
     },
     {
-        title: 'Resultados',
+        title: 'Proceso de Venta',
         href: '#',
     },
 ];
@@ -25,7 +25,7 @@ export default function ResultadoCarrito({ datos }) {
     if (!datos || !datos.venta) {
         return (
             <AppLayout breadcrumbs={breadcrumbs}>
-                <Head title="Resultado de Venta" />
+                <Head title="Reporte de Venda" />
                 <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                     <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-center">
                         <h2 className="mb-2 text-xl font-bold text-red-800">Error</h2>
@@ -40,13 +40,13 @@ export default function ResultadoCarrito({ datos }) {
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Resultado de Venta" />
+            <Head title="Proceso de Venta" />
 
             {/* Contenedor principal */}
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
-                    <HeadingSmall title="Resultado de Venta" description="Detalles de la venta procesada" />
+                    <HeadingSmall title="Proceso de Venta" description="Detalles para el reporte de la venta procesada" />
                     <ShoppingBag
                         size={70}
                         color="#d6d3d1"
