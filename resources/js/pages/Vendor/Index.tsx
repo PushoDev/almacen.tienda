@@ -38,6 +38,12 @@ interface Cliente {
     nombre_cliente: string;
 }
 
+interface Cuenta {
+    id: number | string;
+    nombre_cuenta: string;
+    tipo_moneda: string;
+}
+
 interface Producto {
     id: number | string;
     nombre_producto: string;
@@ -66,6 +72,7 @@ interface Payment {
     via?: string;
     exchangeRate?: number;
     amountInUsd: number;
+    cuenta_id: string;
 }
 
 interface Currency {
@@ -105,6 +112,7 @@ const currencies: Currency[] = [
 // Vías de pago disponibles
 const paymentVias: PaymentVia[] = [
     { id: 'zelle', name: 'Zelle', method: 'transferencia' },
+    { id: 'cashapp', name: 'CashApp', method: 'transferencia' },
     { id: 'visa', name: 'Visa', method: 'transferencia' },
     { id: 'mastercard', name: 'MasterCard', method: 'transferencia' },
     { id: 'stripe', name: 'Stripe', method: 'transferencia' },
@@ -129,6 +137,7 @@ export default function PuntoVentaOficial({
     // Estados
     const [almacenes, setAlmacenes] = useState<Almacen[]>([]);
     const [clientes, setClientes] = useState<Cliente[]>([]);
+    const [cuentas, setCuentas] = useState<Cuenta[]>([]);
     const [productos, setProductos] = useState<Producto[]>([]);
     const [almacenSeleccionado, setAlmacenSeleccionado] = useState<string>('');
     const [clienteSeleccionado, setClienteSeleccionado] = useState<string>('');
@@ -147,11 +156,13 @@ export default function PuntoVentaOficial({
         currency: string;
         via: string;
         amount: string;
+        cuenta_id: string;
     }>({
         method: '',
         currency: '',
         via: '',
         amount: '',
+        cuenta_id: '',
     });
 
     // Cargar almacenes
@@ -177,6 +188,16 @@ export default function PuntoVentaOficial({
             console.error('Error al cargar clientes:', error);
         } finally {
             setLoadingClientes(false);
+        }
+    };
+
+    // Cargar cuentas
+    const cargarCuentas = async () => {
+        try {
+            const response = await axios.get(route('ventas.getCuentas'));
+            setCuentas(response.data);
+        } catch (error) {
+            console.error('Error al cargar cuentas:', error);
         }
     };
 
@@ -210,6 +231,7 @@ export default function PuntoVentaOficial({
     useEffect(() => {
         cargarAlmacenes();
         cargarClientes();
+        cargarCuentas();
     }, []);
 
     // Manejar cambio de almacén
@@ -365,6 +387,12 @@ export default function PuntoVentaOficial({
         currentPayment.method ? currency.availableFor.includes(currentPayment.method) : true,
     );
 
+    // Filtrar cuentas por moneda seleccionada
+    const availableAccounts = useMemo(() => {
+        if (!currentPayment.currency) return cuentas;
+        return cuentas.filter((account) => account.tipo_moneda === currentPayment.currency);
+    }, [cuentas, currentPayment.currency]);
+
     // Calcular el total pagado en USD
     const totalPaid = payments.reduce((sum, payment) => sum + payment.amountInUsd, 0);
     const remainingInUsd = calcularTotal - totalPaid;
@@ -392,6 +420,7 @@ export default function PuntoVentaOficial({
             via: currentPayment.method === 'transferencia' ? currentPayment.via : undefined,
             exchangeRate: selectedCurrency?.exchangeRate,
             amountInUsd: amountInUsd,
+            cuenta_id: currentPayment.cuenta_id,
         };
 
         setPayments([...payments, newPayment]);
@@ -400,6 +429,7 @@ export default function PuntoVentaOficial({
             currency: '',
             via: '',
             amount: '',
+            cuenta_id: '',
         });
     };
 
@@ -407,7 +437,7 @@ export default function PuntoVentaOficial({
         setPayments(payments.filter((payment) => payment.id !== id));
     };
 
-    const handleCompleteSale = () => {
+    const handleCompleteSale = async () => {
         // Preparar datos de la venta
         const datosVenta = {
             almacen_id: almacenSeleccionado,
@@ -426,6 +456,7 @@ export default function PuntoVentaOficial({
                 via: p.via,
                 tasa_cambio: p.exchangeRate,
                 monto_usd: p.amountInUsd,
+                cuenta_id: p.cuenta_id,
             })),
             resultado_json: {
                 venta: {
@@ -446,6 +477,7 @@ export default function PuntoVentaOficial({
                         via: p.via,
                         tasa_cambio: p.exchangeRate,
                         monto_usd: p.amountInUsd,
+                        cuenta_id: p.cuenta_id,
                     })),
                     total_pagado: payments.reduce((sum, p) => sum + p.amountInUsd, 0),
                     restante: remainingInUsd,
@@ -460,14 +492,29 @@ export default function PuntoVentaOficial({
             },
         };
 
-        // Mostrar el JSON en consola
-        console.log('Resultado JSON de la venta:', datosVenta.resultado_json);
-        toast.success('Venta procesada correctamente. Ver Resporte con el Json.');
+        try {
+            // Procesar al backend -> Controlador
+            const response = await axios.post(route('ventas.procesar'), datosVenta);
 
-        // Resetear estados después de completar
-        setPayments([]);
-        setCarrito([]);
-        setRemaining(0);
+            if (response.data.success) {
+                // Mostrar el JSON en consola
+                console.log('Resultado JSON de la venta:', response.data.data);
+                toast.success('Venta procesada correctamente.');
+
+                // Resetear estados después de completar
+                setPayments([]);
+                setCarrito([]);
+                setAlmacenSeleccionado('');
+                setClienteSeleccionado('');
+            } else {
+                toast.error('Error al procesar la venta: ' + response.data.error);
+            }
+        } catch (error) {
+            console.error('Error al procesar venta:', error);
+            toast.error('Error al procesar la venta');
+        } finally {
+            setProcesandoVenta(false);
+        }
     };
 
     const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -859,29 +906,22 @@ export default function PuntoVentaOficial({
                                         </AlertDialogTrigger>
                                         <AlertDialogContent className="max-w-3xl">
                                             <AlertDialogHeader>
-                                                <AlertDialogTitle className="text-center">Proceso de Compra</AlertDialogTitle>
+                                                <AlertDialogTitle className="text-sidebar-accent text-center">Proceso de Venta</AlertDialogTitle>
                                                 <AlertDialogDescription className="animate-pulse">
                                                     Métodos y procesamiento de la compra de artículos por parte del Cliente
                                                 </AlertDialogDescription>
                                             </AlertDialogHeader>
 
                                             <div className="mb-4 flex items-center justify-between">
-                                                <span className="text-sidebar-accent text-sm font-medium">Total a pagar:</span>
+                                                <span className="text-sidebar-accent text-sm font-medium">Total a Pagar el Cliente:</span>
                                                 <span className="text-lg font-bold text-emerald-600">$ {calcularTotal.toFixed(2)} USD</span>
-                                            </div>
-
-                                            <div className="mb-4 flex items-center justify-between">
-                                                <span className="text-sidebar-accent text-sm font-medium">Restante:</span>
-                                                <span className="text-lg font-bold text-emerald-600">
-                                                    ${remainingInUsd > 0 ? remainingInUsd.toFixed(2) : '0.00'} USD
-                                                </span>
                                             </div>
 
                                             <div className="space-y-6">
                                                 {/* Pagos agregados */}
                                                 {payments.length > 0 && (
-                                                    <div className="rounded-lg border p-4">
-                                                        <h3 className="mb-2 font-medium">Pagos agregados:</h3>
+                                                    <div className="border-primary rounded-lg border p-4">
+                                                        <h3 className="mb-2 text-center font-medium">Operaciones Realizadas</h3>
                                                         <ul className="space-y-2">
                                                             {payments.map((payment) => (
                                                                 <li key={payment.id} className="flex items-center justify-between border-b py-1">
@@ -900,7 +940,7 @@ export default function PuntoVentaOficial({
                                                                         variant="ghost"
                                                                         size="sm"
                                                                         onClick={() => handleRemovePayment(payment.id)}
-                                                                        className="text-red-500 hover:text-red-700"
+                                                                        className="hover:bg-destructive cursor-pointer text-red-500 hover:text-white"
                                                                     >
                                                                         <X className="h-4 w-4" />
                                                                     </Button>
@@ -912,8 +952,8 @@ export default function PuntoVentaOficial({
 
                                                 {/* Formulario para agregar nuevo pago */}
                                                 <div className="space-y-4">
-                                                    <h3 className="font-medium">Agregar pago:</h3>
-                                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                                                    <h3 className="text-center font-medium">Realizar Operación</h3>
+                                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                                         {/* Método de pago */}
                                                         <div className="space-y-2">
                                                             <Label>Método de pago</Label>
@@ -924,7 +964,7 @@ export default function PuntoVentaOficial({
                                                                 }
                                                             >
                                                                 <SelectTrigger>
-                                                                    <SelectValue placeholder="Seleccione método" />
+                                                                    <SelectValue placeholder="Seleccione Método" />
                                                                 </SelectTrigger>
                                                                 <SelectContent>
                                                                     <SelectItem value="transferencia">Transferencia</SelectItem>
@@ -948,6 +988,27 @@ export default function PuntoVentaOficial({
                                                                     {availableCurrencies.map((currency) => (
                                                                         <SelectItem key={currency.code} value={currency.code}>
                                                                             {currency.name} ({currency.symbol})
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+
+                                                        {/* Cuenta Asignada */}
+                                                        <div className="space-y-2">
+                                                            <Label>Cuenta Asignada</Label>
+                                                            <Select
+                                                                value={currentPayment.cuenta_id}
+                                                                onValueChange={(value) => setCurrentPayment({ ...currentPayment, cuenta_id: value })}
+                                                                disabled={!currentPayment.currency}
+                                                            >
+                                                                <SelectTrigger>
+                                                                    <SelectValue placeholder="Seleccione cuenta" />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {availableAccounts.map((account) => (
+                                                                        <SelectItem key={account.id} value={account.id.toString()}>
+                                                                            {account.nombre_cuenta} ({account.tipo_moneda})
                                                                         </SelectItem>
                                                                     ))}
                                                                 </SelectContent>
@@ -980,7 +1041,7 @@ export default function PuntoVentaOficial({
                                                     {/* Monto y botón agregar */}
                                                     <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                                                         <div className="space-y-2 md:col-span-3">
-                                                            <Label>Monto</Label>
+                                                            <Label>Monto Declarado</Label>
                                                             <Input
                                                                 type="number"
                                                                 min="0"
@@ -998,7 +1059,8 @@ export default function PuntoVentaOficial({
                                                                     !currentPayment.currency ||
                                                                     (currentPayment.method === 'transferencia' && !currentPayment.via) ||
                                                                     !currentPayment.amount ||
-                                                                    parseFloat(currentPayment.amount) <= 0
+                                                                    parseFloat(currentPayment.amount) <= 0 ||
+                                                                    !currentPayment.cuenta_id
                                                                 }
                                                                 className="w-full"
                                                             >
@@ -1018,22 +1080,29 @@ export default function PuntoVentaOficial({
 
                                                 {/* Resumen de tasas de cambio */}
                                                 <div className="mt-4 border-t pt-4">
-                                                    <h4 className="mb-2 text-sm font-medium">Tasas de cambio:</h4>
+                                                    <h4 className="mb-2 text-center text-sm font-medium">Tasas de Cambio:</h4>
                                                     <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-                                                        <Badge variant="outline" className="justify-center">
+                                                        <Badge variant="outline" className="justify-center bg-emerald-400 text-emerald-800">
                                                             1 USD = 1.00 USD
                                                         </Badge>
-                                                        <Badge variant="outline" className="justify-center">
+                                                        <Badge variant="outline" className="justify-center bg-amber-300 text-amber-800">
                                                             1 EUR = 1.00 USD
                                                         </Badge>
-                                                        <Badge variant="outline" className="justify-center">
+                                                        <Badge variant="outline" className="justify-center bg-indigo-300 text-indigo-800">
                                                             1 MLC = 0.80 USD
                                                         </Badge>
-                                                        <Badge variant="outline" className="justify-center">
+                                                        <Badge variant="outline" className="justify-center bg-lime-300 text-lime-800">
                                                             375 CUP = 1.00 USD
                                                         </Badge>
                                                     </div>
                                                 </div>
+                                            </div>
+
+                                            <div className="mb-4 flex items-center justify-between">
+                                                <span className="text-sidebar-accent text-sm font-medium">Monto Restante:</span>
+                                                <span className="text-lg font-bold text-emerald-600">
+                                                    ${remainingInUsd > 0 ? remainingInUsd.toFixed(2) : '0.00'} USD
+                                                </span>
                                             </div>
 
                                             <AlertDialogFooter>
