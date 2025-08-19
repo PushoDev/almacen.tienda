@@ -97,7 +97,14 @@ class VentaController extends Controller
             'items.*.cantidad' => 'required|integer|min:1',
             'items.*.precio_venta' => 'required|numeric|min:0',
             'items.*.subtotal' => 'required|numeric|min:0',
-            'total' => 'required|numeric|min:0'
+            'total' => 'required|numeric|min:0',
+            'pagos' => 'required|array|min:1', // Nuevo campo para pagos múltiples
+            'pagos.*.metodo' => 'required|in:transferencia,efectivo',
+            'pagos.*.moneda' => 'required|in:USD,EUR,MLC,CUP',
+            'pagos.*.monto' => 'required|numeric|min:0',
+            'pagos.*.via' => 'nullable|string',
+            'pagos.*.tasa_cambio' => 'required|numeric|min:0',
+            'pagos.*.monto_usd' => 'required|numeric|min:0',
         ]);
 
         // Obtener información adicional para el response
@@ -120,6 +127,22 @@ class VentaController extends Controller
             ];
         });
 
+        // Obtener información detallada de los pagos
+        $pagosDetallados = collect($validatedData['pagos'])->map(function ($pago) {
+            return [
+                'metodo' => $pago['metodo'],
+                'moneda' => $pago['moneda'],
+                'monto' => $pago['monto'],
+                'via' => $pago['via'] ?? null,
+                'tasa_cambio' => $pago['tasa_cambio'],
+                'monto_usd' => $pago['monto_usd']
+            ];
+        });
+
+        // Calcular total pagado en USD
+        $totalPagado = collect($validatedData['pagos'])->sum('monto_usd');
+        $restante = $validatedData['total'] - $totalPagado;
+
         // Preparar datos de respuesta
         $datosVenta = [
             'venta' => [
@@ -139,7 +162,10 @@ class VentaController extends Controller
                     'nombre' => Auth::user()->name,
                     'email' => Auth::user()->email,
                     'rol' => Auth::user()->role
-                ]
+                ],
+                'pagos' => $pagosDetallados, // Incluir pagos en la respuesta
+                'total_pagado' => $totalPagado,
+                'restante' => $restante
             ],
             'metadata' => [
                 'timestamp' => now()->toISOString(),

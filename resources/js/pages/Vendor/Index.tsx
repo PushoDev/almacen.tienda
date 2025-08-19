@@ -1,5 +1,6 @@
 import HeadingSmall from '@/components/heading-small';
 import {
+    AlertDialog,
     AlertDialogCancel,
     AlertDialogContent,
     AlertDialogDescription,
@@ -12,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from '@/components/ui/sonner';
@@ -19,8 +21,7 @@ import { Table, TableBody, TableCaption, TableHead, TableHeader, TableRow } from
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head, router } from '@inertiajs/react';
-import { AlertDialog } from '@radix-ui/react-alert-dialog';
+import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import { BoxesIcon, Minus, PackagePlus, Plus, Search, ShoppingBag, ShoppingCart, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -56,6 +57,31 @@ interface ItemCarrito {
     subtotal: number;
 }
 
+// Nuevos tipos para pagos
+interface Payment {
+    id: string;
+    method: 'transferencia' | 'efectivo';
+    currency: string;
+    amount: number;
+    via?: string;
+    exchangeRate?: number;
+    amountInUsd: number;
+}
+
+interface Currency {
+    code: string;
+    name: string;
+    symbol: string;
+    exchangeRate: number;
+    availableFor: ('transferencia' | 'efectivo')[];
+}
+
+interface PaymentVia {
+    id: string;
+    name: string;
+    method: 'transferencia' | 'efectivo';
+}
+
 // Rutas breadcrumb
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -66,6 +92,25 @@ const breadcrumbs: BreadcrumbItem[] = [
         title: 'Punto de Ventas',
         href: '#',
     },
+];
+
+// Monedas disponibles
+const currencies: Currency[] = [
+    { code: 'USD', name: 'Dólar Estadounidense', symbol: '$', exchangeRate: 1, availableFor: ['transferencia', 'efectivo'] },
+    { code: 'EUR', name: 'Euro', symbol: '€', exchangeRate: 1, availableFor: ['transferencia', 'efectivo'] },
+    { code: 'MLC', name: 'MLC', symbol: 'MLC', exchangeRate: 1.25, availableFor: ['transferencia'] },
+    { code: 'CUP', name: 'Peso Cubano', symbol: '$', exchangeRate: 375, availableFor: ['transferencia', 'efectivo'] },
+];
+
+// Vías de pago disponibles
+const paymentVias: PaymentVia[] = [
+    { id: 'zelle', name: 'Zelle', method: 'transferencia' },
+    { id: 'visa', name: 'Visa', method: 'transferencia' },
+    { id: 'mastercard', name: 'MasterCard', method: 'transferencia' },
+    { id: 'stripe', name: 'Stripe', method: 'transferencia' },
+    { id: 'enzona', name: 'EnZona', method: 'transferencia' },
+    { id: 'transfermovil', name: 'Transfermóvil', method: 'transferencia' },
+    { id: 'efectivo', name: 'Efectivo', method: 'efectivo' },
 ];
 
 export default function PuntoVentaOficial({
@@ -91,6 +136,21 @@ export default function PuntoVentaOficial({
     const [busqueda, setBusqueda] = useState<string>('');
     const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
     const [procesandoVenta, setProcesandoVenta] = useState<boolean>(false);
+
+    // Nuevos estados para pagos
+    const [payments, setPayments] = useState<Payment[]>([]);
+    const [remaining, setRemaining] = useState(0);
+    const [currentPayment, setCurrentPayment] = useState<{
+        method: 'transferencia' | 'efectivo' | '';
+        currency: string;
+        via: string;
+        amount: string;
+    }>({
+        method: '',
+        currency: '',
+        via: '',
+        amount: '',
+    });
 
     // Cargar almacenes
     const cargarAlmacenes = async () => {
@@ -287,26 +347,65 @@ export default function PuntoVentaOficial({
         }
     };
 
-    // Procesar venta
-    const procesarVenta = () => {
-        // Validaciones
-        if (carrito.length === 0) {
-            toast.warning('El carrito está vacío');
+    // =================================================
+    // Funciones para el procesamiento de pagos
+    // =================================================
+
+    // Efecto para actualizar el restante cuando cambia el total
+    useEffect(() => {
+        setRemaining(calcularTotal);
+    }, [calcularTotal]);
+
+    // Filtros para opciones disponibles
+    const availableVias = paymentVias.filter((via) => (currentPayment.method ? via.method === currentPayment.method : true));
+
+    const availableCurrencies = currencies.filter((currency) =>
+        currentPayment.method ? currency.availableFor.includes(currentPayment.method) : true,
+    );
+
+    // Calcular el total pagado en USD
+    const totalPaid = payments.reduce((sum, payment) => sum + payment.amountInUsd, 0);
+    const remainingInUsd = calcularTotal - totalPaid;
+
+    const handleAddPayment = () => {
+        if (
+            !currentPayment.method ||
+            !currentPayment.currency ||
+            (currentPayment.method === 'transferencia' && !currentPayment.via) ||
+            !currentPayment.amount ||
+            parseFloat(currentPayment.amount) <= 0
+        ) {
             return;
         }
 
-        if (!almacenSeleccionado) {
-            toast.warning('Por favor seleccione un almacén');
-            return;
-        }
+        const selectedCurrency = currencies.find((c) => c.code === currentPayment.currency);
+        const amount = parseFloat(currentPayment.amount);
+        const amountInUsd = amount / (selectedCurrency?.exchangeRate || 1);
 
-        if (!clienteSeleccionado) {
-            toast.warning('Por favor seleccione un cliente');
-            return;
-        }
+        const newPayment: Payment = {
+            id: crypto.randomUUID(),
+            method: currentPayment.method,
+            currency: currentPayment.currency,
+            amount: amount,
+            via: currentPayment.method === 'transferencia' ? currentPayment.via : undefined,
+            exchangeRate: selectedCurrency?.exchangeRate,
+            amountInUsd: amountInUsd,
+        };
 
-        setProcesandoVenta(true);
+        setPayments([...payments, newPayment]);
+        setCurrentPayment({
+            method: '',
+            currency: '',
+            via: '',
+            amount: '',
+        });
+    };
 
+    const handleRemovePayment = (id: string) => {
+        setPayments(payments.filter((payment) => payment.id !== id));
+    };
+
+    const handleCompleteSale = () => {
         // Preparar datos de la venta
         const datosVenta = {
             almacen_id: almacenSeleccionado,
@@ -318,23 +417,65 @@ export default function PuntoVentaOficial({
                 subtotal: item.subtotal,
             })),
             total: calcularTotal,
+            pagos: payments.map((p) => ({
+                metodo: p.method,
+                moneda: p.currency,
+                monto: p.amount,
+                via: p.via,
+                tasa_cambio: p.exchangeRate,
+                monto_usd: p.amountInUsd,
+            })),
+            resultado_json: {
+                venta: {
+                    almacen_id: almacenSeleccionado,
+                    cliente_id: clienteSeleccionado,
+                    items: carrito.map((item) => ({
+                        producto_id: item.producto.id,
+                        nombre: item.producto.nombre_producto,
+                        cantidad: item.cantidad,
+                        precio: item.precio_venta,
+                        subtotal: item.subtotal,
+                    })),
+                    total: calcularTotal,
+                    pagos: payments.map((p) => ({
+                        metodo: p.method,
+                        moneda: p.currency,
+                        monto: p.amount,
+                        via: p.via,
+                        tasa_cambio: p.exchangeRate,
+                        monto_usd: p.amountInUsd,
+                    })),
+                    total_pagado: payments.reduce((sum, p) => sum + p.amountInUsd, 0),
+                    restante: remainingInUsd,
+                },
+                metadata: {
+                    timestamp: new Date().toISOString(),
+                    usuario: {
+                        id: meta.role_usuario === 'admin' ? 'admin' : 'vendedor',
+                        nombre: 'Usuario Actual',
+                    },
+                },
+            },
         };
 
-        // Enviar datos al backend
-        router.post(route('ventas.procesar'), datosVenta, {
-            onSuccess: () => {
-                console.log('Venta procesada exitosamente');
-                // Limpiar carrito después de procesar
-                setCarrito([]);
-            },
-            onError: (errors) => {
-                console.error('Error al procesar venta:', errors);
-                alert('Error al procesar la venta. Por favor intente nuevamente.');
-            },
-            onFinish: () => {
-                setProcesandoVenta(false);
-            },
-        });
+        // Mostrar el JSON en consola
+        console.log('Resultado JSON de la venta:', datosVenta.resultado_json);
+        toast.success('Venta procesada correctamente. Ver consola para el JSON.');
+
+        // Resetear estados después de completar
+        setPayments([]);
+        setCarrito([]);
+        setRemaining(0);
+    };
+
+    const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setCurrentPayment({ ...currentPayment, amount: value });
+    };
+
+    const convertToUsd = (amount: number, currencyCode: string) => {
+        const currency = currencies.find((c) => c.code === currencyCode);
+        return (amount / (currency?.exchangeRate || 1)).toFixed(2);
     };
 
     return (
@@ -714,22 +855,190 @@ export default function PuntoVentaOficial({
                                                 )}
                                             </button>
                                         </AlertDialogTrigger>
-                                        <AlertDialogContent>
+                                        <AlertDialogContent className="max-w-3xl">
                                             <AlertDialogHeader>
                                                 <AlertDialogTitle className="text-center">Proceso de Compra</AlertDialogTitle>
                                                 <AlertDialogDescription className="animate-pulse">
                                                     Métodos y procesamiento de la compra de artículos por parte del Cliente
                                                 </AlertDialogDescription>
                                             </AlertDialogHeader>
-                                            <div className="mb-2 flex items-center justify-between">
-                                                <span className="text-sidebar-accent text-sm font-medium">Cliente a Pagar:</span>
-                                                <span className="text-lg font-bold text-emerald-600">$ {calcularTotal.toFixed(2)}</span>
+
+                                            <div className="mb-4 flex items-center justify-between">
+                                                <span className="text-sidebar-accent text-sm font-medium">Total a pagar:</span>
+                                                <span className="text-lg font-bold text-emerald-600">$ {calcularTotal.toFixed(2)} USD</span>
                                             </div>
-                                            <span>Aqui va todo lo relacionado al proceso de venta</span>
+
+                                            <div className="mb-4 flex items-center justify-between">
+                                                <span className="text-sidebar-accent text-sm font-medium">Restante:</span>
+                                                <span className="text-lg font-bold text-emerald-600">
+                                                    ${remainingInUsd > 0 ? remainingInUsd.toFixed(2) : '0.00'} USD
+                                                </span>
+                                            </div>
+
+                                            <div className="space-y-6">
+                                                {/* Pagos agregados */}
+                                                {payments.length > 0 && (
+                                                    <div className="rounded-lg border p-4">
+                                                        <h3 className="mb-2 font-medium">Pagos agregados:</h3>
+                                                        <ul className="space-y-2">
+                                                            {payments.map((payment) => (
+                                                                <li key={payment.id} className="flex items-center justify-between border-b py-1">
+                                                                    <div>
+                                                                        <span className="font-medium">
+                                                                            {payment.method === 'transferencia'
+                                                                                ? `Transferencia (${payment.via})`
+                                                                                : 'Efectivo'}{' '}
+                                                                            - {payment.amount.toFixed(2)} {payment.currency}
+                                                                        </span>
+                                                                        <div className="text-sm text-gray-500">
+                                                                            = ${payment.amountInUsd.toFixed(2)} USD
+                                                                        </div>
+                                                                    </div>
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        onClick={() => handleRemovePayment(payment.id)}
+                                                                        className="text-red-500 hover:text-red-700"
+                                                                    >
+                                                                        <X className="h-4 w-4" />
+                                                                    </Button>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                )}
+
+                                                {/* Formulario para agregar nuevo pago */}
+                                                <div className="space-y-4">
+                                                    <h3 className="font-medium">Agregar pago:</h3>
+                                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                                                        {/* Método de pago */}
+                                                        <div className="space-y-2">
+                                                            <Label>Método de pago</Label>
+                                                            <Select
+                                                                value={currentPayment.method}
+                                                                onValueChange={(value: 'transferencia' | 'efectivo' | '') =>
+                                                                    setCurrentPayment({ ...currentPayment, method: value })
+                                                                }
+                                                            >
+                                                                <SelectTrigger>
+                                                                    <SelectValue placeholder="Seleccione método" />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    <SelectItem value="transferencia">Transferencia</SelectItem>
+                                                                    <SelectItem value="efectivo">Efectivo</SelectItem>
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+
+                                                        {/* Moneda */}
+                                                        <div className="space-y-2">
+                                                            <Label>Moneda</Label>
+                                                            <Select
+                                                                value={currentPayment.currency}
+                                                                onValueChange={(value) => setCurrentPayment({ ...currentPayment, currency: value })}
+                                                                disabled={!currentPayment.method}
+                                                            >
+                                                                <SelectTrigger>
+                                                                    <SelectValue placeholder="Seleccione moneda" />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {availableCurrencies.map((currency) => (
+                                                                        <SelectItem key={currency.code} value={currency.code}>
+                                                                            {currency.name} ({currency.symbol})
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+
+                                                        {/* Vía de pago (solo para transferencia) */}
+                                                        {currentPayment.method === 'transferencia' && (
+                                                            <div className="space-y-2">
+                                                                <Label>Vía de pago</Label>
+                                                                <Select
+                                                                    value={currentPayment.via}
+                                                                    onValueChange={(value) => setCurrentPayment({ ...currentPayment, via: value })}
+                                                                >
+                                                                    <SelectTrigger>
+                                                                        <SelectValue placeholder="Seleccione vía" />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        {availableVias.map((via) => (
+                                                                            <SelectItem key={via.id} value={via.id}>
+                                                                                {via.name}
+                                                                            </SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Monto y botón agregar */}
+                                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                                                        <div className="space-y-2 md:col-span-3">
+                                                            <Label>Monto</Label>
+                                                            <Input
+                                                                type="number"
+                                                                min="0"
+                                                                step="0.01"
+                                                                value={currentPayment.amount}
+                                                                onChange={handleAmountChange}
+                                                                placeholder="Ingrese el monto"
+                                                            />
+                                                        </div>
+                                                        <div className="flex items-end">
+                                                            <Button
+                                                                onClick={handleAddPayment}
+                                                                disabled={
+                                                                    !currentPayment.method ||
+                                                                    !currentPayment.currency ||
+                                                                    (currentPayment.method === 'transferencia' && !currentPayment.via) ||
+                                                                    !currentPayment.amount ||
+                                                                    parseFloat(currentPayment.amount) <= 0
+                                                                }
+                                                                className="w-full"
+                                                            >
+                                                                Agregar
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Conversión a USD */}
+                                                    {currentPayment.amount && currentPayment.currency && (
+                                                        <div className="text-sm text-gray-500">
+                                                            {parseFloat(currentPayment.amount).toFixed(2)} {currentPayment.currency} ={' '}
+                                                            {convertToUsd(parseFloat(currentPayment.amount), currentPayment.currency)} USD
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Resumen de tasas de cambio */}
+                                                <div className="mt-4 border-t pt-4">
+                                                    <h4 className="mb-2 text-sm font-medium">Tasas de cambio:</h4>
+                                                    <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                                                        <Badge variant="outline" className="justify-center">
+                                                            1 USD = 1.00 USD
+                                                        </Badge>
+                                                        <Badge variant="outline" className="justify-center">
+                                                            1 EUR = 1.00 USD
+                                                        </Badge>
+                                                        <Badge variant="outline" className="justify-center">
+                                                            1 MLC = 0.80 USD
+                                                        </Badge>
+                                                        <Badge variant="outline" className="justify-center">
+                                                            375 CUP = 1.00 USD
+                                                        </Badge>
+                                                    </div>
+                                                </div>
+                                            </div>
+
                                             <AlertDialogFooter>
                                                 <Button
                                                     className="flex w-full cursor-pointer items-center justify-center rounded-md bg-green-600 px-4 py-2 font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
-                                                    onClick={procesarVenta}
+                                                    onClick={handleCompleteSale}
+                                                    disabled={remainingInUsd > 0 || payments.length === 0}
                                                 >
                                                     Realizar la Venta
                                                 </Button>
