@@ -96,10 +96,10 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 // Monedas disponibles
 const currencies: Currency[] = [
-    { code: 'USD', name: 'Dólar Estadounidense', symbol: '$', exchangeRate: 1, availableFor: ['transferencia', 'efectivo'] },
-    { code: 'EUR', name: 'Euro', symbol: '€', exchangeRate: 1, availableFor: ['transferencia', 'efectivo'] },
-    { code: 'MLC', name: 'MLC', symbol: 'MLC', exchangeRate: 1.25, availableFor: ['transferencia'] },
-    { code: 'CUP', name: 'Peso Cubano', symbol: '$', exchangeRate: 375, availableFor: ['transferencia', 'efectivo'] },
+    { code: 'USD', name: 'Dólar Estadounidense', symbol: '$ USD', exchangeRate: 1, availableFor: ['transferencia', 'efectivo'] },
+    { code: 'EUR', name: 'Euro', symbol: '€ EUR', exchangeRate: 1, availableFor: ['transferencia', 'efectivo'] },
+    { code: 'MLC', name: 'Moneda Libre Convertible', symbol: '$ MLC', exchangeRate: 1.25, availableFor: ['transferencia'] },
+    { code: 'CUP', name: 'Peso Cubano', symbol: '$ CUP', exchangeRate: 375, availableFor: ['transferencia', 'efectivo'] },
 ];
 
 // Vías de pago disponibles
@@ -108,6 +108,8 @@ const paymentVias: PaymentVia[] = [
     { id: 'visa', name: 'Visa', method: 'transferencia' },
     { id: 'mastercard', name: 'MasterCard', method: 'transferencia' },
     { id: 'stripe', name: 'Stripe', method: 'transferencia' },
+    { id: 'paypal', name: 'Paypal', method: 'transferencia' },
+    { id: 'qvapay', name: 'QvaPay', method: 'transferencia' },
     { id: 'enzona', name: 'EnZona', method: 'transferencia' },
     { id: 'transfermovil', name: 'Transfermóvil', method: 'transferencia' },
     { id: 'efectivo', name: 'Efectivo', method: 'efectivo' },
@@ -460,7 +462,7 @@ export default function PuntoVentaOficial({
 
         // Mostrar el JSON en consola
         console.log('Resultado JSON de la venta:', datosVenta.resultado_json);
-        toast.success('Venta procesada correctamente. Ver consola para el JSON.');
+        toast.success('Venta procesada correctamente. Ver Resporte con el Json.');
 
         // Resetear estados después de completar
         setPayments([]);
