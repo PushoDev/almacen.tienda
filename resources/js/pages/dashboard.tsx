@@ -24,7 +24,14 @@ import { ComprasVentasCharts } from '@/layouts/charts/ChartCompraVenta';
 import WidgetInventario from '@/layouts/home/WidgetInventario';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/react';
-import { ComputerIcon, DiamondPercent, LucideBaggageClaim, LucideClockArrowDown, ShoppingBagIcon } from 'lucide-react';
+import {
+    ComputerIcon,
+    DiamondPercent,
+    LucideBaggageClaim,
+    LucideBoomBox,
+    LucideClockArrowDown, MonitorCog,
+    ShoppingBagIcon
+} from 'lucide-react';
 import { useState } from 'react'; // Importar useState
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -196,9 +203,40 @@ export default function Dashboard({
                             <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
                         </div>
                     </div>
-                    {/* Widget de Inventario */}
+                    {/* Widget de Remesas */}
                     <div>
-                        <WidgetInventario />
+                        <div
+                            className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-amber-800 to-amber-400">
+                            {/* Ícono de fondo transparente */}
+                            <div className="absolute inset-0 flex items-center justify-center opacity-10">
+                                <LucideBoomBox className="h-48 w-48 text-white" />
+                            </div>
+
+                            {/* Contenido principal */}
+                            <div className="relative z-10 h-full p-6">
+                                {/* Ícono en la esquina superior izquierda */}
+                                <div className="absolute top-4 left-4">
+                                    <MonitorCog className="h-8 w-8 text-white" />
+                                </div>
+
+                                {/* Textos alineados a la derecha */}
+                                <div className="flex h-full flex-col items-end justify-center space-y-2">
+                                    <h3 className="text-4xl font-bold text-white">Remesas</h3>
+                                </div>
+
+                                {/* Botón pequeño */}
+                                <Link href={route('remesas')}>
+                                    <button
+                                        className="absolute right-4 bottom-4 rounded-md bg-amber-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-amber-800">
+                                        Cuadre / Inventario
+                                    </button>
+                                </Link>
+                            </div>
+
+                            {/* Patrón de fondo adicional */}
+                            <PlaceholderPattern
+                                className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
+                        </div>
                     </div>
                 </div>
 

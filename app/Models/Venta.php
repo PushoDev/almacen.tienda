@@ -17,38 +17,30 @@ class Venta extends Model
         'cliente_id',
         'total',
         'detalles_venta',
+        'estado'
     ];
 
-    protected $casts = [
-        'total' => 'decimal:2',
-    ];
-
-    // Relación con el usuario que realizó la venta
-    public function user(): BelongsTo
+    public function usuario()
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'user_id');
     }
 
-    // Relación con el almacén donde se realizó la venta
-    public function almacen(): BelongsTo
+    public function almacen()
     {
         return $this->belongsTo(Almacen::class);
     }
 
-    // Relación opcional con cliente (si usas clientes)
-    public function cliente(): BelongsTo
+    public function cliente()
     {
         return $this->belongsTo(Cliente::class);
     }
 
-    // Relación con los productos vendidos (venta_detalle)
-    public function detalles(): HasMany
+    public function detalles()
     {
         return $this->hasMany(VentaDetalle::class);
     }
 
-    // Relación con los pagos realizados
-    public function pagos(): HasMany
+    public function pagos()
     {
         return $this->hasMany(PagoVenta::class);
     }

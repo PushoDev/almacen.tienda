@@ -13,11 +13,12 @@ return new class extends Migration
     {
         Schema::create('venta_detalles', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('venta_id')->constrained()->onDelete('cascade'); // Relación con la venta principal
-            $table->foreignId('producto_id')->constrained()->onDelete('cascade'); // Producto vendido
-            $table->integer('cantidad'); // Cantidad vendida
-            $table->decimal('precio_venta', 10, 2); // Precio unitario en el momento de la venta
-            $table->decimal('subtotal', 10, 2); // Subtotal = cantidad * precio_venta
+            $table->foreignId('venta_id')->constrained()->onDelete('cascade');
+            $table->foreignId('producto_id')->constrained()->onDelete('cascade');
+            $table->integer('cantidad');
+            $table->decimal('precio_venta', 15, 2);
+            $table->decimal('subtotal', 15, 2);
+            $table->decimal('costo_unitario', 15, 2)->nullable();
             $table->timestamps();
         });
     }

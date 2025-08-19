@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Model;
 
 class VentaDetalle extends Model
 {
-    /** @use HasFactory<\Database\Factories\VentaDetalleFactory> */
     use HasFactory;
 
     protected $fillable = [
@@ -16,6 +15,7 @@ class VentaDetalle extends Model
         'cantidad',
         'precio_venta',
         'subtotal',
+        'costo_unitario'
     ];
 
     public function venta()

@@ -13,19 +13,22 @@ class PagoVenta extends Model
     protected $fillable = [
         'venta_id',
         'tipo_pago',
-        'via_pago',
         'tipo_moneda',
+        'cuenta_id',
+        'via_pago',
         'monto',
-        'cuenta_id'
+        'tasa_cambio',
+        'monto_equivalente',
+        'referencia'
     ];
 
-    protected $casts = [
-        'monto' => 'decimal:2',
-    ];
-
-    // Relación con la venta principal
-    public function venta(): BelongsTo
+    public function venta()
     {
         return $this->belongsTo(Venta::class);
+    }
+
+    public function cuenta()
+    {
+        return $this->belongsTo(Cuenta::class);
     }
 }

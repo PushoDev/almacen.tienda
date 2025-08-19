@@ -15,16 +15,15 @@ return new class extends Migration
     {
         Schema::create('pago_ventas', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('venta_id')->constrained()->onDelete('cascade'); // Relación con la venta
-
-            $table->enum('tipo_pago', ['efectivo', 'tarjeta', 'transferencia', 'otros'])->default('transferencia'); // Tipo de pago (efectivo, tarjeta, transferencia, etc.)
-
-            $table->enum('tipo_moneda', ['usd', 'euro', 'mlc', 'cup'])->default('usd');  // Tipo de moneda que paga el cliente (uds, mlc, euro, cup)
-
+            $table->foreignId('venta_id')->constrained()->onDelete('cascade');
+            $table->enum('tipo_pago', ['efectivo', 'transferencia']);
+            $table->enum('tipo_moneda', ['USD', 'EUR', 'MLC', 'CUP'])->default('USD');
             $table->foreignId('cuenta_id')->constrained('cuentas')->onDelete('cascade');
-
-            $table->enum('via_pago', ['zelle', 'visa', 'paypal', 'mastercard', 'stripe', 'transfermovil', 'enzona', 'otros'])->default('zelle'); // Via de Pago
-            $table->decimal('monto', 10, 2); // Monto pagado con ese método
+            $table->enum('via_pago', ['zelle', 'cashapp', 'visa', 'mastercard', 'stripe', 'paypal', 'qvapay', 'enzona', 'transfermovil', 'efectivo', 'otros'])->default('zelle');
+            $table->decimal('monto', 15, 2);
+            $table->decimal('tasa_cambio', 10, 4)->default(1);
+            $table->decimal('monto_equivalente', 15, 2);
+            $table->text('referencia')->nullable();
             $table->timestamps();
         });
     }

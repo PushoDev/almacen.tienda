@@ -7,7 +7,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Ruta principal del punto de venta
     Route::get('/punto-venta', [VentaController::class, 'index'])->name('punto-venta.index');
 
-
     // Obtener almacenes del usuario
     Route::get('/ventas/almacenes', [VentaController::class, 'getAlmacenes'])->name('ventas.getAlmacenes');
 
@@ -17,6 +16,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Obtener clientes
     Route::get('/ventas/clientes', [VentaController::class, 'getClientes'])->name('ventas.getClientes');
 
-    // Ruta para procesar venta (test/debug)
+    // Obtener cuentas
+    Route::get('/ventas/cuentas', [VentaController::class, 'getCuentas'])->name('ventas.getCuentas');
+
+    // Ruta para procesar venta
     Route::post('/ventas/procesar', [VentaController::class, 'procesarVenta'])->name('ventas.procesar');
 });

@@ -53,6 +53,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Transacciones
     require __DIR__ . '/acciones/transacciones.php';
 
+//    Remesas
+    require __DIR__ . '/acciones/remesas.php';
+
     // Venta Productos
     require __DIR__ . '/shop/puntoventa.php';
     // Reportes
