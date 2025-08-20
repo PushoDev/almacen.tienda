@@ -59,9 +59,9 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
 
     const formatearMoneda = (valor: number | null) => {
         if (valor === null || valor === undefined) return '$0.00';
-        return new Intl.NumberFormat('es-MX', {
+        return new Intl.NumberFormat('es-ES', {
             style: 'currency',
-            currency: 'MXN',
+            currency: 'USD',
             minimumFractionDigits: 2,
             maximumFractionDigits: 8,
         }).format(valor);
@@ -70,7 +70,7 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
     // Filtros y Paginación
     const [filtroTipo, setFiltroTipo] = useState<string>('');
     const [paginaActual, setPaginaActual] = useState(1);
-    const elementosPorPagina = 5; // Cambia esto al número que desees
+    const elementosPorPagina = 8; // Cambia esto al número que desees
     const indiceUltimoElemento = paginaActual * elementosPorPagina;
     const indicePrimerElemento = indiceUltimoElemento - elementosPorPagina;
 

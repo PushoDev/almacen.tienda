@@ -19,6 +19,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Obtener cuentas
     Route::get('/ventas/cuentas', [VentaController::class, 'getCuentas'])->name('ventas.getCuentas');
 
+    // Ruta para tasa de cambio USD
+    Route::get('/ventas/tasausd', [VentaController::class, 'getTasaUSD'])->name('ventas.getTasaUSD');
+
     // Ruta para procesar venta
     Route::post('/ventas/procesar', [VentaController::class, 'procesarVenta'])->name('ventas.procesar');
 });

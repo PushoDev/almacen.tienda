@@ -150,6 +150,7 @@ export default function PuntoVentaOficial({
 
     // Nuevos estados para pagos
     const [payments, setPayments] = useState<Payment[]>([]);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [remaining, setRemaining] = useState(0);
     const [currentPayment, setCurrentPayment] = useState<{
         method: 'transferencia' | 'efectivo' | '';
@@ -212,6 +213,7 @@ export default function PuntoVentaOficial({
         try {
             const response = await axios.get(route('ventas.getProductosPorAlmacen', almacenId));
             // Asegurarse de que los precios sean números válidos
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const productosProcesados = response.data.map((producto: any) => ({
                 ...producto,
                 precio_venta: producto.precio_venta ? Number(producto.precio_venta) : null,

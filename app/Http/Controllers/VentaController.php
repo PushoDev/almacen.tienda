@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\TasaCambio;
 use App\Models\Venta;
 use App\Models\VentaDetalle;
 use App\Models\PagoVenta;
@@ -18,6 +19,7 @@ use Inertia\Inertia;
 
 class VentaController extends Controller
 {
+    // Cargar Almacenes
     public function getAlmacenes()
     {
         $user = Auth::user();
@@ -27,7 +29,7 @@ class VentaController extends Controller
 
         return response()->json($almacenes);
     }
-
+    //  Cargar Productos por Almacenes
     public function getProductosPorAlmacen($id)
     {
         $user = Auth::user();
@@ -69,18 +71,25 @@ class VentaController extends Controller
 
         return response()->json($productos);
     }
-
+    //  Cargar todos los Clientes
     public function getClientes()
     {
         $clientes = Cliente::select('id', 'nombre_cliente')->get();
         return response()->json($clientes);
     }
-
+    // Cargar Todas las cuentas del Negocio
     public function getCuentas()
     {
         $cuentas = Cuenta::select('id', 'nombre_cuenta', 'tipo_moneda')->get();
         return response()->json($cuentas);
     }
+    // Caragr datos de la Tasa de Cambio para USD
+    public function getTasaUSD()
+    {
+        $tasaUSD = TasaCambio::select('id', 'tasa')->get();
+        return response()->json($tasaUSD);
+    }
+
 
     public function index()
     {
@@ -251,7 +260,6 @@ class VentaController extends Controller
             ];
 
             return response()->json(['success' => true, 'data' => $datosVenta]);
-
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
