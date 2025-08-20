@@ -29,7 +29,8 @@ class VentaController extends Controller
 
         return response()->json($almacenes);
     }
-    //  Cargar Productos por Almacenes
+
+    // Cargar Productos por Almacenes
     public function getProductosPorAlmacen($id)
     {
         $user = Auth::user();
@@ -71,25 +72,27 @@ class VentaController extends Controller
 
         return response()->json($productos);
     }
-    //  Cargar todos los Clientes
+
+    // Cargar todos los Clientes
     public function getClientes()
     {
         $clientes = Cliente::select('id', 'nombre_cliente')->get();
         return response()->json($clientes);
     }
+
     // Cargar Todas las cuentas del Negocio
     public function getCuentas()
     {
         $cuentas = Cuenta::select('id', 'nombre_cuenta', 'tipo_moneda')->get();
         return response()->json($cuentas);
     }
-    // Caragr datos de la Tasa de Cambio para USD
+
+    // Cargar datos de la Tasa de Cambio para USD
     public function getTasaUSD()
     {
         $tasaUSD = TasaCambio::select('id', 'tasa')->get();
         return response()->json($tasaUSD);
     }
-
 
     public function index()
     {
@@ -106,6 +109,7 @@ class VentaController extends Controller
 
     public function procesarVenta(Request $request)
     {
+        // Validar los datos recibidos
         $validatedData = $request->validate([
             'almacen_id' => 'required|exists:almacens,id',
             'cliente_id' => 'nullable|exists:clientes,id',
@@ -141,6 +145,7 @@ class VentaController extends Controller
             foreach ($validatedData['items'] as $item) {
                 $producto = Producto::find($item['producto_id']);
 
+                // Crear detalle de venta
                 VentaDetalle::create([
                     'venta_id' => $venta->id,
                     'producto_id' => $item['producto_id'],
@@ -159,6 +164,7 @@ class VentaController extends Controller
                     $cantidadAnterior = $almacenProducto->cantidad;
                     $nuevaCantidad = $cantidadAnterior - $item['cantidad'];
 
+                    // Registrar en historial de stock
                     HistorialStock::create([
                         'producto_id' => $item['producto_id'],
                         'almacen_id' => $validatedData['almacen_id'],
@@ -171,12 +177,16 @@ class VentaController extends Controller
                         'user_id' => Auth::id(),
                     ]);
 
+                    // Actualizar stock
                     $almacenProducto->update(['cantidad' => $nuevaCantidad]);
+                } else {
+                    throw new \Exception("Producto no encontrado en el almacén: " . $item['producto_id']);
                 }
             }
 
             // Procesar pagos y actualizar cuentas
             foreach ($validatedData['pagos'] as $pago) {
+                // Crear pago de venta
                 PagoVenta::create([
                     'venta_id' => $venta->id,
                     'tipo_pago' => $pago['metodo'],
@@ -191,16 +201,21 @@ class VentaController extends Controller
 
                 // Actualizar saldo de la cuenta
                 $cuenta = Cuenta::find($pago['cuenta_id']);
-                $nuevoSaldo = $cuenta->saldo_cuenta + $pago['monto_usd'];
-                $cuenta->update(['saldo_cuenta' => $nuevoSaldo]);
+                if ($cuenta) {
+                    $nuevoSaldo = $cuenta->saldo_cuenta + $pago['monto_usd'];
+                    $cuenta->update(['saldo_cuenta' => $nuevoSaldo]);
+                } else {
+                    throw new \Exception("Cuenta no encontrada: " . $pago['cuenta_id']);
+                }
             }
 
             DB::commit();
 
-            // Preparar respuesta
+            // Obtener información para la respuesta
             $almacen = Almacen::find($validatedData['almacen_id']);
             $cliente = $validatedData['cliente_id'] ? Cliente::find($validatedData['cliente_id']) : null;
 
+            // Preparar items detallados
             $itemsDetallados = collect($validatedData['items'])->map(function ($item) {
                 $producto = Producto::find($item['producto_id']);
                 return [
@@ -216,6 +231,7 @@ class VentaController extends Controller
                 ];
             });
 
+            // Preparar pagos detallados
             $pagosDetallados = collect($validatedData['pagos'])->map(function ($pago) {
                 return [
                     'metodo' => $pago['metodo'],
@@ -227,9 +243,11 @@ class VentaController extends Controller
                 ];
             });
 
+            // Calcular totales
             $totalPagado = collect($validatedData['pagos'])->sum('monto_usd');
             $restante = $validatedData['total'] - $totalPagado;
 
+            // Preparar datos de respuesta
             $datosVenta = [
                 'venta' => [
                     'id' => $venta->id,
@@ -259,12 +277,22 @@ class VentaController extends Controller
                 ]
             ];
 
-            return response()->json(['success' => true, 'data' => $datosVenta]);
+            // Retornar respuesta JSON exitosa
+            return response()->json([
+                'success' => true,
+                'message' => 'Venta procesada correctamente',
+                'data' => $datosVenta
+            ]);
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
+
+            // Retornar respuesta JSON de error
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al procesar la venta',
+                'error' => $e->getMessage(),
+                'trace' => config('app.debug') ? $e->getTraceAsString() : null
+            ], 500);
         }
     }
 }
-        // O si prefieres mostrarlo en una vista Inertia:
-//        return Inertia::render('Vendor/Resultados', ['datos' => $datosVenta]);
