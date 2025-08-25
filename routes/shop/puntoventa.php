@@ -22,6 +22,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Ruta para tasa de cambio USD
     Route::get('/ventas/tasausd', [VentaController::class, 'getTasaUSD'])->name('ventas.getTasaUSD');
 
+    // Ruta para tasa de cambio MLC
+    Route::get('/ventas/tasamlc', [VentaController::class, 'getTasaMLC'])->name('ventas.getTasaMLC');
+
     // Ruta para procesar venta
     Route::post('/ventas/procesar', [VentaController::class, 'procesarVenta'])->name('ventas.procesar');
 });
