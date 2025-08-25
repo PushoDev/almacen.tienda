@@ -38,6 +38,11 @@ interface Cliente {
     nombre_cliente: string;
 }
 
+interface TasaUSD {
+    id: number | string;
+    tasa: number | string;
+}
+
 interface Cuenta {
     id: number | string;
     nombre_cuenta: string;
@@ -137,6 +142,7 @@ export default function PuntoVentaOficial({
     // Estados
     const [almacenes, setAlmacenes] = useState<Almacen[]>([]);
     const [clientes, setClientes] = useState<Cliente[]>([]);
+    const [tasaUSD, setTasaUSD] = useState<TasaUSD[]>([]);
     const [cuentas, setCuentas] = useState<Cuenta[]>([]);
     const [productos, setProductos] = useState<Producto[]>([]);
     const [almacenSeleccionado, setAlmacenSeleccionado] = useState<string>('');
@@ -199,6 +205,16 @@ export default function PuntoVentaOficial({
             setCuentas(response.data);
         } catch (error) {
             console.error('Error al cargar cuentas:', error);
+        }
+    };
+
+    // Caragar Tasa de Cambio
+    const cargarTasaUSD = async () => {
+        try {
+            const response = await axios.get(route('ventas.getTasaUSD'));
+            setTasaUSD(response.data);
+        } catch (error) {
+            console.error('Error al cargar Tasa de Cambio USD:', error);
         }
     };
 
@@ -1082,18 +1098,12 @@ export default function PuntoVentaOficial({
 
                                                 {/* Resumen de tasas de cambio */}
                                                 <div className="mt-4 border-t pt-4">
-                                                    <h4 className="mb-2 text-center text-sm font-medium">Tasas de Cambio:</h4>
-                                                    <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-                                                        <Badge variant="outline" className="justify-center bg-emerald-400 text-emerald-800">
-                                                            1 USD = 1.00 USD
-                                                        </Badge>
-                                                        <Badge variant="outline" className="justify-center bg-amber-300 text-amber-800">
-                                                            1 EUR = 1.00 USD
-                                                        </Badge>
+                                                    <h4 className="mb-2 animate-pulse text-center text-sm font-medium">Tasas de Cambio:</h4>
+                                                    <div className="grid gap-2 md:grid-cols-2">
                                                         <Badge variant="outline" className="justify-center bg-indigo-300 text-indigo-800">
                                                             1 MLC = 0.80 USD
                                                         </Badge>
-                                                        <Badge variant="outline" className="justify-center bg-lime-300 text-lime-800">
+                                                        <Badge variant="outline" className="cursor-pointer justify-center bg-lime-300 text-lime-800">
                                                             375 CUP = 1.00 USD
                                                         </Badge>
                                                     </div>
