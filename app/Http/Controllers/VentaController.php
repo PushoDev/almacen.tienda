@@ -12,6 +12,7 @@ use App\Models\HistorialStock;
 use App\Models\Almacen;
 use App\Models\Producto;
 use App\Models\Cliente;
+use App\Models\TasaCambioMLC;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -92,6 +93,13 @@ class VentaController extends Controller
     {
         $tasaUSD = TasaCambio::select('id', 'tasa')->get();
         return response()->json($tasaUSD);
+    }
+
+    // Cargar datos de la tasa de MLC
+    public function getTasaMLC()
+    {
+        $tasaMLC = TasaCambioMLC::select('id', 'tasa_mlc')->get();
+        return response()->json($tasaMLC);
     }
 
     public function index()
