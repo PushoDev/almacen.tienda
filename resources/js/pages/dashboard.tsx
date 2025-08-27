@@ -21,17 +21,9 @@ import { Toaster } from '@/components/ui/sonner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { ComprasVentasCharts } from '@/layouts/charts/ChartCompraVenta';
-import WidgetInventario from '@/layouts/home/WidgetInventario';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/react';
-import {
-    ComputerIcon,
-    DiamondPercent,
-    LucideBaggageClaim,
-    LucideBoomBox,
-    LucideClockArrowDown, MonitorCog,
-    ShoppingBagIcon
-} from 'lucide-react';
+import { ComputerIcon, DiamondPercent, LucideBaggageClaim, LucideBoomBox, LucideClockArrowDown, MonitorCog, ShoppingBagIcon } from 'lucide-react';
 import { useState } from 'react'; // Importar useState
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -43,12 +35,14 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 export default function Dashboard({
     tasa,
+    tasamlc,
     montoCUP,
     montoUSD,
     montoEUR,
     capital,
 }: {
     tasa: { tasa_cambio: number };
+    tasamlc: { tasa_mlc: number | string };
     montoCUP: number;
     montoUSD: number;
     montoEUR: number;
@@ -205,8 +199,7 @@ export default function Dashboard({
                     </div>
                     {/* Widget de Remesas */}
                     <div>
-                        <div
-                            className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-amber-800 to-amber-400">
+                        <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-amber-800 to-amber-400">
                             {/* Ícono de fondo transparente */}
                             <div className="absolute inset-0 flex items-center justify-center opacity-10">
                                 <LucideBoomBox className="h-48 w-48 text-white" />
@@ -226,16 +219,14 @@ export default function Dashboard({
 
                                 {/* Botón pequeño */}
                                 <Link href={route('remesas')}>
-                                    <button
-                                        className="absolute right-4 bottom-4 rounded-md bg-amber-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-amber-800">
+                                    <button className="absolute right-4 bottom-4 rounded-md bg-amber-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-amber-800">
                                         Cuadre / Inventario
                                     </button>
                                 </Link>
                             </div>
 
                             {/* Patrón de fondo adicional */}
-                            <PlaceholderPattern
-                                className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
+                            <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
                         </div>
                     </div>
                 </div>
@@ -306,11 +297,13 @@ export default function Dashboard({
                                 </TableRow>
                                 <TableRow>
                                     <TableCell>TOTAL USD ACTIVO</TableCell>
-                                    <TableCell colSpan={2}>$ 195193</TableCell>
+                                    <TableCell>$ 195193</TableCell>
+                                    <TableCell className="bg-sidebar text-white">TASA MLC</TableCell>
                                 </TableRow>
                                 <TableRow>
                                     <TableCell>FONDO CUP ACTIVO</TableCell>
-                                    <TableCell colSpan={2}>$ 1 440734</TableCell>
+                                    <TableCell>$ 1 440734</TableCell>
+                                    <TableCell>$ {tasamlc.tasa_mlc}</TableCell>
                                 </TableRow>
                                 <TableRow>
                                     <TableCell className="bg-sidebar text-white" colSpan={2}>
