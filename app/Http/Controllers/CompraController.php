@@ -79,7 +79,6 @@ class CompraController extends Controller
             ],
             'productos.*.cantidad' => 'required|integer|min:1',
             'productos.*.precio' => 'required|numeric|min:0',
-            // Validaciones para pago_cash
             'pagos' => 'array|nullable',
             'pagos.*.cuenta_id' => 'required|exists:cuentas,id',
             'pagos.*.monto' => 'required|numeric|min:0.01',
@@ -125,7 +124,6 @@ class CompraController extends Controller
                 $cuentaDeuda->increment('saldo_cuenta', $total);
                 $compraData['cuenta_id'] = $cuentaDeuda->id;
             } else if ($validated['compra'] === 'pago_cash') {
-                // Validar que haya al menos un método de pago
                 $pagos = $validated['pagos'] ?? [];
                 $pagosClientes = $validated['pagos_clientes'] ?? [];
 
@@ -155,19 +153,15 @@ class CompraController extends Controller
                     $cuenta->decrement('saldo_cuenta', $pago['monto']);
                 }
 
-                // Procesar pagos con clientes (préstamo financiero)
+                // Procesar pagos con clientes
                 foreach ($pagosClientes as $pagoCliente) {
                     $cliente = Cliente::findOrFail($pagoCliente['cliente_id']);
-
-                    // Aumentar la deuda del cliente (nosotros le debemos dinero)
                     $cliente->decrement('deuda_pago_cliente', $pagoCliente['monto']);
                 }
 
-                // Usar la primera cuenta como referencia principal, si existe
                 if (!empty($pagos)) {
                     $compraData['cuenta_id'] = $pagos[0]['cuenta_id'];
                 } else {
-                    // Si solo se usan clientes, asignamos null o el primer cliente
                     $compraData['cuenta_id'] = null;
                 }
             }
@@ -184,8 +178,8 @@ class CompraController extends Controller
                         'nombre_producto' => $item['producto'],
                         'categoria_id' => $categoria->id,
                         'precio_compra_producto' => $item['precio'],
-                        'cantidad_producto' => 0, // El stock se maneja en AlmacenProducto
-                        'imagen_producto' => 'productos/producto-default.png', // ✅ Imagen por defecto
+                        'cantidad_producto' => 0,
+                        'imagen_producto' => 'productos/producto-default.png',
                     ]
                 );
 
@@ -195,18 +189,18 @@ class CompraController extends Controller
                     'precio' => $item['precio'],
                 ]);
 
-                // Actualizar inventario en almacén de forma segura
-                AlmacenProducto::updateOrCreate(
-                    ['almacen_id' => $almacen->id, 'producto_id' => $producto->id],
-                    ['cantidad' => DB::raw("cantidad + {$item['cantidad']}")]
-                );
+                // Actualizar inventario en almacén (Modificado para PostgreSQL)
+                $almacenProducto = AlmacenProducto::firstOrNew([
+                    'almacen_id' => $almacen->id,
+                    'producto_id' => $producto->id
+                ]);
+                $almacenProducto->cantidad = ($almacenProducto->cantidad ?? 0) + $item['cantidad'];
+                $almacenProducto->save();
             }
 
             DB::commit();
 
-
             return redirect()->route('dashboard')->with('success', 'Compra registrada correctamente');
-            // return Inertia::location(route('dashboard'))->with('success', 'Compra registrada correctamente');
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->withErrors(['error' => 'Error al procesar la compra: ' . $e->getMessage()]);
