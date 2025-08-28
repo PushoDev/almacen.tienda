@@ -7,7 +7,6 @@ use Illuminate\Support\Facades\DB;
 
 class LogisticaController extends Controller
 {
-
     // Consultas
     private function countCategorias()
     {
@@ -79,7 +78,6 @@ class LogisticaController extends Controller
             ->sum('saldo_cuenta');
     }
 
-
     private function countCuentas()
     {
         return DB::table('cuentas')->count();
@@ -138,7 +136,7 @@ class LogisticaController extends Controller
     {
         return DB::table('compras')
             ->select(
-                DB::raw("DATE_FORMAT(compras.fecha_compra, '%Y-%m') as mes_anio"),
+                DB::raw("TO_CHAR(compras.fecha_compra, 'YYYY-MM') as mes_anio"),
                 DB::raw('SUM(compras.total_compra) as total'),
                 DB::raw('COUNT(compras.id) as cantidad_compras')
             )
@@ -191,11 +189,6 @@ class LogisticaController extends Controller
             ->orderByDesc('total_productos')
             ->get();
     }
-
-
-
-
-
 
     /**
      * Display a listing of the resource.
