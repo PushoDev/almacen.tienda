@@ -1,6 +1,5 @@
 <?php
 
-
 use App\Http\Controllers\CompraController;
 use Illuminate\Support\Facades\Route;
 
@@ -20,7 +19,6 @@ Route::middleware(['auth', 'verified'])->group(
             Route::get('/proveedores', [CompraController::class, 'getProveedor']);
             Route::get('/categorias', [CompraController::class, 'getCategorias']);
             Route::get('/clientes/fisicos', [CompraController::class, 'getClientesFisicos']);
-
 
             // Ruta para obtener cuentas
             Route::get('/cuentas/pago', [CompraController::class, 'getCuentas']);

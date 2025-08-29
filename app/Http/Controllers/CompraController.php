@@ -200,7 +200,15 @@ class CompraController extends Controller
 
             DB::commit();
 
-            return redirect()->route('dashboard')->with('success', 'Compra registrada correctamente');
+            // Cargar las relaciones necesarias para la vista
+            $compra->load(['proveedor', 'almacen', 'productos']);
+
+            // Redirigir a la vista de compra completada en lugar del dashboard
+            return Inertia::render('Comprar/Show', [
+                'compra' => $compra,
+                'productos' => $compra->productos,
+                'success' => 'Compra registrada correctamente'
+            ]);
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->withErrors(['error' => 'Error al procesar la compra: ' . $e->getMessage()]);

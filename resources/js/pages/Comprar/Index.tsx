@@ -31,10 +31,22 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Caja Principal', href: '/dashboard' },
-    { title: 'Productos', href: '/productos' },
-    { title: 'Realizar Venta', href: 'punto-venta' },
-    { title: 'Adquirir Nuevos Productos', href: '/comprar' },
+    {
+        title: 'Caja Principal',
+        href: '/dashboard',
+    },
+    {
+        title: 'Productos',
+        href: '/productos',
+    },
+    {
+        title: 'Realizar Venta',
+        href: 'punto-venta',
+    },
+    {
+        title: 'Adquirir Nuevos Productos',
+        href: '/comprar',
+    },
 ];
 
 export default function ComprarPage() {
@@ -47,7 +59,7 @@ export default function ComprarPage() {
     const [date, setDate] = useState<Date | undefined>(new Date());
     const [editingProductId, setEditingProductId] = useState<number | null>(null);
     const [clientes, setClientes] = useState<ClienteProps[]>([]);
-    const [setActiveTab] = useState<'cuentas' | 'clientes' | 'combinado'>('cuentas');
+    const [activeTab, setActiveTab] = useState<'cuentas' | 'clientes' | 'combinado'>('cuentas');
 
     const [tempFormData, setTempFormData] = useState<Omit<ProductoComprarProps, 'id'>>({
         producto: '',
@@ -74,6 +86,11 @@ export default function ComprarPage() {
     const [searchProveedor, setSearchProveedor] = useState('');
     const [searchAlmacen, setSearchAlmacen] = useState('');
     const [searchCategoria, setSearchCategoria] = useState('');
+
+    // Sincronizar productos con data cuando cambien
+    useEffect(() => {
+        setData('productos', productos);
+    }, [productos]);
 
     useEffect(() => {
         fetch('/compras/almacenes')
@@ -153,6 +170,57 @@ export default function ComprarPage() {
     const filteredProvedors = proveedors.filter((proveedor) => proveedor.nombre_proveedor.toLowerCase().includes(searchProveedor.toLowerCase()));
     const filteredAlmacens = almacens.filter((almacen) => almacen.nombre_almacen.toLowerCase().includes(searchAlmacen.toLowerCase()));
     const filteredCategorias = categorias.filter((cat) => cat.nombre_categoria.toLowerCase().includes(searchCategoria.toLowerCase()));
+
+    // Función para realizar la compra
+    const realizarCompra = () => {
+        // Verificar si hay productos
+        if (productos.length === 0) {
+            toast.warning('Debe agregar al menos un producto para realizar la compra.');
+            return;
+        }
+
+        // Verificar que todos los campos necesarios están llenos
+        if (!data.proveedor || !data.almacen || !data.fecha) {
+            toast.warning('Por favor, complete todos los campos necesarios.');
+            return;
+        }
+
+        // Actualizar fecha si es necesario
+        if (date) {
+            setData('fecha', date.toISOString().split('T')[0]);
+        }
+
+        // Enviar formulario
+        post('/comprar', {
+            preserveScroll: true,
+            onSuccess: () => {
+                // Limpiar estados después de una compra exitosa
+                setProductos([]);
+                setTempFormData({
+                    producto: '',
+                    categoria: '',
+                    codigo: '',
+                    cantidad: 0,
+                    precio: 0,
+                });
+
+                // Mostrar notificación de éxito
+                toast.success('Compra realizada exitosamente!', {
+                    description: 'Los productos han sido agregados al inventario.',
+                });
+
+                // No es necesario hacer F5, Inertia maneja la redirección a Comprar/Show
+            },
+            onError: (errors) => {
+                // Mostrar errores específicos si existen
+                if (errors.error) {
+                    toast.error('Error al procesar la compra', {
+                        description: errors.error,
+                    });
+                }
+            },
+        });
+    };
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -714,7 +782,7 @@ export default function ComprarPage() {
                 <div className="flex justify-center gap-4 p-4">
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
-                            <Button variant="outline" className="bg-green-600 text-white hover:bg-green-700 cursor-pointer">
+                            <Button variant="outline" className="cursor-pointer bg-green-600 text-white hover:bg-green-700">
                                 Realizar Compra
                             </Button>
                         </AlertDialogTrigger>
@@ -732,7 +800,7 @@ export default function ComprarPage() {
                                         value={data.compra}
                                         onValueChange={(value) => setData('compra', value as 'deuda_proveedor' | 'pago_cash')}
                                     >
-                                        <SelectTrigger className="w-full border-4 border-double border-sidebar-accent">
+                                        <SelectTrigger className="border-sidebar-accent w-full border-4 border-double">
                                             <SelectValue placeholder="Seleccione tipo de compra" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -811,7 +879,7 @@ export default function ComprarPage() {
                                                                     />
                                                                 </div>
                                                                 <Button
-                                                                    variant='destructive'
+                                                                    variant="destructive"
                                                                     className="cursor-pointer"
                                                                     onClick={() => {
                                                                         const updatedPagos = data.pagos_clientes.filter(
@@ -890,7 +958,7 @@ export default function ComprarPage() {
                                                                     />
                                                                 </div>
                                                                 <Button
-                                                                    variant='destructive'
+                                                                    variant="destructive"
                                                                     className="cursor-pointer"
                                                                     onClick={() => {
                                                                         const updatedPagos = data.pagos.filter((p) => p.cuenta_id !== pago.cuenta_id);
@@ -930,48 +998,12 @@ export default function ComprarPage() {
                             </div>
 
                             <AlertDialogFooter>
-                                <AlertDialogCancel className='cursor-pointer'>Cancelar</AlertDialogCancel>
+                                <AlertDialogCancel className="cursor-pointer">Cancelar</AlertDialogCancel>
                                 <Button
                                     type="button"
-                                    onClick={() => {
-                                        // Verificar si hay productos
-                                        if (productos.length === 0) {
-                                            toast.warning('Debe agregar al menos un producto para realizar la compra.');
-                                            return;
-                                        }
-
-                                        // Verificar que todos los campos necesarios están llenos
-                                        if (!data.proveedor || !data.almacen || !data.fecha) {
-                                            toast.warning('Por favor, complete todos los campos necesarios.');
-                                            return;
-                                        }
-
-                                        // Establecer los productos en el data y enviar la compra
-                                        setData('productos', productos);
-                                        post('/comprar', {
-                                            preserveScroll: true,
-                                            onSuccess: () => {
-                                                setProductos([]);
-                                                setTempFormData({
-                                                    producto: '',
-                                                    categoria: '',
-                                                    codigo: '',
-                                                    cantidad: 0,
-                                                    precio: 0,
-                                                });
-                                                toast('Event has been created', {
-                                                    description: 'Sunday, December 03, 2023 at 9:00 AM',
-                                                    action: {
-                                                        label: 'Undo',
-                                                        onClick: () => console.log('Undo'),
-                                                    },
-                                                });
-                                                setActiveTab('cuentas');
-                                            },
-                                        });
-                                    }}
+                                    onClick={realizarCompra}
                                     disabled={processing}
-                                    className="bg-green-600 hover:bg-green-700 cursor-pointer text-white"
+                                    className="cursor-pointer bg-green-600 text-white hover:bg-green-700"
                                 >
                                     {processing ? 'Registrando...' : 'Proceder Compra'}
                                 </Button>
