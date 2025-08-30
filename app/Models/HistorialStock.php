@@ -7,10 +7,9 @@ use Illuminate\Database\Eloquent\Model;
 
 class HistorialStock extends Model
 {
-    //
     use HasFactory;
 
-    protected $table = 'historial_stock';
+    protected $table = 'historial_stock'; // Asegúrate de que coincida con el nombre de la tabla
 
     protected $fillable = [
         'producto_id',
@@ -24,6 +23,7 @@ class HistorialStock extends Model
         'user_id'
     ];
 
+    // Relaciones
     public function producto()
     {
         return $this->belongsTo(Producto::class);
@@ -39,8 +39,8 @@ class HistorialStock extends Model
         return $this->belongsTo(Venta::class);
     }
 
-    public function usuario()
+    public function user()
     {
-        return $this->belongsTo(User::class, 'user_id');
+        return $this->belongsTo(User::class);
     }
 }

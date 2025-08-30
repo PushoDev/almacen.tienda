@@ -6,31 +6,25 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
-    public function up(): void
+    public function up()
     {
-        Schema::create('historial_stocks', function (Blueprint $table) {
+        Schema::create('historial_stock', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('producto_id')->constrained()->onDelete('cascade');
-            $table->foreignId('almacen_id')->constrained()->onDelete('cascade');
-            $table->foreignId('venta_id')->nullable()->constrained()->onDelete('set null');
+            $table->foreignId('producto_id')->constrained('productos')->onDelete('cascade');
+            $table->foreignId('almacen_id')->constrained('almacens')->onDelete('cascade');
+            $table->foreignId('venta_id')->nullable()->constrained('ventas')->onDelete('cascade');
             $table->integer('cantidad_anterior');
             $table->integer('cantidad_nueva');
             $table->integer('diferencia');
-            $table->enum('tipo', ['venta', 'ajuste', 'compra', 'transferencia']);
+            $table->string('tipo'); // venta, ajuste, compra, etc.
             $table->text('observaciones')->nullable();
-            $table->foreignId('user_id')->constrained()->onDelete('cascade');
+            $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
             $table->timestamps();
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
-    public function down(): void
+    public function down()
     {
-        Schema::dropIfExists('historial_stocks');
+        Schema::dropIfExists('historial_stock');
     }
 };

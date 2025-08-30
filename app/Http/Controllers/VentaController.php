@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\TasaCambio;
 use App\Models\Venta;
 use App\Models\VentaDetalle;
 use App\Models\PagoVenta;
@@ -12,6 +11,7 @@ use App\Models\HistorialStock;
 use App\Models\Almacen;
 use App\Models\Producto;
 use App\Models\Cliente;
+use App\Models\TasaCambio;
 use App\Models\TasaCambioMLC;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -24,6 +24,10 @@ class VentaController extends Controller
     public function getAlmacenes()
     {
         $user = Auth::user();
+        if (!$user) {
+            return response()->json(['error' => 'Usuario no autenticado'], 401);
+        }
+
         $almacenes = $user->role === 'admin'
             ? Almacen::select('id', 'nombre_almacen')->get()
             : $user->almacenes()->select('id', 'nombre_almacen')->get();
@@ -35,6 +39,9 @@ class VentaController extends Controller
     public function getProductosPorAlmacen($id)
     {
         $user = Auth::user();
+        if (!$user) {
+            return response()->json(['error' => 'Usuario no autenticado'], 403);
+        }
 
         if ($user->role !== 'admin' && !$user->almacenes->contains('id', $id)) {
             return response()->json(['error' => 'Acceso denegado al almacén'], 403);
@@ -105,13 +112,73 @@ class VentaController extends Controller
     public function index()
     {
         $user = Auth::user();
+        if (!$user) {
+            return redirect()->route('login');
+        }
 
         return Inertia::render('Vendor/Index', [
-            'productos' => [],
             'meta' => [
                 'role_usuario' => $user->role,
                 'almacenes_usuario' => $user->almacenes->map(fn($a) => ['id' => $a->id, 'nombre' => $a->nombre_almacen]),
             ]
+        ]);
+    }
+
+    public function show($id)
+    {
+        // Cargar la relación correcta (usuario en lugar de user)
+        $venta = Venta::with(['detalles.producto', 'pagos', 'cliente', 'almacen', 'usuario'])
+            ->findOrFail($id);
+
+        // Formatear los datos para la vista
+        $ventaData = [
+            'id' => $venta->id,
+            'almacen' => [
+                'id' => $venta->almacen->id,
+                'nombre' => $venta->almacen->nombre_almacen,
+            ],
+            'cliente' => $venta->cliente ? [
+                'id' => $venta->cliente->id,
+                'nombre' => $venta->cliente->nombre_cliente,
+            ] : null,
+            'items' => $venta->detalles->map(function ($detalle) {
+                return [
+                    'producto' => [
+                        'id' => $detalle->producto->id,
+                        'nombre' => $detalle->producto->nombre_producto,
+                        'marca' => $detalle->producto->marca_producto,
+                        'categoria' => $detalle->producto->categoria->nombre_categoria ?? 'Sin categoría',
+                    ],
+                    'cantidad' => $detalle->cantidad,
+                    'precio_venta' => $detalle->precio_venta,
+                    'subtotal' => $detalle->subtotal,
+                ];
+            }),
+            'total' => $venta->total,
+            'fecha' => $venta->created_at->toISOString(),
+            // Acceder a través de la relación 'usuario'
+            'usuario' => [
+                'id' => $venta->usuario->id,
+                'nombre' => $venta->usuario->name,
+                'email' => $venta->usuario->email,
+                'rol' => $venta->usuario->role,
+            ],
+            'pagos' => $venta->pagos->map(function ($pago) {
+                return [
+                    'metodo' => $pago->tipo_pago,
+                    'moneda' => $pago->tipo_moneda,
+                    'monto' => $pago->monto,
+                    'via' => $pago->via_pago,
+                    'tasa_cambio' => $pago->tasa_cambio,
+                    'monto_usd' => $pago->monto_equivalente,
+                ];
+            }),
+            'total_pagado' => $venta->pagos->sum('monto_equivalente'),
+            'restante' => $venta->total - $venta->pagos->sum('monto_equivalente'),
+        ];
+
+        return Inertia::render('Vendor/Show', [
+            'venta' => $ventaData
         ]);
     }
 
@@ -140,9 +207,14 @@ class VentaController extends Controller
         DB::beginTransaction();
 
         try {
+            $user = Auth::user();
+            if (!$user) {
+                throw new \Exception("Usuario no autenticado");
+            }
+
             // Crear la venta
             $venta = Venta::create([
-                'user_id' => Auth::id(),
+                'user_id' => $user->id,
                 'almacen_id' => $validatedData['almacen_id'],
                 'cliente_id' => $validatedData['cliente_id'],
                 'total' => $validatedData['total'],
@@ -172,6 +244,11 @@ class VentaController extends Controller
                     $cantidadAnterior = $almacenProducto->cantidad;
                     $nuevaCantidad = $cantidadAnterior - $item['cantidad'];
 
+                    // Verificar stock suficiente
+                    if ($nuevaCantidad < 0) {
+                        throw new \Exception("Stock insuficiente para el producto: " . $producto->nombre_producto);
+                    }
+
                     // Registrar en historial de stock
                     HistorialStock::create([
                         'producto_id' => $item['producto_id'],
@@ -182,7 +259,7 @@ class VentaController extends Controller
                         'diferencia' => -$item['cantidad'],
                         'tipo' => 'venta',
                         'observaciones' => 'Venta realizada',
-                        'user_id' => Auth::id(),
+                        'user_id' => $user->id,
                     ]);
 
                     // Actualizar stock
@@ -219,77 +296,11 @@ class VentaController extends Controller
 
             DB::commit();
 
-            // Obtener información para la respuesta
-            $almacen = Almacen::find($validatedData['almacen_id']);
-            $cliente = $validatedData['cliente_id'] ? Cliente::find($validatedData['cliente_id']) : null;
-
-            // Preparar items detallados
-            $itemsDetallados = collect($validatedData['items'])->map(function ($item) {
-                $producto = Producto::find($item['producto_id']);
-                return [
-                    'producto' => [
-                        'id' => $producto->id,
-                        'nombre' => $producto->nombre_producto,
-                        'marca' => $producto->marca_producto,
-                        'categoria' => $producto->categoria?->nombre_categoria
-                    ],
-                    'cantidad' => $item['cantidad'],
-                    'precio_venta' => $item['precio_venta'],
-                    'subtotal' => $item['subtotal']
-                ];
-            });
-
-            // Preparar pagos detallados
-            $pagosDetallados = collect($validatedData['pagos'])->map(function ($pago) {
-                return [
-                    'metodo' => $pago['metodo'],
-                    'moneda' => $pago['moneda'],
-                    'monto' => $pago['monto'],
-                    'via' => $pago['via'] ?? null,
-                    'tasa_cambio' => $pago['tasa_cambio'],
-                    'monto_usd' => $pago['monto_usd']
-                ];
-            });
-
-            // Calcular totales
-            $totalPagado = collect($validatedData['pagos'])->sum('monto_usd');
-            $restante = $validatedData['total'] - $totalPagado;
-
-            // Preparar datos de respuesta
-            $datosVenta = [
-                'venta' => [
-                    'id' => $venta->id,
-                    'almacen' => [
-                        'id' => $almacen->id,
-                        'nombre' => $almacen->nombre_almacen
-                    ],
-                    'cliente' => $cliente ? [
-                        'id' => $cliente->id,
-                        'nombre' => $cliente->nombre_cliente
-                    ] : null,
-                    'items' => $itemsDetallados,
-                    'total' => $validatedData['total'],
-                    'fecha' => $venta->created_at->toISOString(),
-                    'usuario' => [
-                        'id' => Auth::id(),
-                        'nombre' => Auth::user()->name,
-                        'email' => Auth::user()->email,
-                        'rol' => Auth::user()->role
-                    ],
-                    'pagos' => $pagosDetallados,
-                    'total_pagado' => $totalPagado,
-                    'restante' => $restante
-                ],
-                'metadata' => [
-                    'timestamp' => now()->toISOString(),
-                ]
-            ];
-
-            // Retornar respuesta JSON exitosa
+            // Redirigir a la vista de detalle de venta
             return response()->json([
                 'success' => true,
                 'message' => 'Venta procesada correctamente',
-                'data' => $datosVenta
+                'redirect' => route('ventas.show', $venta->id)
             ]);
         } catch (\Exception $e) {
             DB::rollBack();

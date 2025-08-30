@@ -476,60 +476,30 @@ export default function PuntoVentaOficial({
                 monto_usd: p.amountInUsd,
                 cuenta_id: p.cuenta_id,
             })),
-            resultado_json: {
-                venta: {
-                    almacen_id: almacenSeleccionado,
-                    cliente_id: clienteSeleccionado,
-                    items: carrito.map((item) => ({
-                        producto_id: item.producto.id,
-                        nombre: item.producto.nombre_producto,
-                        cantidad: item.cantidad,
-                        precio: item.precio_venta,
-                        subtotal: item.subtotal,
-                    })),
-                    total: calcularTotal,
-                    pagos: payments.map((p) => ({
-                        metodo: p.method,
-                        moneda: p.currency,
-                        monto: p.amount,
-                        via: p.via,
-                        tasa_cambio: p.exchangeRate,
-                        monto_usd: p.amountInUsd,
-                        cuenta_id: p.cuenta_id,
-                    })),
-                    total_pagado: payments.reduce((sum, p) => sum + p.amountInUsd, 0),
-                    restante: remainingInUsd,
-                },
-                metadata: {
-                    timestamp: new Date().toISOString(),
-                    usuario: {
-                        id: meta.role_usuario === 'admin' ? 'admin' : 'vendedor',
-                        nombre: 'Usuario Actual',
-                    },
-                },
-            },
         };
 
         try {
+            setProcesandoVenta(true);
+            
             // Procesar al backend -> Controlador
             const response = await axios.post(route('ventas.procesar'), datosVenta);
 
             if (response.data.success) {
-                // Mostrar el JSON en consola
-                console.log('Resultado JSON de la venta:', response.data.data);
                 toast.success('Venta procesada correctamente.');
-
-                // Resetear estados después de completar
-                setPayments([]);
-                setCarrito([]);
-                setAlmacenSeleccionado('');
-                setClienteSeleccionado('');
+                
+                // Redirigir a la página de detalles de la venta
+                window.location.href = response.data.redirect;
             } else {
                 toast.error('Error al procesar la venta: ' + response.data.error);
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error al procesar venta:', error);
-            toast.error('Error al procesar la venta');
+            
+            if (error.response?.data?.error) {
+                toast.error('Error al procesar la venta: ' + error.response.data.error);
+            } else {
+                toast.error('Error al procesar la venta');
+            }
         } finally {
             setProcesandoVenta(false);
         }
@@ -986,7 +956,7 @@ export default function PuntoVentaOficial({
                                                                 </SelectTrigger>
                                                                 <SelectContent>
                                                                     <SelectItem value="transferencia">Transferencia</SelectItem>
-                                                                    <SelectItem value="efectivo">Efectivo</SelectItem>
+                                                                    <SelectItem value='efectivo'>Efectivo</SelectItem>
                                                                 </SelectContent>
                                                             </Select>
                                                         </div>

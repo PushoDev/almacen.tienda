@@ -7,6 +7,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Ruta principal del punto de venta
     Route::get('/punto-venta', [VentaController::class, 'index'])->name('punto-venta.index');
 
+    // Ruta para mostrar el resultado de la venta
+    Route::get('/ventas/{id}/show', [VentaController::class, 'show'])->name('ventas.show');
+
     // Obtener almacenes del usuario
     Route::get('/ventas/almacenes', [VentaController::class, 'getAlmacenes'])->name('ventas.getAlmacenes');
 

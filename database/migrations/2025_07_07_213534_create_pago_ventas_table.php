@@ -6,8 +6,6 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    // $table->enum('tipo_cuenta', ['permanentes', 'temporales'])->default('permanentes');
-
     /**
      * Run the migrations.
      */
@@ -19,7 +17,7 @@ return new class extends Migration
             $table->enum('tipo_pago', ['efectivo', 'transferencia']);
             $table->enum('tipo_moneda', ['USD', 'EUR', 'MLC', 'CUP'])->default('USD');
             $table->foreignId('cuenta_id')->constrained('cuentas')->onDelete('cascade');
-            $table->enum('via_pago', ['zelle', 'cashapp', 'visa', 'mastercard', 'stripe', 'paypal', 'qvapay', 'enzona', 'transfermovil', 'efectivo', 'otros'])->default('zelle');
+            $table->string('via_pago')->nullable(); // Cambiado a string nullable
             $table->decimal('monto', 15, 2);
             $table->decimal('tasa_cambio', 10, 4)->default(1);
             $table->decimal('monto_equivalente', 15, 2);
