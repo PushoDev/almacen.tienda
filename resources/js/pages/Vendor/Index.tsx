@@ -480,13 +480,13 @@ export default function PuntoVentaOficial({
 
         try {
             setProcesandoVenta(true);
-            
+
             // Procesar al backend -> Controlador
             const response = await axios.post(route('ventas.procesar'), datosVenta);
 
             if (response.data.success) {
                 toast.success('Venta procesada correctamente.');
-                
+
                 // Redirigir a la página de detalles de la venta
                 window.location.href = response.data.redirect;
             } else {
@@ -494,7 +494,7 @@ export default function PuntoVentaOficial({
             }
         } catch (error: any) {
             console.error('Error al procesar venta:', error);
-            
+
             if (error.response?.data?.error) {
                 toast.error('Error al procesar la venta: ' + error.response.data.error);
             } else {
@@ -956,7 +956,7 @@ export default function PuntoVentaOficial({
                                                                 </SelectTrigger>
                                                                 <SelectContent>
                                                                     <SelectItem value="transferencia">Transferencia</SelectItem>
-                                                                    <SelectItem value='efectivo'>Efectivo</SelectItem>
+                                                                    <SelectItem value="efectivo">Efectivo</SelectItem>
                                                                 </SelectContent>
                                                             </Select>
                                                         </div>

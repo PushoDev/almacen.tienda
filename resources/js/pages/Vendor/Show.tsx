@@ -1,7 +1,7 @@
 import HeadingSmall from '@/components/heading-small';
 import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem, type PageProps } from '@/types';
+import { type BreadcrumbItem } from '@/types';
 import { Head, usePage } from '@inertiajs/react';
 import { Calendar, CreditCard, DollarSign, ShoppingBag, User, Warehouse } from 'lucide-react';
 
@@ -46,8 +46,10 @@ interface Venta {
     restante: number;
 }
 
-interface VentaPageProps extends PageProps {
+// Definimos las props de la página extendiendo las props básicas de Inertia
+interface PageProps {
     venta: Venta;
+    [key: string]: unknown;
 }
 
 // Rutas breadcrumb
@@ -67,7 +69,8 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function ResultadoCarrito() {
-    const { venta } = usePage<VentaPageProps>().props;
+    const { props } = usePage<PageProps>();
+    const { venta } = props;
 
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('es-CU', {

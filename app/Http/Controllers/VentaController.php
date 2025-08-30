@@ -116,10 +116,16 @@ class VentaController extends Controller
             return redirect()->route('login');
         }
 
+        // Obtener las últimas tasas de cambio
+        $tasaUSD = TasaCambio::latest()->first();
+        $tasaMLC = TasaCambioMLC::latest()->first();
+
         return Inertia::render('Vendor/Index', [
             'meta' => [
                 'role_usuario' => $user->role,
                 'almacenes_usuario' => $user->almacenes->map(fn($a) => ['id' => $a->id, 'nombre' => $a->nombre_almacen]),
+                'tasa_usd' => $tasaUSD ? $tasaUSD->tasa : 1,
+                'tasa_mlc' => $tasaMLC ? $tasaMLC->tasa_mlc : 1,
             ]
         ]);
     }
@@ -202,6 +208,9 @@ class VentaController extends Controller
             'pagos.*.tasa_cambio' => 'required|numeric|min:0',
             'pagos.*.monto_usd' => 'required|numeric|min:0',
             'pagos.*.cuenta_id' => 'required|exists:cuentas,id',
+            'tasas_temporales' => 'nullable|array',
+            'tasas_temporales.tasa_usd' => 'nullable|numeric|min:0',
+            'tasas_temporales.tasa_mlc' => 'nullable|numeric|min:0',
         ]);
 
         DB::beginTransaction();
@@ -212,6 +221,10 @@ class VentaController extends Controller
                 throw new \Exception("Usuario no autenticado");
             }
 
+            // Obtener tasas de cambio - usar las temporales si están disponibles, sino las de la BD
+            $tasaUSDaCUP = $validatedData['tasas_temporales']['tasa_usd'] ?? TasaCambio::latest()->first()->tasa;
+            $tasaMLCaUSD = $validatedData['tasas_temporales']['tasa_mlc'] ?? TasaCambioMLC::latest()->first()->tasa_mlc;
+
             // Crear la venta
             $venta = Venta::create([
                 'user_id' => $user->id,
@@ -219,6 +232,8 @@ class VentaController extends Controller
                 'cliente_id' => $validatedData['cliente_id'],
                 'total' => $validatedData['total'],
                 'estado' => 'completada',
+                'tasa_usd_utilizada' => $tasaUSDaCUP,
+                'tasa_mlc_utilizada' => $tasaMLCaUSD,
             ]);
 
             // Crear detalles de venta y actualizar stock
@@ -287,7 +302,10 @@ class VentaController extends Controller
                 // Actualizar saldo de la cuenta
                 $cuenta = Cuenta::find($pago['cuenta_id']);
                 if ($cuenta) {
-                    $nuevoSaldo = $cuenta->saldo_cuenta + $pago['monto_usd'];
+                    // Determinar el monto a incrementar basado en la moneda de la cuenta
+                    $montoIncremento = $this->calcularMontoIncremento($cuenta, $pago, $tasaUSDaCUP, $tasaMLCaUSD);
+
+                    $nuevoSaldo = $cuenta->saldo_cuenta + $montoIncremento;
                     $cuenta->update(['saldo_cuenta' => $nuevoSaldo]);
                 } else {
                     throw new \Exception("Cuenta no encontrada: " . $pago['cuenta_id']);
@@ -311,6 +329,125 @@ class VentaController extends Controller
                 'message' => 'Error al procesar la venta',
                 'error' => $e->getMessage(),
                 'trace' => config('app.debug') ? $e->getTraceAsString() : null
+            ], 500);
+        }
+    }
+
+    /**
+     * Calcula el monto a incrementar en la cuenta basado en su tipo de moneda
+     */
+    private function calcularMontoIncremento(Cuenta $cuenta, array $pago, float $tasaUSDaCUP, float $tasaMLCaUSD): float
+    {
+        // Si la cuenta tiene la misma moneda que el pago, usar el monto original
+        if ($cuenta->tipo_moneda === $pago['moneda']) {
+            return $pago['monto'];
+        }
+
+        // Si la cuenta está en USD
+        if ($cuenta->tipo_moneda === 'USD') {
+            // Si el pago es en CUP, convertir a USD usando la tasa
+            if ($pago['moneda'] === 'CUP') {
+                return $pago['monto'] / $tasaUSDaCUP;
+            }
+            // Si el pago es en MLC, convertir a USD usando la tasa MLC->USD
+            if ($pago['moneda'] === 'MLC') {
+                return $pago['monto'] * $tasaMLCaUSD;
+            }
+            // Si el pago es en EUR, necesitaríamos una tasa EUR->USD
+            // Por ahora, usamos el monto_usd que ya viene calculado
+            if ($pago['moneda'] === 'EUR') {
+                return $pago['monto_usd'];
+            }
+            // Para otros casos, usar el monto equivalente en USD
+            return $pago['monto_usd'];
+        }
+
+        // Si la cuenta está en CUP
+        if ($cuenta->tipo_moneda === 'CUP') {
+            // Si el pago es en USD, convertir a CUP usando la tasa
+            if ($pago['moneda'] === 'USD') {
+                return $pago['monto'] * $tasaUSDaCUP;
+            }
+            // Si el pago es en MLC, convertir MLC->USD->CUP
+            if ($pago['moneda'] === 'MLC') {
+                $montoUSD = $pago['monto'] * $tasaMLCaUSD;
+                return $montoUSD * $tasaUSDaCUP;
+            }
+            // Si el pago es en EUR, convertir usando el monto_usd (EUR->USD->CUP)
+            if ($pago['moneda'] === 'EUR') {
+                return $pago['monto_usd'] * $tasaUSDaCUP;
+            }
+            // Para otros casos, usar el monto original (asumiendo que ya está en CUP)
+            return $pago['monto'];
+        }
+
+        // Si la cuenta está en MLC
+        if ($cuenta->tipo_moneda === 'MLC') {
+            // Si el pago es en USD, convertir USD->MLC
+            if ($pago['moneda'] === 'USD') {
+                return $pago['monto'] / $tasaMLCaUSD;
+            }
+            // Si el pago es en CUP, convertir CUP->USD->MLC
+            if ($pago['moneda'] === 'CUP') {
+                $montoUSD = $pago['monto'] / $tasaUSDaCUP;
+                return $montoUSD / $tasaMLCaUSD;
+            }
+            // Si el pago es en EUR, convertir EUR->USD->MLC
+            if ($pago['moneda'] === 'EUR') {
+                return $pago['monto_usd'] / $tasaMLCaUSD;
+            }
+            // Para otros casos, usar el monto original (asumiendo que ya está en MLC)
+            return $pago['monto'];
+        }
+
+        // Si la cuenta está en EUR
+        if ($cuenta->tipo_moneda === 'EUR') {
+            // Para simplificar, usamos el monto_usd (asumiendo que todas las conversiones pasan por USD)
+            // y luego aplicamos una tasa fija EUR/USD (necesitarías implementar esta tasa)
+            $tasaEURaUSD = 1.10; // Esta tasa debería obtenerse de la base de datos
+            return $pago['monto_usd'] * $tasaEURaUSD;
+        }
+
+        // Para otras monedas no contempladas, usar el monto equivalente en USD
+        return $pago['monto_usd'];
+    }
+
+    /**
+     * Actualizar tasas de cambio globales
+     */
+    public function actualizarTasas(Request $request)
+    {
+        $request->validate([
+            'tasa_usd' => 'required|numeric|min:0',
+            'tasa_mlc' => 'required|numeric|min:0',
+        ]);
+
+        try {
+            // Actualizar tasa USD
+            $tasaUSD = TasaCambio::latest()->first();
+            if ($tasaUSD) {
+                $tasaUSD->update(['tasa' => $request->tasa_usd]);
+            } else {
+                TasaCambio::create(['tasa' => $request->tasa_usd]);
+            }
+
+            // Actualizar tasa MLC
+            $tasaMLC = TasaCambioMLC::latest()->first();
+            if ($tasaMLC) {
+                $tasaMLC->update(['tasa_mlc' => $request->tasa_mlc]);
+            } else {
+                TasaCambioMLC::create(['tasa_mlc' => $request->tasa_mlc]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Tasas de cambio actualizadas correctamente'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al actualizar las tasas de cambio',
+                'error' => $e->getMessage()
             ], 500);
         }
     }
