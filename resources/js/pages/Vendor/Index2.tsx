@@ -38,11 +38,6 @@ interface Cliente {
     nombre_cliente: string;
 }
 
-interface TasaUSD {
-    id: number | string;
-    tasa: number | string;
-}
-
 interface Cuenta {
     id: number | string;
     nombre_cuenta: string;
@@ -106,14 +101,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-// Monedas disponibles
-const currencies: Currency[] = [
-    { code: 'USD', name: 'Dólar Estadounidense', symbol: '$ USD', exchangeRate: 1, availableFor: ['transferencia', 'efectivo'] },
-    { code: 'EUR', name: 'Euro', symbol: '€ EUR', exchangeRate: 1, availableFor: ['transferencia', 'efectivo'] },
-    { code: 'MLC', name: 'Moneda Libre Convertible', symbol: '$ MLC', exchangeRate: 1.25, availableFor: ['transferencia'] },
-    { code: 'CUP', name: 'Peso Cubano', symbol: '$ CUP', exchangeRate: 375, availableFor: ['transferencia', 'efectivo'] },
-];
-
 // Vías de pago disponibles
 const paymentVias: PaymentVia[] = [
     { id: 'zelle', name: 'Zelle', method: 'transferencia' },
@@ -127,6 +114,7 @@ const paymentVias: PaymentVia[] = [
     { id: 'transfermovil', name: 'Transfermóvil', method: 'transferencia' },
     { id: 'efectivo', name: 'Efectivo', method: 'efectivo' },
 ];
+
 
 export default function PuntoVentaOficial({
     meta,
@@ -161,10 +149,19 @@ export default function PuntoVentaOficial({
         tasa_usd: meta.tasa_usd,
         tasa_mlc: meta.tasa_mlc,
     });
+
+
+
+// Monedas disponibles (usando las tasas actuales)
+    const [currencies, setCurrencies] = useState<Currency[]>([
+        { code: 'USD', name: 'Dólar Estadounidense', symbol: '$ USD', exchangeRate: 1, availableFor: ['transferencia', 'efectivo'] },
+        { code: 'EUR', name: 'Euro', symbol: '€ EUR', exchangeRate: 1, availableFor: ['transferencia', 'efectivo'] },
+        { code: 'MLC', name: 'Moneda Libre Convertible', symbol: '$ MLC', exchangeRate: meta.tasa_mlc, availableFor: ['transferencia'] },
+        { code: 'CUP', name: 'Peso Cubano', symbol: '$ CUP', exchangeRate: meta.tasa_usd, availableFor: ['transferencia', 'efectivo'] },
+    ]);
+
     // Nuevos estados para pagos
     const [payments, setPayments] = useState<Payment[]>([]);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const [remaining, setRemaining] = useState(0);
     const [currentPayment, setCurrentPayment] = useState<{
         method: 'transferencia' | 'efectivo' | '';
         currency: string;
@@ -179,6 +176,8 @@ export default function PuntoVentaOficial({
         cuenta_id: '',
     });
 
+
+
     // Cargar almacenes
     const cargarAlmacenes = async () => {
         setLoadingAlmacenes(true);
@@ -187,6 +186,7 @@ export default function PuntoVentaOficial({
             setAlmacenes(response.data);
         } catch (error) {
             console.error('Error al cargar almacenes:', error);
+            toast.error('Error al cargar almacenes');
         } finally {
             setLoadingAlmacenes(false);
         }
@@ -200,6 +200,7 @@ export default function PuntoVentaOficial({
             setClientes(response.data);
         } catch (error) {
             console.error('Error al cargar clientes:', error);
+            toast.error('Error al cargar clientes');
         } finally {
             setLoadingClientes(false);
         }
@@ -212,6 +213,7 @@ export default function PuntoVentaOficial({
             setCuentas(response.data);
         } catch (error) {
             console.error('Error al cargar cuentas:', error);
+            toast.error('Error al cargar cuentas');
         }
     };
 
@@ -226,8 +228,7 @@ export default function PuntoVentaOficial({
         try {
             const response = await axios.get(route('ventas.getProductosPorAlmacen', almacenId));
             // Asegurarse de que los precios sean números válidos
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const productosProcesados = response.data.map((producto: any) => ({
+            const productosProcesados = response.data.map((producto: Producto) => ({
                 ...producto,
                 precio_venta: producto.precio_venta ? Number(producto.precio_venta) : null,
                 precio_compra_producto: producto.precio_compra_producto ? Number(producto.precio_compra_producto) : 0,
@@ -236,6 +237,7 @@ export default function PuntoVentaOficial({
             setProductos(productosProcesados);
         } catch (error) {
             console.error('Error al cargar productos:', error);
+            toast.error('Error al cargar productos');
             setProductos([]);
         } finally {
             setLoadingProductos(false);
@@ -248,6 +250,18 @@ export default function PuntoVentaOficial({
         cargarClientes();
         cargarCuentas();
     }, []);
+
+    // Efecto para actualizar currencies cuando cambien las tasas
+    useEffect(() => {
+        setCurrencies(prev => prev.map(currency => {
+            if (currency.code === 'CUP') {
+                return { ...currency, exchangeRate: tasaUSD };
+            } else if (currency.code === 'MLC') {
+                return { ...currency, exchangeRate: tasaMLC };
+            }
+            return currency;
+        }));
+    }, [tasaUSD, tasaMLC]);
 
     // Manejar cambio de almacén
     const handleAlmacenChange = (value: string) => {
@@ -282,37 +296,42 @@ export default function PuntoVentaOficial({
 
     // Agregar producto al carrito
     const agregarAlCarrito = (producto: Producto) => {
-        const idItem = `${producto.id}`;
+        try {
+            const idItem = `${producto.id}`;
 
-        // Verificar si el producto ya está en el carrito
-        const itemExistente = carrito.find((item) => item.id === idItem);
+            // Verificar si el producto ya está en el carrito
+            const itemExistente = carrito.find((item) => item.id === idItem);
 
-        if (itemExistente) {
-            // Si ya existe, aumentar la cantidad (verificar stock)
-            const nuevaCantidad = Math.min(itemExistente.cantidad + 1, producto.stock_total);
-            setCarrito(
-                carrito.map((item) =>
-                    item.id === idItem
-                        ? {
-                              ...item,
-                              cantidad: nuevaCantidad,
-                              subtotal: nuevaCantidad * item.precio_venta,
-                          }
-                        : item,
-                ),
-            );
-        } else {
-            // Si no existe, agregar nuevo item
-            const precioVenta = producto.precio_venta && producto.precio_venta > 0 ? producto.precio_venta : 0;
+            if (itemExistente) {
+                // Si ya existe, aumentar la cantidad (verificar stock)
+                const nuevaCantidad = Math.min(itemExistente.cantidad + 1, producto.stock_total);
+                setCarrito(
+                    carrito.map((item) =>
+                        item.id === idItem
+                            ? {
+                                  ...item,
+                                  cantidad: nuevaCantidad,
+                                  subtotal: nuevaCantidad * (item.precio_venta || 0),
+                              }
+                            : item,
+                    ),
+                );
+            } else {
+                // Si no existe, agregar nuevo item
+                const precioVenta = producto.precio_venta && producto.precio_venta > 0 ? producto.precio_venta : 0;
 
-            const nuevoItem: ItemCarrito = {
-                id: idItem,
-                producto: producto,
-                cantidad: 1,
-                precio_venta: precioVenta,
-                subtotal: precioVenta,
-            };
-            setCarrito([...carrito, nuevoItem]);
+                const nuevoItem: ItemCarrito = {
+                    id: idItem,
+                    producto: producto,
+                    cantidad: 1,
+                    precio_venta: precioVenta,
+                    subtotal: precioVenta,
+                };
+                setCarrito([...carrito, nuevoItem]);
+            }
+        } catch (error) {
+            console.error('Error al agregar producto al carrito:', error);
+            toast.error('Error al agregar producto al carrito');
         }
     };
 
@@ -333,7 +352,7 @@ export default function PuntoVentaOficial({
                     ? {
                           ...itemCarrito,
                           cantidad: nuevaCantidad,
-                          subtotal: nuevaCantidad * itemCarrito.precio_venta,
+                          subtotal: nuevaCantidad * (itemCarrito.precio_venta || 0),
                       }
                     : itemCarrito,
             ),
@@ -365,7 +384,7 @@ export default function PuntoVentaOficial({
     // Calcular totales
     const calcularTotal = useMemo(() => {
         return carrito.reduce((total, item) => {
-            const subtotal = item.cantidad * item.precio_venta;
+            const subtotal = item.cantidad * (item.precio_venta || 0);
             return total + (isNaN(subtotal) ? 0 : subtotal);
         }, 0);
     }, [carrito]);
@@ -389,11 +408,6 @@ export default function PuntoVentaOficial({
     // =================================================
     // Funciones para el procesamiento de pagos
     // =================================================
-
-    // Efecto para actualizar el restante cuando cambia el total
-    useEffect(() => {
-        setRemaining(calcularTotal);
-    }, [calcularTotal]);
 
     // Filtros para opciones disponibles
     const availableVias = paymentVias.filter((via) => (currentPayment.method ? via.method === currentPayment.method : true));
@@ -473,6 +487,14 @@ export default function PuntoVentaOficial({
                 monto_usd: p.amountInUsd,
                 cuenta_id: p.cuenta_id,
             })),
+            // Incluir tasas temporales si son diferentes de las globales
+            tasas_temporales:
+                tasaUSD !== meta.tasa_usd || tasaMLC !== meta.tasa_mlc
+                    ? {
+                        tasa_usd: tasaUSD,
+                        tasa_mlc: tasaMLC
+                    }
+                    : undefined
         };
 
         try {
@@ -489,13 +511,14 @@ export default function PuntoVentaOficial({
             } else {
                 toast.error('Error al procesar la venta: ' + response.data.error);
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Error al procesar venta:', error);
+            const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
 
-            if (error.response?.data?.error) {
+            if (axios.isAxiosError(error) && error.response?.data?.error) {
                 toast.error('Error al procesar la venta: ' + error.response.data.error);
             } else {
-                toast.error('Error al procesar la venta');
+                toast.error('Error al procesar la venta: ' + errorMessage);
             }
         } finally {
             setProcesandoVenta(false);
@@ -511,6 +534,78 @@ export default function PuntoVentaOficial({
         const currency = currencies.find((c) => c.code === currencyCode);
         return (amount / (currency?.exchangeRate || 1)).toFixed(2);
     };
+
+    // Manejar cambio de tasas
+    const handleTasaChange = (tipo: 'usd' | 'mlc', valor: string) => {
+        const valorNumerico = parseFloat(valor) || 0;
+        setTasasTemporales(prev => ({
+            ...prev,
+            [tipo === 'usd' ? 'tasa_usd' : 'tasa_mlc']: valorNumerico
+        }));
+    };
+
+    // Aplicar tasas temporales
+    const aplicarTasasTemporales = () => {
+        setTasaUSD(tasasTemporales.tasa_usd);
+        setTasaMLC(tasasTemporales.tasa_mlc);
+        setEditandoTasas(false);
+        toast.success('Tasas de cambio actualizadas para esta venta');
+    };
+
+    // Modal para editar tasas de cambio
+    const EditarTasasModal = () => (
+        <AlertDialog open={editandoTasas} onOpenChange={setEditandoTasas}>
+            <AlertDialogContent className="max-w-md">
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Editar Tasas de Cambio</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Estas tasas solo se aplicarán para esta venta específica.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+
+                <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="tasa_usd">Tasa USD a CUP</Label>
+                        <Input
+                            id="tasa_usd"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={tasasTemporales.tasa_usd}
+                            onChange={(e) => handleTasaChange('usd', e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            1 USD = {tasasTemporales.tasa_usd} CUP
+                        </p>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="tasa_mlc">Tasa MLC a USD</Label>
+                        <Input
+                            id="tasa_mlc"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={tasasTemporales.tasa_mlc}
+                            onChange={(e) => handleTasaChange('mlc', e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            1 MLC = {tasasTemporales.tasa_mlc} USD
+                        </p>
+                    </div>
+                </div>
+
+                <AlertDialogFooter>
+                    <Button variant="outline" onClick={() => setEditandoTasas(false)}>
+                        Cancelar
+                    </Button>
+                    <Button onClick={aplicarTasasTemporales}>
+                        Aplicar para esta venta
+                    </Button>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    );
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -1065,13 +1160,23 @@ export default function PuntoVentaOficial({
 
                                                 {/* Resumen de tasas de cambio */}
                                                 <div className="mt-4 border-t pt-4">
-                                                    <h4 className="mb-2 animate-pulse text-center text-sm font-medium">Tasas de Cambio:</h4>
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <h4 className="animate-pulse text-sm font-medium">Tasas de Cambio:</h4>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => setEditandoTasas(true)}
+                                                            className="h-8 text-xs"
+                                                        >
+                                                            Editar
+                                                        </Button>
+                                                    </div>
                                                     <div className="grid gap-2 md:grid-cols-2">
                                                         <Badge variant="outline" className="justify-center bg-indigo-300 text-indigo-800">
-                                                            {tasaMLC} MLC = 1 USD
+                                                            1 MLC = {tasaMLC.toFixed(2)} USD
                                                         </Badge>
-                                                        <Badge variant="outline" className="cursor-pointer justify-center bg-lime-300 text-lime-800">
-                                                            { tasaUSD } CUP = 1.00 USD
+                                                        <Badge variant="outline" className="justify-center bg-lime-300 text-lime-800">
+                                                            1 USD = {tasaUSD.toFixed(2)} CUP
                                                         </Badge>
                                                     </div>
                                                 </div>
@@ -1105,6 +1210,7 @@ export default function PuntoVentaOficial({
                     </div>
                 </div>
                 <Toaster position="top-center" />
+                <EditarTasasModal />
             </div>
         </AppLayout>
     );

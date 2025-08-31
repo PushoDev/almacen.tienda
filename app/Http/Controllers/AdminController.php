@@ -16,14 +16,14 @@ class AdminController extends Controller
     public function index()
     {
         $tasa = TasaCambio::getTasa(); // Obtenemos la tasa actual
-        $tasamlc = TasaCambioMLC::getTasaMLC();
+        $tasaMLC = TasaCambioMLC::latest()->first();
 
         return Inertia::render('dashboard', [
             'tasa' => [
                 'tasa_cambio' => $tasa ?? 0,
             ],
             'tasamlc' => [
-                'tasa_mlc' => $tasamlc ?? 0,
+                'tasa_mlc' => $tasaMLC ? $tasaMLC->tasa_mlc : 1,
             ],
             'montoCUP' => $this->getMontoCUP() ?? 0, // Monto en CUP
             'montoUSD' => $this->getMontoUSD() ?? 0,
