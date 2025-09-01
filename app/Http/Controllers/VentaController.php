@@ -181,6 +181,9 @@ class VentaController extends Controller
             }),
             'total_pagado' => $venta->pagos->sum('monto_equivalente'),
             'restante' => $venta->total - $venta->pagos->sum('monto_equivalente'),
+            // Agregar las tasas utilizadas en la venta
+            'tasa_usd_utilizada' => $venta->tasa_usd_utilizada,
+            'tasa_mlc_utilizada' => $venta->tasa_mlc_utilizada,
         ];
 
         return Inertia::render('Vendor/Show', [

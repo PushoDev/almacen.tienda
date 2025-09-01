@@ -38,11 +38,6 @@ interface Cliente {
     nombre_cliente: string;
 }
 
-interface TasaUSD {
-    id: number | string;
-    tasa: number | string;
-}
-
 interface Cuenta {
     id: number | string;
     nombre_cuenta: string;
@@ -148,11 +143,6 @@ export default function PuntoVentaOficial({
     const [busqueda, setBusqueda] = useState<string>('');
     const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
     const [procesandoVenta, setProcesandoVenta] = useState<boolean>(false);
-    const [editandoTasas, setEditandoTasas] = useState(false);
-    const [tasasTemporales, setTasasTemporales] = useState({
-        tasa_usd: meta.tasa_usd,
-        tasa_mlc: meta.tasa_mlc,
-    });
 
     // Monedas disponibles
     const currencies: Currency[] = [
@@ -453,7 +443,7 @@ export default function PuntoVentaOficial({
     };
 
     const handleCompleteSale = async () => {
-        // Preparar datos de la venta
+        // Preparar datos de la venta con tasas temporales
         const datosVenta = {
             almacen_id: almacenSeleccionado,
             cliente_id: clienteSeleccionado,
@@ -473,6 +463,11 @@ export default function PuntoVentaOficial({
                 monto_usd: p.amountInUsd,
                 cuenta_id: p.cuenta_id,
             })),
+            // Agregar las tasas temporales
+            tasas_temporales: {
+                tasa_usd: tasaUSD,
+                tasa_mlc: tasaMLC,
+            },
         };
 
         try {
@@ -483,15 +478,12 @@ export default function PuntoVentaOficial({
 
             if (response.data.success) {
                 toast.success('Venta procesada correctamente.');
-
-                // Redirigir a la página de detalles de la venta
                 window.location.href = response.data.redirect;
             } else {
                 toast.error('Error al procesar la venta: ' + response.data.error);
             }
         } catch (error: any) {
             console.error('Error al procesar venta:', error);
-
             if (error.response?.data?.error) {
                 toast.error('Error al procesar la venta: ' + error.response.data.error);
             } else {
@@ -509,7 +501,15 @@ export default function PuntoVentaOficial({
 
     const convertToUsd = (amount: number, currencyCode: string) => {
         const currency = currencies.find((c) => c.code === currencyCode);
-        return (amount / (currency?.exchangeRate || 1)).toFixed(2);
+
+        // Usar tasas temporales en lugar de las globales
+        let exchangeRate = currency?.exchangeRate || 1;
+
+        // Sobrescribir con tasas temporales si están disponibles
+        if (currencyCode === 'CUP') exchangeRate = tasaUSD;
+        if (currencyCode === 'MLC') exchangeRate = tasaMLC;
+
+        return (amount / exchangeRate).toFixed(2);
     };
 
     return (
@@ -1070,13 +1070,8 @@ export default function PuntoVentaOficial({
                                                         <Badge variant="outline" className="justify-center">
                                                             <Input
                                                                 type="number"
-                                                                value={meta.tasa_mlc || ''}
-                                                                onChange={(e) => {
-                                                                    const value = parseFloat(e.target.value);
-                                                                    if (!isNaN(value)) {
-                                                                        editandoTasas(meta.tasa_mlc, value);
-                                                                    }
-                                                                }}
+                                                                value={tasaMLC}
+                                                                onChange={(e) => setTasaMLC(parseFloat(e.target.value))}
                                                                 className="border-sidebar-accent w-20 rounded border px-2 py-1 text-left text-sm text-emerald-600 hover:border-emerald-300"
                                                                 placeholder="$ 0.00"
                                                             />{' '}
@@ -1085,13 +1080,8 @@ export default function PuntoVentaOficial({
                                                         <Badge variant="outline" className="cursor-pointer justify-center">
                                                             <Input
                                                                 type="number"
-                                                                value={meta.tasa_usd || ''}
-                                                                onChange={(e) => {
-                                                                    const value = parseFloat(e.target.value);
-                                                                    if (!isNaN(value)) {
-                                                                        editandoTasas(meta.tasa_usd, value);
-                                                                    }
-                                                                }}
+                                                                value={tasaUSD}
+                                                                onChange={(e) => setTasaUSD(parseFloat(e.target.value))}
                                                                 className="border-sidebar-accent w-20 rounded border px-2 py-1 text-left text-sm text-emerald-600 hover:border-emerald-300"
                                                                 placeholder="$ 0.00"
                                                             />{' '}
