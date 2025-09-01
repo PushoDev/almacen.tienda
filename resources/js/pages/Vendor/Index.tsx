@@ -106,14 +106,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-// Monedas disponibles
-const currencies: Currency[] = [
-    { code: 'USD', name: 'Dólar Estadounidense', symbol: '$ USD', exchangeRate: 1, availableFor: ['transferencia', 'efectivo'] },
-    { code: 'EUR', name: 'Euro', symbol: '€ EUR', exchangeRate: 1, availableFor: ['transferencia', 'efectivo'] },
-    { code: 'MLC', name: 'Moneda Libre Convertible', symbol: '$ MLC', exchangeRate: 1.25, availableFor: ['transferencia'] },
-    { code: 'CUP', name: 'Peso Cubano', symbol: '$ CUP', exchangeRate: 375, availableFor: ['transferencia', 'efectivo'] },
-];
-
 // Vías de pago disponibles
 const paymentVias: PaymentVia[] = [
     { id: 'zelle', name: 'Zelle', method: 'transferencia' },
@@ -161,6 +153,14 @@ export default function PuntoVentaOficial({
         tasa_usd: meta.tasa_usd,
         tasa_mlc: meta.tasa_mlc,
     });
+
+    // Monedas disponibles
+    const currencies: Currency[] = [
+        { code: 'USD', name: 'Dólar Estadounidense', symbol: '$ USD', exchangeRate: 1, availableFor: ['transferencia', 'efectivo'] },
+        { code: 'EUR', name: 'Euro', symbol: '€ EUR', exchangeRate: 1, availableFor: ['transferencia', 'efectivo'] },
+        { code: 'MLC', name: 'Moneda Libre Convertible', symbol: '$ MLC', exchangeRate: meta.tasa_mlc, availableFor: ['transferencia'] },
+        { code: 'CUP', name: 'Peso Cubano', symbol: '$ CUP', exchangeRate: meta.tasa_usd, availableFor: ['transferencia', 'efectivo'] },
+    ];
     // Nuevos estados para pagos
     const [payments, setPayments] = useState<Payment[]>([]);
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1067,11 +1067,35 @@ export default function PuntoVentaOficial({
                                                 <div className="mt-4 border-t pt-4">
                                                     <h4 className="mb-2 animate-pulse text-center text-sm font-medium">Tasas de Cambio:</h4>
                                                     <div className="grid gap-2 md:grid-cols-2">
-                                                        <Badge variant="outline" className="justify-center bg-indigo-300 text-indigo-800">
-                                                            {tasaMLC} MLC = 1 USD
+                                                        <Badge variant="outline" className="justify-center">
+                                                            <Input
+                                                                type="number"
+                                                                value={meta.tasa_mlc || ''}
+                                                                onChange={(e) => {
+                                                                    const value = parseFloat(e.target.value);
+                                                                    if (!isNaN(value)) {
+                                                                        editandoTasas(meta.tasa_mlc, value);
+                                                                    }
+                                                                }}
+                                                                className="border-sidebar-accent w-20 rounded border px-2 py-1 text-left text-sm text-emerald-600 hover:border-emerald-300"
+                                                                placeholder="$ 0.00"
+                                                            />{' '}
+                                                            MLC = 1 USD
                                                         </Badge>
-                                                        <Badge variant="outline" className="cursor-pointer justify-center bg-lime-300 text-lime-800">
-                                                            { tasaUSD } CUP = 1.00 USD
+                                                        <Badge variant="outline" className="cursor-pointer justify-center">
+                                                            <Input
+                                                                type="number"
+                                                                value={meta.tasa_usd || ''}
+                                                                onChange={(e) => {
+                                                                    const value = parseFloat(e.target.value);
+                                                                    if (!isNaN(value)) {
+                                                                        editandoTasas(meta.tasa_usd, value);
+                                                                    }
+                                                                }}
+                                                                className="border-sidebar-accent w-20 rounded border px-2 py-1 text-left text-sm text-emerald-600 hover:border-emerald-300"
+                                                                placeholder="$ 0.00"
+                                                            />{' '}
+                                                            CUP = $ 1.00 USD
                                                         </Badge>
                                                     </div>
                                                 </div>
