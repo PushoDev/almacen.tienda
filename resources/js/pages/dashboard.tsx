@@ -298,12 +298,14 @@ export default function Dashboard({
                                 <TableRow>
                                     <TableCell>TOTAL USD ACTIVO</TableCell>
                                     <TableCell>$ 195193</TableCell>
-                                    <TableCell className="bg-sidebar text-white">TASA MLC</TableCell>
+                                    <TableCell className="bg-sidebar text-center text-white">TASA MLC</TableCell>
                                 </TableRow>
                                 <TableRow>
                                     <TableCell>FONDO CUP ACTIVO</TableCell>
                                     <TableCell>$ 1 440734</TableCell>
-                                    <TableCell>$ {tasamlc.tasa_mlc}</TableCell>
+                                    <TableCell className="cursor-pointer border-2 border-red-400 text-center dark:border-indigo-500">
+                                        $ {tasamlc.tasa_mlc}
+                                    </TableCell>
                                 </TableRow>
                                 <TableRow>
                                     <TableCell className="bg-sidebar text-white" colSpan={2}>
