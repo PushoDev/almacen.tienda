@@ -1,9 +1,20 @@
+import AppLogoIcon from '@/components/app-logo-icon';
 import HeadingSmall from '@/components/heading-small';
+import {
+    AlertDialog,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head, usePage } from '@inertiajs/react';
-import { Calendar, CreditCard, DollarSign, ShoppingBag, User, Warehouse } from 'lucide-react';
+import { Head, Link, usePage } from '@inertiajs/react';
+import { Calendar, CreditCard, DollarSign, FileText, Printer, ShoppingBag, User, Warehouse } from 'lucide-react';
 
 interface Venta {
     id: number;
@@ -44,6 +55,9 @@ interface Venta {
     }>;
     total_pagado: number;
     restante: number;
+    // Tasas utilizadas
+    tasa_usd_utilizada: number;
+    tasa_mlc_utilizada: number;
 }
 
 // Definimos las props de la página extendiendo las props básicas de Inertia
@@ -105,6 +119,44 @@ export default function ResultadoCarrito() {
                     />
                 </div>
                 <Separator />
+
+                {/* Acciones */}
+                <div className="flex justify-end gap-2">
+                    {/* Exportar PDF */}
+                    <Link href="#">
+                        <Button variant="outline" className="hover:bg-chart-5 flex cursor-pointer items-center gap-2">
+                            <FileText size={16} />
+                            Exportar PDF
+                        </Button>
+                    </Link>
+
+                    {/* Botón Imprimir */}
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="secondary" className="hover:bg-chart-2 flex cursor-pointer items-center gap-2">
+                                <Printer size={16} />
+                                Imprimir Reporte
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent className="max-w-3xl">
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>
+                                    <div className="flex items-center justify-center">
+                                        <AppLogoIcon />
+                                    </div>
+                                </AlertDialogTitle>
+                            </AlertDialogHeader>
+                            <Separator />
+                            <Separator />
+                            <Separator />
+                            <AlertDialogFooter>
+                                <AlertDialogCancel className="bg-destructive hover:bg-destructive-foreground cursor-pointer text-white">
+                                    Cancelar
+                                </AlertDialogCancel>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                </div>
 
                 {/* Información de la Venta */}
                 <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -228,7 +280,7 @@ export default function ResultadoCarrito() {
                             </div>
                             <Separator />
                             <div className="flex justify-between">
-                                <span className="text-muted-foreground">Restante por Pagar:</span>
+                                <span className="text-muted-foreground">Ganancia Mayormpor la Tasa:</span>
                                 <span className={`font-semibold ${venta.restante > 0 ? 'text-orange-500' : 'text-green-600'}`}>
                                     {formatCurrency(venta.restante)}
                                 </span>
@@ -238,6 +290,15 @@ export default function ResultadoCarrito() {
                                 <span className={`font-semibold ${venta.restante > 0 ? 'text-orange-500' : 'text-green-600'}`}>
                                     {venta.restante > 0 ? 'Pendiente' : 'Completada'}
                                 </span>
+                            </div>
+                            <Separator />
+                            <div className="flex justify-between">
+                                <span className="text-muted-foreground">Tasa CUP Utilizada:</span>
+                                <span className="font-semibold text-green-600">{formatCurrency(venta.tasa_usd_utilizada)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-muted-foreground">Tasa MLC Utilizada:</span>
+                                <span className="font-semibold text-green-600">{formatCurrency(venta.tasa_mlc_utilizada)}</span>
                             </div>
                         </div>
                     </div>
