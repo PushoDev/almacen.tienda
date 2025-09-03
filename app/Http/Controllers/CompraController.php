@@ -18,36 +18,37 @@ class CompraController extends Controller
 {
     public function getAlmacen()
     {
-        return response()->json(Almacen::select('id', 'nombre_almacen')->get());
+        $almacenes = Almacen::select('id', 'nombre_almacen')->get();
+        return response()->json($almacenes);
     }
 
     public function getProveedor()
     {
-        return response()->json(Proveedor::select('id', 'nombre_proveedor')->get());
+        $proveedores = Proveedor::select('id', 'nombre_proveedor')->get();
+        return response()->json($proveedores);
     }
 
     public function getCategorias()
     {
-        return response()->json(Categoria::select('id', 'nombre_categoria')->get());
+        $categorias = Categoria::select('id', 'nombre_categoria')->get();
+        return response()->json($categorias);
     }
 
     public function getClientesFisicos()
     {
-        return response()->json(
-            Cliente::where('tipo_cliente', 'fisico')
-                ->select('id', 'nombre_cliente', 'deuda_pago_cliente')
-                ->get()
-        );
+        $clientes = Cliente::where('tipo_cliente', 'fisico')
+            ->select('id', 'nombre_cliente', 'deuda_pago_cliente')
+            ->get();
+        return response()->json($clientes);
     }
 
     public function getCuentas()
     {
-        return response()->json(
-            Cuenta::whereIn('tipo_cuenta', ['permanentes', 'temporales'])
-                ->whereIn('tipo_moneda', ['USD', 'EUR'])
-                ->select('id', 'nombre_cuenta', 'saldo_cuenta', 'tipo_moneda')
-                ->get()
-        );
+        $cuentas = Cuenta::whereIn('tipo_cuenta', ['permanentes', 'temporales'])
+            ->whereIn('tipo_moneda', ['USD', 'EUR'])
+            ->select('id', 'nombre_cuenta', 'saldo_cuenta', 'tipo_moneda')
+            ->get();
+        return response()->json($cuentas);
     }
 
     public function index()
@@ -172,16 +173,28 @@ class CompraController extends Controller
             // Procesar productos
             foreach ($validated['productos'] as $item) {
                 $categoria = Categoria::firstOrCreate(['nombre_categoria' => $item['categoria']]);
-                $producto = Producto::firstOrCreate(
-                    ['codigo_producto' => $item['codigo']],
-                    [
+
+                // Buscar el producto por código o crear uno nuevo
+                $producto = Producto::firstOrNew(['codigo_producto' => $item['codigo']]);
+
+                // Si es un producto nuevo, establecer todos los campos necesarios
+                if (!$producto->exists) {
+                    $producto->fill([
                         'nombre_producto' => $item['producto'],
                         'categoria_id' => $categoria->id,
                         'precio_compra_producto' => $item['precio'],
-                        'cantidad_producto' => 0,
+                        'cantidad_producto' => 0, // Valor por defecto para PostgreSQL
                         'imagen_producto' => 'productos/producto-default.png',
-                    ]
-                );
+                    ]);
+                    $producto->save();
+                } else {
+                    // Si el producto ya existe, actualizar solo los campos necesarios
+                    $producto->update([
+                        'nombre_producto' => $item['producto'],
+                        'categoria_id' => $categoria->id,
+                        'precio_compra_producto' => $item['precio'],
+                    ]);
+                }
 
                 // Asociar producto a la compra
                 $compra->productos()->attach($producto->id, [
@@ -189,11 +202,12 @@ class CompraController extends Controller
                     'precio' => $item['precio'],
                 ]);
 
-                // Actualizar inventario en almacén (Modificado para PostgreSQL)
+                // Actualizar inventario en almacén - Método optimizado para PostgreSQL
                 $almacenProducto = AlmacenProducto::firstOrNew([
                     'almacen_id' => $almacen->id,
                     'producto_id' => $producto->id
                 ]);
+
                 $almacenProducto->cantidad = ($almacenProducto->cantidad ?? 0) + $item['cantidad'];
                 $almacenProducto->save();
             }
@@ -203,7 +217,7 @@ class CompraController extends Controller
             // Cargar las relaciones necesarias para la vista
             $compra->load(['proveedor', 'almacen', 'productos']);
 
-            // Redirigir a la vista de compra completada en lugar del dashboard
+            // Redirigir a la vista de compra completada
             return Inertia::render('Comprar/Show', [
                 'compra' => $compra,
                 'productos' => $compra->productos,
@@ -217,21 +231,27 @@ class CompraController extends Controller
 
     public function getProductos($id)
     {
-        $almacen = Almacen::with('compras.productos')->find($id);
+        $almacen = Almacen::with(['compras.productos' => function ($query) {
+            $query->select('productos.id', 'nombre_producto', 'marca_producto');
+        }])->find($id);
 
         if (!$almacen) {
             return response()->json(['message' => 'Almacén no encontrado'], 404);
         }
 
-        $productos = $almacen->compras->flatMap(fn($compra) => $compra->productos->map(fn($producto) => [
-            'compra_id' => $compra->id,
-            'producto_id' => $producto->id,
-            'nombre_producto' => $producto->nombre_producto,
-            'marca_producto' => $producto->marca_producto ?? null,
-            'cantidad' => $producto->pivot->cantidad,
-            'precio' => $producto->pivot->precio,
-            'fecha_compra' => $compra->fecha_compra,
-        ]));
+        $productos = $almacen->compras->flatMap(function ($compra) {
+            return $compra->productos->map(function ($producto) use ($compra) {
+                return [
+                    'compra_id' => $compra->id,
+                    'producto_id' => $producto->id,
+                    'nombre_producto' => $producto->nombre_producto,
+                    'marca_producto' => $producto->marca_producto ?? null,
+                    'cantidad' => $producto->pivot->cantidad,
+                    'precio' => $producto->pivot->precio,
+                    'fecha_compra' => $compra->fecha_compra,
+                ];
+            });
+        });
 
         return response()->json([
             'almacen' => $almacen,
