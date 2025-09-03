@@ -25,7 +25,6 @@ import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
 import { AlmacenProps, CategoriasProps, ClienteProps, CuentaNegocioProps, ProductoComprarProps, ProveedorProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
-import axios from 'axios'; // Importar axios
 import { format } from 'date-fns';
 import { BadgeMinus, BookCheck, CalendarIcon, Edit2, HardDriveUpload, PlusIcon, ShoppingBasket, Trash2Icon } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -61,7 +60,6 @@ export default function ComprarPage() {
     const [editingProductId, setEditingProductId] = useState<number | null>(null);
     const [clientes, setClientes] = useState<ClienteProps[]>([]);
     const [activeTab, setActiveTab] = useState<'cuentas' | 'clientes' | 'combinado'>('cuentas');
-    const [loading, setLoading] = useState(true); // Estado de carga
 
     const [tempFormData, setTempFormData] = useState<Omit<ProductoComprarProps, 'id'>>({
         producto: '',
@@ -95,32 +93,26 @@ export default function ComprarPage() {
     }, [productos]);
 
     useEffect(() => {
-        const cargarDatos = async () => {
-            try {
-                setLoading(true);
-
-                const [almacenesRes, proveedoresRes, categoriasRes, cuentasRes, clientesRes] = await Promise.all([
-                    axios.get(route('compras.almacenes')),
-                    axios.get(route('compras.proveedores')),
-                    axios.get(route('compras.categorias')),
-                    axios.get(route('compras.cuentas.pago')),
-                    axios.get(route('compras.clientes.fisicos')),
-                ]);
-
-                setAlmacens(almacenesRes.data);
-                setProveedors(proveedoresRes.data);
-                setCategorias(categoriasRes.data);
-                setCuentas(cuentasRes.data);
-                setClientes(clientesRes.data);
-            } catch (error) {
-                console.error('Error al cargar datos:', error);
-                toast.error('Error al cargar los datos necesarios');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        cargarDatos();
+        fetch('/compras/almacenes')
+            .then((res) => res.json())
+            .then(setAlmacens)
+            .catch(console.error);
+        fetch('/compras/proveedores')
+            .then((res) => res.json())
+            .then(setProveedors)
+            .catch(console.error);
+        fetch('/compras/categorias')
+            .then((res) => res.json())
+            .then(setCategorias)
+            .catch(console.error);
+        fetch('/compras/cuentas/pago')
+            .then((res) => res.json())
+            .then(setCuentas)
+            .catch(console.error);
+        fetch('/compras/clientes/fisicos')
+            .then((res) => res.json())
+            .then(setClientes)
+            .catch(console.error);
     }, []);
 
     const handleTempInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -199,7 +191,7 @@ export default function ComprarPage() {
         }
 
         // Enviar formulario
-        post(route('comprar.store'), {
+        post('/comprar', {
             preserveScroll: true,
             onSuccess: () => {
                 // Limpiar estados después de una compra exitosa
@@ -233,16 +225,6 @@ export default function ComprarPage() {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Comprar" />
-
-            {/* Indicador de carga */}
-            {loading && (
-                <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black">
-                    <div className="rounded-lg bg-white p-4 shadow-lg">
-                        <p>Cargando datos...</p>
-                    </div>
-                </div>
-            )}
-
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
@@ -288,7 +270,7 @@ export default function ComprarPage() {
                                             <Calendar mode="single" selected={date} onSelect={setDate} initialFocus />
                                         </PopoverContent>
                                     </Popover>
-                                    {errors.fecha && <InputError message={errors.fecha} />}
+                                    {errors.fecha && <InputError message={errors.fecha[0]} />}
                                 </div>
 
                                 {/* Proveedor */}
@@ -351,7 +333,7 @@ export default function ComprarPage() {
                                             )}
                                         </SelectContent>
                                     </Select>
-                                    {errors.proveedor && <InputError message={errors.proveedor} />}
+                                    {errors.proveedor && <InputError message={errors.proveedor[0]} />}
                                 </div>
 
                                 {/* Almacén Destino */}
@@ -380,7 +362,7 @@ export default function ComprarPage() {
                                             )}
                                         </SelectContent>
                                     </Select>
-                                    {errors.almacen && <InputError message={errors.almacen} />}
+                                    {errors.almacen && <InputError message={errors.almacen[0]} />}
                                 </div>
                             </div>
                         </form>
@@ -405,7 +387,7 @@ export default function ComprarPage() {
                                     value={tempFormData.producto}
                                     onChange={handleTempInputChange}
                                 />
-                                {errors.producto && <InputError message={errors.producto} />}
+                                {errors.producto && <InputError message={errors.producto[0]} />}
                             </div>
 
                             {/* Código del Producto */}
@@ -419,7 +401,7 @@ export default function ComprarPage() {
                                     value={tempFormData.codigo}
                                     onChange={handleTempInputChange}
                                 />
-                                {errors.codigo && <InputError message={errors.codigo} />}
+                                {errors.codigo && <InputError message={errors.codigo[0]} />}
                             </div>
 
                             {/* Categoría del Producto */}
@@ -489,7 +471,7 @@ export default function ComprarPage() {
                                         )}
                                     </SelectContent>
                                 </Select>
-                                {errors.categorias && <InputError message={errors.categorias} />}
+                                {errors.categorias && <InputError message={errors.categorias[0]} />}
                             </div>
 
                             {/* Precio de Compra */}
@@ -502,7 +484,7 @@ export default function ComprarPage() {
                                     value={tempFormData.precio || ''}
                                     onChange={handleTempInputChange}
                                 />
-                                {errors.precio && <InputError message={errors.precio} />}
+                                {errors.precio && <InputError message={errors.precio[0]} />}
                             </div>
 
                             {/* Cantidad de Productos */}
@@ -515,7 +497,7 @@ export default function ComprarPage() {
                                     value={tempFormData.cantidad || ''}
                                     onChange={handleTempInputChange}
                                 />
-                                {errors.cantidad && <InputError message={errors.cantidad} />}
+                                {errors.cantidad && <InputError message={errors.cantidad[0]} />}
                             </div>
 
                             {/* Botón Agregar */}
@@ -826,7 +808,7 @@ export default function ComprarPage() {
                                             <SelectItem value="pago_cash">Pagar Ahora</SelectItem>
                                         </SelectContent>
                                     </Select>
-                                    {errors.compra && <InputError message={errors.compra} />}
+                                    {errors.compra && <InputError message={errors.compra[0]} />}
                                 </div>
 
                                 {data.compra === 'pago_cash' && (
