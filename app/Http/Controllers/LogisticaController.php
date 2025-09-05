@@ -50,7 +50,7 @@ class LogisticaController extends Controller
     {
         return DB::table('cuentas')
             ->where('tipo_moneda', 'USD')
-            ->where('tipo_cuenta', ['permanentes', 'temporales'])
+            ->whereIn('tipo_cuenta', ['permanentes', 'temporales'])
             ->sum('saldo_cuenta');
     }
 
@@ -58,7 +58,7 @@ class LogisticaController extends Controller
     {
         return DB::table('cuentas')
             ->where('tipo_moneda', 'EUR')
-            ->where('tipo_cuenta', ['permanentes', 'temporales'])
+            ->whereIn('tipo_cuenta', ['permanentes', 'temporales'])
             ->sum('saldo_cuenta');
     }
 
@@ -66,7 +66,7 @@ class LogisticaController extends Controller
     {
         return DB::table('cuentas')
             ->where('tipo_moneda', 'MLC')
-            ->where('tipo_cuenta', ['permanentes', 'temporales'])
+            ->whereIn('tipo_cuenta', ['permanentes', 'temporales'])
             ->sum('saldo_cuenta');
     }
 
@@ -74,7 +74,7 @@ class LogisticaController extends Controller
     {
         return DB::table('cuentas')
             ->where('tipo_moneda', 'CUP')
-            ->where('tipo_cuenta', ['permanentes', 'temporales'])
+            ->whereIn('tipo_cuenta', ['permanentes', 'temporales'])
             ->sum('saldo_cuenta');
     }
 
@@ -99,7 +99,7 @@ class LogisticaController extends Controller
     {
         return DB::table('cuentas')
             ->where('tipo_moneda', 'USD')
-            ->where('tipo_cuenta', ['deudas'])
+            ->whereIn('tipo_cuenta', ['deudas'])
             ->sum('saldo_cuenta');
     }
 
@@ -136,7 +136,7 @@ class LogisticaController extends Controller
     {
         return DB::table('compras')
             ->select(
-                DB::raw("TO_CHAR(compras.fecha_compra, 'YYYY-MM') as mes_anio"),
+                DB::raw("DATE_FORMAT(compras.fecha_compra, '%Y-%m') as mes_anio"),
                 DB::raw('SUM(compras.total_compra) as total'),
                 DB::raw('COUNT(compras.id) as cantidad_compras')
             )
@@ -176,14 +176,12 @@ class LogisticaController extends Controller
 
     private function getProductosPorAlmacen()
     {
-        return DB::table('compra_producto')
-            ->join('compras', 'compra_producto.compra_id', '=', 'compras.id')
-            ->join('almacens', 'compras.almacen_id', '=', 'almacens.id')
-            ->join('productos', 'compra_producto.producto_id', '=', 'productos.id')
+        return DB::table('almacen_producto')
+            ->join('almacens', 'almacen_producto.almacen_id', '=', 'almacens.id')
             ->select(
                 'almacens.nombre_almacen',
-                DB::raw('SUM(compra_producto.cantidad) as total_productos'),
-                DB::raw('COUNT(DISTINCT productos.id) as productos_unicos')
+                DB::raw('SUM(almacen_producto.cantidad) as total_productos'),
+                DB::raw('COUNT(DISTINCT almacen_producto.producto_id) as productos_unicos')
             )
             ->groupBy('almacens.id', 'almacens.nombre_almacen')
             ->orderByDesc('total_productos')
@@ -210,9 +208,9 @@ class LogisticaController extends Controller
             'montoMLC' => $this->getMontoMLC() ?? 0, // Monto en MLC
             'montoCUP' => $this->getMontoCUP() ?? 0, // Monto en CUP
             'tasaCambioGeneral' => $this->tasaCambioGeneral() ?? 0, // Tasa Cambio
-            'calculoCup' => $this->getMontoCUP() / $this->tasaCambioGeneral() ?? 0, // Valor Tasa de Cambio del Cup
+            'calculoCup' => $this->getMontoCUP() / ($this->tasaCambioGeneral() ?: 1) ?? 0, // Valor Tasa de Cambio del Cup
             // Suma General Disponible Caja
-            'sumaDsiponible' => ($this->getMontoCUP() / $this->tasaCambioGeneral()) + ($this->getMontoMLC() / $this->getTasaMlcTemp()) + $this->getMontoUSD() + $this->getMontoEUR(),
+            'sumaDsiponible' => ($this->getMontoCUP() / ($this->tasaCambioGeneral() ?: 1)) + ($this->getMontoMLC() / ($this->getTasaMlcTemp() ?: 1)) + $this->getMontoUSD() + $this->getMontoEUR(),
             // Deudas con Clientes fisicos
             'deudaClienteFisico' => $this->sumDeudaClienteFisico() ?? 0,
             'clientesFisicos' => $this->countClientesFisicos() ?? 0, // Contar Clientes Fisicos
@@ -220,12 +218,12 @@ class LogisticaController extends Controller
             'deudaPendientes' => $this->countDeudaPendientes() ?? 0,
             'deudaPendietesSaldo' => $this->sumDeudaPendientesSaldo() ?? 0,
             'montoGeneralInvertido' => $this->calculateMontoGeneralInvertido() ?? 0,
-            'gastosMensuales' => $this->getGastosMensuales() ?? 0,
-            'productosTop' => $this->getProductosTop() ?? 0,
-            'comprasPorProveedor' => $this->getComprasPorProveedor() ?? 0,
-            'productosPorAlmacen' => $this->getProductosPorAlmacen() ?? 0,
+            'gastosMensuales' => $this->getGastosMensuales() ?? [],
+            'productosTop' => $this->getProductosTop() ?? [],
+            'comprasPorProveedor' => $this->getComprasPorProveedor() ?? [],
+            'productosPorAlmacen' => $this->getProductosPorAlmacen() ?? [],
             'tasaMLC' => $this->getTasaMlcTemp() ?? 0,
-            'calcTasaMLC' => $this->getMontoMLC() / $this->getTasaMlcTemp(),
+            'calcTasaMLC' => $this->getMontoMLC() / ($this->getTasaMlcTemp() ?: 1),
         ]);
     }
 }

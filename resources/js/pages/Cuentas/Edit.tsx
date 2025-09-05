@@ -118,6 +118,7 @@ export default function EditarCuentasPage({ cuenta }: { cuenta: CuentaProps }) {
                                     <Select
                                         value={data.tipo_moneda}
                                         onValueChange={(value) => setData('tipo_moneda', value as 'USD' | 'EUR' | 'MLC' | 'CUP')}
+                                        disabled
                                     >
                                         <SelectTrigger className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                                             <SelectValue placeholder="Seleccione una moneda" />
@@ -140,6 +141,7 @@ export default function EditarCuentasPage({ cuenta }: { cuenta: CuentaProps }) {
                                     <Select
                                         value={data.tipo_cuenta}
                                         onValueChange={(value) => setData('tipo_cuenta', value as 'permanentes' | 'temporales')}
+                                        disabled
                                     >
                                         <SelectTrigger className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                                             <SelectValue placeholder="Seleccione un tipo de cuenta" />
