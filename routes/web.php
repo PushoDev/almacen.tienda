@@ -15,7 +15,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
      */
     Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('dashboard', [AdminController::class, 'index'])->name('dashboard');
-        Route::post('dashboard', [AdminController::class, 'update'])->name('dashboard.update');
+        Route::post('dashboard/update-tasa', [AdminController::class, 'update'])->name('dashboard.update');
+        Route::post('dashboard/update-tasa-mlc', [AdminController::class, 'updateMLC'])->name('dashboard.update-mlc');
     });
     /**
      * Vendedor
@@ -53,7 +54,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Transacciones
     require __DIR__ . '/acciones/transacciones.php';
 
-//    Remesas
+    //    Remesas
     require __DIR__ . '/acciones/remesas.php';
 
     // Venta Productos

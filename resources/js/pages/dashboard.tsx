@@ -24,7 +24,7 @@ import { ComprasVentasCharts } from '@/layouts/charts/ChartCompraVenta';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { ComputerIcon, DiamondPercent, LucideBaggageClaim, LucideBoomBox, LucideClockArrowDown, MonitorCog, ShoppingBagIcon } from 'lucide-react';
-import { useState } from 'react'; // Importar useState
+import { useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -39,6 +39,7 @@ export default function Dashboard({
     montoCUP,
     montoUSD,
     montoEUR,
+    montoMLC,
     capital,
 }: {
     tasa: { tasa_cambio: number };
@@ -46,18 +47,37 @@ export default function Dashboard({
     montoCUP: number;
     montoUSD: number;
     montoEUR: number;
+    montoMLC: number;
     capital: number;
 }) {
     const { data, setData, post, processing } = useForm({
         tasa_cambio: tasa.tasa_cambio,
     });
 
-    const [dialogOpen, setDialogOpen] = useState(false); // Estado para controlar el diálogo
+    const {
+        data: dataMLC,
+        setData: setDataMLC,
+        post: postMLC,
+        processing: processingMLC,
+    } = useForm({
+        tasa_mlc: typeof tasamlc.tasa_mlc === 'string' ? parseFloat(tasamlc.tasa_mlc) || 1 : tasamlc.tasa_mlc,
+    });
+
+    const [dialogOpen, setDialogOpen] = useState(false);
+    const [dialogOpenMLC, setDialogOpenMLC] = useState(false);
 
     const handleUpdate = () => {
         post(route('dashboard.update'), {
             onSuccess: () => {
-                setDialogOpen(false); // Cierra el diálogo al éxito
+                setDialogOpen(false);
+            },
+        });
+    };
+
+    const handleUpdateMLC = () => {
+        postMLC(route('dashboard.update-mlc'), {
+            onSuccess: () => {
+                setDialogOpenMLC(false);
             },
         });
     };
@@ -279,6 +299,12 @@ export default function Dashboard({
                                         <CountingNumber decimalPlaces={2} decimalSeparator="," className="text-amber-600" inView number={montoEUR} />
                                     </TableCell>
                                 </TableRow>
+                                <TableRow>
+                                    <TableCell>MLC CAJA</TableCell>
+                                    <TableCell className="cursor-pointer">
+                                        <CountingNumber decimalPlaces={2} decimalSeparator="," className="text-red-600" inView number={montoMLC} />
+                                    </TableCell>
+                                </TableRow>
                             </TableBody>
                         </Table>
                     </div>
@@ -286,7 +312,7 @@ export default function Dashboard({
                         <Table>
                             <TableBody>
                                 <TableRow>
-                                    <TableCell>TOTAL</TableCell>
+                                    <TableCell className="bg-sidebar text-white">TOTAL</TableCell>
                                     <TableCell>$ 199559</TableCell>
                                     <TableCell>$ 248 </TableCell>
                                 </TableRow>
@@ -297,23 +323,23 @@ export default function Dashboard({
                                 </TableRow>
                                 <TableRow>
                                     <TableCell>TOTAL USD ACTIVO</TableCell>
-                                    <TableCell>$ 195193</TableCell>
-                                    <TableCell className="bg-sidebar text-center text-white">TASA MLC</TableCell>
+                                    <TableCell colSpan={2} className="bg-emerald-600 text-center text-white">
+                                        $ 195193
+                                    </TableCell>
                                 </TableRow>
                                 <TableRow>
                                     <TableCell>FONDO CUP ACTIVO</TableCell>
-                                    <TableCell>$ 1 440734</TableCell>
-                                    <TableCell className="cursor-pointer border-2 border-red-400 text-center dark:border-indigo-500">
-                                        $ {tasamlc.tasa_mlc}
+                                    <TableCell colSpan={2} className="bg-yellow-800 text-center text-white">
+                                        $ 1 440734
                                     </TableCell>
                                 </TableRow>
                                 <TableRow>
-                                    <TableCell className="bg-sidebar text-white" colSpan={2}>
-                                        TASA CAMBIO GENERAL
+                                    <TableCell className="bg-emerald-800 text-white" colSpan={2}>
+                                        TASA CAMBIO PARA USD
                                     </TableCell>
                                     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                                         <DialogTrigger asChild>
-                                            <TableCell className="dark:hover:bg-sidebar-accent cursor-pointer text-center font-bold text-emerald-950 hover:bg-emerald-800 hover:text-white dark:text-emerald-400">
+                                            <TableCell className="cursor-pointer border-2 border-emerald-800 text-center font-bold">
                                                 $ {tasa.tasa_cambio}
                                             </TableCell>
                                         </DialogTrigger>
@@ -344,13 +370,50 @@ export default function Dashboard({
                                                         Cancelar
                                                     </Button>
                                                 </DialogClose>
-                                                <Button
-                                                    className="cursor-pointer"
-                                                    type="button"
-                                                    disabled={processing}
-                                                    onClick={handleUpdate} // Llama a la función de actualización
-                                                >
+                                                <Button className="cursor-pointer" type="button" disabled={processing} onClick={handleUpdate}>
                                                     {processing ? 'Guardando...' : 'Actualizar'}
+                                                </Button>
+                                            </DialogFooter>
+                                        </DialogContent>
+                                    </Dialog>
+                                </TableRow>
+                                <TableRow>
+                                    <TableCell colSpan={2} className="bg-yellow-900 text-white">
+                                        TASA DE CAMBIO PARA MLC
+                                    </TableCell>
+                                    <Dialog open={dialogOpenMLC} onOpenChange={setDialogOpenMLC}>
+                                        <DialogTrigger asChild>
+                                            <TableCell className="cursor-pointer border-2 border-yellow-900 text-center font-bold">
+                                                $ {tasamlc.tasa_mlc}
+                                            </TableCell>
+                                        </DialogTrigger>
+                                        <DialogContent className="sm:max-w-[425px]">
+                                            <DialogHeader>
+                                                <DialogTitle>Tasa Cambio MLC</DialogTitle>
+                                                <DialogDescription>Actualizar valor de la Tasa de Cambio para MLC</DialogDescription>
+                                            </DialogHeader>
+                                            <div className="grid gap-4">
+                                                <div className="grid gap-3">
+                                                    <Label htmlFor="tasaMLC">Valor Actual a Cambiar</Label>
+                                                    <Input
+                                                        id="tasaMLC"
+                                                        name="tasa_mlc"
+                                                        type="number"
+                                                        step="0.00000001"
+                                                        placeholder="$ 0.00"
+                                                        value={dataMLC.tasa_mlc || ''}
+                                                        onChange={(e) => setDataMLC('tasa_mlc', parseFloat(e.target.value) || 0)}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <DialogFooter>
+                                                <DialogClose asChild>
+                                                    <Button className="cursor-pointer" variant="secondary">
+                                                        Cancelar
+                                                    </Button>
+                                                </DialogClose>
+                                                <Button className="cursor-pointer" type="button" disabled={processingMLC} onClick={handleUpdateMLC}>
+                                                    {processingMLC ? 'Guardando...' : 'Actualizar'}
                                                 </Button>
                                             </DialogFooter>
                                         </DialogContent>

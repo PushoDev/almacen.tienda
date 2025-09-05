@@ -25,48 +25,60 @@ class AdminController extends Controller
             'tasamlc' => [
                 'tasa_mlc' => $tasaMLC ? $tasaMLC->tasa_mlc : 1,
             ],
-            'montoCUP' => $this->getMontoCUP() ?? 0, // Monto en CUP
+            'montoCUP' => $this->getMontoCUP() ?? 0,
             'montoUSD' => $this->getMontoUSD() ?? 0,
             'montoEUR' => $this->getMontoEUR() ?? 0,
-            'capital' => ($this->getMontoCUP() / $tasa) + ($this->getMontoUSD() ?? 0) + ($this->getMontoEUR() ?? 0),
+            'montoMLC' => $this->getMontoMLC() ?? 0,
+            'capital' => ($this->getMontoCUP() / $tasa) + $this->getMontoUSD() + $this->getMontoEUR() + ($this->getMontoMLC() / ($tasaMLC ? $tasaMLC->tasa_mlc : 1)),
         ]);
     }
 
     /**
-     * Summary of getMontoCUP
+     * Obtener monto en CUP
      */
     private function getMontoCUP()
     {
         return DB::table('cuentas')
             ->where('tipo_moneda', 'CUP')
-            ->where('tipo_cuenta', ['permanentes', 'temporales'])
+            ->whereIn('tipo_cuenta', ['permanentes', 'temporales'])
             ->sum('saldo_cuenta');
     }
+
     /**
-     * Summary of getMontoUSD
+     * Obtener monto en USD
      */
     private function getMontoUSD()
     {
         return DB::table('cuentas')
             ->where('tipo_moneda', 'USD')
-            ->where('tipo_cuenta', ['permanentes', 'temporales'])
+            ->whereIn('tipo_cuenta', ['permanentes', 'temporales'])
             ->sum('saldo_cuenta');
     }
+
     /**
-     * Summary of getMontoEUR
+     * Obtener monto en EUR
      */
     private function getMontoEUR()
     {
         return DB::table('cuentas')
             ->where('tipo_moneda', 'EUR')
-            ->where('tipo_cuenta', ['permanentes', 'temporales'])
+            ->whereIn('tipo_cuenta', ['permanentes', 'temporales'])
             ->sum('saldo_cuenta');
     }
 
-
+    /**
+     * Obtener monto en MLC
+     */
+    private function getMontoMLC()
+    {
+        return DB::table('cuentas')
+            ->where('tipo_moneda', 'MLC')
+            ->whereIn('tipo_cuenta', ['permanentes', 'temporales'])
+            ->sum('saldo_cuenta');
+    }
 
     /**
-     * Update the specified resource in storage.
+     * Actualizar la tasa de cambio USD
      */
     public function update(Request $request)
     {
@@ -77,5 +89,33 @@ class AdminController extends Controller
         TasaCambio::setTasa($request->input('tasa_cambio'));
 
         return back()->with('success', 'Tasa actualizada correctamente.');
+    }
+
+    /**
+     * Actualizar la tasa de cambio MLC
+     * Ahora actualiza el registro existente en lugar de crear uno nuevo
+     */
+    public function updateMLC(Request $request)
+    {
+        $request->validate([
+            'tasa_mlc' => 'required|numeric|min:0',
+        ]);
+
+        // Obtener el último registro de tasa MLC
+        $tasaMLC = TasaCambioMLC::latest()->first();
+
+        if ($tasaMLC) {
+            // Si existe, actualizarlo
+            $tasaMLC->update([
+                'tasa_mlc' => $request->input('tasa_mlc')
+            ]);
+        } else {
+            // Si no existe, crear uno nuevo
+            TasaCambioMLC::create([
+                'tasa_mlc' => $request->input('tasa_mlc')
+            ]);
+        }
+
+        return back()->with('success', 'Tasa MLC actualizada correctamente.');
     }
 }
