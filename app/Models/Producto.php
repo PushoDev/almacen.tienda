@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
 
 class Producto extends Model
 {
@@ -27,77 +26,41 @@ class Producto extends Model
         'precio_compra_producto' => 'decimal:2',
         'cantidad_producto' => 'integer',
     ];
-    protected $appends = ['imagen_url', 'cantidad_producto'];
 
-    // Relación con categorías
+    protected $appends = ['imagen_url', 'cantidad_total'];
+
+    // Relación con categoría
     public function categoria()
     {
         return $this->belongsTo(Categoria::class, 'categoria_id');
     }
 
-    // Accesor para URL de imagen
-    public function getImagenUrlAttribute(): ?string
-    {
-        return $this->imagen_producto
-            ? asset('storage/' . $this->imagen_producto)
-            : null;
-    }
-
-
-    // public function getImagenUrlAttribute()
-    // {
-    //     return $this->imagen_producto ? Storage::url($this->imagen_producto) : null;
-    // }
-
-    public function getCantidadProductoAttribute()
-    {
-        return $this->almacenes->sum('pivot.cantidad');
-    }
-
-    // Relación con compras (many-to-many)
+    // Relación con compras
     public function compras()
     {
         return $this->belongsToMany(Compra::class, 'compra_producto')
             ->withPivot('cantidad', 'precio');
     }
 
-    // Relación directa con un almacén (si se usa en otro contexto)
-    public function almacen()
-    {
-        return $this->belongsTo(Almacen::class);
-    }
-
-    // Relación con múltiples almacenes (many-to-many)
+    // Relación con múltiples almacenes
     public function almacenes()
     {
         return $this->belongsToMany(Almacen::class, 'almacen_producto')
             ->withPivot('cantidad')
-            ->withTimestamps(); // Asegura manejo de timestamps si existen
+            ->withTimestamps();
     }
 
-    // Método para estructurar datos de almacenes
-    public function getAlmacenesConCantidad()
+    // 🔥 Cantidad total en todos los almacenes
+    public function getCantidadTotalAttribute()
     {
-        return $this->almacenes->map(function ($almacen) {
-            return [
-                'id' => $almacen->id,
-                'nombre_almacen' => $almacen->nombre_almacen,
-                'pivot' => [
-                    'cantidad' => $almacen->pivot->cantidad,
-                ],
-            ];
-        });
+        return $this->almacenes->sum('pivot.cantidad');
     }
 
-    /**
-     * Undocumented function
-     * Relación con vendedores y sus precios
-     * @return void
-     */
-    public function vendedores()
+    // 🔥 Accesor para URL de la imagen (usa default si no hay)
+    public function getImagenUrlAttribute(): string
     {
-        return $this->belongsToMany(User::class, 'producto_vendedors')
-            ->using(ProductoVendedor::class)
-            ->withPivot('precio_venta', 'venta_ganancia');
+        return $this->imagen_producto
+            ? asset('storage/' . $this->imagen_producto)
+            : asset('storage/productos/producto-default.png');
     }
 }

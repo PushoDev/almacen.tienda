@@ -4,41 +4,35 @@ namespace App\Http\Controllers;
 
 use App\Models\Producto;
 use App\Models\Categoria;
-use App\Models\Almacen;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Storage;
 
 class ProductoController extends Controller
 {
     /**
-     * Display a listing of the resource.
+     * Listado de productos
      */
     public function index()
     {
-        $productos = Producto::with('categoria')->get();
+        $productos = Producto::with('categoria', 'almacenes')->get();
 
         return Inertia::render('Productos/Index', [
-            'productos' => $productos->map(function ($producto) {
-                return [
-                    'id' => $producto->id,
-                    'nombre_producto' => $producto->nombre_producto,
-                    'marca_producto' => $producto->marca_producto,
-                    'codigo_producto' => $producto->codigo_producto,
-                    'categoria' => $producto->categoria ? $producto->categoria->nombre_categoria : null,
-                    'precio_compra_producto' => (float) $producto->precio_compra_producto,
-                    'cantidad_producto' => $producto->almacenes->sum('pivot.cantidad'),
-                    'imagen_url' => $producto->imagen_producto ? Storage::url($producto->imagen_producto) : null,
-                ];
-            }),
+            'productos' => $productos->map(fn($producto) => [
+                'id' => $producto->id,
+                'nombre_producto' => $producto->nombre_producto,
+                'marca_producto' => $producto->marca_producto,
+                'codigo_producto' => $producto->codigo_producto,
+                'categoria' => $producto->categoria?->nombre_categoria,
+                'precio_compra_producto' => (float) $producto->precio_compra_producto,
+                'cantidad_producto' => $producto->cantidad_total,
+                'imagen_url' => $producto->imagen_url,
+            ]),
         ]);
     }
 
-
-
     /**
-     * Display the specified resource.
+     * Mostrar producto
      */
     public function show(Producto $producto)
     {
@@ -51,7 +45,7 @@ class ProductoController extends Controller
     }
 
     /**
-     * Show the form for editing the specified resource.
+     * Editar producto
      */
     public function edit(Producto $producto)
     {
@@ -62,11 +56,11 @@ class ProductoController extends Controller
     }
 
     /**
-     * Update the specified resource in storage.
+     * Actualizar producto
      */
     public function update(Request $request, Producto $producto)
     {
-        $request->validate([
+        $rules = [
             'nombre_producto' => ['required', 'string', 'max:255'],
             'marca_producto' => ['nullable', 'string', 'max:255'],
             'codigo_producto' => [
@@ -76,45 +70,44 @@ class ProductoController extends Controller
             ],
             'categoria_id' => ['required', 'exists:categorias,id'],
             'precio_compra_producto' => ['required', 'numeric', 'min:0'],
-            'imagen_producto' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'],
-        ]);
+        ];
 
-        $imagenPath = $producto->imagen_producto;
         if ($request->hasFile('imagen_producto')) {
-            if ($producto->imagen_producto) {
+            $rules['imagen_producto'] = ['image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'];
+        }
+
+        $validated = $request->validate($rules);
+
+        // Imagen actual o default
+        $imagenPath = $producto->imagen_producto ?? 'productos/producto-default.png';
+
+        // Subida nueva imagen
+        if ($request->hasFile('imagen_producto')) {
+            if ($producto->imagen_producto && $producto->imagen_producto !== 'productos/producto-default.png') {
                 Storage::disk('public')->delete($producto->imagen_producto);
             }
             $imagenPath = $request->file('imagen_producto')->store('productos', 'public');
         }
 
-        $producto->update([
-            'nombre_producto' => $request->nombre_producto,
-            'marca_producto' => $request->marca_producto,
-            'codigo_producto' => $request->codigo_producto,
-            'categoria_id' => $request->categoria_id,
-            'precio_compra_producto' => $request->precio_compra_producto,
+        $producto->update(array_merge($validated, [
             'imagen_producto' => $imagenPath,
-        ]);
+        ]));
 
-        // No se actualiza la cantidad aquí
-
-        return redirect()->route('productos.index')->with('success', 'Producto actualizado exitosamente.');
+        return redirect()->route('productos.index')->with('success', 'Producto actualizado correctamente.');
     }
 
     /**
-     * Remove the specified resource from storage.
+     * Eliminar producto
      */
     public function destroy(Producto $producto)
     {
-        if ($producto->imagen_producto) {
+        if ($producto->imagen_producto && $producto->imagen_producto !== 'productos/producto-default.png') {
             Storage::disk('public')->delete($producto->imagen_producto);
         }
 
-        // Eliminar relaciones en almacen_producto
         $producto->almacenes()->detach();
-
         $producto->delete();
 
-        return redirect()->route('productos.index')->with('success', 'Producto eliminado exitosamente.');
+        return redirect()->route('productos.index')->with('success', 'Producto eliminado correctamente.');
     }
 }

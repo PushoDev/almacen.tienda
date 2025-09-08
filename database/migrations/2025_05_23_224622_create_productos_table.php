@@ -15,15 +15,17 @@ return new class extends Migration
             $table->id();
             $table->string('nombre_producto');
             $table->string('marca_producto')->nullable();
-            $table->string('codigo_producto')->nullable(); // Este es para code barra
+            $table->string('codigo_producto')->nullable()->unique(); // código de barras opcional
             $table->unsignedBigInteger('categoria_id');
-            $table->foreign('categoria_id')->references('id')->on('categorias')->onUpdate('cascade')->onDelete('cascade');
-            $table->decimal('precio_compra_producto', 8, 2);
-            $table->integer('cantidad_producto');
-            $table->string('imagen_producto')->nullable();
+            $table->foreign('categoria_id')
+                ->references('id')->on('categorias')
+                ->onUpdate('cascade')
+                ->onDelete('cascade');
+            $table->decimal('precio_compra_producto', 10, 2)->default(0);
+            $table->integer('cantidad_producto')->default(0);
+            $table->string('imagen_producto')->nullable()->default('productos/producto-default.png');
             $table->timestamps();
 
-            // Indice de los Productos
             $table->index(['codigo_producto']);
         });
     }
