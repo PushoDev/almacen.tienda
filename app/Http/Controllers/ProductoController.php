@@ -35,64 +35,7 @@ class ProductoController extends Controller
         ]);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        return Inertia::render('Productos/Create', [
-            'categorias' => Categoria::all(),
-        ]);
-    }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
-    {
-        $request->validate([
-            'nombre_producto' => ['required', 'string', 'max:255'],
-            'marca_producto' => ['nullable', 'string', 'max:255'],
-            'codigo_producto' => ['nullable', 'string', 'unique:productos,codigo_producto'],
-            'categoria_id' => ['required', 'exists:categorias,id'],
-            'precio_compra_producto' => ['required', 'numeric', 'min:0'],
-            'cantidad_producto' => ['required', 'integer', 'min:0'],
-            'imagen_producto' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'],
-        ]);
-
-        $imagenPath = null;
-        if ($request->hasFile('imagen_producto')) {
-            $imagenPath = $request->file('imagen_producto')->store('productos', 'public');
-        }
-
-        $producto = Producto::create([
-            'nombre_producto' => $request->nombre_producto,
-            'marca_producto' => $request->marca_producto,
-            'codigo_producto' => $request->codigo_producto,
-            'categoria_id' => $request->categoria_id,
-            'precio_compra_producto' => $request->precio_compra_producto,
-            'imagen_producto' => $imagenPath,
-        ]);
-
-        // Obtener o crear el almacén por defecto
-        $almacen = Almacen::where('nombre_almacen', 'Almacén de Conservas')->first();
-        if (!$almacen) {
-            $almacen = Almacen::create([
-                'nombre_almacen' => 'Almacén de Conservas',
-                'telefono_almacen' => 'N/A',
-                'correo_almacen' => 'almacen@default.com',
-                'provincia_almacen' => 'Default',
-                'ciudad_almacen' => 'Default',
-            ]);
-        }
-
-        // Asociar el producto al almacén con la cantidad
-        $almacen->productos()->attach($producto->id, [
-            'cantidad' => $request->cantidad_producto,
-        ]);
-
-        return redirect()->route('productos.index')->with('success', 'Producto creado exitosamente.');
-    }
 
     /**
      * Display the specified resource.
