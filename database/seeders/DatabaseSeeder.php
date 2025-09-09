@@ -17,18 +17,61 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
+        // Usuarios
         User::factory()->create([
             'name' => 'Luis Alberto',
-            'email' => 'pushodevs@example.com',
+            'email' => 'pushodevs@posglorietashop.com',
             'password' => Hash::make('guisa290**'),
             'role' => 'admin',
+        ]);
+        // Nuevos usuarios administradores
+        User::factory()->create([
+            'name' => 'Lazaro',
+            'email' => 'lazaro2025@posglorietashop.com',
+            'password' => Hash::make('lazaro2025'),
+            'role' => 'admin',
+        ]);
+        User::factory()->create([
+            'name' => 'Angel',
+            'email' => 'angel2025@posglorietashop.com',
+            'password' => Hash::make('angel2025'),
+            'role' => 'admin',
+        ]);
+        User::factory()->create([
+            'name' => 'Aylin',
+            'email' => 'aylin2025@posglorietashop.com',
+            'password' => Hash::make('aylin2025'),
+            'role' => 'admin',
+        ]);
+        User::factory()->create([
+            'name' => 'Aylen',
+            'email' => 'aylen2025@posglorietashop.com',
+            'password' => Hash::make('aylen2025'),
+            'role' => 'admin',
+        ]);
+        // Usuarios Vendedores
+        User::factory()->create([
+            'name' => 'Aismaray',
+            'email' => 'icha8506@posglorietashop.com',
+            'password' => Hash::make('icha8506'),
+            'role' => 'vendedor',
+        ]);
+        User::factory()->create([
+            'name' => 'Manuel',
+            'email' => 'manuel2025@posglorietashop.com',
+            'password' => Hash::make('manuel2025'),
+            'role' => 'vendedor',
+        ]);
+        User::factory()->create([
+            'name' => 'Yusi',
+            'email' => 'yusi2025@posglorietashop.com',
+            'password' => Hash::make('yusi2025'),
+            'role' => 'vendedor',
         ]);
 
         // Crear el almacén predeterminado
         Almacen::firstOrCreate(
-            ['nombre_almacen' => 'ALMACEN CONSERVA'],
+            ['nombre_almacen' => 'ALMACEN ROTURAS'],
             [
                 'tipo_almacen' => 'almacen',
                 'telefono_almacen' => '+53 5 5423017',
@@ -38,6 +81,61 @@ class DatabaseSeeder extends Seeder
                 'notas_almacen' => 'Este es el almacén predeterminado para roturas u otras funciones.',
             ]
         );
+        // Nuevos almacenes
+        $almacenes = [
+            [
+                'nombre_almacen' => 'ALMACEN MANZANILLO',
+                'tipo_almacen' => 'almacen',
+                'telefono_almacen' => '+53 5 1234567',
+                'correo_almacen' => 'manzanillo@glorietashop.com',
+                'provincia_almacen' => 'Granma',
+                'ciudad_almacen' => 'Manzanillo',
+                'notas_almacen' => 'Almacén principal de Manzanillo',
+            ],
+            [
+                'nombre_almacen' => 'TIENDA MANZANILLO',
+                'tipo_almacen' => 'punto_venta',
+                'telefono_almacen' => '+53 5 7654321',
+                'correo_almacen' => 'tiendamanzanillo@glorietashop.com',
+                'provincia_almacen' => 'Granma',
+                'ciudad_almacen' => 'Manzanillo',
+                'notas_almacen' => 'Punto de venta en Manzanillo',
+            ],
+            [
+                'nombre_almacen' => 'ALMACEN BEJUCAL',
+                'tipo_almacen' => 'almacen',
+                'telefono_almacen' => '+53 5 5555555',
+                'correo_almacen' => 'quivican@glorieta.com',
+                'provincia_almacen' => 'Mayabeque',
+                'ciudad_almacen' => 'Quivicán',
+                'notas_almacen' => 'Almacén regional de Quivicán',
+            ],
+            [
+                'nombre_almacen' => 'TIENDA QUIVICAN',
+                'tipo_almacen' => 'punto_venta',
+                'telefono_almacen' => '+53 5 5555556',
+                'correo_almacen' => 'quivican@glorietashop.com',
+                'provincia_almacen' => 'Mayabeque',
+                'ciudad_almacen' => 'Quivicán',
+                'notas_almacen' => 'Punto de Venta en Quivicán',
+            ],
+            [
+                'nombre_almacen' => 'TIENDA FLORIDA',
+                'tipo_almacen' => 'punto_venta',
+                'telefono_almacen' => '+53 5 5555557',
+                'correo_almacen' => 'tendaflorida@glorietashop.com',
+                'provincia_almacen' => 'Camaguey',
+                'ciudad_almacen' => 'Florida',
+                'notas_almacen' => 'Punto de Venta en Florida',
+            ]
+        ];
+
+        foreach ($almacenes as $almacen) {
+            Almacen::firstOrCreate(
+                ['nombre_almacen' => $almacen['nombre_almacen']],
+                $almacen
+            );
+        }
 
         // Tasa de Cambio Inicial
         DB::table('tasa_cambios')->insert([

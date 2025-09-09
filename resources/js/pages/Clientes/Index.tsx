@@ -70,7 +70,7 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
     // Filtros y Paginación
     const [filtroTipo, setFiltroTipo] = useState<string>('');
     const [paginaActual, setPaginaActual] = useState(1);
-    const elementosPorPagina = 8; // Cambia esto al número que desees
+    const elementosPorPagina = 10; // Cambia esto al número que desees
     const indiceUltimoElemento = paginaActual * elementosPorPagina;
     const indicePrimerElemento = indiceUltimoElemento - elementosPorPagina;
 

@@ -54,7 +54,7 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
 
     // Paginación
     const [paginaActual, setPaginaActual] = useState(1);
-    const elementosPorPagina = 8; // Cambiado a 8 elementos por página
+    const elementosPorPagina = 25; // Cambiado a 8 elementos por página
     const indiceUltimoElemento = paginaActual * elementosPorPagina;
     const indicePrimerElemento = indiceUltimoElemento - elementosPorPagina;
 
