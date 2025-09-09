@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\User;
 use App\Models\Almacen;
+use App\Models\Cliente;
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -200,5 +201,46 @@ class DatabaseSeeder extends Seeder
                 'updated_at' => now(),
             ],
         ]);
+
+        // Clientes Asociados al Sistema por default
+        $clientes = [
+            [
+                'nombre_cliente' => 'CLIENTE ASOCIADO MANZANILLO',
+                'tipo_cliente' => 'asociado',
+                'deuda_pago_cliente' => 0,
+                'telefono_cliente' => '+53 5 1111111',
+                'direccion_cliente' => 'Dirección Manzanillo',
+                'ciudad_cliente' => 'Manzanillo',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'nombre_cliente' => 'CLIENTE ASOCIADO QUIVICAN',
+                'tipo_cliente' => 'asociado',
+                'deuda_pago_cliente' => 0,
+                'telefono_cliente' => '+53 5 2222222',
+                'direccion_cliente' => 'Dirección Quivicán',
+                'ciudad_cliente' => 'Quivicán',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'nombre_cliente' => 'CLIENTE ASOCIADO FLORIDA',
+                'tipo_cliente' => 'asociado',
+                'deuda_pago_cliente' => 0,
+                'telefono_cliente' => '+53 5 3333333',
+                'direccion_cliente' => 'Dirección Florida',
+                'ciudad_cliente' => 'Florida',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
+        ];
+
+        foreach ($clientes as $cliente) {
+            Cliente::firstOrCreate(
+                ['nombre_cliente' => $cliente['nombre_cliente']],
+                $cliente
+            );
+        }
     }
 }
