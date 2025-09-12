@@ -19,13 +19,14 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 export default function EditarProductosPage({ producto, categorias }: { producto: ProductoProps; categorias: CategoriasProps[] }) {
     const { data, setData, post, errors, processing } = useForm({
-        _method: 'put', // Agrega el método PUT aquí, Inertia lo manejará por ti.
+        _method: 'put',
         nombre_producto: producto.nombre_producto,
         marca_producto: producto.marca_producto || '',
         codigo_producto: producto.codigo_producto || '',
         categoria_id: producto.categoria_id.toString(),
         precio_compra_producto: producto.precio_compra_producto,
         imagen_producto: null as File | null,
+        // Eliminamos 'cantidad_producto' del estado de Inertia ya que no es un campo editable.
     });
 
     const [preview, setPreview] = useState<string | null>(producto.imagen_url ?? null);
@@ -33,8 +34,6 @@ export default function EditarProductosPage({ producto, categorias }: { producto
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
 
-        // **Cambio clave:** No uses FormData manualmente.
-        // Inertia.js lo maneja automáticamente cuando envías un archivo.
         post(route('productos.update', { producto: producto.id }), {
             onSuccess: () => toast.success('Producto actualizado correctamente'),
             onError: () => toast.error('Error al actualizar el producto'),
@@ -85,6 +84,30 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                                     />
                                     <InputError message={errors.marca_producto} />
                                 </div>
+
+                                {/* Campo de Precio de Compra no editable */}
+                                <div>
+                                    <Label htmlFor="precio_compra_producto">Precio de Compra:</Label>
+                                    <Input
+                                        id="precio_compra_producto"
+                                        type="number"
+                                        value={data.precio_compra_producto}
+                                        onChange={() => {}} // No permitimos cambios
+                                        disabled
+                                    />
+                                    <InputError message={errors.precio_compra_producto} />
+                                </div>
+
+                                {/* Campo de Cantidad no editable */}
+                                <div>
+                                    <Label htmlFor="cantidad_producto">Cantidad:</Label>
+                                    <Input
+                                        id="cantidad_producto"
+                                        type="text" // Cambiamos a 'text' para que se vea como un campo de texto normal
+                                        value={(producto.almacenes ?? []).reduce((total, almacen) => total + almacen.pivot.cantidad, 0)}
+                                        disabled
+                                    />
+                                </div>
                             </div>
 
                             {/* Columna 2 */}
@@ -115,16 +138,6 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                                         placeholder="Código del Producto"
                                     />
                                     <InputError message={errors.codigo_producto} />
-                                </div>
-
-                                <div>
-                                    <Label htmlFor="cantidad_producto">Cantidad:</Label>
-                                    <Input
-                                        id="cantidad_producto"
-                                        type="number"
-                                        value={(producto.almacenes ?? []).reduce((total, almacen) => total + almacen.pivot.cantidad, 0)}
-                                        readOnly
-                                    />
                                 </div>
 
                                 <div>
