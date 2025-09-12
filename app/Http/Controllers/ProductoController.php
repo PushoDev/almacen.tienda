@@ -26,7 +26,7 @@ class ProductoController extends Controller
                 'categoria' => $producto->categoria?->nombre_categoria,
                 'precio_compra_producto' => (float) $producto->precio_compra_producto,
                 'cantidad_producto' => $producto->cantidad_total,
-                'imagen_url' => $producto->imagen_url,
+                'imagen_url' => $producto->imagen_url, // siempre usar accessor
             ]),
         ]);
     }
@@ -40,7 +40,7 @@ class ProductoController extends Controller
 
         return Inertia::render('Productos/Show', [
             'producto' => $producto,
-            'almacenes' => $producto->getAlmacenesConCantidad(),
+            'almacenes' => $producto->almacenes, // Usar directamente la relación cargada
         ]);
     }
 
@@ -50,7 +50,7 @@ class ProductoController extends Controller
     public function edit(Producto $producto)
     {
         return Inertia::render('Productos/Edit', [
-            'producto' => $producto,
+            'producto' => $producto->load('almacenes'),
             'categorias' => Categoria::all(),
         ]);
     }
@@ -60,7 +60,8 @@ class ProductoController extends Controller
      */
     public function update(Request $request, Producto $producto)
     {
-        $rules = [
+        // 1. Validar la petición
+        $validatedData = $request->validate([
             'nombre_producto' => ['required', 'string', 'max:255'],
             'marca_producto' => ['nullable', 'string', 'max:255'],
             'codigo_producto' => [
@@ -70,26 +71,24 @@ class ProductoController extends Controller
             ],
             'categoria_id' => ['required', 'exists:categorias,id'],
             'precio_compra_producto' => ['required', 'numeric', 'min:0'],
-        ];
+            'imagen_producto' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'],
+        ]);
 
+        // 2. Manejar la imagen
+        $imagenPath = $producto->imagen_producto; // Mantener la imagen actual por defecto
+
+        // Si se subió una nueva imagen
         if ($request->hasFile('imagen_producto')) {
-            $rules['imagen_producto'] = ['image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'];
-        }
-
-        $validated = $request->validate($rules);
-
-        // Imagen actual o default
-        $imagenPath = $producto->imagen_producto ?? 'productos/producto-default.png';
-
-        // Subida nueva imagen
-        if ($request->hasFile('imagen_producto')) {
-            if ($producto->imagen_producto && $producto->imagen_producto !== 'productos/producto-default.png') {
-                Storage::disk('public')->delete($producto->imagen_producto);
+            // Eliminar la imagen anterior si no es la por defecto
+            if ($imagenPath && $imagenPath !== 'productos/producto-default.png') {
+                Storage::disk('public')->delete($imagenPath);
             }
+            // Guardar la nueva imagen
             $imagenPath = $request->file('imagen_producto')->store('productos', 'public');
         }
 
-        $producto->update(array_merge($validated, [
+        // 3. Actualizar los datos del producto
+        $producto->update(array_merge($validatedData, [
             'imagen_producto' => $imagenPath,
         ]));
 

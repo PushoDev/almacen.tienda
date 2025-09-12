@@ -8,56 +8,36 @@ import AppLayout from '@/layouts/app-layout';
 import { CategoriasProps, ProductoProps, type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
 import { FileBox } from 'lucide-react';
+import { useState } from 'react';
 import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Resumen General',
-        href: '/dashboard',
-    },
-    {
-        title: 'Productos',
-        href: '/productos',
-    },
-    {
-        title: 'Editar Producto',
-        href: '#',
-    },
+    { title: 'Resumen General', href: '/dashboard' },
+    { title: 'Productos', href: '/productos' },
+    { title: 'Editar Producto', href: '#' },
 ];
 
 export default function EditarProductosPage({ producto, categorias }: { producto: ProductoProps; categorias: CategoriasProps[] }) {
-    // Manejo del formulario con useForm
-    const { data, setData, put, errors, processing } = useForm({
+    const { data, setData, post, errors, processing } = useForm({
+        _method: 'put', // Agrega el método PUT aquí, Inertia lo manejará por ti.
         nombre_producto: producto.nombre_producto,
         marca_producto: producto.marca_producto || '',
         codigo_producto: producto.codigo_producto || '',
-        categoria_id: producto.categoria_id.toString(), // ID de la categoría seleccionada
+        categoria_id: producto.categoria_id.toString(),
         precio_compra_producto: producto.precio_compra_producto,
         imagen_producto: null as File | null,
     });
 
-    // Función para enviar el formulario
+    const [preview, setPreview] = useState<string | null>(producto.imagen_url ?? null);
+
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
 
-        const formData = new FormData();
-        formData.append('nombre_producto', data.nombre_producto);
-        formData.append('marca_producto', data.marca_producto);
-        formData.append('codigo_producto', data.codigo_producto);
-        formData.append('categoria_id', data.categoria_id);
-        formData.append('precio_compra_producto', data.precio_compra_producto.toString());
-        if (data.imagen_producto) {
-            formData.append('imagen_producto', data.imagen_producto);
-        }
-
-        put(route('productos.update', { producto: producto.id }), {
-            data: formData,
-            onSuccess: () => {
-                toast.success('Producto actualizado correctamente');
-            },
-            onError: () => {
-                alert('Error al actualizar el producto');
-            },
+        // **Cambio clave:** No uses FormData manualmente.
+        // Inertia.js lo maneja automáticamente cuando envías un archivo.
+        post(route('productos.update', { producto: producto.id }), {
+            onSuccess: () => toast.success('Producto actualizado correctamente'),
+            onError: () => toast.error('Error al actualizar el producto'),
         });
     };
 
@@ -78,55 +58,41 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                     />
                 </div>
 
-                {/* Formulario de Edición */}
+                {/* Formulario */}
                 <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
                     <form onSubmit={submit} className="space-y-6 p-6">
-                        {/* Contenedor de dos columnas */}
                         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                             {/* Columna 1 */}
                             <div className="space-y-4">
-                                {/* Campo Nombre del Producto */}
                                 <div>
-                                    <Label htmlFor="nombre_producto" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        Nombre del Producto:
-                                    </Label>
+                                    <Label htmlFor="nombre_producto">Nombre del Producto:</Label>
                                     <Input
                                         id="nombre_producto"
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                         value={data.nombre_producto}
                                         onChange={(e) => setData('nombre_producto', e.target.value)}
-                                        autoComplete="nombre_producto"
                                         placeholder="Nombre del Producto"
                                     />
-                                    <InputError className="mt-2" message={errors.nombre_producto} />
+                                    <InputError message={errors.nombre_producto} />
                                 </div>
 
-                                {/* Campo Marca del Producto */}
                                 <div>
-                                    <Label htmlFor="marca_producto" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        Marca del Producto:
-                                    </Label>
+                                    <Label htmlFor="marca_producto">Marca del Producto:</Label>
                                     <Input
                                         id="marca_producto"
-                                        className="mt-1 block w-full rounded-md border-gray-300 uppercase shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                         value={data.marca_producto}
                                         onChange={(e) => setData('marca_producto', e.target.value)}
-                                        autoComplete="marca_producto"
                                         placeholder="Marca del Producto"
                                     />
-                                    <InputError className="mt-2" message={errors.marca_producto} />
+                                    <InputError message={errors.marca_producto} />
                                 </div>
                             </div>
 
                             {/* Columna 2 */}
                             <div className="space-y-4">
-                                {/* Campo Categoría */}
                                 <div>
-                                    <Label htmlFor="categoria_id" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        Categoría:
-                                    </Label>
+                                    <Label htmlFor="categoria_id">Categoría:</Label>
                                     <Select value={data.categoria_id} onValueChange={(value) => setData('categoria_id', value)}>
-                                        <SelectTrigger className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                        <SelectTrigger>
                                             <SelectValue placeholder="Selecciona una categoría" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -137,77 +103,62 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                                             ))}
                                         </SelectContent>
                                     </Select>
-                                    <InputError className="mt-2" message={errors.categoria_id} />
+                                    <InputError message={errors.categoria_id} />
                                 </div>
 
-                                {/* Campo Código del Producto */}
                                 <div>
-                                    <Label htmlFor="codigo_producto" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        Código del Producto:
-                                    </Label>
+                                    <Label htmlFor="codigo_producto">Código del Producto:</Label>
                                     <Input
                                         id="codigo_producto"
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                         value={data.codigo_producto}
                                         onChange={(e) => setData('codigo_producto', e.target.value)}
-                                        autoComplete="codigo_producto"
                                         placeholder="Código del Producto"
                                     />
-                                    <InputError className="mt-2" message={errors.codigo_producto} />
+                                    <InputError message={errors.codigo_producto} />
                                 </div>
 
-                                {/* Campo Cantidad (solo lectura) */}
                                 <div>
-                                    <Label htmlFor="cantidad_producto" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        Cantidad:
-                                    </Label>
+                                    <Label htmlFor="cantidad_producto">Cantidad:</Label>
                                     <Input
                                         id="cantidad_producto"
                                         type="number"
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                        value={producto.almacenes.reduce((total, almacen) => total + almacen.pivot.cantidad, 0)} // Mostrar cantidad total
-                                        readOnly // Campo solo de lectura
+                                        value={(producto.almacenes ?? []).reduce((total, almacen) => total + almacen.pivot.cantidad, 0)}
+                                        readOnly
                                     />
                                 </div>
 
-                                {/* Campo Imagen */}
                                 <div>
-                                    <Label htmlFor="imagen_producto" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        Imagen del Producto:
-                                    </Label>
+                                    <Label htmlFor="imagen_producto">Imagen del Producto:</Label>
                                     <Input
                                         id="imagen_producto"
                                         type="file"
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                        onChange={(e) => setData('imagen_producto', e.target.files ? e.target.files[0] : null)}
+                                        accept="image/*"
+                                        onChange={(e) => {
+                                            const file = e.target.files ? e.target.files[0] : null;
+                                            setData('imagen_producto', file);
+                                            if (file) {
+                                                setPreview(URL.createObjectURL(file));
+                                            }
+                                        }}
                                     />
-                                    <InputError className="mt-2" message={errors.imagen_producto} />
-                                    {producto.imagen_producto && (
+                                    <InputError message={errors.imagen_producto} />
+                                    {preview && (
                                         <div className="mt-2">
-                                            <img
-                                                src={`/storage/${producto.imagen_producto}`}
-                                                alt={producto.nombre_producto}
-                                                className="h-20 w-20 rounded-full object-cover"
-                                            />
+                                            <img src={preview} alt={data.nombre_producto} className="h-20 w-20 rounded-full object-cover" />
                                         </div>
                                     )}
                                 </div>
                             </div>
                         </div>
 
-                        {/* Botón Actualizar */}
                         <div className="flex justify-end">
-                            <Button
-                                type="submit"
-                                disabled={processing}
-                                className="w-full rounded-md bg-indigo-600 px-4 py-2 font-semibold text-white transition duration-300 ease-in-out hover:bg-indigo-700 md:w-auto"
-                            >
+                            <Button type="submit" disabled={processing}>
                                 {processing ? 'Actualizando...' : 'Actualizar Producto'}
                             </Button>
                         </div>
                     </form>
                 </div>
-                <Toaster position="top-center" className="bg-emerald-600 text-emerald-950" />
+                <Toaster position="top-center" />
             </div>
         </AppLayout>
     );
