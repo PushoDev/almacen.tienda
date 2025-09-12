@@ -23,7 +23,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function ShowPageProductos({ producto }: { producto: ProductoProps }) {
+export default function ShowPageProductos({ producto, precio_venta }: { producto: ProductoProps; precio_venta: number | null }) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Productos" />
@@ -102,6 +102,10 @@ export default function ShowPageProductos({ producto }: { producto: ProductoProp
                                     <p className="font-medium">${producto.precio_compra_producto}</p>
                                 </div>
                                 <div>
+                                    <p className="text-muted-foreground text-sm">Precio de Venta</p>
+                                    <p className="font-medium">{precio_venta !== null ? `$ ${precio_venta}` : 'No Asignado'}</p>
+                                </div>
+                                <div>
                                     <p className="text-muted-foreground text-sm">Stock</p>
                                     <p className="font-medium">{producto.cantidad_producto} unidades</p>
                                 </div>
@@ -150,7 +154,7 @@ export default function ShowPageProductos({ producto }: { producto: ProductoProp
                                                 <Separator orientation="vertical" />
                                                 <div>Precio Venta:</div>
                                                 <p className="text-muted-foreground">
-                                                    <span className="font-bold">$ 0.00</span>
+                                                    <span className="font-bold">{precio_venta !== null ? `$ ${precio_venta}` : 'No Asignado'}</span>
                                                 </p>
                                                 <Separator orientation="vertical" />
                                                 <div>Ventas Realizadas:</div>

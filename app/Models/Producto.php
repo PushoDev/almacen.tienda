@@ -50,6 +50,18 @@ class Producto extends Model
             ->withTimestamps();
     }
 
+    /**
+     * ✅ Nueva relación para conectar Productos con Vendedores (Usuarios) a través de la tabla pivote.
+     * Esta relación es la que faltaba y causaba el error.
+     */
+    public function vendedores()
+    {
+        return $this->belongsToMany(User::class, 'producto_vendedors')
+            ->using(ProductoVendedor::class) // Especificamos el modelo de la tabla pivote
+            ->withPivot('precio_venta', 'venta_ganancia') // Incluimos los campos extra de la tabla pivote
+            ->withTimestamps();
+    }
+
     // 🔥 Cantidad total en todos los almacenes
     public function getCantidadTotalAttribute()
     {

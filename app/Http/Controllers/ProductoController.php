@@ -7,6 +7,7 @@ use App\Models\Categoria;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Auth;
 
 class ProductoController extends Controller
 {
@@ -15,7 +16,12 @@ class ProductoController extends Controller
      */
     public function index()
     {
-        $productos = Producto::with('categoria', 'almacenes')->get();
+        $user = Auth::user();
+
+        $productos = Producto::with('categoria', 'almacenes')
+            ->with(['vendedores' => function ($query) use ($user) {
+                $query->where('users.id', $user->id);
+            }])->get();
 
         return Inertia::render('Productos/Index', [
             'productos' => $productos->map(fn($producto) => [
@@ -26,7 +32,8 @@ class ProductoController extends Controller
                 'categoria' => $producto->categoria?->nombre_categoria,
                 'precio_compra_producto' => (float) $producto->precio_compra_producto,
                 'cantidad_producto' => $producto->cantidad_total,
-                'imagen_url' => $producto->imagen_url, // siempre usar accessor
+                'imagen_url' => $producto->imagen_url,
+                'precio_venta' => $producto->vendedores->first()->pivot->precio_venta ?? null,
             ]),
         ]);
     }
@@ -36,11 +43,19 @@ class ProductoController extends Controller
      */
     public function show(Producto $producto)
     {
-        $producto->load(['categoria', 'almacenes']);
+        $user = Auth::user();
+
+        $producto->load(['categoria', 'almacenes', 'vendedores' => function ($query) use ($user) {
+            $query->where('users.id', $user->id)
+                ->select('users.id', 'producto_vendedors.precio_venta');
+        }]);
+
+        $precioVenta = $producto->vendedores->first()->pivot->precio_venta ?? null;
 
         return Inertia::render('Productos/Show', [
             'producto' => $producto,
-            'almacenes' => $producto->almacenes, // Usar directamente la relación cargada
+            'almacenes' => $producto->almacenes,
+            'precio_venta' => $precioVenta,
         ]);
     }
 
@@ -75,15 +90,12 @@ class ProductoController extends Controller
         ]);
 
         // 2. Manejar la imagen
-        $imagenPath = $producto->imagen_producto; // Mantener la imagen actual por defecto
+        $imagenPath = $producto->imagen_producto;
 
-        // Si se subió una nueva imagen
         if ($request->hasFile('imagen_producto')) {
-            // Eliminar la imagen anterior si no es la por defecto
             if ($imagenPath && $imagenPath !== 'productos/producto-default.png') {
                 Storage::disk('public')->delete($imagenPath);
             }
-            // Guardar la nueva imagen
             $imagenPath = $request->file('imagen_producto')->store('productos', 'public');
         }
 
