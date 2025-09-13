@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Compra;
+use App\Models\Venta;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Carbon;
 
 class ReporteController extends Controller
 {
@@ -185,54 +188,83 @@ class ReporteController extends Controller
     /**
      * Obtiene datos de compras y ventas para un gráfico en un rango de tiempo.
      *
-     * @param  \Illuminate\Http\Request  $request
+     * @param \Illuminate\Http\Request $request
      * @return \Illuminate\Http\JsonResponse
      */
     public function getComprasVentasData(Request $request)
     {
         // Define el rango de tiempo. Por defecto, 90 días.
         $timeRange = $request->query('timeRange', '90d');
-        $days = (int) substr($timeRange, 0, -1);
-        $startDate = now()->subDays($days);
 
-        // Subconsulta para ventas
-        $ventasQuery = DB::table('ventas')
-            ->select(DB::raw('DATE(fecha_venta) as date'), DB::raw('SUM(total_venta) as total_ventas'))
-            ->whereDate('fecha_venta', '>=', $startDate)
-            ->groupBy('date');
+        // Lógica para filtrar por un solo día o un rango
+        if ($timeRange === '1d') {
+            $startDate = Carbon::now()->startOfDay();
+            $endDate = Carbon::now()->endOfDay();
+        } elseif ($timeRange === '2d') {
+            $startDate = Carbon::now()->subDay()->startOfDay();
+            $endDate = Carbon::now()->subDay()->endOfDay();
+        } elseif ($timeRange === '3d') {
+            $startDate = Carbon::now()->subDays(2)->startOfDay();
+            $endDate = Carbon::now()->subDays(2)->endOfDay();
+        } else {
+            $days = (int) substr($timeRange, 0, -1);
+            $startDate = Carbon::now()->subDays($days);
+            $endDate = Carbon::now()->endOfDay();
+        }
 
-        // Subconsulta para compras
-        $comprasQuery = DB::table('compras')
-            ->select(DB::raw('DATE(fecha_compra) as date'), DB::raw('SUM(total_compra) as total_compras'))
-            ->whereDate('fecha_compra', '>=', $startDate)
-            ->groupBy('date');
-
-        // Combinar ambas consultas para obtener un solo conjunto de datos
-        // Se usa RIGHT JOIN para incluir días con compras pero sin ventas (o viceversa)
-        $data = DB::query()
-            ->fromSub($ventasQuery, 'ventas')
-            ->rightJoinSub($comprasQuery, 'compras', 'ventas.date', '=', 'compras.date')
-            ->select(
-                DB::raw("COALESCE(ventas.date, compras.date) as date"),
-                DB::raw("COALESCE(ventas.total_ventas, 0) as ventas"),
-                DB::raw("COALESCE(compras.total_compras, 0) as compras")
-            )
-            ->union(
-                DB::query()
-                    ->fromSub($comprasQuery, 'compras')
-                    ->rightJoinSub($ventasQuery, 'ventas', 'compras.date', '=', 'ventas.date')
-                    ->select(
-                        DB::raw("COALESCE(compras.date, ventas.date) as date"),
-                        DB::raw("COALESCE(ventas.total_ventas, 0) as ventas"),
-                        DB::raw("COALESCE(compras.total_compras, 0) as compras")
-                    )
-            )
-            ->orderBy('date')
+        // Consulta de compras
+        $compras = Compra::select(
+            DB::raw('DATE(fecha_compra) as date'),
+            DB::raw('SUM(total_compra) as total')
+        )
+            ->whereBetween('fecha_compra', [$startDate, $endDate])
+            ->groupBy('date')
             ->get();
 
-        // Asegurar que solo haya un registro por fecha en caso de duplicados
-        $uniqueData = $data->unique('date')->values()->all();
+        // Consulta de ventas
+        $ventas = Venta::select(
+            DB::raw('DATE(created_at) as date'),
+            DB::raw('SUM(total) as total')
+        )
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->groupBy('date')
+            ->get();
 
-        return response()->json($uniqueData);
+        // Combinar los resultados de compras y ventas por fecha
+        $combinedData = [];
+        foreach ($compras as $compra) {
+            $date = $compra->date;
+            $combinedData[$date]['compras'] = $compra->total;
+            $combinedData[$date]['ventas'] = 0; // Inicializar ventas a 0
+        }
+
+        foreach ($ventas as $venta) {
+            $date = $venta->date;
+            // Si ya hay una compra para esta fecha, suma las ventas
+            if (isset($combinedData[$date])) {
+                $combinedData[$date]['ventas'] = $venta->total;
+            } else {
+                // Si no hay compras para esta fecha, crear una nueva entrada
+                $combinedData[$date]['compras'] = 0;
+                $combinedData[$date]['ventas'] = $venta->total;
+            }
+        }
+
+        // Convertir el array asociativo a una lista de objetos para el gráfico
+        $formattedData = [];
+        foreach ($combinedData as $date => $values) {
+            $formattedData[] = [
+                'date' => $date,
+                'compras' => $values['compras'] ?? 0,
+                'ventas' => $values['ventas'] ?? 0,
+            ];
+        }
+
+        // Asegurar que los datos estén ordenados por fecha
+        usort($formattedData, function ($a, $b) {
+            return strtotime($a['date']) - strtotime($b['date']);
+        });
+
+        return response()->json($formattedData);
     }
 }
