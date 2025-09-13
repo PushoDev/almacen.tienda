@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ReporteController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\AdminController;
@@ -17,6 +18,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('dashboard', [AdminController::class, 'index'])->name('dashboard');
         Route::post('dashboard/update-tasa', [AdminController::class, 'update'])->name('dashboard.update');
         Route::post('dashboard/update-tasa-mlc', [AdminController::class, 'updateMLC'])->name('dashboard.update-mlc');
+        // Reporte Chatjs de Compra y Venta
+        Route::get('/dashboard/chart-data', [ReporteController::class, 'getComprasVentasData'])->name('dashboard.chart.data');
     });
     /**
      * Vendedor

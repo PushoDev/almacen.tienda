@@ -17,6 +17,7 @@ class ReporteController extends Controller
     {
         return Inertia::render('Reportes/Index');
     }
+
     /**
      * Obtener los productos mas comprados.
      */
@@ -38,6 +39,7 @@ class ReporteController extends Controller
             'productos' => $productos,
         ]);
     }
+
     /**
      * Compras por Periodo
      */
@@ -178,5 +180,59 @@ class ReporteController extends Controller
                 'datos' => $datos,
             ]
         );
+    }
+
+    /**
+     * Obtiene datos de compras y ventas para un gráfico en un rango de tiempo.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getComprasVentasData(Request $request)
+    {
+        // Define el rango de tiempo. Por defecto, 90 días.
+        $timeRange = $request->query('timeRange', '90d');
+        $days = (int) substr($timeRange, 0, -1);
+        $startDate = now()->subDays($days);
+
+        // Subconsulta para ventas
+        $ventasQuery = DB::table('ventas')
+            ->select(DB::raw('DATE(fecha_venta) as date'), DB::raw('SUM(total_venta) as total_ventas'))
+            ->whereDate('fecha_venta', '>=', $startDate)
+            ->groupBy('date');
+
+        // Subconsulta para compras
+        $comprasQuery = DB::table('compras')
+            ->select(DB::raw('DATE(fecha_compra) as date'), DB::raw('SUM(total_compra) as total_compras'))
+            ->whereDate('fecha_compra', '>=', $startDate)
+            ->groupBy('date');
+
+        // Combinar ambas consultas para obtener un solo conjunto de datos
+        // Se usa RIGHT JOIN para incluir días con compras pero sin ventas (o viceversa)
+        $data = DB::query()
+            ->fromSub($ventasQuery, 'ventas')
+            ->rightJoinSub($comprasQuery, 'compras', 'ventas.date', '=', 'compras.date')
+            ->select(
+                DB::raw("COALESCE(ventas.date, compras.date) as date"),
+                DB::raw("COALESCE(ventas.total_ventas, 0) as ventas"),
+                DB::raw("COALESCE(compras.total_compras, 0) as compras")
+            )
+            ->union(
+                DB::query()
+                    ->fromSub($comprasQuery, 'compras')
+                    ->rightJoinSub($ventasQuery, 'ventas', 'compras.date', '=', 'ventas.date')
+                    ->select(
+                        DB::raw("COALESCE(compras.date, ventas.date) as date"),
+                        DB::raw("COALESCE(ventas.total_ventas, 0) as ventas"),
+                        DB::raw("COALESCE(compras.total_compras, 0) as compras")
+                    )
+            )
+            ->orderBy('date')
+            ->get();
+
+        // Asegurar que solo haya un registro por fecha en caso de duplicados
+        $uniqueData = $data->unique('date')->values()->all();
+
+        return response()->json($uniqueData);
     }
 }
