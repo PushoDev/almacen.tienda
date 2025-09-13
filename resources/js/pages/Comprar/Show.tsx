@@ -20,7 +20,6 @@ interface Compra {
     total_compra: number;
     tipo_compra: string;
     proveedor?: Proveedor;
-    almacen?: Almacen;
 }
 
 interface ProductoPivot {
@@ -31,6 +30,7 @@ interface ProductoPivot {
 interface Producto {
     nombre_producto: string;
     pivot: ProductoPivot;
+    almacen: Almacen; // Agregar la propiedad 'almacen' al producto
 }
 
 interface CompraShowProps {
@@ -89,10 +89,6 @@ export default function CompraShow({ compra, productos, success }: CompraShowPro
                                     <p>{compra.proveedor?.nombre_proveedor}</p>
                                 </div>
                                 <div>
-                                    <h3 className="font-semibold">Almacén</h3>
-                                    <p>{compra.almacen?.nombre_almacen}</p>
-                                </div>
-                                <div>
                                     <h3 className="font-semibold">Total</h3>
                                     <p>${compra.total_compra}</p>
                                 </div>
@@ -105,11 +101,19 @@ export default function CompraShow({ compra, productos, success }: CompraShowPro
                             <div className="mt-6">
                                 <h3 className="mb-2 font-semibold">Productos Comprados</h3>
                                 <div className="divide-y rounded-md border">
+                                    <div className="grid grid-cols-5 gap-2 bg-gray-100 p-3 font-semibold dark:bg-gray-800">
+                                        <div>Producto</div>
+                                        <div>Almacén</div>
+                                        <div>Cantidad</div>
+                                        <div>Precio unitario</div>
+                                        <div className="text-right">Importe</div>
+                                    </div>
                                     {productos.map((producto: Producto, index: number) => (
-                                        <div key={index} className="grid grid-cols-4 gap-2 p-3">
+                                        <div key={index} className="grid grid-cols-5 gap-2 p-3">
                                             <div>{producto.nombre_producto}</div>
+                                            <div>{producto.almacen.nombre_almacen}</div>
                                             <div>{producto.pivot.cantidad} unidades</div>
-                                            <div>${producto.pivot.precio} c/u</div>
+                                            <div>${producto.pivot.precio.toFixed(2)} c/u</div>
                                             <div className="text-right font-medium">
                                                 ${(producto.pivot.cantidad * producto.pivot.precio).toFixed(2)}
                                             </div>

@@ -20,6 +20,7 @@ return new class extends Migration
             // Datos específicos de la relación
             $table->integer('cantidad')->default(0); // Cantidad del producto en la compra
             $table->decimal('precio', 8, 2)->default(0); // Precio del producto en la compra
+            $table->foreignId('almacen_id')->nullable()->constrained('almacens'); // Relación con el almacén
 
             // Clave primaria compuesta
             $table->primary(['compra_id', 'producto_id']);

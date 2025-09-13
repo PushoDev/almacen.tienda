@@ -25,7 +25,7 @@ import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
 import { AlmacenProps, CategoriasProps, ClienteProps, CuentaNegocioProps, ProductoComprarProps, ProveedorProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
-import axios from 'axios'; // Importar axios
+import axios from 'axios';
 import { format } from 'date-fns';
 import { BadgeMinus, BookCheck, CalendarIcon, Edit2, HardDriveUpload, PlusIcon, ShoppingBasket, Trash2Icon } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -60,10 +60,10 @@ export default function ComprarPage() {
     const [date, setDate] = useState<Date | undefined>(new Date());
     const [editingProductId, setEditingProductId] = useState<number | null>(null);
     const [clientes, setClientes] = useState<ClienteProps[]>([]);
-    const [activeTab, setActiveTab] = useState<'cuentas' | 'clientes' | 'combinado'>('cuentas');
-    const [loading, setLoading] = useState(true); // Estado de carga
+    const [loading, setLoading] = useState(true);
 
     const [tempFormData, setTempFormData] = useState<Omit<ProductoComprarProps, 'id'>>({
+        almacen_id: '', // Nuevo campo para el almacén
         producto: '',
         categoria: '',
         codigo: '',
@@ -76,8 +76,6 @@ export default function ComprarPage() {
 
     const { data, setData, post, processing } = useForm({
         compra: 'deuda_proveedor',
-        cuenta_id: 1,
-        almacen: '',
         proveedor: '',
         fecha: date ? date.toISOString().split('T')[0] : '',
         pagos: [] as { cuenta_id: number; monto: number }[],
@@ -86,10 +84,8 @@ export default function ComprarPage() {
     });
 
     const [searchProveedor, setSearchProveedor] = useState('');
-    const [searchAlmacen, setSearchAlmacen] = useState('');
     const [searchCategoria, setSearchCategoria] = useState('');
 
-    // Sincronizar productos con data cuando cambien
     useEffect(() => {
         setData('productos', productos);
     }, [productos]);
@@ -123,7 +119,7 @@ export default function ComprarPage() {
         cargarDatos();
     }, []);
 
-    const handleTempInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const handleTempInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
         setTempFormData((prev) => ({
             ...prev,
@@ -131,15 +127,30 @@ export default function ComprarPage() {
         }));
     };
 
+    const handleTempSelectChange = (name: string, value: string) => {
+        setTempFormData((prev) => ({
+            ...prev,
+            [name]: value,
+        }));
+    };
+
     const agregarProducto = () => {
-        if (!tempFormData.producto || !tempFormData.categoria || !tempFormData.codigo || tempFormData.cantidad <= 0 || tempFormData.precio <= 0) {
-            toast.warning('Por favor, completa todos los campos del formulario.');
+        if (
+            !tempFormData.producto ||
+            !tempFormData.categoria ||
+            !tempFormData.codigo ||
+            tempFormData.cantidad <= 0 ||
+            tempFormData.precio <= 0 ||
+            !tempFormData.almacen_id
+        ) {
+            toast.warning('Por favor, completa todos los campos del formulario, incluyendo el almacén de destino.');
             return;
         }
 
         const nuevoProducto: ProductoComprarProps = {
             id: editingProductId || Date.now(),
             ...tempFormData,
+            almacen_id: parseInt(tempFormData.almacen_id as any), // Convertir a número
         };
 
         if (editingProductId) {
@@ -149,7 +160,7 @@ export default function ComprarPage() {
             setProductos((prev) => [...prev, nuevoProducto]);
         }
 
-        setTempFormData({ producto: '', categoria: '', codigo: '', cantidad: 0, precio: 0 });
+        setTempFormData({ almacen_id: '', producto: '', categoria: '', codigo: '', cantidad: 0, precio: 0 });
     };
 
     const eliminarProducto = (id: number) => {
@@ -160,6 +171,7 @@ export default function ComprarPage() {
         const productoParaEditar = productos.find((p) => p.id === id);
         if (productoParaEditar) {
             setTempFormData({
+                almacen_id: productoParaEditar.almacen_id.toString(), // Convertir a string para el Select
                 producto: productoParaEditar.producto,
                 categoria: productoParaEditar.categoria,
                 codigo: productoParaEditar.codigo,
@@ -176,55 +188,46 @@ export default function ComprarPage() {
     };
 
     const filteredProvedors = proveedors.filter((proveedor) => proveedor.nombre_proveedor.toLowerCase().includes(searchProveedor.toLowerCase()));
-    const filteredAlmacens = almacens.filter((almacen) => almacen.nombre_almacen.toLowerCase().includes(searchAlmacen.toLowerCase()));
     const filteredCategorias = categorias.filter((cat) => cat.nombre_categoria.toLowerCase().includes(searchCategoria.toLowerCase()));
 
-    // Función para realizar la compra
     const realizarCompra = () => {
-        // Verificar si hay productos
         if (productos.length === 0) {
             toast.warning('Debe agregar al menos un producto para realizar la compra.');
             return;
         }
 
-        // Verificar que todos los campos necesarios están llenos
-        if (!data.proveedor || !data.almacen || !data.fecha) {
+        if (!data.proveedor || !data.fecha) {
             toast.warning('Por favor, complete todos los campos necesarios.');
             return;
         }
 
-        // Actualizar fecha si es necesario
         if (date) {
-            setData('fecha', date.toISOString().split('T')[0]);
+            setData('fecha', format(date, 'yyyy-MM-dd'));
         }
 
-        // Enviar formulario
         post(route('comprar.store'), {
             preserveScroll: true,
             onSuccess: () => {
-                // Limpiar estados después de una compra exitosa
                 setProductos([]);
                 setTempFormData({
+                    almacen_id: '',
                     producto: '',
                     categoria: '',
                     codigo: '',
                     cantidad: 0,
                     precio: 0,
                 });
-
-                // Mostrar notificación de éxito
                 toast.success('Compra realizada exitosamente!', {
                     description: 'Los productos han sido agregados al inventario.',
                 });
-
-                // No es necesario hacer F5, Inertia maneja la redirección a Comprar/Show
             },
             onError: (errors) => {
-                // Mostrar errores específicos si existen
                 if (errors.error) {
                     toast.error('Error al procesar la compra', {
                         description: errors.error,
                     });
+                } else {
+                    toast.error('Ocurrió un error inesperado al procesar la compra.');
                 }
             },
         });
@@ -234,7 +237,6 @@ export default function ComprarPage() {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Comprar" />
 
-            {/* Indicador de carga */}
             {loading && (
                 <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black">
                     <div className="rounded-lg bg-white p-4 shadow-lg">
@@ -244,7 +246,6 @@ export default function ComprarPage() {
             )}
 
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
-                {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     <HeadingSmall
                         title="Opciones Generales del Sistema"
@@ -259,18 +260,16 @@ export default function ComprarPage() {
 
                 <Separator className="col-span-4" />
 
-                {/* Formulario principal */}
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-sidebar-accent text-center">Nuevos Productos</CardTitle>
                         <CardDescription className="text-center">
-                            A continuación usted va a realizar una compra de Productos, recuerde debe asignar: fecha de compra, almacén destino y
-                            proveedor.
+                            A continuación va a realizar una compra de productos, recuerde asignar: fecha y proveedor.
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
                         <form onSubmit={(e) => e.preventDefault()}>
-                            <div className="grid grid-cols-3 gap-4">
+                            <div className="grid grid-cols-2 gap-4">
                                 {/* Fecha de la Compra */}
                                 <div className="grid w-full max-w-sm items-center gap-1.5">
                                     <Label htmlFor="fechaCompra">Fecha de la Compra</Label>
@@ -353,73 +352,62 @@ export default function ComprarPage() {
                                     </Select>
                                     {errors.proveedor && <InputError message={errors.proveedor} />}
                                 </div>
-
-                                {/* Almacén Destino */}
-                                <div className="grid w-full max-w-sm items-center gap-1.5">
-                                    <Label htmlFor="almacen">Almacén</Label>
-                                    <Select name="almacen" value={data.almacen} onValueChange={(value) => setData('almacen', value)}>
-                                        <SelectTrigger className="mt-2 w-full">
-                                            <SelectValue placeholder="Seleccione Almacén" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <input
-                                                type="text"
-                                                className="mb-2 w-full rounded border border-gray-300 p-2"
-                                                placeholder="Buscar almacén..."
-                                                value={searchAlmacen}
-                                                onChange={(e) => setSearchAlmacen(e.target.value.toUpperCase())}
-                                            />
-                                            {filteredAlmacens.length > 0 ? (
-                                                filteredAlmacens.map((almacen) => (
-                                                    <SelectItem key={almacen.id} value={almacen.nombre_almacen}>
-                                                        {almacen.nombre_almacen}
-                                                    </SelectItem>
-                                                ))
-                                            ) : (
-                                                <SelectItem disabled>No hay almacenes disponibles</SelectItem>
-                                            )}
-                                        </SelectContent>
-                                    </Select>
-                                    {errors.almacen && <InputError message={errors.almacen} />}
-                                </div>
                             </div>
                         </form>
                     </CardContent>
                 </Card>
 
-                {/* Formulario de productos */}
                 <Card>
                     <CardHeader>
                         <CardDescription className="text-center dark:text-emerald-400">Ingrese Datos del Producto a Comprar</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-4 gap-4">
+                            {/* Almacén Destino (Individual) */}
+                            <div className="grid w-full max-w-sm items-center gap-1">
+                                <Label htmlFor="almacen_id">Almacén Destino</Label>
+                                <Select
+                                    name="almacen_id"
+                                    value={tempFormData.almacen_id}
+                                    onValueChange={(value) => handleTempSelectChange('almacen_id', value)}
+                                >
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue placeholder="Seleccione Almacén" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {almacens.map((almacen) => (
+                                            <SelectItem key={almacen.id} value={almacen.id.toString()}>
+                                                {almacen.nombre_almacen}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
                             {/* Nombre del Producto */}
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="nombre_producto">Nombre del Producto</Label>
                                 <Input
-                                    className="mt-2"
                                     type="text"
                                     name="producto"
                                     placeholder="Producto"
                                     value={tempFormData.producto}
                                     onChange={handleTempInputChange}
                                 />
-                                {errors.producto && <InputError message={errors.producto} />}
+                                {errors['productos.0.producto'] && <InputError message={errors['productos.0.producto']} />}
                             </div>
 
                             {/* Código del Producto */}
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="codigo_producto">Código del Producto</Label>
                                 <Input
-                                    className="mt-2"
                                     type="text"
                                     name="codigo"
                                     placeholder="Código Producto"
                                     value={tempFormData.codigo}
                                     onChange={handleTempInputChange}
                                 />
-                                {errors.codigo && <InputError message={errors.codigo} />}
+                                {errors['productos.0.codigo'] && <InputError message={errors['productos.0.codigo']} />}
                             </div>
 
                             {/* Categoría del Producto */}
@@ -428,10 +416,7 @@ export default function ComprarPage() {
                                 <Select
                                     name="categoria"
                                     value={tempFormData.categoria}
-                                    onValueChange={(value) => {
-                                        setTempFormData({ ...tempFormData, categoria: value });
-                                        setSearchCategoria(''); // Limpiar búsqueda al seleccionar
-                                    }}
+                                    onValueChange={(value) => handleTempSelectChange('categoria', value)}
                                 >
                                     <SelectTrigger className="w-full">
                                         <SelectValue placeholder="Seleccione Categoría" />
@@ -448,40 +433,20 @@ export default function ComprarPage() {
                                                     e.preventDefault();
                                                     const trimmed = searchCategoria.trim();
                                                     if (trimmed && !filteredCategorias.some((c) => c.nombre_categoria === trimmed)) {
-                                                        setTempFormData({ ...tempFormData, categoria: trimmed });
+                                                        handleTempSelectChange('categoria', trimmed);
                                                         setSearchCategoria('');
                                                     }
                                                 }
                                             }}
                                         />
-
                                         {filteredCategorias.length > 0 ? (
                                             filteredCategorias.map((categoria) => (
-                                                <SelectItem
-                                                    key={categoria.id}
-                                                    value={categoria.nombre_categoria}
-                                                    onSelect={() => {
-                                                        setTempFormData({
-                                                            ...tempFormData,
-                                                            categoria: categoria.nombre_categoria,
-                                                        });
-                                                        setSearchCategoria('');
-                                                    }}
-                                                >
+                                                <SelectItem key={categoria.id} value={categoria.nombre_categoria}>
                                                     {categoria.nombre_categoria}
                                                 </SelectItem>
                                             ))
                                         ) : searchCategoria.trim() ? (
-                                            <SelectItem
-                                                value={searchCategoria.trim()}
-                                                onSelect={() => {
-                                                    setTempFormData({
-                                                        ...tempFormData,
-                                                        categoria: searchCategoria.trim(),
-                                                    });
-                                                    setSearchCategoria('');
-                                                }}
-                                            >
+                                            <SelectItem value={searchCategoria.trim()}>
                                                 ➕ Crear nueva categoría: <strong>{searchCategoria.trim()}</strong>
                                             </SelectItem>
                                         ) : (
@@ -502,7 +467,7 @@ export default function ComprarPage() {
                                     value={tempFormData.precio || ''}
                                     onChange={handleTempInputChange}
                                 />
-                                {errors.precio && <InputError message={errors.precio} />}
+                                {errors['productos.0.precio'] && <InputError message={errors['productos.0.precio']} />}
                             </div>
 
                             {/* Cantidad de Productos */}
@@ -515,7 +480,7 @@ export default function ComprarPage() {
                                     value={tempFormData.cantidad || ''}
                                     onChange={handleTempInputChange}
                                 />
-                                {errors.cantidad && <InputError message={errors.cantidad} />}
+                                {errors['productos.0.cantidad'] && <InputError message={errors['productos.0.cantidad']} />}
                             </div>
 
                             {/* Botón Agregar */}
@@ -533,13 +498,13 @@ export default function ComprarPage() {
                     </CardContent>
                 </Card>
 
-                {/* Tabla de productos */}
                 <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
                     <Table>
                         <TableCaption className="text-sidebar-accent">Lista de los Productos a Comprar</TableCaption>
                         <TableHeader>
                             <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
                                 <TableHead>Producto</TableHead>
+                                <TableHead>Almacén</TableHead>
                                 <TableHead>Categoria</TableHead>
                                 <TableHead>Código</TableHead>
                                 <TableHead>Cantidad</TableHead>
@@ -552,13 +517,14 @@ export default function ComprarPage() {
                             {productos.map((p) => (
                                 <TableRow key={p.id}>
                                     <TableCell className="font-medium">{p.producto}</TableCell>
+                                    <TableCell>{almacens.find((a) => a.id === p.almacen_id)?.nombre_almacen || 'Desconocido'}</TableCell>
                                     <TableCell>{p.categoria}</TableCell>
                                     <TableCell>{p.codigo}</TableCell>
                                     <TableCell>{p.cantidad}</TableCell>
                                     <TableCell>${p.precio.toFixed(2)}</TableCell>
                                     <TableCell>${(p.cantidad * p.precio).toFixed(2)}</TableCell>
                                     <TableCell className="text-right">
-                                        <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                                        <AlertDialog open={isDialogOpen && editingProductId === p.id} onOpenChange={setIsDialogOpen}>
                                             <AlertDialogTrigger asChild>
                                                 <Button
                                                     variant="link"
@@ -577,7 +543,28 @@ export default function ComprarPage() {
                                                 </AlertDialogHeader>
 
                                                 <div className="grid gap-4 py-4">
-                                                    {/* Nombre del Producto */}
+                                                    <div className="grid grid-cols-4 items-center gap-4">
+                                                        <Label htmlFor="edit-almacen" className="text-right">
+                                                            Almacén
+                                                        </Label>
+                                                        <Select
+                                                            name="almacen_id"
+                                                            value={tempFormData.almacen_id}
+                                                            onValueChange={(value) => handleTempSelectChange('almacen_id', value)}
+                                                        >
+                                                            <SelectTrigger className="col-span-3">
+                                                                <SelectValue placeholder="Seleccione Almacén" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {almacens.map((almacen) => (
+                                                                    <SelectItem key={almacen.id} value={almacen.id.toString()}>
+                                                                        {almacen.nombre_almacen}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+
                                                     <div className="grid grid-cols-4 items-center gap-4">
                                                         <Label htmlFor="edit-producto" className="text-right">
                                                             Nombre
@@ -585,17 +572,11 @@ export default function ComprarPage() {
                                                         <Input
                                                             id="edit-producto"
                                                             value={tempFormData.producto}
-                                                            onChange={(e) =>
-                                                                setTempFormData({
-                                                                    ...tempFormData,
-                                                                    producto: e.target.value,
-                                                                })
-                                                            }
+                                                            onChange={(e) => handleTempInputChange(e as any)}
                                                             className="col-span-3"
                                                         />
                                                     </div>
 
-                                                    {/* Código del Producto */}
                                                     <div className="grid grid-cols-4 items-center gap-4">
                                                         <Label htmlFor="edit-codigo" className="text-right">
                                                             Código
@@ -603,29 +584,18 @@ export default function ComprarPage() {
                                                         <Input
                                                             id="edit-codigo"
                                                             value={tempFormData.codigo}
-                                                            onChange={(e) =>
-                                                                setTempFormData({
-                                                                    ...tempFormData,
-                                                                    codigo: e.target.value,
-                                                                })
-                                                            }
+                                                            onChange={(e) => handleTempInputChange(e as any)}
                                                             className="col-span-3"
                                                         />
                                                     </div>
 
-                                                    {/* Categoría del Producto */}
                                                     <div className="grid grid-cols-4 items-center gap-4">
                                                         <Label htmlFor="edit-categoria" className="text-right">
                                                             Categoría
                                                         </Label>
                                                         <Select
                                                             value={tempFormData.categoria}
-                                                            onValueChange={(value) =>
-                                                                setTempFormData({
-                                                                    ...tempFormData,
-                                                                    categoria: value,
-                                                                })
-                                                            }
+                                                            onValueChange={(value) => handleTempSelectChange('categoria', value)}
                                                         >
                                                             <SelectTrigger className="col-span-3">
                                                                 <SelectValue placeholder="Seleccione o cree una categoría" />
@@ -642,10 +612,7 @@ export default function ComprarPage() {
                                                                             e.preventDefault();
                                                                             const trimmed = searchCategoria.trim();
                                                                             if (trimmed) {
-                                                                                setTempFormData({
-                                                                                    ...tempFormData,
-                                                                                    categoria: trimmed,
-                                                                                });
+                                                                                handleTempSelectChange('categoria', trimmed);
                                                                                 setSearchCategoria('');
                                                                             }
                                                                         }
@@ -653,29 +620,12 @@ export default function ComprarPage() {
                                                                 />
                                                                 {filteredCategorias.length > 0 ? (
                                                                     filteredCategorias.map((cat) => (
-                                                                        <SelectItem
-                                                                            key={cat.id}
-                                                                            value={cat.nombre_categoria}
-                                                                            onSelect={() =>
-                                                                                setTempFormData({
-                                                                                    ...tempFormData,
-                                                                                    categoria: cat.nombre_categoria,
-                                                                                })
-                                                                            }
-                                                                        >
+                                                                        <SelectItem key={cat.id} value={cat.nombre_categoria}>
                                                                             {cat.nombre_categoria}
                                                                         </SelectItem>
                                                                     ))
                                                                 ) : searchCategoria.trim() ? (
-                                                                    <SelectItem
-                                                                        value={searchCategoria.trim()}
-                                                                        onSelect={() =>
-                                                                            setTempFormData({
-                                                                                ...tempFormData,
-                                                                                categoria: searchCategoria.trim(),
-                                                                            })
-                                                                        }
-                                                                    >
+                                                                    <SelectItem value={searchCategoria.trim()}>
                                                                         ➕ Crear: <strong>{searchCategoria.trim()}</strong>
                                                                     </SelectItem>
                                                                 ) : (
@@ -685,7 +635,6 @@ export default function ComprarPage() {
                                                         </Select>
                                                     </div>
 
-                                                    {/* Precio */}
                                                     <div className="grid grid-cols-4 items-center gap-4">
                                                         <Label htmlFor="edit-precio" className="text-right">
                                                             Precio
@@ -694,18 +643,13 @@ export default function ComprarPage() {
                                                             id="edit-precio"
                                                             type="number"
                                                             step="0.01"
+                                                            name="precio"
                                                             value={tempFormData.precio || ''}
-                                                            onChange={(e) =>
-                                                                setTempFormData({
-                                                                    ...tempFormData,
-                                                                    precio: parseFloat(e.target.value) || 0,
-                                                                })
-                                                            }
+                                                            onChange={(e) => handleTempInputChange(e as any)}
                                                             className="col-span-3"
                                                         />
                                                     </div>
 
-                                                    {/* Cantidad */}
                                                     <div className="grid grid-cols-4 items-center gap-4">
                                                         <Label htmlFor="edit-cantidad" className="text-right">
                                                             Cantidad
@@ -713,13 +657,9 @@ export default function ComprarPage() {
                                                         <Input
                                                             id="edit-cantidad"
                                                             type="number"
+                                                            name="cantidad"
                                                             value={tempFormData.cantidad || ''}
-                                                            onChange={(e) =>
-                                                                setTempFormData({
-                                                                    ...tempFormData,
-                                                                    cantidad: parseInt(e.target.value) || 0,
-                                                                })
-                                                            }
+                                                            onChange={(e) => handleTempInputChange(e as any)}
                                                             className="col-span-3"
                                                         />
                                                     </div>
@@ -735,25 +675,27 @@ export default function ComprarPage() {
                                                                 !tempFormData.categoria.trim() ||
                                                                 !tempFormData.codigo.trim() ||
                                                                 tempFormData.cantidad <= 0 ||
-                                                                tempFormData.precio <= 0
+                                                                tempFormData.precio <= 0 ||
+                                                                !tempFormData.almacen_id
                                                             ) {
                                                                 toast.warning('Por favor, completa todos los campos válidos.');
                                                                 return;
                                                             }
 
-                                                            // Actualizar producto
                                                             setProductos((prev) =>
                                                                 prev.map((prod) =>
                                                                     prod.id === editingProductId
                                                                         ? {
                                                                               ...tempFormData,
                                                                               id: editingProductId,
+                                                                              almacen_id: parseInt(tempFormData.almacen_id as any),
                                                                           }
                                                                         : prod,
                                                                 ),
                                                             );
 
                                                             setTempFormData({
+                                                                almacen_id: '',
                                                                 producto: '',
                                                                 categoria: '',
                                                                 codigo: '',
@@ -784,7 +726,7 @@ export default function ComprarPage() {
                         </TableBody>
                         <TableFooter>
                             <TableRow>
-                                <TableCell colSpan={3} className="bg-gray-500 text-center text-white">
+                                <TableCell colSpan={4} className="bg-gray-500 text-center text-white">
                                     {productos.length} Tipo de Mercancía
                                 </TableCell>
                                 <TableCell className="bg-gray-600 text-amber-300">{productos.reduce((t, p) => t + p.cantidad, 0)} Unidades</TableCell>
@@ -796,7 +738,6 @@ export default function ComprarPage() {
                     </Table>
                 </div>
 
-                {/* Botones de acción */}
                 <div className="flex justify-center gap-4 p-4">
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
@@ -833,12 +774,11 @@ export default function ComprarPage() {
                                     <>
                                         <Separator />
                                         <div className="space-y-4">
-                                            {/* Detalles de Clientes */}
                                             <div className="space-y-3">
                                                 <Label htmlFor="clientes">Seleccione Clientes (Opcional)</Label>
                                                 <Select
                                                     name="clientes"
-                                                    value={data.pagos_clientes.map((p) => p.cliente_id.toString())} // Asegúrate de que sea un array de strings
+                                                    value={data.pagos_clientes.map((p) => p.cliente_id.toString())}
                                                     onValueChange={(value) => {
                                                         const selectedClientes = Array.isArray(value) ? value : [value];
                                                         const updatedClientes = [
@@ -846,14 +786,14 @@ export default function ComprarPage() {
                                                                 ...data.pagos_clientes.map((p) => p.cliente_id),
                                                                 ...selectedClientes.map((id) => parseInt(id)),
                                                             ]),
-                                                        ]; // Evitar duplicados
+                                                        ];
                                                         const updatedPagosClientes = updatedClientes.map((cliente_id) => ({
                                                             cliente_id,
                                                             monto: data.pagos_clientes.find((p) => p.cliente_id === cliente_id)?.monto || 0,
                                                         }));
                                                         setData('pagos_clientes', updatedPagosClientes);
                                                     }}
-                                                    multiple // Habilitar selección múltiple
+                                                    multiple
                                                 >
                                                     <SelectTrigger className="mt-2 w-full border-zinc-500">
                                                         <SelectValue placeholder="Seleccione Clientes" />
@@ -914,12 +854,12 @@ export default function ComprarPage() {
                                                     </div>
                                                 )}
                                             </div>
-                                            {/* Detalles de Cuentas */}
+
                                             <div className="space-y-3">
                                                 <Label htmlFor="cuentas">Seleccione Cuentas (Opcional)</Label>
                                                 <Select
                                                     name="cuentas"
-                                                    value={data.pagos.map((p) => p.cuenta_id.toString())} // Asegúrate de que sea un array de strings
+                                                    value={data.pagos.map((p) => p.cuenta_id.toString())}
                                                     onValueChange={(value) => {
                                                         const selectedCuentas = Array.isArray(value) ? value : [value];
                                                         const updatedCuentas = [
@@ -927,14 +867,14 @@ export default function ComprarPage() {
                                                                 ...data.pagos.map((p) => p.cuenta_id),
                                                                 ...selectedCuentas.map((id) => parseInt(id)),
                                                             ]),
-                                                        ]; // Evitar duplicados
+                                                        ];
                                                         const updatedPagos = updatedCuentas.map((cuenta_id) => ({
                                                             cuenta_id,
                                                             monto: data.pagos.find((p) => p.cuenta_id === cuenta_id)?.monto || 0,
                                                         }));
                                                         setData('pagos', updatedPagos);
                                                     }}
-                                                    multiple // Habilitar selección múltiple
+                                                    multiple
                                                 >
                                                     <SelectTrigger className="mt-2 w-full border-zinc-500">
                                                         <SelectValue placeholder="Seleccione Cuentas" />

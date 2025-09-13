@@ -10,7 +10,6 @@ class Compra extends Model
     use HasFactory;
 
     protected $fillable = [
-        'almacen_id',
         'proveedor_id',
         'cuenta_id',
         'cliente_id',
@@ -18,12 +17,6 @@ class Compra extends Model
         'total_compra',
         'tipo_compra',
     ];
-
-    // Relación con almacén
-    public function almacen()
-    {
-        return $this->belongsTo(Almacen::class);
-    }
 
     // Relación con proveedor
     public function proveedor()

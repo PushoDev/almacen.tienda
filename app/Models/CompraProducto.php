@@ -13,6 +13,7 @@ class CompraProducto extends Model
         'producto_id',
         'cantidad',
         'precio',
+        'almacen_id', // ¡Agregar esta línea!
     ];
 
     // Relación con Compra
@@ -25,5 +26,11 @@ class CompraProducto extends Model
     public function producto()
     {
         return $this->belongsTo(Producto::class);
+    }
+
+    // Relación con Almacen
+    public function almacen()
+    {
+        return $this->belongsTo(Almacen::class);
     }
 }
