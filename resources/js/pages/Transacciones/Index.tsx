@@ -1,15 +1,35 @@
-// resources/js/Pages/Transacciones/Index.tsx
 import HeadingSmall from '@/components/heading-small';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AppLayout from '@/layouts/app-layout';
+import CostosAdicionales from '@/pages/Transacciones/Operaciones/CostosAdicionales';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import { Banknote, Repeat, TrendingDown, TrendingUp } from 'lucide-react';
 import Ganancias from './Operaciones/Ganancias';
 import Gastos from './Operaciones/Gastos';
 import Movimientos from './Operaciones/Movimientos';
-import CostosAdicionales from '@/pages/Transacciones/Operaciones/CostosAdicionales';
+
+// 1. Define las interfaces para los datos que recibes desde el backend
+interface Compra {
+    id: number;
+    fecha_compra: string;
+    total_compra: number;
+    productos: any[];
+}
+
+interface Cuenta {
+    id: number;
+    nombre_cuenta: string;
+    tipo_moneda: string;
+}
+
+// 2. Define la interfaz principal de las props
+interface Props {
+    compras: Compra[];
+    cuentas: Cuenta[];
+    tasaCambioActual: number;
+}
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -30,7 +50,8 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function Transacciones() {
+// 3. Usa la interfaz de props en la función del componente
+export default function Transacciones({ compras, cuentas, tasaCambioActual }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Transacciones" />
@@ -80,7 +101,8 @@ export default function Transacciones() {
                     </TabsContent>
 
                     <TabsContent value="costos">
-                        <CostosAdicionales />
+                        {/* Aquí se pasan las props al componente CostosAdicionales */}
+                        <CostosAdicionales compras={compras} cuentas={cuentas} tasaCambioActual={tasaCambioActual} />
                     </TabsContent>
                 </Tabs>
             </div>
