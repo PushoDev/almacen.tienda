@@ -1,33 +1,25 @@
 // resources/js/Pages/Transacciones/Operaciones/Movimientos.tsx
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function CostosAdicionales() {
     return (
         <div className="space-y-4">
             {/* Tarjeta de Resumen */}
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div>
                 <Card>
-                    <CardHeader className="pb-3">
-                        <CardTitle>Costos Adicionales</CardTitle>
-                        <CardDescription>Descripcion Costos Adicionales</CardDescription>
+                    <CardHeader>
+                        <CardTitle>Opciones de Costos Adicionales</CardTitle>
+                        <CardDescription>Opciones de Costos de las Comprsa de los Productos</CardDescription>
+                        <CardAction>Card Action</CardAction>
                     </CardHeader>
                     <CardContent>
-                        Costos Adicionales
+                        <p>Contenido</p>
                     </CardContent>
+                    <CardFooter>
+                        <p>Footer</p>
+                    </CardFooter>
                 </Card>
-                {/* Otras tarjetas de resumen pueden ir aquí */}
             </div>
-
-            {/* Tabla de Transacciones */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Costos Adicionales</CardTitle>
-                </CardHeader>
-                <CardContent>
-                {/*   Espacio para Costos Adicionales*/}
-                </CardContent>
-            </Card>
         </div>
     );
 }
