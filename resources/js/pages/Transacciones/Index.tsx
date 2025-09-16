@@ -22,6 +22,9 @@ interface Cuenta {
     id: number;
     nombre_cuenta: string;
     tipo_moneda: string;
+    // Agregamos las propiedades 'saldo_cuenta' y 'deuda' para usarlas en los formularios.
+    saldo_cuenta: number;
+    deuda: number;
 }
 
 // 2. Define la interfaz principal de las props
@@ -96,12 +99,12 @@ export default function Transacciones({ compras, cuentas, tasaCambioActual }: Pr
                         <Gastos />
                     </TabsContent>
 
+                    {/* Paso 1: Pasar la prop 'cuentas' al componente Movimientos */}
                     <TabsContent value="movimientos">
-                        <Movimientos />
+                        <Movimientos cuentas={cuentas} />
                     </TabsContent>
 
                     <TabsContent value="costos">
-                        {/* Aquí se pasan las props al componente CostosAdicionales */}
                         <CostosAdicionales compras={compras} cuentas={cuentas} tasaCambioActual={tasaCambioActual} />
                     </TabsContent>
                 </Tabs>
