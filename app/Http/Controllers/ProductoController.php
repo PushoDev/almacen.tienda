@@ -31,7 +31,7 @@ class ProductoController extends Controller
                 'codigo_producto' => $producto->codigo_producto,
                 'categoria' => $producto->categoria?->nombre_categoria,
                 'precio_compra_producto' => (float) $producto->precio_compra_producto,
-                'cantidad_producto' => $producto->cantidad_total, // 🔥 stock total
+                'cantidad_total' => $producto->cantidad_total, // 🔥 stock total - Asegúrate de que sea cantidad_total
                 'imagen_url' => $producto->imagen_url,
                 'precio_venta' => $producto->vendedores->first()->pivot->precio_venta ?? null,
                 'stock_bajo' => $producto->stock_bajo, // 🔥 flag stock bajo
@@ -54,8 +54,28 @@ class ProductoController extends Controller
         $precioVenta = $producto->vendedores->first()->pivot->precio_venta ?? null;
 
         return Inertia::render('Productos/Show', [
-            'producto' => $producto,
-            'almacenes' => $producto->almacenes,
+            'producto' => [
+                'id' => $producto->id,
+                'nombre_producto' => $producto->nombre_producto,
+                'marca_producto' => $producto->marca_producto,
+                'codigo_producto' => $producto->codigo_producto,
+                'categoria' => $producto->categoria?->nombre_categoria,
+                'precio_compra_producto' => (float) $producto->precio_compra_producto,
+                'cantidad_total' => $producto->cantidad_total,
+                'imagen_url' => $producto->imagen_url,
+                'precio_venta' => $precioVenta,
+                'stock_bajo' => $producto->stock_bajo,
+                'almacenes' => $producto->almacenes->map(fn($almacen) => [
+                    'id' => $almacen->id,
+                    'nombre_almacen' => $almacen->nombre_almacen,
+                    'ciudad_almacen' => $almacen->ciudad_almacen,
+                    'provincia_almacen' => $almacen->provincia_almacen,
+                    'telefono_almacen' => $almacen->telefono_almacen,
+                    'correo_almacen' => $almacen->correo_almacen,
+                    'cantidad' => $almacen->pivot->cantidad,
+                    'stock_bajo' => $almacen->pivot->cantidad < 3,
+                ]),
+            ],
             'precio_venta' => $precioVenta,
         ]);
     }

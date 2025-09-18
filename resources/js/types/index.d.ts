@@ -117,12 +117,12 @@ export interface ProductoProps {
     nombre_producto: string;
     marca_producto: string;
     codigo_producto: string;
-    categoria?: string;
+    categoria: string; // Cambiado de "categoria?: string" a "categoria: string"
     precio_compra_producto: number;
-    cantidad_total: number; // 🔥 Añadir esta propiedad
+    cantidad_total: number;
     imagen_url?: string;
     precio_venta?: number;
-    stock_bajo: boolean; // 🔥 Añadir esta propiedad
+    stock_bajo: boolean;
     almacenes?: Array<{
         id: number;
         nombre_almacen: string;
@@ -130,9 +130,8 @@ export interface ProductoProps {
         provincia_almacen: string;
         telefono_almacen?: string;
         correo_almacen?: string;
-        pivot: {
-            cantidad: number;
-        };
+        cantidad: number; // Movido desde pivot
+        stock_bajo: boolean; // Nueva propiedad
     }>;
     created_at?: string;
     updated_at?: string;

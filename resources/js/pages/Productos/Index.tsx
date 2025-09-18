@@ -64,16 +64,16 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
     // Categorías únicas
     const categoriasUnicas = [...new Set(productos.map((producto) => producto.categoria))];
 
-    // Calcular estadísticas
-    const productosConStockBajo = productos.filter((p) => p.cantidad_producto <= umbralStockBajo);
-    const valorTotalInventario = productos.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_producto, 0);
-    const valorStockBajo = productosConStockBajo.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_producto, 0);
+    // Calcular estadísticas - CAMBIO: usar cantidad_total en lugar de cantidad_producto
+    const productosConStockBajo = productos.filter((p) => p.cantidad_total <= umbralStockBajo);
+    const valorTotalInventario = productos.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0);
+    const valorStockBajo = productosConStockBajo.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0);
 
-    // Filtrar productos
+    // Filtrar productos - CAMBIO: usar cantidad_total en lugar de cantidad_producto
     const productosFiltrados = productos.filter((producto) => {
         const matchesCategoria = !filtroTipo || producto.categoria === filtroTipo;
         const matchesBusqueda = producto.nombre_producto.toLowerCase().includes(busqueda.toLowerCase());
-        const matchesStockFilter = !soloStockBajo || producto.cantidad_producto <= umbralStockBajo;
+        const matchesStockFilter = !soloStockBajo || producto.cantidad_total <= umbralStockBajo;
 
         return matchesCategoria && matchesBusqueda && matchesStockFilter;
     });
@@ -246,7 +246,8 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                         </TableHeader>
                         <TableBody>
                             {productosAmostrar.map((producto) => {
-                                const isStockBajo = producto.cantidad_producto <= umbralStockBajo;
+                                // CAMBIO: usar cantidad_total en lugar de cantidad_producto
+                                const isStockBajo = producto.cantidad_total <= umbralStockBajo;
 
                                 return (
                                     <TableRow key={producto.id} className={isStockBajo ? 'animate-pulse bg-red-50 dark:bg-red-950/30' : ''}>
@@ -288,7 +289,8 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                                         <TableCell>
                                             <div className="flex items-center gap-2">
                                                 <Hash size={14} className="shrink-0 text-blue-500" />
-                                                <span className={isStockBajo ? 'font-bold text-red-600' : ''}>{producto.cantidad_producto}</span>
+                                                {/* CAMBIO: usar cantidad_total en lugar de cantidad_producto */}
+                                                <span className={isStockBajo ? 'font-bold text-red-600' : ''}>{producto.cantidad_total}</span>
                                                 {isStockBajo && (
                                                     <Badge variant="destructive" className="ml-2 animate-pulse">
                                                         <AlertTriangle size={12} className="mr-1" />
@@ -299,7 +301,8 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                                         <TableCell>
                                             <div className="flex items-center gap-2">
                                                 <DollarSign size={14} className="shrink-0 text-emerald-500" />
-                                                <span>$ {(producto.precio_compra_producto * producto.cantidad_producto).toFixed(2)}</span>
+                                                {/* CAMBIO: usar cantidad_total en lugar de cantidad_producto */}
+                                                <span>$ {(producto.precio_compra_producto * producto.cantidad_total).toFixed(2)}</span>
                                             </div>
                                         </TableCell>
                                         <TableCell>
@@ -372,8 +375,8 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                                 </TableCell>
                                 <TableCell className="bg-gray-700 text-center font-bold">{productosFiltrados.length}</TableCell>
                                 <TableCell colSpan={3} className="bg-gray-700 text-right">
-                                    Valor Total: $
-                                    {productosFiltrados.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_producto, 0).toFixed(2)}
+                                    Valor Total: ${/* CAMBIO: usar cantidad_total en lugar de cantidad_producto */}
+                                    {productosFiltrados.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0).toFixed(2)}
                                 </TableCell>
                             </TableRow>
                         </TableFooter>
