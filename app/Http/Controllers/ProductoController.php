@@ -54,24 +54,9 @@ class ProductoController extends Controller
         $precioVenta = $producto->vendedores->first()->pivot->precio_venta ?? null;
 
         return Inertia::render('Productos/Show', [
-            'producto' => [
-                'id' => $producto->id,
-                'nombre_producto' => $producto->nombre_producto,
-                'marca_producto' => $producto->marca_producto,
-                'codigo_producto' => $producto->codigo_producto,
-                'categoria' => $producto->categoria?->nombre_categoria,
-                'precio_compra_producto' => (float) $producto->precio_compra_producto,
-                'cantidad_total' => $producto->cantidad_total, // 🔥 stock total
-                'imagen_url' => $producto->imagen_url,
-                'precio_venta' => $precioVenta,
-                'stock_bajo' => $producto->stock_bajo, // 🔥 flag stock bajo
-                'almacenes' => $producto->almacenes->map(fn($almacen) => [
-                    'id' => $almacen->id,
-                    'nombre' => $almacen->nombre_almacen,
-                    'cantidad' => $almacen->pivot->cantidad,
-                    'stock_bajo' => $almacen->pivot->cantidad < 3, // 🔥 por almacén
-                ]),
-            ],
+            'producto' => $producto,
+            'almacenes' => $producto->almacenes,
+            'precio_venta' => $precioVenta,
         ]);
     }
 
