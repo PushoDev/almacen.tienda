@@ -17,8 +17,24 @@ import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, Tabl
 import AppLayout from '@/layouts/app-layout';
 import { ProductoProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { CopyX, DollarSign, Edit3, Eye, FileText, Hash, Package, Package2, QrCode, Sheet, Trash2, Wallet } from 'lucide-react';
-import { useState } from 'react';
+import {
+    AlertTriangle,
+    BarChart3,
+    CopyX,
+    DollarSign,
+    Edit3,
+    Eye,
+    FileText,
+    Filter,
+    Hash,
+    Package,
+    Package2,
+    QrCode,
+    Sheet,
+    Trash2,
+    Wallet,
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -35,6 +51,44 @@ const breadcrumbs: BreadcrumbItem[] = [
 export default function ProductosPage({ productos }: { productos: ProductoProps[] }) {
     console.log('Productos recibidos:', productos);
 
+    // Estados para gestión de stock
+    const [umbralStockBajo, setUmbralStockBajo] = useState(5);
+    const [soloStockBajo, setSoloStockBajo] = useState(false);
+    const [filtroTipo, setFiltroTipo] = useState<string>('');
+    const [busqueda, setBusqueda] = useState<string>('');
+
+    // Paginación
+    const [paginaActual, setPaginaActual] = useState(1);
+    const elementosPorPagina = 25;
+
+    // Categorías únicas
+    const categoriasUnicas = [...new Set(productos.map((producto) => producto.categoria))];
+
+    // Calcular estadísticas
+    const productosConStockBajo = productos.filter((p) => p.cantidad_producto <= umbralStockBajo);
+    const valorTotalInventario = productos.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_producto, 0);
+    const valorStockBajo = productosConStockBajo.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_producto, 0);
+
+    // Filtrar productos
+    const productosFiltrados = productos.filter((producto) => {
+        const matchesCategoria = !filtroTipo || producto.categoria === filtroTipo;
+        const matchesBusqueda = producto.nombre_producto.toLowerCase().includes(busqueda.toLowerCase());
+        const matchesStockFilter = !soloStockBajo || producto.cantidad_producto <= umbralStockBajo;
+
+        return matchesCategoria && matchesBusqueda && matchesStockFilter;
+    });
+
+    // Paginación
+    const indiceUltimoElemento = paginaActual * elementosPorPagina;
+    const indicePrimerElemento = indiceUltimoElemento - elementosPorPagina;
+    const productosAmostrar = productosFiltrados.slice(indicePrimerElemento, indiceUltimoElemento);
+    const totalPaginas = Math.ceil(productosFiltrados.length / elementosPorPagina);
+
+    // Resetear paginación cuando cambian los filtros
+    useEffect(() => {
+        setPaginaActual(1);
+    }, [filtroTipo, busqueda, soloStockBajo, umbralStockBajo]);
+
     // Eliminar Producto
     const deleteProducto = (id: number) => {
         router.delete(route('productos.destroy', { producto: id }), {
@@ -46,30 +100,6 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
             },
         });
     };
-
-    // Filtro
-    const [filtroTipo, setFiltroTipo] = useState<string>('');
-    const [busqueda, setBusqueda] = useState<string>(''); // Estado para el término de búsqueda
-    const categoriasUnicas = [...new Set(productos.map((producto) => producto.categoria))];
-
-    // Paginación
-    const [paginaActual, setPaginaActual] = useState(1);
-    const elementosPorPagina = 25; // Cambiado a 8 elementos por página
-    const indiceUltimoElemento = paginaActual * elementosPorPagina;
-    const indicePrimerElemento = indiceUltimoElemento - elementosPorPagina;
-
-    // Filtrar productos según el filtro aplicado y la búsqueda
-    const productosFiltrados = productos.filter((producto) => {
-        const matchesCategoria = !filtroTipo || producto.categoria === filtroTipo;
-        const matchesBusqueda = producto.nombre_producto.toLowerCase().includes(busqueda.toLowerCase());
-        return matchesCategoria && matchesBusqueda;
-    });
-
-    // Obtener los productos a mostrar en la página actual
-    const productosAmostrar = productosFiltrados.slice(indicePrimerElemento, indiceUltimoElemento);
-
-    // Calcular el número total de páginas
-    const totalPaginas = Math.ceil(productosFiltrados.length / elementosPorPagina);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -90,63 +120,117 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
 
                 <Separator className="col-span-4" />
 
-                {/* Acciones */}
-                <div className="flex justify-end gap-2">
-                    {/* Buscador */}
-                    <input
-                        type="text"
-                        placeholder="Buscar productos..."
-                        value={busqueda}
-                        onChange={(e) => setBusqueda(e.target.value)}
-                        className="focus:ring-sidebar-accent border-primary rounded-md border px-3 py-1 focus:ring-2 focus:outline-none"
-                    />
+                {/* Panel de Información de Stock */}
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                    <div className="flex items-center justify-between rounded-lg bg-blue-100 p-4 dark:bg-blue-900">
+                        <div>
+                            <h3 className="font-semibold">Total Productos</h3>
+                            <p className="text-2xl">{productos.length}</p>
+                        </div>
+                        <BarChart3 className="text-blue-500" size={32} />
+                    </div>
 
-                    {/* Filtro*/}
-                    <select
-                        id="filtro-tipo"
-                        value={filtroTipo}
-                        onChange={(e) => setFiltroTipo(e.target.value)}
-                        className="focus:ring-sidebar-accent border-primary rounded-md border px-3 py-1 focus:ring-2 focus:outline-none"
-                    >
-                        <option className="bg-background text-sidebar-accent" value="">
-                            Todos los Productos
-                        </option>
-                        {categoriasUnicas.map((categoria, index) => (
-                            <option key={index} className="bg-background text-sidebar-accent" value={categoria}>
-                                {categoria} ({productos.filter((p) => p.categoria === categoria).length})
+                    <div className="flex items-center justify-between rounded-lg bg-amber-100 p-4 dark:bg-amber-900">
+                        <div>
+                            <h3 className="font-semibold">Stock Bajo</h3>
+                            <p className="text-2xl">{productosConStockBajo.length}</p>
+                        </div>
+                        <AlertTriangle className="text-amber-500" size={32} />
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-lg bg-green-100 p-4 dark:bg-green-900">
+                        <div>
+                            <h3 className="font-semibold">Valor Total</h3>
+                            <p className="text-2xl">${valorTotalInventario.toFixed(2)}</p>
+                        </div>
+                        <DollarSign className="text-green-500" size={32} />
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-lg bg-red-100 p-4 dark:bg-red-900">
+                        <div>
+                            <h3 className="font-semibold">Valor Stock Bajo</h3>
+                            <p className="text-2xl">${valorStockBajo.toFixed(2)}</p>
+                        </div>
+                        <DollarSign className="text-red-500" size={32} />
+                    </div>
+                </div>
+
+                {/* Controles de Filtro */}
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center gap-2">
+                        <span>Umbral stock bajo:</span>
+                        <select value={umbralStockBajo} onChange={(e) => setUmbralStockBajo(Number(e.target.value))} className="rounded border p-1">
+                            <option value={3}>3 unidades</option>
+                            <option value={5}>5 unidades</option>
+                            <option value={10}>10 unidades</option>
+                            <option value={15}>15 unidades</option>
+                        </select>
+
+                        <Button
+                            variant={soloStockBajo ? 'default' : 'outline'}
+                            onClick={() => setSoloStockBajo(!soloStockBajo)}
+                            className="flex items-center gap-2"
+                        >
+                            <Filter size={16} />
+                            {soloStockBajo ? 'Mostrar Todos' : 'Solo Stock Bajo'}
+                        </Button>
+                    </div>
+
+                    <div className="flex gap-2">
+                        {/* Buscador */}
+                        <input
+                            type="text"
+                            placeholder="Buscar productos..."
+                            value={busqueda}
+                            onChange={(e) => setBusqueda(e.target.value)}
+                            className="focus:ring-sidebar-accent border-primary rounded-md border px-3 py-1 focus:ring-2 focus:outline-none"
+                        />
+
+                        {/* Filtro por categoría*/}
+                        <select
+                            id="filtro-tipo"
+                            value={filtroTipo}
+                            onChange={(e) => setFiltroTipo(e.target.value)}
+                            className="focus:ring-sidebar-accent border-primary rounded-md border px-3 py-1 focus:ring-2 focus:outline-none"
+                        >
+                            <option className="bg-background text-sidebar-accent" value="">
+                                Todas las categorías
                             </option>
-                        ))}
-                    </select>
+                            {categoriasUnicas.map((categoria, index) => (
+                                <option key={index} className="bg-background text-sidebar-accent" value={categoria}>
+                                    {categoria} ({productos.filter((p) => p.categoria === categoria).length})
+                                </option>
+                            ))}
+                        </select>
 
-                    {/* Botón Exportar PDF */}
-                    <Link href="#">
-                        <Button variant="outline" className="hover:bg-chart-3 flex cursor-pointer items-center gap-2">
-                            <FileText size={16} />
-                            Exportar PDF
-                        </Button>
-                    </Link>
+                        {/* Botones de exportación */}
+                        <Link href="#">
+                            <Button variant="outline" className="hover:bg-chart-3 flex cursor-pointer items-center gap-2">
+                                <FileText size={16} />
+                                PDF
+                            </Button>
+                        </Link>
 
-                    {/* Boton Importar Excel */}
-                    <Link href="#">
-                        <Button variant="secondary" className="hover:bg-chart-1 flex cursor-pointer items-center gap-2">
-                            <Sheet size={16} />
-                            Importar Excel
-                        </Button>
-                    </Link>
+                        <Link href="#">
+                            <Button variant="secondary" className="hover:bg-chart-1 flex cursor-pointer items-center gap-2">
+                                <Sheet size={16} />
+                                Importar
+                            </Button>
+                        </Link>
 
-                    {/* Botón Exportar Excel */}
-                    <Link href="#">
-                        <Button variant="secondary" className="hover:bg-chart-2 flex cursor-pointer items-center gap-2">
-                            <Sheet size={16} />
-                            Exportar Excel
-                        </Button>
-                    </Link>
+                        <Link href="#">
+                            <Button variant="secondary" className="hover:bg-chart-2 flex cursor-pointer items-center gap-2">
+                                <Sheet size={16} />
+                                Exportar
+                            </Button>
+                        </Link>
+                    </div>
                 </div>
 
                 {/* Tabla de Productos */}
                 <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
                     <Table>
-                        <TableCaption>Lista de Productos</TableCaption>
+                        <TableCaption>Lista de Productos {soloStockBajo && '(Solo productos con stock bajo)'}</TableCaption>
                         <TableHeader>
                             <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
                                 <TableHead className="w-[100px]">Nombre</TableHead>
@@ -161,135 +245,148 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {productosAmostrar.map((producto) => (
-                                <TableRow key={producto.id}>
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <Package size={14} className="text-primary shrink-0" />
-                                            <span className="text-primary truncate font-medium">{producto.nombre_producto}</span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <Badge variant="outline" className="font-mono uppercase">
-                                                {producto.marca_producto || 'Sin marca'}
-                                            </Badge>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <QrCode size={14} className="shrink-0 text-gray-500" />
-                                            <span>{producto.codigo_producto || 'Sin código'}</span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <CopyX size={14} className="shrink-0 text-indigo-500" />
-                                            <span>{producto.categoria || 'Sin categoría'}</span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <Wallet size={14} className="shrink-0 text-emerald-500" />
-                                            <span>
-                                                {typeof producto.precio_compra_producto === 'number'
-                                                    ? `$${producto.precio_compra_producto.toFixed(2)}`
-                                                    : 'Sin precio'}
-                                            </span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <Hash size={14} className="shrink-0 text-blue-500" />
-                                            <span>{producto.cantidad_producto}</span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <DollarSign size={14} className="shrink-0 text-emerald-500" />
-                                            <span>$ {(producto.precio_compra_producto * producto.cantidad_producto).toFixed(2)}</span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        {producto.imagen_url ? (
-                                            <img
-                                                src={producto.imagen_url}
-                                                alt={producto.nombre_producto}
-                                                className="h-10 w-10 rounded-full object-cover"
-                                            />
-                                        ) : (
-                                            'Sin imagen'
-                                        )}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        {/* Botón Detalles */}
-                                        <Link href={route('productos.show', { producto: producto.id })}>
-                                            <Button variant="outline" className="hover:bg-chart-3 cursor-pointer hover:text-white">
-                                                <Eye />
-                                            </Button>
-                                        </Link>
-                                        {/* Botón Editar */}
-                                        <Link href={route('productos.edit', { producto: producto.id })}>
-                                            <Button
-                                                variant="outline"
-                                                className="cursor-pointer hover:bg-blue-900 hover:text-white dark:hover:bg-blue-700"
-                                            >
-                                                <Edit3 />
-                                            </Button>
-                                        </Link>
+                            {productosAmostrar.map((producto) => {
+                                const isStockBajo = producto.cantidad_producto <= umbralStockBajo;
 
-                                        {/* Diálogo de Confirmación para Eliminar */}
-                                        <AlertDialog>
-                                            <AlertDialogTrigger asChild>
-                                                <Button
-                                                    variant="ghost"
-                                                    className="hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white"
-                                                >
-                                                    <Trash2 />
+                                return (
+                                    <TableRow key={producto.id} className={isStockBajo ? 'animate-pulse bg-red-50 dark:bg-red-950/30' : ''}>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <Package size={14} className="text-primary shrink-0" />
+                                                <span className="text-primary truncate font-medium">{producto.nombre_producto}</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <Badge variant="outline" className="font-mono uppercase">
+                                                    {producto.marca_producto || 'Sin marca'}
+                                                </Badge>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <QrCode size={14} className="shrink-0 text-gray-500" />
+                                                <span>{producto.codigo_producto || 'Sin código'}</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <CopyX size={14} className="shrink-0 text-indigo-500" />
+                                                <span>{producto.categoria || 'Sin categoría'}</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <Wallet size={14} className="shrink-0 text-emerald-500" />
+                                                <span>
+                                                    {typeof producto.precio_compra_producto === 'number'
+                                                        ? `$${producto.precio_compra_producto.toFixed(2)}`
+                                                        : 'Sin precio'}
+                                                </span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <Hash size={14} className="shrink-0 text-blue-500" />
+                                                <span className={isStockBajo ? 'font-bold text-red-600' : ''}>{producto.cantidad_producto}</span>
+                                                {isStockBajo && (
+                                                    <Badge variant="destructive" className="ml-2 animate-pulse">
+                                                        <AlertTriangle size={12} className="mr-1" />
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <DollarSign size={14} className="shrink-0 text-emerald-500" />
+                                                <span>$ {(producto.precio_compra_producto * producto.cantidad_producto).toFixed(2)}</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            {producto.imagen_url ? (
+                                                <img
+                                                    src={producto.imagen_url}
+                                                    alt={producto.nombre_producto}
+                                                    className="h-10 w-10 rounded-full object-cover"
+                                                />
+                                            ) : (
+                                                'Sin imagen'
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            {/* Botón Detalles */}
+                                            <Link href={route('productos.show', { producto: producto.id })}>
+                                                <Button variant="outline" className="hover:bg-chart-3 cursor-pointer hover:text-white">
+                                                    <Eye />
                                                 </Button>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                    <AlertDialogTitle className="text-center">Atención</AlertDialogTitle>
-                                                    <AlertDialogDescription>
-                                                        ¿Estás seguro de eliminar este producto? Esta acción es irreversible.
-                                                    </AlertDialogDescription>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                    <AlertDialogAction
-                                                        onClick={() => deleteProducto(producto.id)}
-                                                        className="bg-destructive cursor-pointer hover:bg-red-300"
+                                            </Link>
+                                            {/* Botón Editar */}
+                                            <Link href={route('productos.edit', { producto: producto.id })}>
+                                                <Button
+                                                    variant="outline"
+                                                    className="cursor-pointer hover:bg-blue-900 hover:text-white dark:hover:bg-blue-700"
+                                                >
+                                                    <Edit3 />
+                                                </Button>
+                                            </Link>
+
+                                            {/* Diálogo de Confirmación para Eliminar */}
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button
+                                                        variant="ghost"
+                                                        className="hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white"
                                                     >
-                                                        Aceptar
-                                                    </AlertDialogAction>
-                                                    <AlertDialogCancel className="cursor-pointer text-white hover:bg-emerald-300 hover:text-emerald-950 dark:hover:bg-emerald-300 dark:hover:text-emerald-950">
-                                                        Cancelar
-                                                    </AlertDialogCancel>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        </AlertDialog>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
+                                                        <Trash2 />
+                                                    </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle className="text-center">Atención</AlertDialogTitle>
+                                                        <AlertDialogDescription>
+                                                            ¿Estás seguro de eliminar este producto? Esta acción es irreversible.
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogAction
+                                                            onClick={() => deleteProducto(producto.id)}
+                                                            className="bg-destructive cursor-pointer hover:bg-red-300"
+                                                        >
+                                                            Aceptar
+                                                        </AlertDialogAction>
+                                                        <AlertDialogCancel className="cursor-pointer text-white hover:bg-emerald-300 hover:text-emerald-950 dark:hover:bg-emerald-300 dark:hover:text-emerald-950">
+                                                            Cancelar
+                                                        </AlertDialogCancel>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
                         </TableBody>
                         <TableFooter>
                             <TableRow>
-                                <TableCell colSpan={8} className="bg-gray-700">
-                                    Total de Productos
+                                <TableCell colSpan={5} className="bg-gray-700">
+                                    Total de Productos {soloStockBajo && 'con Stock Bajo'}
                                 </TableCell>
-                                <TableCell className="bg-gray-500 text-center">{productos.length}</TableCell>
+                                <TableCell className="bg-gray-700 text-center font-bold">{productosFiltrados.length}</TableCell>
+                                <TableCell colSpan={3} className="bg-gray-700 text-right">
+                                    Valor Total: $
+                                    {productosFiltrados.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_producto, 0).toFixed(2)}
+                                </TableCell>
                             </TableRow>
                         </TableFooter>
                     </Table>
                 </div>
 
                 {/* Controles de Paginación */}
-                <div className="mt-4 flex justify-between">
+                <div className="mt-4 flex items-center justify-between">
                     <Button onClick={() => setPaginaActual((prev) => Math.max(prev - 1, 1))} disabled={paginaActual === 1}>
                         Anterior
                     </Button>
                     <span>
-                        Página {paginaActual} de {totalPaginas}
+                        Página {paginaActual} de {totalPaginas} - {productosFiltrados.length} productos
                     </span>
                     <Button onClick={() => setPaginaActual((prev) => Math.min(prev + 1, totalPaginas))} disabled={paginaActual === totalPaginas}>
                         Siguiente

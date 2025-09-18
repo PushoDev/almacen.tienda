@@ -115,17 +115,27 @@ export interface AlmacenProductoProps {
 export interface ProductoProps {
     id: number;
     nombre_producto: string;
-    marca_producto?: string | null;
-    codigo_producto?: string | null;
-    categoria_id: number;
-    categoria?: CategoriaProps;
+    marca_producto: string;
+    codigo_producto: string;
+    categoria?: string;
     precio_compra_producto: number;
-    cantidad_producto: number;
-    imagen_producto?: string | null;
-    imagen_url?: string | null;
-    created_at: string;
-    updated_at: string;
-    almacenes?: AlmacenProductoProps[];
+    cantidad_total: number; // 🔥 Añadir esta propiedad
+    imagen_url?: string;
+    precio_venta?: number;
+    stock_bajo: boolean; // 🔥 Añadir esta propiedad
+    almacenes?: Array<{
+        id: number;
+        nombre_almacen: string;
+        ciudad_almacen: string;
+        provincia_almacen: string;
+        telefono_almacen?: string;
+        correo_almacen?: string;
+        pivot: {
+            cantidad: number;
+        };
+    }>;
+    created_at?: string;
+    updated_at?: string;
 }
 
 // Interface para Clientes

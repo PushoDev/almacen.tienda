@@ -18,31 +18,22 @@ class Producto extends Model
         'codigo_producto',
         'categoria_id',
         'precio_compra_producto',
-        'cantidad_producto',
         'imagen_producto',
     ];
 
     protected $casts = [
         'precio_compra_producto' => 'decimal:2',
-        'cantidad_producto' => 'integer',
     ];
 
-    protected $appends = ['imagen_url', 'cantidad_total'];
+    protected $appends = ['imagen_url', 'cantidad_total', 'stock_bajo'];
 
-    // Relación con categoría
+    // 🔹 Relación con categoría
     public function categoria()
     {
         return $this->belongsTo(Categoria::class, 'categoria_id');
     }
 
-    // Relación con compras
-    public function compras()
-    {
-        return $this->belongsToMany(Compra::class, 'compra_producto')
-            ->withPivot('cantidad', 'precio');
-    }
-
-    // Relación con múltiples almacenes
+    // 🔹 Relación con almacenes
     public function almacenes()
     {
         return $this->belongsToMany(Almacen::class, 'almacen_producto')
@@ -50,25 +41,28 @@ class Producto extends Model
             ->withTimestamps();
     }
 
-    /**
-     * ✅ Nueva relación para conectar Productos con Vendedores (Usuarios) a través de la tabla pivote.
-     * Esta relación es la que faltaba y causaba el error.
-     */
+    // 🔹 Relación con vendedores
     public function vendedores()
     {
         return $this->belongsToMany(User::class, 'producto_vendedors')
-            ->using(ProductoVendedor::class) // Especificamos el modelo de la tabla pivote
-            ->withPivot('precio_venta', 'venta_ganancia') // Incluimos los campos extra de la tabla pivote
+            ->using(ProductoVendedor::class)
+            ->withPivot('precio_venta', 'venta_ganancia')
             ->withTimestamps();
     }
 
     // 🔥 Cantidad total en todos los almacenes
-    public function getCantidadTotalAttribute()
+    public function getCantidadTotalAttribute(): int
     {
         return $this->almacenes->sum('pivot.cantidad');
     }
 
-    // 🔥 Accesor para URL de la imagen (usa default si no hay)
+    // 🔥 Stock bajo si es menor a 3
+    public function getStockBajoAttribute(): bool
+    {
+        return $this->cantidad_total < 3;
+    }
+
+    // 🔥 Accesor para URL de imagen
     public function getImagenUrlAttribute(): string
     {
         return $this->imagen_producto

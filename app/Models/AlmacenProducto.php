@@ -14,15 +14,21 @@ class AlmacenProducto extends Model
         'cantidad',
     ];
 
-    // Relación con Almacen
+    // 🔹 Relación con almacén
     public function almacen()
     {
         return $this->belongsTo(Almacen::class, 'almacen_id');
     }
 
-    // Relación con Producto
+    // 🔹 Relación con producto
     public function producto()
     {
         return $this->belongsTo(Producto::class, 'producto_id');
+    }
+
+    // 🔥 Accesor: stock bajo si la cantidad < 3
+    public function getStockBajoAttribute(): bool
+    {
+        return $this->cantidad < 3;
     }
 }
