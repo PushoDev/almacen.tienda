@@ -13,12 +13,45 @@ class CreateMovimientosTable extends Migration
     {
         Schema::create('movimientos', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('almacen_emisor_id')->constrained('almacens')->onDelete('cascade'); // Almacén emisor
-            $table->foreignId('almacen_receptor_id')->constrained('almacens')->onDelete('cascade'); // Almacén receptor
-            $table->foreignId('producto_id')->constrained('productos')->onDelete('cascade'); // Producto movido
-            $table->integer('cantidad')->unsigned(); // Cantidad de productos movidos
-            $table->timestamp('fecha_movimiento')->useCurrent(); // Fecha del movimiento
-            $table->timestamps(); // Timestamps para seguimiento
+
+            // Relaciones principales
+            $table->foreignId('almacen_origen_id')->constrained('almacens')->onDelete('cascade');
+            $table->foreignId('almacen_destino_id')->constrained('almacens')->onDelete('cascade');
+            $table->foreignId('user_id')->constrained()->onDelete('cascade');
+            $table->foreignId('usuario_aprobacion_id')->nullable()->constrained('users')->onDelete('set null');
+
+            // Información del movimiento
+            $table->enum('tipo_movimiento', [
+                'traslado',
+                'ajuste',
+                'venta',
+                'compra',
+                'devolucion'
+            ])->default('traslado');
+
+            $table->enum('estado', [
+                'pendiente',
+                'aprobado',
+                'en_transito',
+                'recibido_parcial',
+                'recibido_completo',
+                'rechazado',
+                'cancelado'
+            ])->default('pendiente');
+
+            // Información adicional
+            $table->text('observaciones')->nullable();
+            $table->string('guia_transporte')->nullable();
+            $table->string('transportista')->nullable();
+
+            // Fechas importantes
+            $table->timestamp('fecha_aprobacion')->nullable();
+            $table->timestamp('fecha_envio')->nullable();
+            $table->timestamp('fecha_recepcion')->nullable();
+
+            // Auditoría
+            $table->softDeletes();
+            $table->timestamps();
         });
     }
 

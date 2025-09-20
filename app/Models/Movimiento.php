@@ -2,32 +2,64 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Movimiento extends Model
 {
+    use HasFactory, SoftDeletes;
+
     protected $fillable = [
-        'almacen_emisor_id',
-        'almacen_receptor_id',
-        'producto_id',
-        'cantidad',
+        'almacen_origen_id',
+        'almacen_destino_id',
+        'user_id',
+        'usuario_aprobacion_id',
+        'tipo_movimiento',
+        'estado',
+        'observaciones',
+        'guia_transporte',
+        'transportista',
+        'fecha_aprobacion',
+        'fecha_envio',
+        'fecha_recepcion'
     ];
 
-    // Relación con Almacen Emisor
-    public function almacenEmisor()
+    protected $casts = [
+        'fecha_aprobacion' => 'datetime',
+        'fecha_envio' => 'datetime',
+        'fecha_recepcion' => 'datetime',
+    ];
+
+    public function almacenOrigen(): BelongsTo
     {
-        return $this->belongsTo(Almacen::class, 'almacen_emisor_id');
+        return $this->belongsTo(Almacen::class, 'almacen_origen_id');
     }
 
-    // Relación con Almacen Receptor
-    public function almacenReceptor()
+    public function almacenDestino(): BelongsTo
     {
-        return $this->belongsTo(Almacen::class, 'almacen_receptor_id');
+        return $this->belongsTo(Almacen::class, 'almacen_destino_id');
     }
 
-    // Relación con Producto
-    public function producto()
+    public function usuario(): BelongsTo
     {
-        return $this->belongsTo(Producto::class, 'producto_id');
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function usuarioAprobacion(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'usuario_aprobacion_id');
+    }
+
+    public function detalles(): HasMany
+    {
+        return $this->hasMany(MovimientoDetalle::class);
+    }
+
+    public function seguimientos(): HasMany
+    {
+        return $this->hasMany(MovimientoSeguimiento::class);
     }
 }

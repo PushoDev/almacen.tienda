@@ -331,44 +331,67 @@ export interface ProductoPorAlmacenDetalleRef {
     cantidad_total: number;
 }
 
-// Interface para Movimientos
-export interface MovimientoProps {
-    id: number;
+export interface ProductoPorAlmacenDetalleRef {
     producto_id: number;
+    nombre_producto: string;
+    cantidad: number;
+    id?: number; // Para compatibilidad
+    nombre?: string; // Para compatibilidad
+    stock_actual?: number; // Para compatibilidad
+}
+
+export interface Movimiento {
+    id: number;
     almacen_origen_id: number;
     almacen_destino_id: number;
-    cantidad: number;
-    fecha_movimiento: string;
+    user_id: number;
+    tipo_movimiento: string;
+    estado: string;
+    observaciones?: string;
+    guia_transporte?: string;
+    transportista?: string;
+    fecha_aprobacion?: string;
+    fecha_envio?: string;
+    fecha_recepcion?: string;
     created_at: string;
     updated_at: string;
-    producto?: {
-        nombre_producto: string;
-    };
-    almacen_origen?: {
-        nombre_almacen: string;
-    };
-    almacen_destino?: {
-        nombre_almacen: string;
+    detalles?: MovimientoDetalle[];
+    seguimientos?: MovimientoSeguimiento[];
+    almacen_origen?: AlmacenProps;
+    almacen_destino?: AlmacenProps;
+    usuario?: {
+        name: string;
     };
 }
 
-// Interface para la solicitud de movimiento
-export interface MovimientoRequest {
-    almacen_origen_id: number;
-    almacen_destino_id: number;
-    productos: {
-        producto_id: number;
-        cantidad: number;
-    }[];
+export interface MovimientoDetalle {
+    id: number;
+    movimiento_id: number;
+    producto_id: number;
+    cantidad_solicitada: number;
+    cantidad_despachada: number;
+    cantidad_recibida: number;
+    costo_unitario?: number;
+    observaciones?: string;
+    created_at: string;
+    updated_at: string;
+    producto?: Producto;
 }
 
-// Interface para la respuesta de movimiento
-export interface MovimientoResponse {
-    success: boolean;
-    message: string;
-    movimiento?: MovimientoProps;
+export interface MovimientoSeguimiento {
+    id: number;
+    movimiento_id: number;
+    estado: string;
+    observaciones?: string;
+    user_id: number;
+    ubicacion?: string;
+    evidencia?: string;
+    created_at: string;
+    updated_at: string;
+    usuario?: {
+        name: string;
+    };
 }
-
 // Interface para disponibilidad de venta
 export interface VendedorProductoProps {
     id: number;

@@ -4,10 +4,10 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AppLayout from '@/layouts/app-layout';
-import { AlmacenProps, BreadcrumbItem, ProductoPorAlmacenDetalleRef } from '@/types';
+import { AlmacenProps, BreadcrumbItem, Movimiento, ProductoPorAlmacenDetalleRef } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { CarFront } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { CarFront, CheckCircle, Eye, Package, Truck, XCircle } from 'lucide-react';
+import { useState } from 'react';
 import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -21,120 +21,235 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function MovimientosPage() {
-    console.log('🔄 Componente MovimientosPage montado');
+interface MovimientoWithDetails extends Movimiento {
+    detalles: any[];
+    seguimientos: any[];
+    almacen_origen: AlmacenProps;
+    almacen_destino: AlmacenProps;
+    usuario: {
+        name: string;
+    };
+}
 
-    const [almacens, setAlmacens] = useState<AlmacenProps[]>([]);
+export default function MovimientosPage({
+    movimientos: initialMovimientos,
+    almacenes: initialAlmacenes,
+    estados,
+}: {
+    movimientos: any;
+    almacenes: AlmacenProps[];
+    estados: Record<string, string>;
+}) {
+    const [almacenes, setAlmacenes] = useState<AlmacenProps[]>(initialAlmacenes || []);
     const [productosEmisor, setProductosEmisor] = useState<ProductoPorAlmacenDetalleRef[]>([]);
-    const [almacenEmisorId, setAlmacenEmisorId] = useState<string>('');
-    const [almacenReceptorId, setAlmacenReceptorId] = useState<string>('');
+    const [almacenOrigenId, setAlmacenOrigenId] = useState<string>('');
+    const [almacenDestinoId, setAlmacenDestinoId] = useState<string>('');
     const [loading, setLoading] = useState(false);
+    const [movimientos, setMovimientos] = useState<any>(initialMovimientos);
+    const [selectedMovimiento, setSelectedMovimiento] = useState<MovimientoWithDetails | null>(null);
+    const [showSeguimiento, setShowSeguimiento] = useState(false);
+    const [showRecibirModal, setShowRecibirModal] = useState(false);
+    const [productosRecibidos, setProductosRecibidos] = useState<{ [key: string]: number }>({});
 
-    // Cargar almacenes desde la API
-    useEffect(() => {
-        console.log('📂 Cargando almacenes desde /movimientos/almacenes');
-        fetch('/movimientos/almacenes')
-            .then((res) => {
-                console.log('📥 Respuesta de almacenes:', res.status);
-                return res.json();
-            })
-            .then((data) => {
-                console.log('📦 Almacenes cargados:', data);
-                setAlmacens(data);
-            })
-            .catch((err) => {
-                console.error('❌ Error al cargar almacenes:', err);
-            });
-    }, []);
-
-    // Cargar productos del almacén emisor
-    const handleAlmacenEmisorChange = (value: string) => {
-        console.log('🔄 Almacén emisor seleccionado:', value);
-        setAlmacenEmisorId(value);
+    // Cargar productos del almacén origen
+    const handleAlmacenOrigenChange = (value: string) => {
+        setAlmacenOrigenId(value);
         const almacenId = parseInt(value);
+
         fetch(`/movimientos/almacenes/${almacenId}/productos`)
-            .then((res) => {
-                console.log('📥 Respuesta de productos del almacén:', res.status);
-                return res.json();
-            })
+            .then((res) => res.json())
             .then((data) => {
-                console.log('📦 Productos del almacén emisor:', data);
                 setProductosEmisor(data);
             })
             .catch((err) => {
-                console.error('❌ Error al cargar productos del almacén:', err);
+                console.error('Error al cargar productos del almacén:', err);
+                toast.error('Error al cargar productos del almacén');
             });
     };
 
     // Manejar el envío del formulario
     const handleSubmit = () => {
-        console.log('📤 Iniciando envío del formulario');
-
-        if (!almacenEmisorId || !almacenReceptorId) {
-            console.warn('⚠️ Almacén emisor o receptor no seleccionado');
-            toast.warning('Debes seleccionar un almacén emisor y un almacén receptor.');
+        if (!almacenOrigenId || !almacenDestinoId) {
+            toast.warning('Debes seleccionar un almacén origen y un almacén destino.');
             return;
         }
 
         // Recopilar cantidades de productos
         const productosTrasladados = productosEmisor
             .map((producto) => {
-                const input = document.getElementById(`cantidad-${producto.producto_id}`) as HTMLInputElement;
+                const input = document.getElementById(`cantidad-${producto.id}`) as HTMLInputElement;
                 const cantidad = parseInt(input?.value || '0');
-                console.log(`📊 Producto ID ${producto.producto_id}: Cantidad ingresada:`, cantidad);
-                return cantidad > 0 ? { producto_id: producto.producto_id, cantidad } : null;
+                const observacionesInput = document.getElementById(`observaciones-${producto.id}`) as HTMLInputElement;
+
+                return cantidad > 0
+                    ? {
+                          id: producto.id,
+                          cantidad,
+                          observaciones: observacionesInput?.value || '',
+                      }
+                    : null;
             })
             .filter((item) => item !== null);
 
         if (productosTrasladados.length === 0) {
-            console.warn('⚠️ No se seleccionaron productos para trasladar');
-            alert('Debes especificar al menos una cantidad a trasladar.');
+            toast.warning('Debes especificar al menos una cantidad a trasladar.');
             return;
         }
 
-        console.log('📦 Datos a enviar:', {
-            almacen_origen_id: almacenEmisorId,
-            almacen_destino_id: almacenReceptorId,
-            productos: productosTrasladados,
-        });
-
         setLoading(true);
+
         router.post(
             '/movimientos',
             {
-                almacen_origen_id: almacenEmisorId,
-                almacen_destino_id: almacenReceptorId,
+                almacen_origen_id: almacenOrigenId,
+                almacen_destino_id: almacenDestinoId,
                 productos: productosTrasladados,
             },
             {
                 onSuccess: (page) => {
-                    console.log('✅ Movimiento exitoso:', page);
-                    toast.success('Movimiento registrado exitosamente.');
-                    setProductosEmisor([]); // Limpiar tabla
-                    setAlmacenEmisorId(''); // Reiniciar almacén emisor
-                    setAlmacenReceptorId(''); // Reiniciar almacén receptor
+                    toast.success('Solicitud de movimiento creada exitosamente.');
+                    setProductosEmisor([]);
+                    setAlmacenOrigenId('');
+                    setAlmacenDestinoId('');
+                    // Recargar la lista de movimientos
+                    router.reload({ only: ['movimientos'] });
                 },
                 onError: (errors) => {
-                    console.error('❌ Errores de validación:', errors);
-                    toast.error('Error al registrar el movimiento. Verifica los datos ingresados.');
+                    toast.error('Error al crear la solicitud de movimiento.');
                 },
                 onFinish: () => {
-                    setLoading(false); // Quitar estado de carga
-                    console.log('🏁 Finalizado: Carga completada');
+                    setLoading(false);
                 },
             },
         );
     };
 
+    // Acciones sobre movimientos
+    const handleAprobar = (movimiento: Movimiento) => {
+        router.post(
+            `/movimientos/${movimiento.id}/aprobar`,
+            {},
+            {
+                onSuccess: () => {
+                    toast.success('Movimiento aprobado exitosamente.');
+                    router.reload({ only: ['movimientos'] });
+                },
+                onError: () => {
+                    toast.error('Error al aprobar el movimiento.');
+                },
+            },
+        );
+    };
+
+    const handleEnviar = (movimiento: Movimiento) => {
+        const guia = prompt('Número de guía de transporte (opcional):');
+        const transportista = prompt('Transportista (opcional):');
+
+        router.post(
+            `/movimientos/${movimiento.id}/enviar`,
+            {
+                guia_transporte: guia,
+                transportista: transportista,
+            },
+            {
+                onSuccess: () => {
+                    toast.success('Movimiento marcado como en tránsito.');
+                    router.reload({ only: ['movimientos'] });
+                },
+                onError: () => {
+                    toast.error('Error al enviar el movimiento.');
+                },
+            },
+        );
+    };
+
+    const handleRecibir = (movimiento: Movimiento) => {
+        setSelectedMovimiento(movimiento as MovimientoWithDetails);
+        setShowRecibirModal(true);
+
+        // Inicializar cantidades recibidas
+        const initialCantidades: { [key: string]: number } = {};
+        movimiento.detalles.forEach((detalle: any) => {
+            initialCantidades[detalle.producto_id] = detalle.cantidad_despachada;
+        });
+        setProductosRecibidos(initialCantidades);
+    };
+
+    const confirmarRecepcion = () => {
+        if (!selectedMovimiento) return;
+
+        const productos = selectedMovimiento.detalles.map((detalle: any) => ({
+            id: detalle.producto_id,
+            cantidad_recibida: productosRecibidos[detalle.producto_id] || 0,
+        }));
+
+        router.post(
+            `/movimientos/${selectedMovimiento.id}/recibir`,
+            {
+                productos: productos,
+            },
+            {
+                onSuccess: () => {
+                    toast.success('Movimiento recibido exitosamente.');
+                    setShowRecibirModal(false);
+                    router.reload({ only: ['movimientos'] });
+                },
+                onError: () => {
+                    toast.error('Error al recibir el movimiento.');
+                },
+            },
+        );
+    };
+
+    const handleRechazar = (movimiento: Movimiento) => {
+        const observaciones = prompt('Motivo del rechazo:');
+        if (observaciones) {
+            router.post(
+                `/movimientos/${movimiento.id}/rechazar`,
+                {
+                    observaciones,
+                },
+                {
+                    onSuccess: () => {
+                        toast.success('Movimiento rechazado.');
+                        router.reload({ only: ['movimientos'] });
+                    },
+                    onError: () => {
+                        toast.error('Error al rechazar el movimiento.');
+                    },
+                },
+            );
+        }
+    };
+
+    const verSeguimiento = (movimiento: Movimiento) => {
+        setSelectedMovimiento(movimiento as MovimientoWithDetails);
+        setShowSeguimiento(true);
+
+        // Cargar seguimiento
+        fetch(`/movimientos/${movimiento.id}/seguimiento`)
+            .then((res) => res.json())
+            .then((data) => {
+                setSelectedMovimiento({ ...movimiento, seguimientos: data } as MovimientoWithDetails);
+            });
+    };
+
+    const handleCantidadRecibidaChange = (productoId: number, cantidad: number) => {
+        setProductosRecibidos((prev) => ({
+            ...prev,
+            [productoId]: cantidad,
+        }));
+    };
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Movimientos" />
-            <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
+            <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
-                <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     <HeadingSmall
-                        title="Opciones Generales del Sistema"
-                        description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento."
+                        title="Sistema de Movimientos Logísticos"
+                        description="Gestión profesional de traslados entre almacenes con control de estados y aprobaciones."
                     />
                     <CarFront
                         size={70}
@@ -143,24 +258,24 @@ export default function MovimientosPage() {
                     />
                 </div>
 
-                {/* Seleccionar Almacenes */}
+                {/* Crear nuevo movimiento */}
                 <Card>
                     <CardHeader>
-                        <CardTitle>Gestionar Movimiento</CardTitle>
-                        <CardDescription>Envíos internos de uno o varios productos de un almacén a otro.</CardDescription>
+                        <CardTitle>Nuevo Movimiento</CardTitle>
+                        <CardDescription>Solicitud de traslado entre almacenes (requiere aprobación)</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <form>
                             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                                {/* Almacén Emisor */}
+                                {/* Almacén Origen */}
                                 <div className="flex flex-col space-y-1.5">
-                                    <Label htmlFor="almacen_emisor">Almacén Emisor</Label>
-                                    <Select onValueChange={handleAlmacenEmisorChange} value={almacenEmisorId}>
-                                        <SelectTrigger id="almacen_emisor">
-                                            <SelectValue placeholder="Selecciona el almacén emisor..." />
+                                    <Label htmlFor="almacen_origen">Almacén Origen</Label>
+                                    <Select onValueChange={handleAlmacenOrigenChange} value={almacenOrigenId}>
+                                        <SelectTrigger id="almacen_origen">
+                                            <SelectValue placeholder="Selecciona el almacén origen..." />
                                         </SelectTrigger>
                                         <SelectContent position="popper">
-                                            {almacens.map((almacen) => (
+                                            {almacenes.map((almacen) => (
                                                 <SelectItem key={almacen.id} value={almacen.id.toString()}>
                                                     {almacen.nombre_almacen}
                                                 </SelectItem>
@@ -169,16 +284,16 @@ export default function MovimientosPage() {
                                     </Select>
                                 </div>
 
-                                {/* Almacén Receptor */}
+                                {/* Almacén Destino */}
                                 <div className="flex flex-col space-y-1.5">
-                                    <Label htmlFor="almacen_receptor">Almacén Receptor</Label>
-                                    <Select onValueChange={(value) => setAlmacenReceptorId(value)} value={almacenReceptorId}>
-                                        <SelectTrigger id="almacen_receptor">
-                                            <SelectValue placeholder="Selecciona el almacén receptor..." />
+                                    <Label htmlFor="almacen_destino">Almacén Destino</Label>
+                                    <Select onValueChange={(value) => setAlmacenDestinoId(value)} value={almacenDestinoId}>
+                                        <SelectTrigger id="almacen_destino">
+                                            <SelectValue placeholder="Selecciona el almacén destino..." />
                                         </SelectTrigger>
                                         <SelectContent position="popper">
-                                            {almacens
-                                                .filter((alm) => (almacenEmisorId ? alm.id.toString() !== almacenEmisorId : true))
+                                            {almacenes
+                                                .filter((alm) => (almacenOrigenId ? alm.id.toString() !== almacenOrigenId : true))
                                                 .map((almacen) => (
                                                     <SelectItem key={almacen.id} value={almacen.id.toString()}>
                                                         {almacen.nombre_almacen}
@@ -189,70 +304,275 @@ export default function MovimientosPage() {
                                 </div>
                             </div>
                         </form>
+
+                        {/* Tabla de Productos */}
+                        {productosEmisor.length > 0 && (
+                            <div className="mt-6">
+                                <h3 className="text-lg font-medium">Productos Disponibles</h3>
+                                <div className="mt-2 overflow-x-auto">
+                                    <table className="min-w-full divide-y divide-gray-200">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock Disponible</th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                                    Cantidad a Trasladar
+                                                </th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Observaciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-200 bg-white">
+                                            {productosEmisor.map((producto) => (
+                                                <tr key={producto.id}>
+                                                    <td className="px-6 py-4 whitespace-nowrap">{producto.nombre}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap">{producto.stock_actual}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                        <input
+                                                            id={`cantidad-${producto.id}`}
+                                                            type="number"
+                                                            min="0"
+                                                            max={producto.stock_actual}
+                                                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                                        />
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                        <input
+                                                            id={`observaciones-${producto.id}`}
+                                                            type="text"
+                                                            placeholder="Observaciones opcionales"
+                                                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                                        />
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
                     </CardContent>
                     <CardFooter className="flex justify-between">
                         <Link href={route('dashboard')}>
-                            <Button variant="outline" className="hover:bg-destructive-foreground cursor-pointer">
-                                Cancelar
-                            </Button>
+                            <Button variant="outline">Cancelar</Button>
                         </Link>
-                        <Button onClick={handleSubmit} className="hover:bg-chart-2 cursor-pointer" disabled={loading}>
-                            {loading ? 'Procesando...' : 'Realizar Movimiento'}
+                        <Button onClick={handleSubmit} disabled={loading || productosEmisor.length === 0}>
+                            {loading ? 'Enviando solicitud...' : 'Solicitar Movimiento'}
                         </Button>
                     </CardFooter>
                 </Card>
 
-                {/* Tabla de Productos del Almacén Emisor */}
-                <Card className="mt-6">
+                {/* Lista de Movimientos */}
+                <Card>
                     <CardHeader>
-                        <CardTitle className="text-sidebar-accent">Productos Disponibles en el Almacén Emisor</CardTitle>
-                        <CardDescription>Listado de productos con sus cantidades disponibles en el almacén emisor</CardDescription>
+                        <CardTitle>Historial de Movimientos</CardTitle>
+                        <CardDescription>Gestiona las solicitudes de movimiento y su seguimiento</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        {productosEmisor.length === 0 ? (
-                            <p className="py-4 text-center text-gray-500">No hay productos disponibles en este almacén.</p>
-                        ) : (
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                                    <thead className="bg-gray-50 dark:bg-gray-800">
-                                        <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
-                                                Nombre del Producto
-                                            </th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
-                                                Cantidad Disponible
-                                            </th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300">
-                                                Cantidad a Trasladar
-                                            </th>
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Origen</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Destino</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cantidad</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Solicitado por</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200 bg-white">
+                                    {movimientos.data.map((movimiento: MovimientoWithDetails) => (
+                                        <tr key={movimiento.id}>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                {movimiento.detalles && movimiento.detalles.length > 0 ? (
+                                                    <span>{movimiento.detalles.length} producto(s)</span>
+                                                ) : (
+                                                    <span>Sin productos</span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">{movimiento.almacen_origen?.nombre_almacen}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap">{movimiento.almacen_destino?.nombre_almacen}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                {movimiento.detalles &&
+                                                    movimiento.detalles.reduce(
+                                                        (total: number, detalle: any) => total + detalle.cantidad_solicitada,
+                                                        0,
+                                                    )}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <span
+                                                    className={`rounded-full px-2 py-1 text-xs font-medium ${
+                                                        movimiento.estado === 'pendiente'
+                                                            ? 'bg-yellow-100 text-yellow-800'
+                                                            : movimiento.estado === 'aprobado'
+                                                              ? 'bg-blue-100 text-blue-800'
+                                                              : movimiento.estado === 'en_transito'
+                                                                ? 'bg-orange-100 text-orange-800'
+                                                                : movimiento.estado === 'recibido_completo'
+                                                                  ? 'bg-green-100 text-green-800'
+                                                                  : movimiento.estado === 'recibido_parcial'
+                                                                    ? 'bg-teal-100 text-teal-800'
+                                                                    : 'bg-red-100 text-red-800'
+                                                    }`}
+                                                >
+                                                    {estados[movimiento.estado]}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">{movimiento.usuario?.name}</td>
+                                            <td className="flex space-x-2 px-6 py-4 whitespace-nowrap">
+                                                <Button variant="outline" size="sm" onClick={() => verSeguimiento(movimiento)}>
+                                                    <Eye className="h-4 w-4" />
+                                                </Button>
+                                                {movimiento.estado === 'pendiente' && (
+                                                    <>
+                                                        <Button size="sm" onClick={() => handleAprobar(movimiento)}>
+                                                            <CheckCircle className="mr-1 h-4 w-4" /> Aprobar
+                                                        </Button>
+                                                        <Button variant="destructive" size="sm" onClick={() => handleRechazar(movimiento)}>
+                                                            <XCircle className="mr-1 h-4 w-4" /> Rechazar
+                                                        </Button>
+                                                    </>
+                                                )}
+                                                {movimiento.estado === 'aprobado' && (
+                                                    <Button size="sm" onClick={() => handleEnviar(movimiento)}>
+                                                        <Truck className="mr-1 h-4 w-4" /> Enviar
+                                                    </Button>
+                                                )}
+                                                {movimiento.estado === 'en_transito' && (
+                                                    <Button size="sm" onClick={() => handleRecibir(movimiento)}>
+                                                        <Package className="mr-1 h-4 w-4" /> Recibir
+                                                    </Button>
+                                                )}
+                                            </td>
                                         </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-900">
-                                        {productosEmisor.map((producto) => (
-                                            <tr key={producto.producto_id}>
-                                                <td className="px-6 py-4 text-sm whitespace-nowrap text-gray-900 dark:text-gray-200">
-                                                    {producto.nombre_producto}
-                                                </td>
-                                                <td className="px-6 py-4 text-sm whitespace-nowrap text-gray-900 dark:text-gray-200">
-                                                    {producto.cantidad}
-                                                </td>
-                                                <td className="px-6 py-4 text-sm whitespace-nowrap">
-                                                    <input
-                                                        id={`cantidad-${producto.producto_id}`}
-                                                        type="number"
-                                                        min="0"
-                                                        max={producto.cantidad}
-                                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                                    />
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Paginación */}
+                        {movimientos.links && (
+                            <div className="mt-4 flex items-center justify-between">
+                                <div className="text-sm text-gray-700">
+                                    Mostrando {movimientos.from} a {movimientos.to} de {movimientos.total} resultados
+                                </div>
+                                <div className="flex space-x-2">
+                                    {movimientos.links.map((link: any, index: number) => (
+                                        <Button
+                                            key={index}
+                                            variant={link.active ? 'default' : 'outline'}
+                                            size="sm"
+                                            disabled={!link.url}
+                                            onClick={() => router.get(link.url || '#')}
+                                        >
+                                            {link.label.replace('&laquo;', '«').replace('&raquo;', '»')}
+                                        </Button>
+                                    ))}
+                                </div>
                             </div>
                         )}
                     </CardContent>
                 </Card>
+
+                {/* Modal de Seguimiento */}
+                {showSeguimiento && selectedMovimiento && (
+                    <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black p-4">
+                        <div className="max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white shadow-xl">
+                            <div className="p-6">
+                                <h3 className="mb-4 text-lg font-medium">Seguimiento del Movimiento #{selectedMovimiento.id}</h3>
+
+                                <div className="space-y-4">
+                                    {selectedMovimiento.seguimientos?.map((seguimiento, index) => (
+                                        <div key={seguimiento.id} className="relative border-l-2 border-gray-200 pl-4">
+                                            <div className="absolute top-2 -left-1.5 h-3 w-3 rounded-full bg-gray-200"></div>
+                                            <div className="ml-4">
+                                                <div className="flex justify-between">
+                                                    <span
+                                                        className={`text-sm font-medium ${
+                                                            seguimiento.estado === 'pendiente'
+                                                                ? 'text-yellow-600'
+                                                                : seguimiento.estado === 'aprobado'
+                                                                  ? 'text-blue-600'
+                                                                  : seguimiento.estado === 'en_transito'
+                                                                    ? 'text-orange-600'
+                                                                    : seguimiento.estado === 'recibido_completo'
+                                                                      ? 'text-green-600'
+                                                                      : seguimiento.estado === 'recibido_parcial'
+                                                                        ? 'text-teal-600'
+                                                                        : 'text-red-600'
+                                                        }`}
+                                                    >
+                                                        {estados[seguimiento.estado]}
+                                                    </span>
+                                                    <span className="text-xs text-gray-500">{new Date(seguimiento.created_at).toLocaleString()}</span>
+                                                </div>
+                                                <p className="text-sm text-gray-600">{seguimiento.observaciones}</p>
+                                                <p className="text-xs text-gray-500">Por: {seguimiento.usuario?.name}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="mt-6 flex justify-end">
+                                    <Button onClick={() => setShowSeguimiento(false)}>Cerrar</Button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Modal de Recepción */}
+                {showRecibirModal && selectedMovimiento && (
+                    <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black p-4">
+                        <div className="max-h-[80vh] w-full max-w-4xl overflow-y-auto rounded-lg bg-white shadow-xl">
+                            <div className="p-6">
+                                <h3 className="mb-4 text-lg font-medium">Registrar Recepción - Movimiento #{selectedMovimiento.id}</h3>
+
+                                <div className="mt-4 overflow-x-auto">
+                                    <table className="min-w-full divide-y divide-gray-200">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                                    Cantidad Despachada
+                                                </th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cantidad Recibida</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-200 bg-white">
+                                            {selectedMovimiento.detalles.map((detalle: any) => (
+                                                <tr key={detalle.id}>
+                                                    <td className="px-6 py-4 whitespace-nowrap">{detalle.producto?.nombre_producto}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap">{detalle.cantidad_despachada}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            max={detalle.cantidad_despachada}
+                                                            value={productosRecibidos[detalle.producto_id] || 0}
+                                                            onChange={(e) =>
+                                                                handleCantidadRecibidaChange(detalle.producto_id, parseInt(e.target.value))
+                                                            }
+                                                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                                        />
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <div className="mt-6 flex justify-end space-x-2">
+                                    <Button variant="outline" className="cursor-pointer" onClick={() => setShowRecibirModal(false)}>
+                                        Cancelar
+                                    </Button>
+                                    <Button onClick={confirmarRecepcion}>Confirmar Recepción</Button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
             <Toaster position="top-center" />
         </AppLayout>
