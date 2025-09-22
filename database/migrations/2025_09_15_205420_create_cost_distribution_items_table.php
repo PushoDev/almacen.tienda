@@ -12,19 +12,23 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('cost_distribution_items', function (Blueprint $table) {
-            // En el archivo de migración de CostDistributionItem
             $table->id();
             $table->unsignedBigInteger('cost_distribution_id');
             $table->unsignedBigInteger('product_id');
-            $table->decimal('distributed_amount_usd', 15, 2);
-            $table->decimal('old_cost_usd', 15, 2);
-            $table->decimal('new_cost_usd', 15, 2);
+
+            $table->integer('quantity'); // cantidad comprada
+            $table->decimal('distributed_amount_usd', 15, 4); // monto manual en USD
+            $table->decimal('old_cost_usd', 15, 4); // costo anterior unitario
+            $table->decimal('new_cost_usd', 15, 4); // costo nuevo unitario
+
             $table->timestamps();
 
             $table->foreign('cost_distribution_id')->references('id')->on('cost_distributions')->onDelete('cascade');
             $table->foreign('product_id')->references('id')->on('productos')->onDelete('cascade');
         });
     }
+
+
 
     /**
      * Reverse the migrations.
