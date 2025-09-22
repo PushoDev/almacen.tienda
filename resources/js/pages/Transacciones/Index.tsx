@@ -5,9 +5,7 @@ import AppLayout from '@/layouts/app-layout';
 import CostosAdicionales from '@/pages/Transacciones/Operaciones/CostosAdicionales';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import { Banknote, Repeat, TrendingDown, TrendingUp } from 'lucide-react';
-import Ganancias from './Operaciones/Ganancias';
-import Gastos from './Operaciones/Gastos';
+import { Banknote, Repeat } from 'lucide-react';
 import Movimientos from './Operaciones/Movimientos';
 
 // 1. Define las interfaces para los datos que recibes desde el backend
@@ -72,15 +70,7 @@ export default function Transacciones({ compras, cuentas, tasaCambioActual }: Pr
 
                 {/* Opciones de Transacciones */}
                 <Tabs defaultValue="ganancias">
-                    <TabsList className="grid w-full grid-cols-4">
-                        <TabsTrigger value="ganancias" className="flex items-center gap-2">
-                            <TrendingUp className="h-4 w-4" />
-                            Ganancias
-                        </TabsTrigger>
-                        <TabsTrigger value="gastos" className="flex items-center gap-2">
-                            <TrendingDown className="h-4 w-4" />
-                            Gastos
-                        </TabsTrigger>
+                    <TabsList className="grid w-full grid-cols-2">
                         <TabsTrigger value="movimientos" className="flex items-center gap-2">
                             <Repeat className="h-4 w-4" />
                             Movimientos
@@ -90,15 +80,6 @@ export default function Transacciones({ compras, cuentas, tasaCambioActual }: Pr
                             Costos Adicionales
                         </TabsTrigger>
                     </TabsList>
-
-                    <TabsContent value="ganancias">
-                        <Ganancias />
-                    </TabsContent>
-
-                    <TabsContent value="gastos">
-                        <Gastos />
-                    </TabsContent>
-
                     {/* Paso 1: Pasar la prop 'cuentas' al componente Movimientos */}
                     <TabsContent value="movimientos">
                         <Movimientos cuentas={cuentas} />
