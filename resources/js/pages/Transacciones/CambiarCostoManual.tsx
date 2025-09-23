@@ -10,7 +10,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppLayout from '@/layouts/app-layout';
 import { Head, useForm } from '@inertiajs/react';
 import { Banknote, DollarSign, Euro, Wallet } from 'lucide-react';
-// ✅ Asumiendo que esta función existe en alguna parte de tu proyecto
+import { toast } from 'sonner';
+
+// Asumiendo que esta función existe en alguna parte de tu proyecto
 const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('es-ES', {
         style: 'currency',
@@ -25,9 +27,10 @@ interface Compra {
     productos: Array<{
         id: number;
         nombre_producto: string;
+        precio_compra_producto: number;
         pivot: {
             cantidad: number;
-            costo_compra_usd: number;
+            precio: number; // ✅ CORRECCIÓN: Usamos `precio` para que coincida con lo que carga el controlador
         };
     }>;
 }
@@ -44,7 +47,6 @@ interface Props {
     tasaCambioActual: number;
 }
 
-// ⚠️ Cambiamos el nombre del componente para que coincida con el nombre de archivo
 export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }: Props) {
     const { data, setData, post, processing, errors } = useForm({
         purchase_id: compra.id,
@@ -55,9 +57,9 @@ export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }
         productos: compra.productos.map((producto) => ({
             product_id: producto.id,
             product_name: producto.nombre_producto,
-            old_cost_usd: producto.pivot.costo_compra_usd,
+            old_cost_usd: producto.pivot.precio, // ✅ CORRECCIÓN: Obtenemos el costo del `pivot`
             cantidad: producto.pivot.cantidad,
-            amount_usd: '0', // Usamos string para evitar problemas de tipo con el input
+            amount_usd: '0',
         })),
     });
 
@@ -158,11 +160,11 @@ export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }
                             </div>
                         </div>
 
-                        <div className="mt-4 flex items-center justify-between rounded-md bg-gray-100 p-4">
+                        <div className="mt-4 flex items-center justify-between rounded-md p-4">
                             <span className="text-lg font-semibold">Monto total a distribuir:</span>
                             <span className="text-xl font-bold text-green-600">{formatCurrency(totalUsdToDistribute)} USD</span>
                         </div>
-                        <div className="flex items-center justify-between rounded-md bg-gray-100 p-4">
+                        <div className="flex items-center justify-between rounded-md p-4">
                             <span className="text-lg font-semibold">Monto restante por distribuir:</span>
                             <span className={`text-xl font-bold ${remainingUsd >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
                                 {formatCurrency(remainingUsd)} USD
@@ -183,7 +185,8 @@ export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }
                                 </TableHeader>
                                 <TableBody>
                                     {data.productos.map((producto, index) => {
-                                        const nuevoCosto = producto.old_cost_usd + (parseFloat(producto.amount_usd) || 0) / producto.cantidad;
+                                        const distributedAmount = parseFloat(producto.amount_usd) || 0;
+                                        const nuevoCosto = producto.old_cost_usd + distributedAmount / producto.cantidad;
                                         return (
                                             <TableRow key={producto.product_id}>
                                                 <TableCell>{producto.product_name}</TableCell>

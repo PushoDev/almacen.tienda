@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Log;
 class TransaccionController extends Controller
 {
     /**
-     * Vista principal de transacciones
+     * Vista principal de transacciones.
      */
     public function index()
     {
@@ -37,12 +37,16 @@ class TransaccionController extends Controller
     }
 
     /**
-     * Muestra formulario de distribución manual para una compra
+     * Muestra formulario de distribución manual para una compra.
      */
     public function mostrarFormularioDistribucion(Compra $compra)
     {
-        $compra->load('productos');
-        $cuentas = Cuenta::all();
+        $compra->load([
+            // Cargamos la relación `productos` con los datos del pivot `cantidad` y `precio`.
+            'productos' => fn($query) => $query->withPivot('cantidad', 'precio')
+        ]);
+
+        $cuentas = Cuenta::where('tipo_moneda', 'CUP')->get();
         $tasaCambioActual = TasaCambio::latest('fecha_actualizacion')->first();
 
         return Inertia::render('Transacciones/CambiarCostoManual', [
@@ -53,7 +57,7 @@ class TransaccionController extends Controller
     }
 
     /**
-     * Procesa la distribución manual de costos
+     * Procesa la distribución manual de costos.
      */
     public function distribuirCostosManual(DistribuirCostosManualRequest $request)
     {
@@ -62,28 +66,24 @@ class TransaccionController extends Controller
         DB::beginTransaction();
 
         try {
-            $compra = Compra::findOrFail($validatedData['purchase_id']);
+            $compra = Compra::with('productos')->findOrFail($validatedData['purchase_id']);
             $cuenta = Cuenta::findOrFail($validatedData['account_id']);
 
-            // Validar tipo de cuenta
             if ($cuenta->tipo_cuenta === 'deudas') {
                 DB::rollBack();
                 return redirect()->back()->with('error', 'No se puede usar una cuenta de deudas para esta operación.');
             }
 
-            // Tasa de cambio
             $tasa_cambio = $validatedData['exchange_rate']
                 ?? TasaCambio::latest('fecha_actualizacion')->first()->tasa;
 
             $totalUsdDistribuido = (float) $validatedData['amount_cup'] / $tasa_cambio;
 
-            // Validar saldo
             if ($cuenta->saldo_cuenta < (float) $validatedData['amount_cup']) {
                 DB::rollBack();
                 return redirect()->back()->with('error', 'El saldo en la cuenta de origen es insuficiente.');
             }
 
-            // Crear cabecera de distribución
             $distribution = CostDistribution::create([
                 'purchase_id'   => $validatedData['purchase_id'],
                 'account_id'    => $validatedData['account_id'],
@@ -93,21 +93,17 @@ class TransaccionController extends Controller
                 'details'       => $validatedData['details'],
             ]);
 
-            // Procesar productos
             foreach ($validatedData['productos'] as $productoData) {
                 if ((float) $productoData['amount_usd'] > 0) {
                     $producto = Producto::findOrFail($productoData['product_id']);
-                    $pivotData = $compra->productos()
-                        ->where('producto_id', $producto->id)
-                        ->firstOrFail()
-                        ->pivot;
+
+                    $pivotData = $compra->productos->find($producto->id)->pivot;
 
                     $cantidad = $pivotData->cantidad;
                     $costoActual = $producto->precio_compra_producto;
                     $incrementoUnitario = (float) $productoData['amount_usd'] / $cantidad;
                     $nuevoCosto = $costoActual + $incrementoUnitario;
 
-                    // Registrar detalle de distribución
                     $distribution->items()->create([
                         'product_id' => $producto->id,
                         'quantity' => $cantidad,
@@ -116,7 +112,6 @@ class TransaccionController extends Controller
                         'new_cost_usd' => $nuevoCosto,
                     ]);
 
-                    // Guardar historial de costos
                     CostoHistorial::create([
                         'product_id' => $producto->id,
                         'old_cost_usd' => $costoActual,
@@ -125,18 +120,15 @@ class TransaccionController extends Controller
                         'comentario' => 'Ajuste por distribución manual de costos.',
                     ]);
 
-                    // Actualizar producto
                     $producto->update(['precio_compra_producto' => $nuevoCosto]);
                 }
             }
 
-            // Descontar saldo de la cuenta
             $cuenta->decrement('saldo_cuenta', (float) $validatedData['amount_cup']);
 
-            // Registrar transacción en cuentas
             TransaccionCuenta::create([
                 'user_id' => auth()->id(),
-                'cuenta_origen_id' => $cuenta->id, // ⚠️ usa el nombre de campo real de tu migración
+                'cuenta_origen_id' => $cuenta->id,
                 'monto' => (float) $validatedData['amount_cup'],
                 'tipo' => 'gasto_adicional',
                 'comentario' => $validatedData['details']
