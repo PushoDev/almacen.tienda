@@ -310,18 +310,16 @@ export default function MovimientosPage({
                             <div className="mt-6">
                                 <h3 className="text-lg font-medium">Productos Disponibles</h3>
                                 <div className="mt-2 overflow-x-auto">
-                                    <table className="min-w-full divide-y divide-gray-200">
-                                        <thead className="bg-gray-50">
+                                    <table className="min-w-full divide-y">
+                                        <thead className="bg-primary text-white">
                                             <tr>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock Disponible</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                                    Cantidad a Trasladar
-                                                </th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Observaciones</th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium uppercase">Producto</th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium uppercase">Stock Disponible</th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium uppercase">Cantidad a Trasladar</th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium uppercase">Observaciones</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-gray-200 bg-white">
+                                        <tbody className="divide-y">
                                             {productosEmisor.map((producto) => (
                                                 <tr key={producto.id}>
                                                     <td className="px-6 py-4 whitespace-nowrap">{producto.nombre}</td>
@@ -332,15 +330,15 @@ export default function MovimientosPage({
                                                             type="number"
                                                             min="0"
                                                             max={producto.stock_actual}
-                                                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                                            className="border-sidebar-accent block w-full rounded-md border-1 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                                         />
                                                     </td>
                                                     <td className="px-6 py-4 whitespace-nowrap">
                                                         <input
                                                             id={`observaciones-${producto.id}`}
                                                             type="text"
-                                                            placeholder="Observaciones opcionales"
-                                                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                                            placeholder=" Observaciones opcionales"
+                                                            className="border-primary block w-full rounded-md border-1 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                                         />
                                                     </td>
                                                 </tr>
@@ -369,19 +367,19 @@ export default function MovimientosPage({
                     </CardHeader>
                     <CardContent>
                         <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
+                            <table className="min-w-full divide-y">
+                                <thead className="bg-primary text-white">
                                     <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Origen</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Destino</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cantidad</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Solicitado por</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase">Producto</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase">Origen</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase">Destino</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase">Cantidad</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase">Estado</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase">Solicitado por</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase">Acciones</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-gray-200 bg-white">
+                                <tbody className="divide-y">
                                     {movimientos.data.map((movimiento: MovimientoWithDetails) => (
                                         <tr key={movimiento.id}>
                                             <td className="px-6 py-4 whitespace-nowrap">

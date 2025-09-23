@@ -17,11 +17,15 @@ use Illuminate\Support\Facades\Log;
 class TransaccionController extends Controller
 {
     /**
-     * Muestra la página principal de transacciones y los datos necesarios.
+     * Vista principal de transacciones
      */
     public function index()
     {
-        $compras = Compra::with('productos')->orderByDesc('fecha_compra')->limit(50)->get();
+        $compras = Compra::with('productos')
+            ->orderByDesc('fecha_compra')
+            ->limit(50)
+            ->get();
+
         $cuentas = Cuenta::all();
         $tasaCambioActual = TasaCambio::latest('fecha_actualizacion')->first();
 
@@ -33,20 +37,15 @@ class TransaccionController extends Controller
     }
 
     /**
-     * Muestra la vista completa para distribuir costos de una compra específica.
-     *
-     * @param  \App\Models\Compra  $compra
-     * @return \Inertia\Response
+     * Muestra formulario de distribución manual para una compra
      */
     public function mostrarFormularioDistribucion(Compra $compra)
     {
-        // Carga la relación 'productos' para que la vista tenga acceso a ellos
         $compra->load('productos');
         $cuentas = Cuenta::all();
         $tasaCambioActual = TasaCambio::latest('fecha_actualizacion')->first();
 
-        // RENDERIZA LA VISTA COMPLETA ESPECIFICADA
-        return Inertia::render('Transacciones/CambiarelMalditoPrecio', [
+        return Inertia::render('Transacciones/CambiarCostoManual', [
             'compra' => $compra,
             'cuentas' => $cuentas,
             'tasaCambioActual' => $tasaCambioActual ? $tasaCambioActual->tasa : 0,
@@ -54,7 +53,7 @@ class TransaccionController extends Controller
     }
 
     /**
-     * Procesa la distribución MANUAL de costos adicionales.
+     * Procesa la distribución manual de costos
      */
     public function distribuirCostosManual(DistribuirCostosManualRequest $request)
     {
@@ -66,19 +65,25 @@ class TransaccionController extends Controller
             $compra = Compra::findOrFail($validatedData['purchase_id']);
             $cuenta = Cuenta::findOrFail($validatedData['account_id']);
 
+            // Validar tipo de cuenta
             if ($cuenta->tipo_cuenta === 'deudas') {
                 DB::rollBack();
                 return redirect()->back()->with('error', 'No se puede usar una cuenta de deudas para esta operación.');
             }
 
-            $tasa_cambio = $validatedData['exchange_rate'] ?? TasaCambio::latest('fecha_actualizacion')->first()->tasa;
+            // Tasa de cambio
+            $tasa_cambio = $validatedData['exchange_rate']
+                ?? TasaCambio::latest('fecha_actualizacion')->first()->tasa;
+
             $totalUsdDistribuido = (float) $validatedData['amount_cup'] / $tasa_cambio;
 
-            if ($cuenta->saldo < (float) $validatedData['amount_cup']) {
+            // Validar saldo
+            if ($cuenta->saldo_cuenta < (float) $validatedData['amount_cup']) {
                 DB::rollBack();
                 return redirect()->back()->with('error', 'El saldo en la cuenta de origen es insuficiente.');
             }
 
+            // Crear cabecera de distribución
             $distribution = CostDistribution::create([
                 'purchase_id'   => $validatedData['purchase_id'],
                 'account_id'    => $validatedData['account_id'],
@@ -88,15 +93,21 @@ class TransaccionController extends Controller
                 'details'       => $validatedData['details'],
             ]);
 
+            // Procesar productos
             foreach ($validatedData['productos'] as $productoData) {
                 if ((float) $productoData['amount_usd'] > 0) {
-                    $producto = Producto::find($productoData['product_id']);
-                    $pivotData = $compra->productos()->where('producto_id', $producto->id)->firstOrFail()->pivot;
+                    $producto = Producto::findOrFail($productoData['product_id']);
+                    $pivotData = $compra->productos()
+                        ->where('producto_id', $producto->id)
+                        ->firstOrFail()
+                        ->pivot;
+
                     $cantidad = $pivotData->cantidad;
                     $costoActual = $producto->precio_compra_producto;
                     $incrementoUnitario = (float) $productoData['amount_usd'] / $cantidad;
                     $nuevoCosto = $costoActual + $incrementoUnitario;
 
+                    // Registrar detalle de distribución
                     $distribution->items()->create([
                         'product_id' => $producto->id,
                         'quantity' => $cantidad,
@@ -105,6 +116,7 @@ class TransaccionController extends Controller
                         'new_cost_usd' => $nuevoCosto,
                     ]);
 
+                    // Guardar historial de costos
                     CostoHistorial::create([
                         'product_id' => $producto->id,
                         'old_cost_usd' => $costoActual,
@@ -113,22 +125,29 @@ class TransaccionController extends Controller
                         'comentario' => 'Ajuste por distribución manual de costos.',
                     ]);
 
+                    // Actualizar producto
                     $producto->update(['precio_compra_producto' => $nuevoCosto]);
                 }
             }
 
-            $cuenta->decrement('saldo', (float) $validatedData['amount_cup']);
+            // Descontar saldo de la cuenta
+            $cuenta->decrement('saldo_cuenta', (float) $validatedData['amount_cup']);
 
+            // Registrar transacción en cuentas
             TransaccionCuenta::create([
-                'cuenta_id' => $cuenta->id,
-                'tipo' => 'gasto_adicional',
+                'user_id' => auth()->id(),
+                'cuenta_origen_id' => $cuenta->id, // ⚠️ usa el nombre de campo real de tu migración
                 'monto' => (float) $validatedData['amount_cup'],
-                'descripcion' => $validatedData['details'] ?? 'Gasto de distribución de costos por compra #' . $compra->id,
+                'tipo' => 'gasto_adicional',
+                'comentario' => $validatedData['details']
+                    ?? 'Gasto de distribución de costos por compra #' . $compra->id,
             ]);
 
             DB::commit();
 
-            return redirect()->route('transacciones')->with('success', 'Costos distribuidos manualmente con éxito.');
+            return redirect()
+                ->route('transacciones')
+                ->with('success', 'Costos distribuidos manualmente con éxito.');
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Error al distribuir costos manualmente: ' . $e->getMessage());

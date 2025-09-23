@@ -2,11 +2,11 @@ import HeadingSmall from '@/components/heading-small';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AppLayout from '@/layouts/app-layout';
-import CostosAdicionales from '@/pages/Transacciones/Operaciones/CostosAdicionales';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import { Banknote, Repeat } from 'lucide-react';
-import Movimientos from './Operaciones/Movimientos';
+import CostosAdicionales from './layouts/CostosAdicionales';
+import Movimientos from './layouts/Movimientos';
 
 // 1. Define las interfaces para los datos que recibes desde el backend
 interface Compra {
