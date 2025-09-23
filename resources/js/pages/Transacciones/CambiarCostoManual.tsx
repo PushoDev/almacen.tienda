@@ -12,7 +12,6 @@ import { Head, useForm } from '@inertiajs/react';
 import { Banknote, DollarSign, Euro, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 
-// Asumiendo que esta función existe en alguna parte de tu proyecto
 const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('es-ES', {
         style: 'currency',
@@ -21,7 +20,6 @@ const formatCurrency = (value: number) => {
     }).format(value);
 };
 
-// Definimos las interfaces con tipos específicos para el formulario de Inertia
 interface Compra {
     id: number;
     productos: Array<{
@@ -30,7 +28,7 @@ interface Compra {
         precio_compra_producto: number;
         pivot: {
             cantidad: number;
-            precio: number; // ✅ CORRECCIÓN: Usamos `precio` para que coincida con lo que carga el controlador
+            precio: number;
         };
     }>;
 }
@@ -57,7 +55,7 @@ export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }
         productos: compra.productos.map((producto) => ({
             product_id: producto.id,
             product_name: producto.nombre_producto,
-            old_cost_usd: producto.pivot.precio, // ✅ CORRECCIÓN: Obtenemos el costo del `pivot`
+            old_cost_usd: producto.pivot.precio,
             cantidad: producto.pivot.cantidad,
             amount_usd: '0',
         })),
@@ -84,7 +82,8 @@ export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }
         post(route('distribuir.costos.manual'));
     };
 
-    const handleProductChange = (index: number, value: string) => {
+    const handleProductChange = (index: number, event: React.ChangeEvent<HTMLInputElement>) => {
+        const { value } = event.target;
         const newProducts = [...data.productos];
         newProducts[index].amount_usd = value;
         setData('productos', newProducts);
@@ -185,8 +184,13 @@ export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }
                                 </TableHeader>
                                 <TableBody>
                                     {data.productos.map((producto, index) => {
+                                        // ✅ CORRECCIÓN FINAL: Parseamos y luego forzamos la precisión
                                         const distributedAmount = parseFloat(producto.amount_usd) || 0;
-                                        const nuevoCosto = producto.old_cost_usd + distributedAmount / producto.cantidad;
+                                        const oldCost = parseFloat(String(producto.old_cost_usd));
+
+                                        // Suma precisa
+                                        const nuevoCosto = (oldCost * 100 + distributedAmount * 100) / 100;
+
                                         return (
                                             <TableRow key={producto.product_id}>
                                                 <TableCell>{producto.product_name}</TableCell>
@@ -196,8 +200,8 @@ export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }
                                                     <Input
                                                         type="number"
                                                         step="0.01"
+                                                        onChange={(e) => handleProductChange(index, e)}
                                                         value={producto.amount_usd}
-                                                        onChange={(e) => handleProductChange(index, e.target.value)}
                                                         placeholder="0.00"
                                                     />
                                                 </TableCell>

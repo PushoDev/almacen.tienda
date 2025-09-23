@@ -101,7 +101,8 @@ class TransaccionController extends Controller
 
                     $cantidad = $pivotData->cantidad;
                     $costoActual = $producto->precio_compra_producto;
-                    $incrementoUnitario = (float) $productoData['amount_usd'] / $cantidad;
+                    // ✅ CORRECCIÓN: Realizamos la suma directa, sin dividir
+                    $incrementoUnitario = (float) $productoData['amount_usd'];
                     $nuevoCosto = $costoActual + $incrementoUnitario;
 
                     $distribution->items()->create([
