@@ -56,7 +56,9 @@ export default function CostosAdicionales({ compras, cuentas, tasaCambioActual }
                                         <TableCell className="text-right">
                                             {/* Nuevo enlace que redirige a la vista de distribución */}
                                             <Link href={route('transacciones.distribuir-costos.show', compra.id)}>
-                                                <Button variant="outline">Distribuir</Button>
+                                                <Button variant="outline" className="cursor-pointer">
+                                                    Distribuir
+                                                </Button>
                                             </Link>
                                         </TableCell>
                                     </TableRow>
