@@ -4,10 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\Producto;
 use App\Models\Categoria;
+use App\Models\Almacen;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
+use App\Exports\ProductoExport;
+use App\Imports\ProductoImport;
+use Maatwebsite\Excel\Facades\Excel;
 
 class ProductoController extends Controller
 {
@@ -31,11 +35,12 @@ class ProductoController extends Controller
                 'codigo_producto' => $producto->codigo_producto,
                 'categoria' => $producto->categoria?->nombre_categoria,
                 'precio_compra_producto' => (float) $producto->precio_compra_producto,
-                'cantidad_total' => $producto->cantidad_total, // 🔥 stock total - Asegúrate de que sea cantidad_total
+                'cantidad_total' => $producto->cantidad_total,
                 'imagen_url' => $producto->imagen_url,
                 'precio_venta' => $producto->vendedores->first()->pivot->precio_venta ?? null,
-                'stock_bajo' => $producto->stock_bajo, // 🔥 flag stock bajo
+                'stock_bajo' => $producto->stock_bajo,
             ]),
+            'almacenes' => Almacen::select('id', 'nombre_almacen')->get(), // ← AÑADIDO para el frontend
         ]);
     }
 
@@ -96,7 +101,6 @@ class ProductoController extends Controller
      */
     public function update(Request $request, Producto $producto)
     {
-        // 1. Validar la petición
         $validatedData = $request->validate([
             'nombre_producto' => ['required', 'string', 'max:255'],
             'marca_producto' => ['nullable', 'string', 'max:255'],
@@ -110,7 +114,6 @@ class ProductoController extends Controller
             'imagen_producto' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'],
         ]);
 
-        // 2. Manejar la imagen
         $imagenPath = $producto->imagen_producto;
 
         if ($request->hasFile('imagen_producto')) {
@@ -120,7 +123,6 @@ class ProductoController extends Controller
             $imagenPath = $request->file('imagen_producto')->store('productos', 'public');
         }
 
-        // 3. Actualizar los datos del producto
         $producto->update(array_merge($validatedData, [
             'imagen_producto' => $imagenPath,
         ]));
@@ -142,4 +144,119 @@ class ProductoController extends Controller
 
         return redirect()->route('productos.index')->with('success', 'Producto eliminado correctamente.');
     }
+
+    /**
+     * Exportar productos a Excel
+     */
+    public function export(Request $request)
+    {
+        $almacenId = $request->get('almacen_id', 1);
+
+        // Validar que el almacén exista
+        if (!Almacen::find($almacenId)) {
+            return redirect()->back()->withErrors(['error' => 'El almacén especificado no existe.']);
+        }
+
+        return Excel::download(
+            new ProductoExport($almacenId),
+            'productos-almacen-' . $almacenId . '-' . date('Y-m-d') . '.xlsx'
+        );
+    }
+
+    /**
+     * Importar productos desde Excel y asignar al almacén
+     */
+    public function import(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|mimes:xlsx,xls|max:2048',
+            'almacen_id' => 'sometimes|integer|exists:almacens,id'
+        ]);
+
+        $almacenId = $request->get('almacen_id', 1);
+
+        try {
+            $import = new ProductoImport($almacenId);
+            Excel::import($import, $request->file('file'));
+
+            return redirect()
+                ->route('productos.index')
+                ->with('success', 'Productos importados y asignados al almacén correctamente');
+        } catch (\Exception $e) {
+            return redirect()
+                ->back()
+                ->withErrors(['error' => 'Error al importar: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Importar a un almacén específico (ruta con parámetro)
+     */
+    public function importToAlmacen(Request $request, $almacenId)
+    {
+        $request->validate([
+            'file' => 'required|mimes:xlsx,xls|max:2048'
+        ]);
+
+        // Validar que el almacén exista
+        if (!Almacen::find($almacenId)) {
+            return redirect()->back()->withErrors(['error' => 'El almacén especificado no existe.']);
+        }
+
+        try {
+            $import = new ProductoImport($almacenId);
+            Excel::import($import, $request->file('file'));
+
+            return redirect()
+                ->route('productos.index')
+                ->with('success', "Productos importados al almacén {$almacenId} correctamente");
+        } catch (\Exception $e) {
+            return redirect()
+                ->back()
+                ->withErrors(['error' => 'Error al importar: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Descargar plantilla para importación (OPCIONAL - descomenta si la necesitas)
+     */
+    /*
+    public function downloadTemplate()
+    {
+        $template = [
+            [
+                'nombre_producto',
+                'marca',
+                'codigo',
+                'categoria',
+                'precio_compra',
+                'cantidad',
+                'imagen'
+            ],
+            [
+                'Laptop HP',
+                'HP',
+                'LP-HP001',
+                'Tecnología',
+                '1500.00',
+                '10',
+                ''
+            ],
+            [
+                'Mouse Inalámbrico',
+                'Logitech',
+                'M-LOG001',
+                'Accesorios',
+                '25.50',
+                '5',
+                ''
+            ]
+        ];
+
+        return Excel::download(
+            new \App\Exports\TemplateExport($template),
+            'plantilla-importacion-productos.xlsx'
+        );
+    }
+    */
 }
