@@ -16,12 +16,14 @@ import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { ProductoProps, type BreadcrumbItem } from '@/types';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
 import {
     AlertTriangle,
     BarChart3,
+    CloudUpload,
     CopyX,
     DollarSign,
+    Download,
     Edit3,
     Eye,
     FileText,
@@ -30,8 +32,8 @@ import {
     Package,
     Package2,
     QrCode,
-    Sheet,
     Trash2,
+    Upload,
     Wallet,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -48,7 +50,135 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function ProductosPage({ productos }: { productos: ProductoProps[] }) {
+// Interface para el modal de importación
+interface ImportModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onImport: (file: File, almacenId: number) => void;
+    almacenes: { id: number; nombre_almacen: string }[];
+}
+
+// Modal para importar productos
+function ImportModal({ isOpen, onClose, onImport, almacenes }: ImportModalProps) {
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [almacenId, setAlmacenId] = useState<number>(1);
+    const [isDragging, setIsDragging] = useState(false);
+
+    const handleFileSelect = (file: File) => {
+        if (file.type.includes('excel') || file.type.includes('spreadsheet') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+            setSelectedFile(file);
+        } else {
+            toast.error('Por favor, selecciona un archivo Excel válido (.xlsx o .xls)');
+        }
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+        const file = e.dataTransfer.files[0];
+        if (file) handleFileSelect(file);
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedFile) {
+            toast.error('Por favor, selecciona un archivo');
+            return;
+        }
+        onImport(selectedFile, almacenId);
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="w-full max-w-md rounded-lg bg-white p-6 dark:bg-gray-800">
+                <h2 className="mb-4 text-lg font-semibold">Importar Productos desde Excel</h2>
+
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    {/* Selector de almacén */}
+                    <div>
+                        <label className="mb-2 block text-sm font-medium">Almacén de destino</label>
+                        <select value={almacenId} onChange={(e) => setAlmacenId(Number(e.target.value))} className="w-full rounded-md border p-2">
+                            {almacenes.map((almacen) => (
+                                <option key={almacen.id} value={almacen.id} className="bg-background">
+                                    {almacen.nombre_almacen}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Área de arrastrar y soltar */}
+                    <div
+                        className={`cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition-colors ${
+                            isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
+                        }`}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                        onClick={() => document.getElementById('file-input')?.click()}
+                    >
+                        <CloudUpload className="mx-auto mb-2" size={24} />
+                        <p className="text-sm text-gray-600">
+                            {selectedFile
+                                ? `Archivo seleccionado: ${selectedFile.name}`
+                                : 'Arrastra un archivo Excel aquí o haz clic para seleccionar'}
+                        </p>
+                        <input
+                            id="file-input"
+                            type="file"
+                            accept=".xlsx,.xls"
+                            className="hidden"
+                            onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleFileSelect(file);
+                            }}
+                        />
+                    </div>
+
+                    {/* Información del formato requerido */}
+                    <div className="border-sidebar-accent rounded border p-3 text-sm">
+                        <p className="mb-1 font-medium">Formato requerido:</p>
+                        <ul className="list-inside list-disc space-y-1">
+                            <li>Columnas: nombre_producto, marca, codigo, categoria, precio_compra, cantidad</li>
+                            <li>Formato: .xlsx o .xls</li>
+                            <li>Tamaño máximo: 2MB</li>
+                        </ul>
+                    </div>
+
+                    {/* Botones */}
+                    <div className="flex justify-end gap-2">
+                        <Button type="button" variant="outline" className="cursor-pointer" onClick={onClose}>
+                            Cancelar
+                        </Button>
+                        <Button type="submit" disabled={!selectedFile} className="cursor-pointer bg-green-600 hover:bg-green-700">
+                            <Upload size={16} className="mr-2" />
+                            Importar
+                        </Button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
+
+export default function ProductosPage({
+    productos,
+    almacenes = [],
+}: {
+    productos: ProductoProps[];
+    almacenes?: { id: number; nombre_almacen: string }[];
+}) {
     console.log('Productos recibidos:', productos);
 
     // Estados para gestión de stock
@@ -57,6 +187,14 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
     const [filtroTipo, setFiltroTipo] = useState<string>('');
     const [busqueda, setBusqueda] = useState<string>('');
 
+    // Estados para importación/exportación
+    const [almacenExportId, setAlmacenExportId] = useState<number>(1);
+    const [showImportModal, setShowImportModal] = useState(false);
+    const { data, setData, post, processing } = useForm({
+        file: null as File | null,
+        almacen_id: 1,
+    });
+
     // Paginación
     const [paginaActual, setPaginaActual] = useState(1);
     const elementosPorPagina = 25;
@@ -64,12 +202,12 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
     // Categorías únicas
     const categoriasUnicas = [...new Set(productos.map((producto) => producto.categoria))];
 
-    // Calcular estadísticas - CAMBIO: usar cantidad_total en lugar de cantidad_producto
+    // Calcular estadísticas
     const productosConStockBajo = productos.filter((p) => p.cantidad_total <= umbralStockBajo);
     const valorTotalInventario = productos.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0);
     const valorStockBajo = productosConStockBajo.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0);
 
-    // Filtrar productos - CAMBIO: usar cantidad_total en lugar de cantidad_producto
+    // Filtrar productos
     const productosFiltrados = productos.filter((producto) => {
         const matchesCategoria = !filtroTipo || producto.categoria === filtroTipo;
         const matchesBusqueda = producto.nombre_producto.toLowerCase().includes(busqueda.toLowerCase());
@@ -99,6 +237,47 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                 toast.error('Error en el proceso, inténtelo nuevamente');
             },
         });
+    };
+
+    // Exportar a Excel
+    const handleExport = () => {
+        // Crear URL con parámetros
+        const url = route('productos.export', { almacen_id: almacenExportId });
+
+        // Crear un enlace temporal y hacer clic
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `productos-almacen-${almacenExportId}-${new Date().toISOString().split('T')[0]}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        toast.success('Exportación iniciada');
+    };
+
+    // Importar desde Excel
+    const handleImport = (file: File, almacenId: number) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('almacen_id', almacenId.toString());
+
+        router.post(route('productos.import'), formData, {
+            forceFormData: true,
+            onSuccess: () => {
+                toast.success('Productos importados correctamente');
+                setShowImportModal(false);
+            },
+            onError: (errors) => {
+                toast.error('Error al importar: ' + (errors.file || errors.almacen_id || 'Error desconocido'));
+            },
+        });
+    };
+
+    // Descargar plantilla
+    const downloadTemplate = () => {
+        toast.info('Función de plantilla en desarrollo');
+        // Implementar cuando tengas la ruta para descargar plantilla
+        // router.get(route('productos.template'));
     };
 
     return (
@@ -160,10 +339,18 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                     <div className="flex items-center gap-2">
                         <span>Umbral stock bajo:</span>
                         <select value={umbralStockBajo} onChange={(e) => setUmbralStockBajo(Number(e.target.value))} className="rounded border p-1">
-                            <option value={3}>3 unidades</option>
-                            <option value={5}>5 unidades</option>
-                            <option value={10}>10 unidades</option>
-                            <option value={15}>15 unidades</option>
+                            <option value={3} className="bg-background">
+                                3 unidades
+                            </option>
+                            <option value={5} className="bg-background">
+                                5 unidades
+                            </option>
+                            <option value={10} className="bg-background">
+                                10 unidades
+                            </option>
+                            <option value={15} className="bg-background">
+                                15 unidades
+                            </option>
                         </select>
 
                         <Button
@@ -193,40 +380,52 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                             onChange={(e) => setFiltroTipo(e.target.value)}
                             className="focus:ring-sidebar-accent border-primary rounded-md border px-3 py-1 focus:ring-2 focus:outline-none"
                         >
-                            <option className="bg-background text-sidebar-accent" value="">
+                            <option className="bg-background" value="">
                                 Todas las categorías
                             </option>
                             {categoriasUnicas.map((categoria, index) => (
-                                <option key={index} className="bg-background text-sidebar-accent" value={categoria}>
+                                <option key={index} className="bg-background" value={categoria}>
                                     {categoria} ({productos.filter((p) => p.categoria === categoria).length})
                                 </option>
                             ))}
                         </select>
 
-                        {/* Botones de exportación */}
-                        <Link href="#">
-                            <Button variant="outline" className="hover:bg-chart-3 flex cursor-pointer items-center gap-2">
-                                <FileText size={16} />
-                                PDF
-                            </Button>
-                        </Link>
+                        {/* Selector de almacén para exportación */}
+                        <select
+                            value={almacenExportId}
+                            onChange={(e) => setAlmacenExportId(Number(e.target.value))}
+                            className="focus:ring-sidebar-accent border-primary rounded-md border px-3 py-1 focus:ring-2 focus:outline-none"
+                        >
+                            {almacenes.map((almacen) => (
+                                <option key={almacen.id} value={almacen.id} className="bg-background">
+                                    {almacen.nombre_almacen}
+                                </option>
+                            ))}
+                        </select>
 
-                        <Link href="#">
-                            <Button variant="secondary" className="hover:bg-chart-1 flex cursor-pointer items-center gap-2">
-                                <Sheet size={16} />
-                                Importar
-                            </Button>
-                        </Link>
+                        {/* Botones de exportación/importación */}
+                        <Button variant="outline" className="hover:bg-chart-3 flex cursor-pointer items-center gap-2" onClick={downloadTemplate}>
+                            <FileText size={16} />
+                            Plantilla
+                        </Button>
 
-                        <Link href="#">
-                            <Button variant="secondary" className="hover:bg-chart-2 flex cursor-pointer items-center gap-2">
-                                <Sheet size={16} />
-                                Exportar
-                            </Button>
-                        </Link>
+                        <Button
+                            variant="secondary"
+                            className="hover:bg-chart-1 flex cursor-pointer items-center gap-2"
+                            onClick={() => setShowImportModal(true)}
+                        >
+                            <Download size={16} />
+                            Importar
+                        </Button>
+
+                        <Button variant="secondary" className="hover:bg-chart-2 flex cursor-pointer items-center gap-2" onClick={handleExport}>
+                            <Upload size={16} />
+                            Exportar
+                        </Button>
                     </div>
                 </div>
 
+                {/* Resto del código de la tabla (se mantiene igual) */}
                 {/* Tabla de Productos */}
                 <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
                     <Table>
@@ -246,7 +445,6 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                         </TableHeader>
                         <TableBody>
                             {productosAmostrar.map((producto) => {
-                                // CAMBIO: usar cantidad_total en lugar de cantidad_producto
                                 const isStockBajo = producto.cantidad_total <= umbralStockBajo;
 
                                 return (
@@ -289,7 +487,6 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                                         <TableCell>
                                             <div className="flex items-center gap-2">
                                                 <Hash size={14} className="shrink-0 text-blue-500" />
-                                                {/* CAMBIO: usar cantidad_total en lugar de cantidad_producto */}
                                                 <span className={isStockBajo ? 'font-bold text-red-600' : ''}>{producto.cantidad_total}</span>
                                                 {isStockBajo && (
                                                     <Badge variant="destructive" className="ml-2 animate-pulse">
@@ -301,7 +498,6 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                                         <TableCell>
                                             <div className="flex items-center gap-2">
                                                 <DollarSign size={14} className="shrink-0 text-emerald-500" />
-                                                {/* CAMBIO: usar cantidad_total en lugar de cantidad_producto */}
                                                 <span>$ {(producto.precio_compra_producto * producto.cantidad_total).toFixed(2)}</span>
                                             </div>
                                         </TableCell>
@@ -375,7 +571,7 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                                 </TableCell>
                                 <TableCell className="bg-gray-700 text-center font-bold">{productosFiltrados.length}</TableCell>
                                 <TableCell colSpan={3} className="bg-gray-700 text-right">
-                                    Valor Total: ${/* CAMBIO: usar cantidad_total en lugar de cantidad_producto */}
+                                    Valor Total: $
                                     {productosFiltrados.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0).toFixed(2)}
                                 </TableCell>
                             </TableRow>
@@ -395,6 +591,10 @@ export default function ProductosPage({ productos }: { productos: ProductoProps[
                         Siguiente
                     </Button>
                 </div>
+
+                {/* Modal de Importación */}
+                <ImportModal isOpen={showImportModal} onClose={() => setShowImportModal(false)} onImport={handleImport} almacenes={almacenes} />
+
                 <Toaster position="top-center" />
             </div>
         </AppLayout>

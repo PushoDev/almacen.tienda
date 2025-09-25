@@ -40,7 +40,7 @@ class ProductoController extends Controller
                 'precio_venta' => $producto->vendedores->first()->pivot->precio_venta ?? null,
                 'stock_bajo' => $producto->stock_bajo,
             ]),
-            'almacenes' => Almacen::select('id', 'nombre_almacen')->get(), // ← AÑADIDO para el frontend
+            'almacenes' => Almacen::select('id', 'nombre_almacen')->get()->toArray(), // ← AÑADIDO para el frontend
         ]);
     }
 
