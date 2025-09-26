@@ -14,11 +14,24 @@ return new class extends Migration
         Schema::create('cuentas', function (Blueprint $table) {
             $table->id();
             $table->string('nombre_cuenta')->unique();
+
+            // CAMPO NUEVO: Tipo de activo. ELIMINAMOS ->after('nombre_cuenta')
+            $table->enum('tipo', ['caja', 'banco', 'tarjeta', 'efectivo', 'otro'])->default('caja');
+
+            // CAMPO EXISTENTE
             $table->double('saldo_cuenta', 15, 8)->nullable()->default(1234.56);
+
+            // CAMPO NUEVO: Saldo disponible. ELIMINAMOS ->after('saldo_cuenta')
+            $table->double('saldo_disponible', 15, 8)->default(0.00);
+
+            // CAMPOS EXISTENTES
             $table->enum('tipo_moneda', ['USD', 'EUR', 'MLC', 'CUP'])->default('USD');
-            // Para deudas de proveedores
             $table->double('deuda', 15, 8)->default(0)->nullable();
             $table->enum('tipo_cuenta', ['permanentes', 'temporales', 'deudas'])->default('permanentes');
+
+            // CAMPO NUEVO: Estado de la cuenta
+            $table->enum('estado', ['activa', 'inactiva'])->default('activa');
+
             $table->text('notas_cuenta')->nullable();
             $table->timestamps();
         });

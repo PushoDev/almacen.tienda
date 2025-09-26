@@ -13,9 +13,17 @@ return new class extends Migration
     {
         Schema::create('tasa_cambios', function (Blueprint $table) {
             $table->id();
-            $table->double('tasa', 15, 8)->default(325.0); // Tasa por defecto
+
+            // CAMPOS NUEVOS: Define el par de monedas
+            $table->enum('moneda_base', ['USD', 'EUR', 'MLC', 'CUP']);
+            $table->enum('moneda_destino', ['USD', 'EUR', 'MLC', 'CUP']);
+            $table->unique(['moneda_base', 'moneda_destino']); // Asegura que solo hay una tasa por par
+
+            // CAMPO EXISTENTE
+            $table->double('tasa', 15, 8)->default(1.0); // Tasa por defecto
+
             $table->timestamp('fecha_actualizacion')->useCurrent();
-            $table->timestamps();
+            $table->timestamps(); // Usaremos timestamps estándar para 'created_at' y 'updated_at'
         });
     }
 
