@@ -202,6 +202,42 @@ class DatabaseSeeder extends Seeder
             ],
         ]);
 
+        // Datos Movimientos financieros
+        DB::table('tipos_movimiento_financiero')->insert([
+            [
+                'id' => 1,
+                'nombre' => 'Gasto Operativo',
+                'efecto' => 'egreso',
+                'descripcion' => 'Movimientos que reducen el saldo de una cuenta (Ej: Compras, Pagos de Servicios).',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'id' => 2,
+                'nombre' => 'Ingreso por Venta',
+                'efecto' => 'ingreso',
+                'descripcion' => 'Movimientos que aumentan el saldo de una cuenta (Ej: Ventas, Depósitos).',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'id' => 3,
+                'nombre' => 'Transferencia Interna',
+                'efecto' => 'egreso', // Aunque es un movimiento doble, lo clasificamos por el efecto que inicia (el egreso).
+                'descripcion' => 'Movimiento entre dos cuentas internas (origen y destino).',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'id' => 4,
+                'nombre' => 'Pago de Deuda',
+                'efecto' => 'egreso',
+                'descripcion' => 'Movimiento para reducir la deuda de una cuenta de pasivo.',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
         // Clientes Asociados al Sistema por default
         $clientes = [
             [

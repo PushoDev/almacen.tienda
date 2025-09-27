@@ -23,18 +23,16 @@ class Cuenta extends Model
         'notas_cuenta',
         // NUEVOS CAMPOS
         'tipo',
-        'saldo_disponible',
         'estado',
     ];
 
     // Casts para manejar tipos de datos específicos (ACTUALIZADO)
     protected $casts = [
         'saldo_cuenta' => 'double',
-        'saldo_disponible' => 'double', // NUEVO
         'deuda' => 'double',
         'tipo_cuenta' => 'string',
         'tipo_moneda' => 'string',
-        'tipo' => 'string', // NUEVO
+        'tipo' => 'string',
     ];
 
     // Relación con compras (opcional) - MANTENIDA

@@ -19,10 +19,8 @@ return new class extends Migration
             $table->enum('tipo', ['caja', 'banco', 'tarjeta', 'efectivo', 'otro'])->default('caja');
 
             // CAMPO EXISTENTE
-            $table->double('saldo_cuenta', 15, 8)->nullable()->default(1234.56);
+            $table->double('saldo_cuenta', 15, 8)->nullable()->default(0.00);
 
-            // CAMPO NUEVO: Saldo disponible. ELIMINAMOS ->after('saldo_cuenta')
-            $table->double('saldo_disponible', 15, 8)->default(0.00);
 
             // CAMPOS EXISTENTES
             $table->enum('tipo_moneda', ['USD', 'EUR', 'MLC', 'CUP'])->default('USD');
