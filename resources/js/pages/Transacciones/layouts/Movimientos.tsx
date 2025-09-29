@@ -9,9 +9,8 @@ import { InertiaFormProps, useForm } from '@inertiajs/react';
 import React, { useState } from 'react';
 
 // ------------------------------------
-// 💡 1. COMPONENTE DE ALERTA (Toast Simple)
+// 💡 COMPONENTE DE ALERTA (Toast Simple)
 // ------------------------------------
-// Puedes reemplazar esto con tu librería de toast preferida (Sonner, Hot-Toast, etc.)
 interface AlertState {
     show: boolean;
     message: string;
@@ -21,18 +20,12 @@ interface AlertState {
 const ToastAlert: React.FC<AlertState> = ({ show, message, type }) => {
     if (!show) return null;
 
-    // Clases simples de Tailwind para posicionamiento y estilo
     const baseClasses = 'fixed bottom-5 right-5 p-4 rounded-md shadow-lg transition-all duration-300 z-50';
     const colorClasses = type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white';
 
     return <div className={`${baseClasses} ${colorClasses}`}>{message}</div>;
 };
 // ------------------------------------
-
-// Función auxiliar para obtener la fecha de hoy en formato YYYY-MM-DD
-const getTodayDate = () => {
-    return new Date().toISOString().split('T')[0];
-};
 
 // ------------------------------------
 // TIPOS DE DATOS
@@ -52,7 +45,7 @@ interface Props {
 type FormSetter<T> = InertiaFormProps<T>['setData'];
 
 // ------------------------------------
-// 2. COMPONENTE PRINCIPAL (Movimientos)
+// COMPONENTE PRINCIPAL (Movimientos)
 // ------------------------------------
 export default function Movimientos({ cuentas }: Props) {
     // 💡 Estado para gestionar el toast
@@ -61,12 +54,11 @@ export default function Movimientos({ cuentas }: Props) {
     // 💡 Función para mostrar el toast
     const showToast = (message: string, type: 'success' | 'error') => {
         setAlert({ show: true, message, type });
-        // Ocultar automáticamente después de 4 segundos
         setTimeout(() => setAlert({ show: false, message: '', type: 'success' }), 4000);
     };
 
     // ------------------------------------
-    // 1. FORMULARIO DE GASTO (EGRESO)
+    // 1. FORMULARIO DE GASTO
     // ------------------------------------
     const {
         data: gastoData,
@@ -78,32 +70,17 @@ export default function Movimientos({ cuentas }: Props) {
     } = useForm({
         cuenta_origen_id: '',
         monto: '',
-        descripcion: '',
         moneda: '',
-        fecha_operacion: getTodayDate(),
+        comentario: '',
     });
 
     const handleGastoSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
-        const cuentaOrigenId = gastoData.cuenta_origen_id;
-
-        postGasto(route('movimientos.gasto.store'), {
+        postGasto(route('transacciones.gastar'), {
             onSuccess: () => {
                 showToast('¡Gasto registrado con éxito!', 'success');
-
                 resetGasto();
-                setGastoData((data) => {
-                    const selectedCuenta = cuentas.find((c) => String(c.id) === cuentaOrigenId);
-                    return {
-                        ...data,
-                        fecha_operacion: getTodayDate(),
-                        cuenta_origen_id: cuentaOrigenId,
-                        moneda: selectedCuenta?.tipo_moneda ?? '',
-                        monto: '',
-                        descripcion: '',
-                    };
-                });
             },
             onError: () => {
                 showToast('Hubo un error al registrar el gasto. Revisa los campos.', 'error');
@@ -112,7 +89,7 @@ export default function Movimientos({ cuentas }: Props) {
     };
 
     // ------------------------------------
-    // 2. FORMULARIO DE INGRESO (GANANCIA)
+    // 2. FORMULARIO DE INGRESO
     // ------------------------------------
     const {
         data: ingresoData,
@@ -124,32 +101,17 @@ export default function Movimientos({ cuentas }: Props) {
     } = useForm({
         cuenta_destino_id: '',
         monto: '',
-        descripcion: '',
         moneda: '',
-        tasa_cambio: '',
-        fecha_operacion: getTodayDate(),
+        comentario: '',
     });
 
     const handleIngresoSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const cuentaDestinoId = ingresoData.cuenta_destino_id;
 
-        postIngreso(route('movimientos.ingreso.store'), {
+        postIngreso(route('transacciones.ingresar'), {
             onSuccess: () => {
                 showToast('¡Ingreso registrado con éxito!', 'success');
-
                 resetIngreso();
-                setIngresoData((data) => {
-                    const selectedCuenta = cuentas.find((c) => String(c.id) === cuentaDestinoId);
-                    return {
-                        ...data,
-                        fecha_operacion: getTodayDate(),
-                        cuenta_destino_id: cuentaDestinoId,
-                        moneda: selectedCuenta?.tipo_moneda ?? '',
-                        monto: '',
-                        descripcion: '',
-                    };
-                });
             },
             onError: () => {
                 showToast('Hubo un error al registrar el ingreso. Revisa los campos.', 'error');
@@ -158,7 +120,7 @@ export default function Movimientos({ cuentas }: Props) {
     };
 
     // ------------------------------------
-    // 3. FORMULARIO DE TRANSFERENCIA INTERNA
+    // 3. FORMULARIO DE TRANSFERENCIA
     // ------------------------------------
     const {
         data: transferData,
@@ -171,32 +133,17 @@ export default function Movimientos({ cuentas }: Props) {
         cuenta_origen_id: '',
         cuenta_destino_id: '',
         monto: '',
-        descripcion: '',
         moneda: '',
-        tasa_cambio: '',
-        fecha_operacion: getTodayDate(),
+        comentario: '',
     });
 
     const handleTransferSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const cuentaOrigenId = transferData.cuenta_origen_id;
 
-        postTransfer(route('movimientos.transferencia.store'), {
+        postTransfer(route('transacciones.transferir'), {
             onSuccess: () => {
                 showToast('¡Transferencia realizada con éxito!', 'success');
-
                 resetTransfer();
-                setTransferData((data) => {
-                    const selectedCuenta = cuentas.find((c) => String(c.id) === cuentaOrigenId);
-                    return {
-                        ...data,
-                        fecha_operacion: getTodayDate(),
-                        cuenta_origen_id: cuentaOrigenId,
-                        moneda: selectedCuenta?.tipo_moneda ?? '',
-                        monto: '',
-                        descripcion: '',
-                    };
-                });
             },
             onError: () => {
                 showToast('Hubo un error al realizar la transferencia. Revisa los campos.', 'error');
@@ -205,7 +152,7 @@ export default function Movimientos({ cuentas }: Props) {
     };
 
     /**
-     * Maneja el cambio de cuenta y actualiza la moneda.
+     * Maneja el cambio de cuenta y actualiza la moneda automáticamente
      */
     const handleCuentaChange = (value: string, type: 'origen' | 'destino' | 'gasto', formSetter: FormSetter<any>) => {
         const selectedCuenta = cuentas.find((c) => String(c.id) === value);
@@ -237,14 +184,14 @@ export default function Movimientos({ cuentas }: Props) {
             </CardHeader>
             <CardContent>
                 <Tabs defaultValue="gasto">
-                    <TabsList className="grid w-full grid-cols-4 md:grid-cols-3">
+                    <TabsList className="grid w-full grid-cols-3">
                         <TabsTrigger value="gasto">Gasto</TabsTrigger>
                         <TabsTrigger value="ingreso">Ingreso</TabsTrigger>
                         <TabsTrigger value="transferir">Transferir</TabsTrigger>
                     </TabsList>
 
                     {/* =======================================================
-                        1. FORMULARIO DE GASTO (Egreso)
+                        1. FORMULARIO DE GASTO
                     ======================================================= */}
                     <TabsContent value="gasto" className="mt-4">
                         <form onSubmit={handleGastoSubmit} className="space-y-4">
@@ -268,24 +215,12 @@ export default function Movimientos({ cuentas }: Props) {
                                 {gastoErrors.cuenta_origen_id && <p className="mt-1 text-sm text-red-500">{gastoErrors.cuenta_origen_id}</p>}
                             </div>
 
-                            {/* Campo de fecha */}
-                            <div>
-                                <Label htmlFor="fecha_gasto">Fecha de Operación</Label>
-                                <Input
-                                    type="date"
-                                    id="fecha_gasto"
-                                    value={gastoData.fecha_operacion}
-                                    onChange={(e) => setGastoData('fecha_operacion', e.target.value)}
-                                />
-                                {gastoErrors.fecha_operacion && <p className="mt-1 text-sm text-red-500">{gastoErrors.fecha_operacion}</p>}
-                            </div>
-
-                            {/* Moneda solo de lectura */}
+                            {/* Moneda automática (solo lectura) */}
                             <div>
                                 <Label htmlFor="moneda_gasto">Moneda</Label>
                                 <Input
                                     id="moneda_gasto"
-                                    value={gastoData.moneda || 'Seleccione cuenta'}
+                                    value={gastoData.moneda || 'Seleccione cuenta primero'}
                                     readOnly
                                     className="bg-gray-100 dark:bg-gray-800"
                                 />
@@ -301,27 +236,34 @@ export default function Movimientos({ cuentas }: Props) {
                                     onChange={(e) => setGastoData('monto', e.target.value)}
                                     step="0.01"
                                     min="0.01"
+                                    placeholder="0.00"
                                 />
                                 {gastoErrors.monto && <p className="mt-1 text-sm text-red-500">{gastoErrors.monto}</p>}
                             </div>
 
                             <div>
-                                <Label htmlFor="descripcion_gasto">Descripción / Concepto</Label>
+                                <Label htmlFor="comentario_gasto">Comentario / Concepto</Label>
                                 <Textarea
-                                    id="descripcion_gasto"
-                                    value={gastoData.descripcion}
-                                    onChange={(e) => setGastoData('descripcion', e.target.value)}
+                                    id="comentario_gasto"
+                                    value={gastoData.comentario}
+                                    onChange={(e) => setGastoData('comentario', e.target.value)}
+                                    placeholder="Descripción del gasto..."
                                 />
-                                {gastoErrors.descripcion && <p className="mt-1 text-sm text-red-500">{gastoErrors.descripcion}</p>}
+                                {gastoErrors.comentario && <p className="mt-1 text-sm text-red-500">{gastoErrors.comentario}</p>}
                             </div>
-                            <Button type="submit" disabled={gastoProcessing || !gastoData.moneda || Number(gastoData.monto) <= 0}>
-                                Registrar Gasto
+
+                            <Button
+                                type="submit"
+                                disabled={gastoProcessing || !gastoData.cuenta_origen_id || !gastoData.monto || Number(gastoData.monto) <= 0}
+                                className="w-full"
+                            >
+                                {gastoProcessing ? 'Procesando...' : 'Registrar Gasto'}
                             </Button>
                         </form>
                     </TabsContent>
 
                     {/* =======================================================
-                        2. FORMULARIO DE INGRESO (Ganancia)
+                        2. FORMULARIO DE INGRESO
                     ======================================================= */}
                     <TabsContent value="ingreso" className="mt-4">
                         <form onSubmit={handleIngresoSubmit} className="space-y-4">
@@ -345,24 +287,12 @@ export default function Movimientos({ cuentas }: Props) {
                                 {ingresoErrors.cuenta_destino_id && <p className="mt-1 text-sm text-red-500">{ingresoErrors.cuenta_destino_id}</p>}
                             </div>
 
-                            {/* Campo de fecha */}
+                            {/* Moneda automática (solo lectura) */}
                             <div>
-                                <Label htmlFor="fecha_ingreso">Fecha de Operación</Label>
-                                <Input
-                                    type="date"
-                                    id="fecha_ingreso"
-                                    value={ingresoData.fecha_operacion}
-                                    onChange={(e) => setIngresoData('fecha_operacion', e.target.value)}
-                                />
-                                {ingresoErrors.fecha_operacion && <p className="mt-1 text-sm text-red-500">{ingresoErrors.fecha_operacion}</p>}
-                            </div>
-
-                            {/* Moneda solo de lectura */}
-                            <div>
-                                <Label htmlFor="moneda_ingreso">Moneda de la Cuenta</Label>
+                                <Label htmlFor="moneda_ingreso">Moneda</Label>
                                 <Input
                                     id="moneda_ingreso"
-                                    value={ingresoData.moneda || 'Seleccione cuenta'}
+                                    value={ingresoData.moneda || 'Seleccione cuenta primero'}
                                     readOnly
                                     className="bg-gray-100 dark:bg-gray-800"
                                 />
@@ -378,35 +308,28 @@ export default function Movimientos({ cuentas }: Props) {
                                     onChange={(e) => setIngresoData('monto', e.target.value)}
                                     step="0.01"
                                     min="0.01"
+                                    placeholder="0.00"
                                 />
                                 {ingresoErrors.monto && <p className="mt-1 text-sm text-red-500">{ingresoErrors.monto}</p>}
                             </div>
 
-                            {/* Campo opcional de Tasa de Cambio */}
                             <div>
-                                <Label htmlFor="tasa_cambio_ingreso">Tasa de Cambio (Opcional)</Label>
-                                <Input
-                                    type="number"
-                                    id="tasa_cambio_ingreso"
-                                    value={ingresoData.tasa_cambio}
-                                    onChange={(e) => setIngresoData('tasa_cambio', e.target.value)}
-                                    step="0.01"
-                                    placeholder="Solo si la moneda de origen es diferente a la de la cuenta"
+                                <Label htmlFor="comentario_ingreso">Comentario / Concepto</Label>
+                                <Textarea
+                                    id="comentario_ingreso"
+                                    value={ingresoData.comentario}
+                                    onChange={(e) => setIngresoData('comentario', e.target.value)}
+                                    placeholder="Descripción del ingreso..."
                                 />
-                                {ingresoErrors.tasa_cambio && <p className="mt-1 text-sm text-red-500">{ingresoErrors.tasa_cambio}</p>}
+                                {ingresoErrors.comentario && <p className="mt-1 text-sm text-red-500">{ingresoErrors.comentario}</p>}
                             </div>
 
-                            <div>
-                                <Label htmlFor="descripcion_ingreso">Descripción / Concepto</Label>
-                                <Textarea
-                                    id="descripcion_ingreso"
-                                    value={ingresoData.descripcion}
-                                    onChange={(e) => setIngresoData('descripcion', e.target.value)}
-                                />
-                                {ingresoErrors.descripcion && <p className="mt-1 text-sm text-red-500">{ingresoErrors.descripcion}</p>}
-                            </div>
-                            <Button type="submit" disabled={ingresoProcessing || !ingresoData.moneda || Number(ingresoData.monto) <= 0}>
-                                Registrar Ingreso
+                            <Button
+                                type="submit"
+                                disabled={ingresoProcessing || !ingresoData.cuenta_destino_id || !ingresoData.monto || Number(ingresoData.monto) <= 0}
+                                className="w-full"
+                            >
+                                {ingresoProcessing ? 'Procesando...' : 'Registrar Ingreso'}
                             </Button>
                         </form>
                     </TabsContent>
@@ -423,7 +346,7 @@ export default function Movimientos({ cuentas }: Props) {
                                     value={transferData.cuenta_origen_id}
                                 >
                                     <SelectTrigger>
-                                        <SelectValue placeholder="Seleccione una cuenta" />
+                                        <SelectValue placeholder="Seleccione cuenta de origen" />
                                     </SelectTrigger>
                                     <SelectContent>
                                         {cuentas.map((cuenta) => (
@@ -440,37 +363,27 @@ export default function Movimientos({ cuentas }: Props) {
                                 <Label htmlFor="cuenta_destino">Cuenta de Destino</Label>
                                 <Select onValueChange={(value) => setTransferData('cuenta_destino_id', value)} value={transferData.cuenta_destino_id}>
                                     <SelectTrigger>
-                                        <SelectValue placeholder="Seleccione una cuenta" />
+                                        <SelectValue placeholder="Seleccione cuenta de destino" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {cuentas.map((cuenta) => (
-                                            <SelectItem key={cuenta.id} value={String(cuenta.id)}>
-                                                {cuenta.nombre_cuenta} ({cuenta.tipo_moneda}) - Saldo: {cuenta.saldo_cuenta.toFixed(2)}
-                                            </SelectItem>
-                                        ))}
+                                        {cuentas
+                                            .filter((cuenta) => String(cuenta.id) !== transferData.cuenta_origen_id)
+                                            .map((cuenta) => (
+                                                <SelectItem key={cuenta.id} value={String(cuenta.id)}>
+                                                    {cuenta.nombre_cuenta} ({cuenta.tipo_moneda}) - Saldo: {cuenta.saldo_cuenta.toFixed(2)}
+                                                </SelectItem>
+                                            ))}
                                     </SelectContent>
                                 </Select>
                                 {transferErrors.cuenta_destino_id && <p className="mt-1 text-sm text-red-500">{transferErrors.cuenta_destino_id}</p>}
                             </div>
 
-                            {/* Campo de fecha */}
+                            {/* Moneda automática (solo lectura) */}
                             <div>
-                                <Label htmlFor="fecha_transferir">Fecha de Operación</Label>
-                                <Input
-                                    type="date"
-                                    id="fecha_transferir"
-                                    value={transferData.fecha_operacion}
-                                    onChange={(e) => setTransferData('fecha_operacion', e.target.value)}
-                                />
-                                {transferErrors.fecha_operacion && <p className="mt-1 text-sm text-red-500">{transferErrors.fecha_operacion}</p>}
-                            </div>
-
-                            {/* Moneda solo de lectura */}
-                            <div>
-                                <Label htmlFor="moneda_transferir">Moneda de Transferencia (Origen)</Label>
+                                <Label htmlFor="moneda_transferir">Moneda</Label>
                                 <Input
                                     id="moneda_transferir"
-                                    value={transferData.moneda || 'Seleccione cuenta de origen'}
+                                    value={transferData.moneda || 'Seleccione cuenta de origen primero'}
                                     readOnly
                                     className="bg-gray-100 dark:bg-gray-800"
                                 />
@@ -478,7 +391,7 @@ export default function Movimientos({ cuentas }: Props) {
                             </div>
 
                             <div>
-                                <Label htmlFor="monto_transferir">Monto</Label>
+                                <Label htmlFor="monto_transferir">Monto a Transferir</Label>
                                 <Input
                                     type="number"
                                     id="monto_transferir"
@@ -486,42 +399,42 @@ export default function Movimientos({ cuentas }: Props) {
                                     onChange={(e) => setTransferData('monto', e.target.value)}
                                     step="0.01"
                                     min="0.01"
+                                    placeholder="0.00"
                                 />
                                 {transferErrors.monto && <p className="mt-1 text-sm text-red-500">{transferErrors.monto}</p>}
                             </div>
 
-                            {/* Campo opcional de Tasa de Cambio */}
                             <div>
-                                <Label htmlFor="tasa_cambio_transferir">Tasa de Cambio (Opcional)</Label>
-                                <Input
-                                    type="number"
-                                    id="tasa_cambio_transferir"
-                                    value={transferData.tasa_cambio}
-                                    onChange={(e) => setTransferData('tasa_cambio', e.target.value)}
-                                    step="0.01"
-                                    placeholder="Solo si las monedas de origen/destino son diferentes"
+                                <Label htmlFor="comentario_transferir">Comentario</Label>
+                                <Textarea
+                                    id="comentario_transferir"
+                                    value={transferData.comentario}
+                                    onChange={(e) => setTransferData('comentario', e.target.value)}
+                                    placeholder="Descripción de la transferencia..."
                                 />
-                                {transferErrors.tasa_cambio && <p className="mt-1 text-sm text-red-500">{transferErrors.tasa_cambio}</p>}
+                                {transferErrors.comentario && <p className="mt-1 text-sm text-red-500">{transferErrors.comentario}</p>}
                             </div>
 
-                            <div>
-                                <Label htmlFor="descripcion_transferir">Descripción</Label>
-                                <Textarea
-                                    id="descripcion_transferir"
-                                    value={transferData.descripcion}
-                                    onChange={(e) => setTransferData('descripcion', e.target.value)}
-                                />
-                                {transferErrors.descripcion && <p className="mt-1 text-sm text-red-500">{transferErrors.descripcion}</p>}
-                            </div>
-                            <Button type="submit" disabled={transferProcessing || !transferData.moneda || Number(transferData.monto) <= 0}>
-                                Transferir
+                            <Button
+                                type="submit"
+                                disabled={
+                                    transferProcessing ||
+                                    !transferData.cuenta_origen_id ||
+                                    !transferData.cuenta_destino_id ||
+                                    !transferData.monto ||
+                                    Number(transferData.monto) <= 0 ||
+                                    transferData.cuenta_origen_id === transferData.cuenta_destino_id
+                                }
+                                className="w-full"
+                            >
+                                {transferProcessing ? 'Procesando...' : 'Realizar Transferencia'}
                             </Button>
                         </form>
                     </TabsContent>
                 </Tabs>
             </CardContent>
 
-            {/* 💡 Agregamos el Toast al final del componente */}
+            {/* 💡 Toast Alert */}
             <ToastAlert show={alert.show} message={alert.message} type={alert.type} />
         </Card>
     );

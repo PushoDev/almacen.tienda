@@ -21,16 +21,16 @@ Route::middleware(['auth', 'verified'])->group(
 
         // --- RUTAS DE MOVIMIENTOS FINANCIEROS (NUEVAS) ---
 
-        // Ruta para registrar un Gasto (egreso de una sola cuenta)
-        Route::post('movimientos/gasto', [TransaccionController::class, 'registrarGasto'])
-            ->name('movimientos.gasto.store');
+        // Ruta para Gastos
+        Route::post('transacciones/gastar', [TransaccionController::class, 'gastar'])
+            ->name('transacciones.gastar');
 
-        // Ruta para registrar un Ingreso/Ganancia (ingreso a una sola cuenta)
-        Route::post('movimientos/ingreso', [TransaccionController::class, 'registrarIngreso'])
-            ->name('movimientos.ingreso.store');
+        // Ruta para Ingreso
+        Route::post('transacciones/ingresar', [TransaccionController::class, 'ingresar'])
+            ->name('transacciones.ingresar');
 
-        // Ruta para registrar una Transferencia Interna (origen y destino)
-        Route::post('movimientos/transferencia', [TransaccionController::class, 'registrarTransferencia'])
-            ->name('movimientos.transferencia.store');
+        // Ruta para Transferencia
+        Route::post('transacciones/transferir', [TransaccionController::class, 'transferir'])
+            ->name('transacciones.transferir');
     }
 );
