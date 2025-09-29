@@ -5,10 +5,38 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { useForm } from '@inertiajs/react';
-import React from 'react';
+import { InertiaFormProps, useForm } from '@inertiajs/react';
+import React, { useState } from 'react';
 
-// Definir las interfaces para las props
+// ------------------------------------
+// 💡 1. COMPONENTE DE ALERTA (Toast Simple)
+// ------------------------------------
+// Puedes reemplazar esto con tu librería de toast preferida (Sonner, Hot-Toast, etc.)
+interface AlertState {
+    show: boolean;
+    message: string;
+    type: 'success' | 'error';
+}
+
+const ToastAlert: React.FC<AlertState> = ({ show, message, type }) => {
+    if (!show) return null;
+
+    // Clases simples de Tailwind para posicionamiento y estilo
+    const baseClasses = 'fixed bottom-5 right-5 p-4 rounded-md shadow-lg transition-all duration-300 z-50';
+    const colorClasses = type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white';
+
+    return <div className={`${baseClasses} ${colorClasses}`}>{message}</div>;
+};
+// ------------------------------------
+
+// Función auxiliar para obtener la fecha de hoy en formato YYYY-MM-DD
+const getTodayDate = () => {
+    return new Date().toISOString().split('T')[0];
+};
+
+// ------------------------------------
+// TIPOS DE DATOS
+// ------------------------------------
 interface Cuenta {
     id: number;
     nombre_cuenta: string;
@@ -21,7 +49,22 @@ interface Props {
     cuentas: Cuenta[];
 }
 
+type FormSetter<T> = InertiaFormProps<T>['setData'];
+
+// ------------------------------------
+// 2. COMPONENTE PRINCIPAL (Movimientos)
+// ------------------------------------
 export default function Movimientos({ cuentas }: Props) {
+    // 💡 Estado para gestionar el toast
+    const [alert, setAlert] = useState<AlertState>({ show: false, message: '', type: 'success' });
+
+    // 💡 Función para mostrar el toast
+    const showToast = (message: string, type: 'success' | 'error') => {
+        setAlert({ show: true, message, type });
+        // Ocultar automáticamente después de 4 segundos
+        setTimeout(() => setAlert({ show: false, message: '', type: 'success' }), 4000);
+    };
+
     // ------------------------------------
     // 1. FORMULARIO DE GASTO (EGRESO)
     // ------------------------------------
@@ -37,13 +80,34 @@ export default function Movimientos({ cuentas }: Props) {
         monto: '',
         descripcion: '',
         moneda: '',
+        fecha_operacion: getTodayDate(),
     });
 
     const handleGastoSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        // 🛠️ RUTA CORREGIDA
+
+        const cuentaOrigenId = gastoData.cuenta_origen_id;
+
         postGasto(route('movimientos.gasto.store'), {
-            onSuccess: () => resetGasto(),
+            onSuccess: () => {
+                showToast('¡Gasto registrado con éxito!', 'success');
+
+                resetGasto();
+                setGastoData((data) => {
+                    const selectedCuenta = cuentas.find((c) => String(c.id) === cuentaOrigenId);
+                    return {
+                        ...data,
+                        fecha_operacion: getTodayDate(),
+                        cuenta_origen_id: cuentaOrigenId,
+                        moneda: selectedCuenta?.tipo_moneda ?? '',
+                        monto: '',
+                        descripcion: '',
+                    };
+                });
+            },
+            onError: () => {
+                showToast('Hubo un error al registrar el gasto. Revisa los campos.', 'error');
+            },
         });
     };
 
@@ -63,13 +127,33 @@ export default function Movimientos({ cuentas }: Props) {
         descripcion: '',
         moneda: '',
         tasa_cambio: '',
+        fecha_operacion: getTodayDate(),
     });
 
     const handleIngresoSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        // 🛠️ RUTA CORREGIDA
+        const cuentaDestinoId = ingresoData.cuenta_destino_id;
+
         postIngreso(route('movimientos.ingreso.store'), {
-            onSuccess: () => resetIngreso(),
+            onSuccess: () => {
+                showToast('¡Ingreso registrado con éxito!', 'success');
+
+                resetIngreso();
+                setIngresoData((data) => {
+                    const selectedCuenta = cuentas.find((c) => String(c.id) === cuentaDestinoId);
+                    return {
+                        ...data,
+                        fecha_operacion: getTodayDate(),
+                        cuenta_destino_id: cuentaDestinoId,
+                        moneda: selectedCuenta?.tipo_moneda ?? '',
+                        monto: '',
+                        descripcion: '',
+                    };
+                });
+            },
+            onError: () => {
+                showToast('Hubo un error al registrar el ingreso. Revisa los campos.', 'error');
+            },
         });
     };
 
@@ -90,55 +174,58 @@ export default function Movimientos({ cuentas }: Props) {
         descripcion: '',
         moneda: '',
         tasa_cambio: '',
+        fecha_operacion: getTodayDate(),
     });
 
     const handleTransferSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        // 🛠️ RUTA CORREGIDA
+        const cuentaOrigenId = transferData.cuenta_origen_id;
+
         postTransfer(route('movimientos.transferencia.store'), {
-            onSuccess: () => resetTransfer(),
+            onSuccess: () => {
+                showToast('¡Transferencia realizada con éxito!', 'success');
+
+                resetTransfer();
+                setTransferData((data) => {
+                    const selectedCuenta = cuentas.find((c) => String(c.id) === cuentaOrigenId);
+                    return {
+                        ...data,
+                        fecha_operacion: getTodayDate(),
+                        cuenta_origen_id: cuentaOrigenId,
+                        moneda: selectedCuenta?.tipo_moneda ?? '',
+                        monto: '',
+                        descripcion: '',
+                    };
+                });
+            },
+            onError: () => {
+                showToast('Hubo un error al realizar la transferencia. Revisa los campos.', 'error');
+            },
         });
     };
 
-    // ------------------------------------
-    // 4. FORMULARIO DE PAGO DE DEUDA
-    // ------------------------------------
-    const {
-        data: debtData,
-        setData: setDebtData,
-        post: postDebt,
-        processing: debtProcessing,
-        errors: debtErrors,
-        reset: resetDebt,
-    } = useForm({
-        cuenta_id: '',
-        monto: '',
-        descripcion: '',
-    });
-
-    const handleDebtSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        // RUTA ASUMIDA (Si el formulario existe, debe apuntar a una ruta POST)
-        postDebt(route('transacciones.pagar-deuda'), {
-            onSuccess: () => resetDebt(),
-        });
-    };
-
-    const cuentasConDeuda = cuentas.filter((c) => c.deuda > 0);
-
-    const handleCuentaChange = (value: string, type: 'origen' | 'destino' | 'gasto', formSetter: any) => {
+    /**
+     * Maneja el cambio de cuenta y actualiza la moneda.
+     */
+    const handleCuentaChange = (value: string, type: 'origen' | 'destino' | 'gasto', formSetter: FormSetter<any>) => {
         const selectedCuenta = cuentas.find((c) => String(c.id) === value);
-        if (selectedCuenta) {
-            if (type === 'gasto' || type === 'origen') {
-                formSetter('cuenta_origen_id', value);
-            } else if (type === 'destino') {
-                formSetter('cuenta_destino_id', value);
-            }
 
-            // La moneda se actualiza en el formulario de Gasto/Ingreso/Transferencia.
-            // Para Gasto/Ingreso, la moneda será la de la cuenta seleccionada.
-            // Para Transferencia, la moneda se toma de la cuenta de origen.
-            formSetter('moneda', selectedCuenta.tipo_moneda);
+        if (selectedCuenta) {
+            formSetter((data) => {
+                const newData = { ...data };
+
+                if (type === 'gasto' || type === 'origen') {
+                    newData.cuenta_origen_id = value;
+                    newData.moneda = selectedCuenta.tipo_moneda;
+                }
+
+                if (type === 'destino') {
+                    newData.cuenta_destino_id = value;
+                    newData.moneda = selectedCuenta.tipo_moneda;
+                }
+
+                return newData;
+            });
         }
     };
 
@@ -150,11 +237,10 @@ export default function Movimientos({ cuentas }: Props) {
             </CardHeader>
             <CardContent>
                 <Tabs defaultValue="gasto">
-                    <TabsList className="grid w-full grid-cols-4 md:grid-cols-4">
+                    <TabsList className="grid w-full grid-cols-4 md:grid-cols-3">
                         <TabsTrigger value="gasto">Gasto</TabsTrigger>
                         <TabsTrigger value="ingreso">Ingreso</TabsTrigger>
                         <TabsTrigger value="transferir">Transferir</TabsTrigger>
-                        <TabsTrigger value="pagar-deuda">Pagar Deuda</TabsTrigger>
                     </TabsList>
 
                     {/* =======================================================
@@ -180,6 +266,18 @@ export default function Movimientos({ cuentas }: Props) {
                                     </SelectContent>
                                 </Select>
                                 {gastoErrors.cuenta_origen_id && <p className="mt-1 text-sm text-red-500">{gastoErrors.cuenta_origen_id}</p>}
+                            </div>
+
+                            {/* Campo de fecha */}
+                            <div>
+                                <Label htmlFor="fecha_gasto">Fecha de Operación</Label>
+                                <Input
+                                    type="date"
+                                    id="fecha_gasto"
+                                    value={gastoData.fecha_operacion}
+                                    onChange={(e) => setGastoData('fecha_operacion', e.target.value)}
+                                />
+                                {gastoErrors.fecha_operacion && <p className="mt-1 text-sm text-red-500">{gastoErrors.fecha_operacion}</p>}
                             </div>
 
                             {/* Moneda solo de lectura */}
@@ -216,7 +314,7 @@ export default function Movimientos({ cuentas }: Props) {
                                 />
                                 {gastoErrors.descripcion && <p className="mt-1 text-sm text-red-500">{gastoErrors.descripcion}</p>}
                             </div>
-                            <Button type="submit" disabled={gastoProcessing || !gastoData.moneda}>
+                            <Button type="submit" disabled={gastoProcessing || !gastoData.moneda || Number(gastoData.monto) <= 0}>
                                 Registrar Gasto
                             </Button>
                         </form>
@@ -247,9 +345,21 @@ export default function Movimientos({ cuentas }: Props) {
                                 {ingresoErrors.cuenta_destino_id && <p className="mt-1 text-sm text-red-500">{ingresoErrors.cuenta_destino_id}</p>}
                             </div>
 
+                            {/* Campo de fecha */}
+                            <div>
+                                <Label htmlFor="fecha_ingreso">Fecha de Operación</Label>
+                                <Input
+                                    type="date"
+                                    id="fecha_ingreso"
+                                    value={ingresoData.fecha_operacion}
+                                    onChange={(e) => setIngresoData('fecha_operacion', e.target.value)}
+                                />
+                                {ingresoErrors.fecha_operacion && <p className="mt-1 text-sm text-red-500">{ingresoErrors.fecha_operacion}</p>}
+                            </div>
+
                             {/* Moneda solo de lectura */}
                             <div>
-                                <Label htmlFor="moneda_ingreso">Moneda</Label>
+                                <Label htmlFor="moneda_ingreso">Moneda de la Cuenta</Label>
                                 <Input
                                     id="moneda_ingreso"
                                     value={ingresoData.moneda || 'Seleccione cuenta'}
@@ -295,7 +405,7 @@ export default function Movimientos({ cuentas }: Props) {
                                 />
                                 {ingresoErrors.descripcion && <p className="mt-1 text-sm text-red-500">{ingresoErrors.descripcion}</p>}
                             </div>
-                            <Button type="submit" disabled={ingresoProcessing || !ingresoData.moneda}>
+                            <Button type="submit" disabled={ingresoProcessing || !ingresoData.moneda || Number(ingresoData.monto) <= 0}>
                                 Registrar Ingreso
                             </Button>
                         </form>
@@ -341,6 +451,18 @@ export default function Movimientos({ cuentas }: Props) {
                                     </SelectContent>
                                 </Select>
                                 {transferErrors.cuenta_destino_id && <p className="mt-1 text-sm text-red-500">{transferErrors.cuenta_destino_id}</p>}
+                            </div>
+
+                            {/* Campo de fecha */}
+                            <div>
+                                <Label htmlFor="fecha_transferir">Fecha de Operación</Label>
+                                <Input
+                                    type="date"
+                                    id="fecha_transferir"
+                                    value={transferData.fecha_operacion}
+                                    onChange={(e) => setTransferData('fecha_operacion', e.target.value)}
+                                />
+                                {transferErrors.fecha_operacion && <p className="mt-1 text-sm text-red-500">{transferErrors.fecha_operacion}</p>}
                             </div>
 
                             {/* Moneda solo de lectura */}
@@ -391,63 +513,16 @@ export default function Movimientos({ cuentas }: Props) {
                                 />
                                 {transferErrors.descripcion && <p className="mt-1 text-sm text-red-500">{transferErrors.descripcion}</p>}
                             </div>
-                            <Button type="submit" disabled={transferProcessing || !transferData.moneda}>
+                            <Button type="submit" disabled={transferProcessing || !transferData.moneda || Number(transferData.monto) <= 0}>
                                 Transferir
-                            </Button>
-                        </form>
-                    </TabsContent>
-
-                    {/* =======================================================
-                        4. FORMULARIO DE PAGO DE DEUDA
-                    ======================================================= */}
-                    <TabsContent value="pagar-deuda" className="mt-4">
-                        <form onSubmit={handleDebtSubmit} className="space-y-4">
-                            <div>
-                                <Label htmlFor="cuenta_deuda">Cuenta con Deuda</Label>
-                                <Select onValueChange={(value) => setDebtData('cuenta_id', value)} value={debtData.cuenta_id}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Seleccione una cuenta" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {cuentasConDeuda.map((cuenta) => (
-                                            <SelectItem key={cuenta.id} value={String(cuenta.id)}>
-                                                {cuenta.nombre_cuenta} ({cuenta.tipo_moneda}) - Deuda: {cuenta.deuda.toFixed(2)}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                {debtErrors.cuenta_id && <p className="mt-1 text-sm text-red-500">{debtErrors.cuenta_id}</p>}
-                            </div>
-
-                            <div>
-                                <Label htmlFor="monto_deuda">Monto a pagar</Label>
-                                <Input
-                                    type="number"
-                                    id="monto_deuda"
-                                    value={debtData.monto}
-                                    onChange={(e) => setDebtData('monto', e.target.value)}
-                                    step="0.01"
-                                    min="0.01"
-                                />
-                                {debtErrors.monto && <p className="mt-1 text-sm text-red-500">{debtErrors.monto}</p>}
-                            </div>
-
-                            <div>
-                                <Label htmlFor="descripcion_deuda">Descripción</Label>
-                                <Textarea
-                                    id="descripcion_deuda"
-                                    value={debtData.descripcion}
-                                    onChange={(e) => setDebtData('descripcion', e.target.value)}
-                                />
-                                {debtErrors.descripcion && <p className="mt-1 text-sm text-red-500">{debtErrors.descripcion}</p>}
-                            </div>
-                            <Button type="submit" disabled={debtProcessing}>
-                                Pagar Deuda
                             </Button>
                         </form>
                     </TabsContent>
                 </Tabs>
             </CardContent>
+
+            {/* 💡 Agregamos el Toast al final del componente */}
+            <ToastAlert show={alert.show} message={alert.message} type={alert.type} />
         </Card>
     );
 }

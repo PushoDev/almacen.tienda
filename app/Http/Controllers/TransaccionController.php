@@ -8,17 +8,20 @@ use App\Models\Producto;
 use App\Models\TasaCambio;
 use App\Models\CostDistribution;
 use App\Models\CostoHistorial;
-use App\Models\TransaccionCuenta;
+use App\Models\TransaccionCuenta; // USAMOS ESTE MODELO (Para Gasto, Ingreso, Transferencia)
 use App\Http\Requests\DistribuirCostosManualRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Log;
-use Exception; // Importamos Exception para manejo de errores
+use Exception;
+use Illuminate\Validation\ValidationException; // ¡Importación Corregida!
 
 class TransaccionController extends Controller
 {
-    // NO HAY CONSTRUCTOR: Eliminamos la inyección de MovimientoFinancieroService
+    // Las constantes TIPO_... ya no son estrictamente necesarias si TransaccionCuenta
+    // usa el campo 'tipo' como string ('gasto_operativo', 'ingreso_venta', etc.),
+    // pero las he mantenido fuera para simplificar.
 
     /**
      * Vista principal de transacciones.
@@ -159,19 +162,20 @@ class TransaccionController extends Controller
 
 
     // =======================================================
-    // === NUEVOS MÉTODOS DE REGISTRO DE MOVIMIENTOS FINANCIEROS (Lógica Simplificada) ===
+    // === MÉTODOS DE REGISTRO DE MOVIMIENTOS FINANCIEROS (Usando TransaccionCuenta) ===
     // =======================================================
 
     /**
      * Registra un Gasto (Egreso de una cuenta).
-     * Nota: Utiliza TransaccionCuenta para el registro y decrementa directamente saldo_cuenta.
      */
     public function registrarGasto(Request $request)
     {
+        // Nota: Agregué 'fecha_operacion' a la validación ya que lo usaste en los ejemplos anteriores.
         $request->validate([
             'monto' => 'required|numeric|min:0.01',
             'moneda' => 'required|in:USD,EUR,MLC,CUP',
             'cuenta_origen_id' => 'required|exists:cuentas,id',
+            'fecha_operacion' => 'required|date', // Requerido para consistencia con los otros métodos
             'descripcion' => 'nullable|string|max:255',
         ]);
 
@@ -179,30 +183,36 @@ class TransaccionController extends Controller
 
         try {
             $monto = (float) $request->input('monto');
-            $cuenta = Cuenta::findOrFail($request->input('cuenta_origen_id'));
+            $cuenta = Cuenta::lockForUpdate()->findOrFail($request->input('cuenta_origen_id'));
 
-            // 1. Verificación de saldo (usando saldo_cuenta, ya que saldo_disponible no es manejado aquí)
+            // 1. Verificación de saldo
             if ($cuenta->saldo_cuenta < $monto) {
-                DB::rollBack();
-                return back()->with('error', 'Saldo insuficiente en la cuenta para registrar el gasto.')->withInput();
+                // Usamos ValidationException aquí para mantener la coherencia con los métodos anteriores
+                // y permitir que Laravel/Inertia maneje el error de validación.
+                throw ValidationException::withMessages([
+                    'monto' => 'Saldo insuficiente en la cuenta de origen.'
+                ]);
             }
 
             // 2. Actualización de saldos
             $cuenta->decrement('saldo_cuenta', $monto);
-            // Si también manejas saldo_disponible, descomenta y ajusta esta línea:
-            // $cuenta->decrement('saldo_disponible', $monto);
 
             // 3. Registro de la transacción
             TransaccionCuenta::create([
                 'user_id' => auth()->id(),
                 'cuenta_origen_id' => $cuenta->id,
                 'monto' => $monto,
-                'tipo' => 'gasto_operativo', // Tipo que definas en tu sistema
-                'comentario' => $request->input('descripcion')
+                'moneda' => $request->input('moneda'), // Agregado para usar el valor del formulario
+                'tipo' => 'gasto_operativo',
+                'comentario' => $request->input('descripcion'),
+                'fecha_operacion' => $request->input('fecha_operacion'),
             ]);
 
             DB::commit();
             return back()->with('success', 'Gasto registrado correctamente.');
+        } catch (ValidationException $e) {
+            DB::rollBack();
+            throw $e; // Re-lanza la excepción de validación
         } catch (Exception $e) {
             DB::rollBack();
             Log::error('Error al registrar gasto: ' . $e->getMessage());
@@ -212,7 +222,6 @@ class TransaccionController extends Controller
 
     /**
      * Registra un Ingreso/Ganancia (Entrada a una cuenta).
-     * Nota: Utiliza TransaccionCuenta para el registro y actualiza directamente saldo_cuenta.
      */
     public function registrarIngreso(Request $request)
     {
@@ -220,6 +229,7 @@ class TransaccionController extends Controller
             'monto' => 'required|numeric|min:0.01',
             'moneda' => 'required|in:USD,EUR,MLC,CUP',
             'cuenta_destino_id' => 'required|exists:cuentas,id',
+            'fecha_operacion' => 'required|date',
             'tasa_cambio' => 'nullable|numeric|min:0.01',
             'descripcion' => 'nullable|string|max:255',
         ]);
@@ -227,28 +237,46 @@ class TransaccionController extends Controller
         DB::beginTransaction();
 
         try {
-            $monto = (float) $request->input('monto');
-            $cuenta = Cuenta::findOrFail($request->input('cuenta_destino_id'));
+            $montoOriginal = (float) $request->input('monto');
+            $cuenta = Cuenta::lockForUpdate()->findOrFail($request->input('cuenta_destino_id'));
 
-            // 1. Aquí iría la lógica de conversión de divisas si es necesaria (omitida para simplificar sin el servicio).
-            // Por ahora, asumimos que el monto se suma directamente.
+            $montoAfectar = $montoOriginal;
+            $tasaAplicada = null;
+            $monedaIngreso = $request->input('moneda');
+
+            // Lógica de Conversión (Si la moneda de la transacción difiere de la cuenta)
+            if ($monedaIngreso !== $cuenta->tipo_moneda) {
+                $tasaCambio = (float) $request->input('tasa_cambio');
+                if (!$tasaCambio || $tasaCambio <= 0) {
+                    throw ValidationException::withMessages([
+                        'tasa_cambio' => 'Se requiere una Tasa de Cambio para la conversión de moneda.'
+                    ]);
+                }
+                $montoAfectar = $montoOriginal * $tasaCambio;
+                $tasaAplicada = $tasaCambio;
+            }
+
 
             // 2. Actualización de saldos
-            $cuenta->increment('saldo_cuenta', $monto);
-            // Si también manejas saldo_disponible, descomenta y ajusta esta línea:
-            // $cuenta->increment('saldo_disponible', $monto);
+            $cuenta->increment('saldo_cuenta', $montoAfectar);
 
             // 3. Registro de la transacción
             TransaccionCuenta::create([
                 'user_id' => auth()->id(),
                 'cuenta_destino_id' => $cuenta->id,
-                'monto' => $monto,
-                'tipo' => 'ingreso_venta', // Tipo que definas en tu sistema
-                'comentario' => $request->input('descripcion')
+                'monto' => $montoOriginal,
+                'moneda' => $monedaIngreso,
+                'tasa_cambio_aplicada' => $tasaAplicada, // Agregamos la tasa
+                'tipo' => 'ingreso_venta',
+                'comentario' => $request->input('descripcion'),
+                'fecha_operacion' => $request->input('fecha_operacion'),
             ]);
 
             DB::commit();
             return back()->with('success', 'Ingreso registrado correctamente.');
+        } catch (ValidationException $e) {
+            DB::rollBack();
+            throw $e;
         } catch (Exception $e) {
             DB::rollBack();
             Log::error('Error al registrar ingreso: ' . $e->getMessage());
@@ -258,7 +286,6 @@ class TransaccionController extends Controller
 
     /**
      * Registra una Transferencia Interna (Movimiento entre Origen y Destino).
-     * Nota: Actualiza ambas cuentas y usa TransaccionCuenta.
      */
     public function registrarTransferencia(Request $request)
     {
@@ -267,6 +294,7 @@ class TransaccionController extends Controller
             'moneda' => 'required|in:USD,EUR,MLC,CUP',
             'cuenta_origen_id' => 'required|exists:cuentas,id|different:cuenta_destino_id',
             'cuenta_destino_id' => 'required|exists:cuentas,id',
+            'fecha_operacion' => 'required|date',
             'tasa_cambio' => 'nullable|numeric|min:0.01',
             'descripcion' => 'nullable|string|max:255',
         ]);
@@ -274,32 +302,59 @@ class TransaccionController extends Controller
         DB::beginTransaction();
 
         try {
-            $monto = (float) $request->input('monto');
-            $cuentaOrigen = Cuenta::findOrFail($request->input('cuenta_origen_id'));
-            $cuentaDestino = Cuenta::findOrFail($request->input('cuenta_destino_id'));
+            $montoOriginal = (float) $request->input('monto');
+            $origenId = $request->input('cuenta_origen_id');
+            $destinoId = $request->input('cuenta_destino_id');
 
-            // 1. Verificación de saldo
-            if ($cuentaOrigen->saldo_cuenta < $monto) {
-                DB::rollBack();
-                return back()->with('error', 'Saldo insuficiente en la cuenta de origen para la transferencia.')->withInput();
+            // 1. Bloquear y cargar ambas cuentas
+            $cuentaOrigen = Cuenta::lockForUpdate()->findOrFail($origenId);
+            $cuentaDestino = Cuenta::lockForUpdate()->findOrFail($destinoId);
+
+            // 2. Verificación de saldo en origen
+            if ($cuentaOrigen->saldo_cuenta < $montoOriginal) {
+                throw ValidationException::withMessages([
+                    'monto' => 'Saldo insuficiente en la cuenta de origen para la transferencia.'
+                ]);
             }
 
-            // 2. Actualización de saldos (Egreso en origen, Ingreso en destino)
-            $cuentaOrigen->decrement('saldo_cuenta', $monto);
-            $cuentaDestino->increment('saldo_cuenta', $monto);
+            // 3. Cálculo de la conversión para el destino
+            $montoAfectarDestino = $montoOriginal;
+            $tasaAplicada = null;
+            $monedaTransferida = $request->input('moneda');
 
-            // 3. Registro de la transacción
+            if ($monedaTransferida !== $cuentaDestino->tipo_moneda) {
+                $tasaCambio = (float) $request->input('tasa_cambio');
+                if (!$tasaCambio || $tasaCambio <= 0) {
+                    throw ValidationException::withMessages([
+                        'tasa_cambio' => 'Se requiere una Tasa de Cambio para transferir entre monedas diferentes.'
+                    ]);
+                }
+                $montoAfectarDestino = $montoOriginal * $tasaCambio;
+                $tasaAplicada = $tasaCambio;
+            }
+
+            // 4. Actualización de saldos
+            $cuentaOrigen->decrement('saldo_cuenta', $montoOriginal);
+            $cuentaDestino->increment('saldo_cuenta', $montoAfectarDestino);
+
+            // 5. Registro de la transacción
             TransaccionCuenta::create([
                 'user_id' => auth()->id(),
-                'cuenta_origen_id' => $cuentaOrigen->id,
-                'cuenta_destino_id' => $cuentaDestino->id,
-                'monto' => $monto,
-                'tipo' => 'transferencia_interna', // Tipo que definas en tu sistema
-                'comentario' => $request->input('descripcion')
+                'cuenta_origen_id' => $origenId,
+                'cuenta_destino_id' => $destinoId,
+                'monto' => $montoOriginal,
+                'moneda' => $monedaTransferida,
+                'tasa_cambio_aplicada' => $tasaAplicada,
+                'tipo' => 'transferencia_interna',
+                'comentario' => $request->input('descripcion'),
+                'fecha_operacion' => $request->input('fecha_operacion'),
             ]);
 
             DB::commit();
             return back()->with('success', 'Transferencia registrada correctamente.');
+        } catch (ValidationException $e) {
+            DB::rollBack();
+            throw $e;
         } catch (Exception $e) {
             DB::rollBack();
             Log::error('Error al registrar transferencia: ' . $e->getMessage());
