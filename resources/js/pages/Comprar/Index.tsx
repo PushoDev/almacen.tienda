@@ -745,12 +745,13 @@ export default function ComprarPage() {
                                 Realizar Compra
                             </Button>
                         </AlertDialogTrigger>
-                        <AlertDialogContent>
+                        <AlertDialogContent className="max-h-[90vh] overflow-y-auto">
+                            {' '}
+                            {/* Aquí agregué el scroll */}
                             <AlertDialogHeader>
                                 <AlertDialogTitle>Tipo de Compra</AlertDialogTitle>
                                 <AlertDialogDescription>Seleccione si desea pagar ahora o comprar y pagar luego</AlertDialogDescription>
                             </AlertDialogHeader>
-
                             <div className="flex flex-col gap-4 pt-4">
                                 <div className="grid w-full items-center gap-1.5">
                                     <Label htmlFor="tipo_compra">Tipo de Compra</Label>
@@ -954,7 +955,6 @@ export default function ComprarPage() {
                                     </>
                                 )}
                             </div>
-
                             <AlertDialogFooter>
                                 <AlertDialogCancel className="cursor-pointer">Cancelar</AlertDialogCancel>
                                 <Button
