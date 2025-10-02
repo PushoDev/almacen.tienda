@@ -18,6 +18,9 @@ Route::middleware(['auth', 'verified'])->group(
         Route::post('transacciones/distribuir-costos-manual', [TransaccionController::class, 'distribuirCostosManual'])
             ->name('transacciones.distribuir-costos-manual');
 
+        Route::post('/transacciones/distribuir-costos', [TransaccionController::class, 'distribuirCostosManual'])
+            ->name('distribuir.costos.manual');
+
 
         // --- RUTAS DE MOVIMIENTOS FINANCIEROS (NUEVAS) ---
 

@@ -77,7 +77,7 @@ export default function Transacciones({ compras, cuentas, tasaCambioActual }: Pr
                         </TabsTrigger>
                         <TabsTrigger value="costos" className="flex items-center gap-2">
                             <Banknote className="h-4 w-4" />
-                            Costos Adicionales
+                            Gastos por Transportación
                         </TabsTrigger>
                     </TabsList>
                     {/* Paso 1: Pasar la prop 'cuentas' al componente Movimientos */}

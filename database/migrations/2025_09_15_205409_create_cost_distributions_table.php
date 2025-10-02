@@ -18,6 +18,8 @@ return new class extends Migration
             $table->decimal('amount_cup', 15, 2);
             $table->decimal('amount_usd', 15, 2);
             $table->decimal('exchange_rate', 15, 8);
+            $table->decimal('remaining_amount_usd', 15, 4)->default(0);
+            $table->decimal('remaining_amount_cup', 15, 2)->default(0);
             $table->unsignedBigInteger('account_id');
             $table->text('details')->nullable();
             $table->timestamps();
