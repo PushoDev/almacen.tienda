@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Compra;
 use App\Models\Cuenta;
+use App\Models\Cliente;
 use App\Models\Producto;
 use App\Models\TasaCambio;
 use App\Models\CostDistribution;
@@ -31,12 +32,14 @@ class TransaccionController extends Controller
             ->get();
 
         $cuentas = Cuenta::all();
+        $clientes = Cliente::all();
 
         $tasaCambioActual = TasaCambio::latest('fecha_actualizacion')->first();
 
         return Inertia::render('Transacciones/Index', [
             'compras' => $compras,
             'cuentas' => $cuentas,
+            'clientes' => $clientes,
             'tasaCambioActual' => $tasaCambioActual ? $tasaCambioActual->tasa : 0,
         ]);
     }
@@ -61,7 +64,7 @@ class TransaccionController extends Controller
     }
 
     /**
-     * Procesa la distribución manual de costos CON MANEJO DE SOBRANTES.
+     * Procesa la distribución manual de costos (solo con cuentas).
      */
     public function distribuirCostosManual(DistribuirCostosManualRequest $request)
     {
@@ -70,11 +73,9 @@ class TransaccionController extends Controller
         DB::beginTransaction();
 
         try {
-            // === 1. OBTENER RECURSOS NECESARIOS ===
             $compra = Compra::with('productos')->findOrFail($validatedData['purchase_id']);
             $cuenta = Cuenta::findOrFail($validatedData['account_id']);
 
-            // === 2. VALIDACIONES DE NEGOCIO ===
             if ($cuenta->tipo_cuenta === 'deudas') {
                 DB::rollBack();
                 return redirect()->back()->with('error', 'No se puede usar una cuenta de deudas para esta operación.');
@@ -96,7 +97,6 @@ class TransaccionController extends Controller
                 return redirect()->back()->with('error', 'El saldo en la cuenta de origen es insuficiente.');
             }
 
-            // === 3. CREAR REGISTRO DE DISTRIBUCIÓN ===
             $distribution = CostDistribution::create([
                 'purchase_id' => $validatedData['purchase_id'],
                 'account_id' => $validatedData['account_id'],
@@ -104,11 +104,10 @@ class TransaccionController extends Controller
                 'amount_usd' => $totalUsdDisponible,
                 'exchange_rate' => $tasa_cambio,
                 'details' => $validatedData['details'],
-                'remaining_amount_usd' => 0, // Inicialmente en 0
-                'remaining_amount_cup' => 0, // Inicialmente en 0
+                'remaining_amount_usd' => 0,
+                'remaining_amount_cup' => 0,
             ]);
 
-            // === 4. DISTRIBUIR A PRODUCTOS Y CALCULAR TOTAL DISTRIBUIDO ===
             $totalUsdDistribuidoProductos = 0;
 
             foreach ($validatedData['productos'] as $productoData) {
@@ -121,7 +120,6 @@ class TransaccionController extends Controller
                     $incrementoUnitario = (float)$productoData['amount_usd'];
                     $nuevoCosto = $costoActual + $incrementoUnitario;
 
-                    // Registrar item de distribución
                     CostDistributionItem::create([
                         'cost_distribution_id' => $distribution->id,
                         'product_id' => $producto->id,
@@ -131,7 +129,6 @@ class TransaccionController extends Controller
                         'new_cost_usd' => $nuevoCosto,
                     ]);
 
-                    // Guardar historial de costo
                     CostoHistorial::create([
                         'product_id' => $producto->id,
                         'old_cost_usd' => $costoActual,
@@ -140,32 +137,25 @@ class TransaccionController extends Controller
                         'comentario' => 'Ajuste por distribución manual de costos.',
                     ]);
 
-                    // Actualizar costo del producto
                     $producto->update(['precio_compra_producto' => $nuevoCosto]);
 
-                    // Acumular total distribuido
                     $totalUsdDistribuidoProductos += (float)$productoData['amount_usd'];
                 }
             }
 
-            // === 5. 🆕 CALCULAR Y MANEJAR SOBRANTE ===
             $totalUsdSobrante = $totalUsdDisponible - $totalUsdDistribuidoProductos;
             $totalCupSobrante = $totalUsdSobrante * $tasa_cambio;
 
-            // Actualizar la distribución con los sobrantes calculados
             $distribution->update([
                 'remaining_amount_usd' => $totalUsdSobrante,
                 'remaining_amount_cup' => $totalCupSobrante,
             ]);
 
-            // === 6. REGISTRAR MOVIMIENTOS FINANCIEROS ===
-
-            // Movimiento 1: Gasto por lo distribuido a productos
             if ($totalUsdDistribuidoProductos > 0) {
                 $montoCupProductos = $totalUsdDistribuidoProductos * $tasa_cambio;
 
                 MovimientoFinanciero::create([
-                    'tipo_movimiento_id' => 1, // Gasto
+                    'tipo_movimiento_id' => 1,
                     'cuenta_origen_id' => $cuenta->id,
                     'cuenta_destino_id' => null,
                     'monto' => $montoCupProductos,
@@ -177,10 +167,9 @@ class TransaccionController extends Controller
                 ]);
             }
 
-            // Movimiento 2: Gasto por el sobrante no distribuido
-            if ($totalUsdSobrante > 0.01) { // Solo si el sobrante es significativo
+            if ($totalUsdSobrante > 0.01) {
                 MovimientoFinanciero::create([
-                    'tipo_movimiento_id' => 1, // Gasto
+                    'tipo_movimiento_id' => 1,
                     'cuenta_origen_id' => $cuenta->id,
                     'cuenta_destino_id' => null,
                     'monto' => $totalCupSobrante,
@@ -192,24 +181,19 @@ class TransaccionController extends Controller
                 ]);
             }
 
-            // === 7. ACTUALIZAR SALDOS ===
             $cuenta->decrement('saldo_cuenta', $totalCupDistribuir);
 
-            // === 8. MENSAJE INFORMATIVO ===
-            if ($totalUsdSobrante > 0.01) {
-                $mensajeExito = 'Costos distribuidos manualmente con éxito. Se registró un sobrante de ' .
-                    number_format($totalUsdSobrante, 2) . ' USD (' .
-                    number_format($totalCupSobrante, 2) . ' CUP) como gasto directo.';
-            } else {
-                $mensajeExito = 'Costos distribuidos manualmente con éxito.';
-            }
+            $mensajeExito = $totalUsdSobrante > 0.01
+                ? 'Costos distribuidos manualmente con éxito. Se registró un sobrante de ' .
+                number_format($totalUsdSobrante, 2) . ' USD (' .
+                number_format($totalCupSobrante, 2) . ' CUP) como gasto directo.'
+                : 'Costos distribuidos manualmente con éxito.';
 
             DB::commit();
 
             return redirect()
                 ->route('transacciones')
                 ->with('success', $mensajeExito);
-
         } catch (Exception $e) {
             DB::rollBack();
             Log::error('Error al distribuir costos manualmente: ' . $e->getMessage());
@@ -222,12 +206,13 @@ class TransaccionController extends Controller
     // =======================================================
 
     /**
-     * Registrar Gasto
+     * Registrar Gasto (Cuenta o Cliente)
      */
     public function gastar(Request $request)
     {
         $request->validate([
-            'cuenta_origen_id' => 'required|exists:cuentas,id',
+            'origen_tipo' => 'required|string|in:cuenta,cliente',
+            'origen_id' => 'required|integer',
             'monto' => 'required|numeric|min:0.01',
             'moneda' => 'required|string|in:USD,EUR,CUP',
             'comentario' => 'nullable|string|max:255',
@@ -236,30 +221,44 @@ class TransaccionController extends Controller
         DB::beginTransaction();
 
         try {
-            $cuenta = Cuenta::lockForUpdate()->find($request->cuenta_origen_id);
+            if ($request->origen_tipo === 'cuenta') {
+                $origen = Cuenta::lockForUpdate()->findOrFail($request->origen_id);
+                if ($origen->saldo_cuenta < $request->monto) {
+                    throw new \Exception('Saldo insuficiente en la cuenta.');
+                }
+                $origen->decrement('saldo_cuenta', $request->monto);
 
-            if ($cuenta->saldo_cuenta < $request->monto) {
-                throw new \Exception('Saldo insuficiente para el gasto.');
+                MovimientoFinanciero::create([
+                    'tipo_movimiento_id' => 1,
+                    'cuenta_origen_id' => $origen->id,
+                    'cuenta_destino_id' => null,
+                    'monto' => $request->monto,
+                    'moneda' => $request->moneda,
+                    'descripcion' => $request->comentario ?? "Gasto desde cuenta: {$origen->nombre_cuenta}",
+                    'fecha_operacion' => now(),
+                    'estado' => 'completado',
+                ]);
+            } else {
+                $origen = Cliente::lockForUpdate()->findOrFail($request->origen_id);
+                if ($origen->deuda_pago_cliente < $request->monto) {
+                    throw new \Exception('Saldo insuficiente en el cliente.');
+                }
+                $origen->decrement('deuda_pago_cliente', $request->monto);
+
+                MovimientoFinanciero::create([
+                    'tipo_movimiento_id' => 1,
+                    'cuenta_origen_id' => null,
+                    'cuenta_destino_id' => null,
+                    'monto' => $request->monto,
+                    'moneda' => $request->moneda,
+                    'descripcion' => $request->comentario ?? "Gasto desde cliente: {$origen->nombre_cliente}",
+                    'fecha_operacion' => now(),
+                    'estado' => 'completado',
+                ]);
             }
 
-            $cuenta->saldo_cuenta -= $request->monto;
-            $cuenta->save();
-
-            MovimientoFinanciero::create([
-                'tipo_movimiento_id' => 1,
-                'cuenta_origen_id' => $request->cuenta_origen_id,
-                'cuenta_destino_id' => null,
-                'monto' => $request->monto,
-                'moneda' => $request->moneda,
-                'descripcion' => $request->comentario ?? 'Gasto registrado',
-                'fecha_operacion' => now(),
-                'estado' => 'completado',
-            ]);
-
             DB::commit();
-
-            return Redirect::back()->with('success', "✅ Gasto de {$request->monto} {$request->moneda} registrado con éxito. Nuevo saldo: {$cuenta->saldo_cuenta}");
-
+            return Redirect::back()->with('success', "✅ Gasto de {$request->monto} {$request->moneda} registrado con éxito.");
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Error al registrar gasto: ' . $e->getMessage());
@@ -268,12 +267,13 @@ class TransaccionController extends Controller
     }
 
     /**
-     * Registrar Ingreso
+     * Registrar Ingreso (Cuenta o Cliente)
      */
     public function ingresar(Request $request)
     {
         $request->validate([
-            'cuenta_destino_id' => 'required|exists:cuentas,id',
+            'destino_tipo' => 'required|string|in:cuenta,cliente',
+            'destino_id' => 'required|integer',
             'monto' => 'required|numeric|min:0.01',
             'moneda' => 'required|string|in:USD,EUR,CUP',
             'comentario' => 'nullable|string|max:255',
@@ -282,26 +282,38 @@ class TransaccionController extends Controller
         DB::beginTransaction();
 
         try {
-            $cuenta = Cuenta::lockForUpdate()->find($request->cuenta_destino_id);
+            if ($request->destino_tipo === 'cuenta') {
+                $destino = Cuenta::lockForUpdate()->findOrFail($request->destino_id);
+                $destino->increment('saldo_cuenta', $request->monto);
 
-            $cuenta->saldo_cuenta += $request->monto;
-            $cuenta->save();
+                MovimientoFinanciero::create([
+                    'tipo_movimiento_id' => 2,
+                    'cuenta_origen_id' => null,
+                    'cuenta_destino_id' => $destino->id,
+                    'monto' => $request->monto,
+                    'moneda' => $request->moneda,
+                    'descripcion' => $request->comentario ?? "Ingreso a cuenta: {$destino->nombre_cuenta}",
+                    'fecha_operacion' => now(),
+                    'estado' => 'completado',
+                ]);
+            } else {
+                $destino = Cliente::lockForUpdate()->findOrFail($request->destino_id);
+                $destino->increment('deuda_pago_cliente', $request->monto);
 
-            MovimientoFinanciero::create([
-                'tipo_movimiento_id' => 2,
-                'cuenta_origen_id' => null,
-                'cuenta_destino_id' => $request->cuenta_destino_id,
-                'monto' => $request->monto,
-                'moneda' => $request->moneda,
-                'descripcion' => $request->comentario ?? 'Ingreso registrado',
-                'fecha_operacion' => now(),
-                'estado' => 'completado',
-            ]);
+                MovimientoFinanciero::create([
+                    'tipo_movimiento_id' => 2,
+                    'cuenta_origen_id' => null,
+                    'cuenta_destino_id' => null,
+                    'monto' => $request->monto,
+                    'moneda' => $request->moneda,
+                    'descripcion' => $request->comentario ?? "Ingreso a cliente: {$destino->nombre_cliente}",
+                    'fecha_operacion' => now(),
+                    'estado' => 'completado',
+                ]);
+            }
 
             DB::commit();
-
-            return Redirect::back()->with('success', "✅ Ingreso de {$request->monto} {$request->moneda} registrado con éxito. Nuevo saldo: {$cuenta->saldo_cuenta}");
-
+            return Redirect::back()->with('success', "✅ Ingreso de {$request->monto} {$request->moneda} registrado con éxito.");
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Error al registrar ingreso: ' . $e->getMessage());
@@ -310,13 +322,15 @@ class TransaccionController extends Controller
     }
 
     /**
-     * Registrar Transferencia
+     * Registrar Transferencia (Cuenta ↔ Cliente)
      */
     public function transferir(Request $request)
     {
         $request->validate([
-            'cuenta_origen_id' => 'required|exists:cuentas,id',
-            'cuenta_destino_id' => 'required|exists:cuentas,id|different:cuenta_origen_id',
+            'origen_tipo' => 'required|string|in:cuenta,cliente',
+            'origen_id' => 'required|integer',
+            'destino_tipo' => 'required|string|in:cuenta,cliente|different:origen_tipo,origen_id',
+            'destino_id' => 'required|integer',
             'monto' => 'required|numeric|min:0.01',
             'moneda' => 'required|string|in:USD,EUR,CUP',
             'comentario' => 'nullable|string|max:255',
@@ -325,38 +339,43 @@ class TransaccionController extends Controller
         DB::beginTransaction();
 
         try {
-            $cuentaOrigen = Cuenta::lockForUpdate()->find($request->cuenta_origen_id);
-            $cuentaDestino = Cuenta::lockForUpdate()->find($request->cuenta_destino_id);
-
-            if (!$cuentaOrigen || !$cuentaDestino) {
-                throw new \Exception('Una de las cuentas no existe.');
+            // Origen
+            if ($request->origen_tipo === 'cuenta') {
+                $origen = Cuenta::lockForUpdate()->findOrFail($request->origen_id);
+                if ($origen->saldo_cuenta < $request->monto) {
+                    throw new \Exception('Saldo insuficiente en la cuenta origen.');
+                }
+                $origen->decrement('saldo_cuenta', $request->monto);
+            } else {
+                $origen = Cliente::lockForUpdate()->findOrFail($request->origen_id);
+                if ($origen->deuda_pago_cliente < $request->monto) {
+                    throw new \Exception('Saldo insuficiente en el cliente origen.');
+                }
+                $origen->decrement('deuda_pago_cliente', $request->monto);
             }
 
-            if ($cuentaOrigen->saldo_cuenta < $request->monto) {
-                throw new \Exception('Saldo insuficiente para la transferencia.');
+            // Destino
+            if ($request->destino_tipo === 'cuenta') {
+                $destino = Cuenta::lockForUpdate()->findOrFail($request->destino_id);
+                $destino->increment('saldo_cuenta', $request->monto);
+            } else {
+                $destino = Cliente::lockForUpdate()->findOrFail($request->destino_id);
+                $destino->increment('deuda_pago_cliente', $request->monto);
             }
-
-            $cuentaOrigen->saldo_cuenta -= $request->monto;
-            $cuentaOrigen->save();
-
-            $cuentaDestino->saldo_cuenta += $request->monto;
-            $cuentaDestino->save();
 
             MovimientoFinanciero::create([
                 'tipo_movimiento_id' => 3,
-                'cuenta_origen_id' => $request->cuenta_origen_id,
-                'cuenta_destino_id' => $request->cuenta_destino_id,
+                'cuenta_origen_id' => $request->origen_tipo === 'cuenta' ? $origen->id : null,
+                'cuenta_destino_id' => $request->destino_tipo === 'cuenta' ? $destino->id : null,
                 'monto' => $request->monto,
                 'moneda' => $request->moneda,
-                'descripcion' => $request->comentario ?? 'Transferencia entre cuentas',
+                'descripcion' => $request->comentario ?? "Transferencia de {$request->origen_tipo} a {$request->destino_tipo}",
                 'fecha_operacion' => now(),
                 'estado' => 'completado',
             ]);
 
             DB::commit();
-
-            return Redirect::back()->with('success', "✅ Transferencia de {$request->monto} {$request->moneda} registrada con éxito. Nuevo saldo origen: {$cuentaOrigen->saldo_cuenta}, Nuevo saldo destino: {$cuentaDestino->saldo_cuenta}");
-
+            return Redirect::back()->with('success', "✅ Transferencia de {$request->monto} {$request->moneda} registrada con éxito.");
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Error al registrar transferencia: ' . $e->getMessage());

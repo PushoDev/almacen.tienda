@@ -20,15 +20,22 @@ interface Cuenta {
     id: number;
     nombre_cuenta: string;
     tipo_moneda: string;
-    // Agregamos las propiedades 'saldo_cuenta' y 'deuda' para usarlas en los formularios.
     saldo_cuenta: number;
     deuda: number;
+}
+
+// NUEVA INTERFAZ para Clientes
+interface Cliente {
+    id: number;
+    nombre_cliente: string;
+    deuda_pago_cliente: number; // Esto es el 'saldo' que afecta el movimiento
 }
 
 // 2. Define la interfaz principal de las props
 interface Props {
     compras: Compra[];
     cuentas: Cuenta[];
+    clientes: Cliente[]; // AÑADIDO: Lista de Clientes
     tasaCambioActual: number;
 }
 
@@ -52,7 +59,8 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 // 3. Usa la interfaz de props en la función del componente
-export default function Transacciones({ compras, cuentas, tasaCambioActual }: Props) {
+// Asegúrate de desestructurar la nueva prop 'clientes'
+export default function Transacciones({ compras, cuentas, clientes, tasaCambioActual }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Transacciones" />
@@ -69,7 +77,9 @@ export default function Transacciones({ compras, cuentas, tasaCambioActual }: Pr
                 <Separator className="col-span-4" />
 
                 {/* Opciones de Transacciones */}
-                <Tabs defaultValue="ganancias">
+                <Tabs defaultValue="movimientos">
+                    {' '}
+                    {/* Cambié el valor por defecto para mostrar movimientos primero */}
                     <TabsList className="grid w-full grid-cols-2">
                         <TabsTrigger value="movimientos" className="flex items-center gap-2">
                             <Repeat className="h-4 w-4" />
@@ -80,11 +90,10 @@ export default function Transacciones({ compras, cuentas, tasaCambioActual }: Pr
                             Gastos por Transportación
                         </TabsTrigger>
                     </TabsList>
-                    {/* Paso 1: Pasar la prop 'cuentas' al componente Movimientos */}
+                    {/* PASO CLAVE 1: Pasar la prop 'clientes' al componente Movimientos */}
                     <TabsContent value="movimientos">
-                        <Movimientos cuentas={cuentas} />
+                        <Movimientos cuentas={cuentas} clientes={clientes} />
                     </TabsContent>
-
                     <TabsContent value="costos">
                         <CostosAdicionales compras={compras} cuentas={cuentas} tasaCambioActual={tasaCambioActual} />
                     </TabsContent>
