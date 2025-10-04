@@ -157,7 +157,9 @@ class TransaccionController extends Controller
                 MovimientoFinanciero::create([
                     'tipo_movimiento_id' => 1,
                     'cuenta_origen_id' => $cuenta->id,
+                    'cliente_origen_id' => null, // 👈 AGREGADO para ser explícito
                     'cuenta_destino_id' => null,
+                    'cliente_destino_id' => null, // 👈 AGREGADO para ser explícito
                     'monto' => $montoCupProductos,
                     'moneda' => 'CUP',
                     'tasa_cambio_aplicada' => $tasa_cambio,
@@ -171,7 +173,9 @@ class TransaccionController extends Controller
                 MovimientoFinanciero::create([
                     'tipo_movimiento_id' => 1,
                     'cuenta_origen_id' => $cuenta->id,
+                    'cliente_origen_id' => null, // 👈 AGREGADO para ser explícito
                     'cuenta_destino_id' => null,
+                    'cliente_destino_id' => null, // 👈 AGREGADO para ser explícito
                     'monto' => $totalCupSobrante,
                     'moneda' => 'CUP',
                     'tasa_cambio_aplicada' => $tasa_cambio,
@@ -202,6 +206,43 @@ class TransaccionController extends Controller
     }
 
     // =======================================================
+    // === LÓGICA DE TASAS DE CAMBIO ===
+    // =======================================================
+
+    /**
+     * Lógica para obtener la tasa de cambio a aplicar.
+     * Solo es relevante si la moneda es CUP. Si se proporciona, se usa;
+     * de lo contrario, se usa la tasa actual de la base de datos.
+     * * @param Request $request
+     * @return float|null
+     * @throws \Exception
+     */
+    private function resolveTasaCambio(Request $request): ?float
+    {
+        // Solo necesitamos una tasa de cambio si la moneda de la transacción es CUP
+        if ($request->moneda === 'CUP') {
+            // 1. Usar la tasa enviada por el usuario si existe y es válida
+            if ($request->filled('tasa_cambio_aplicada') && $request->tasa_cambio_aplicada > 0) {
+                return (float)$request->tasa_cambio_aplicada;
+            }
+
+            // 2. Si es CUP pero el usuario no proporcionó una tasa, usamos la actual del sistema como fallback
+            $tasaCambioModel = TasaCambio::latest('fecha_actualizacion')->first();
+            $tasaCambio = $tasaCambioModel ? $tasaCambioModel->tasa : 0;
+
+            if ($tasaCambio <= 0) {
+                // Si la tasa por defecto es cero, lanzamos un error
+                throw new \Exception('No se puede procesar la transacción en CUP: la tasa de cambio no está definida en el sistema.');
+            }
+            return $tasaCambio;
+        }
+
+        // Para USD/EUR u otras monedas, no se aplica ninguna tasa (se guarda como NULL)
+        return null;
+    }
+
+
+    // =======================================================
     // === MÉTODOS DE REGISTRO DE MOVIMIENTOS FINANCIEROS ===
     // =======================================================
 
@@ -216,46 +257,52 @@ class TransaccionController extends Controller
             'monto' => 'required|numeric|min:0.01',
             'moneda' => 'required|string|in:USD,EUR,CUP',
             'comentario' => 'nullable|string|max:255',
+            'tasa_cambio_aplicada' => 'nullable|numeric|min:0.0001',
         ]);
 
         DB::beginTransaction();
 
         try {
+            // 1. RESOLVER LA TASA DE CAMBIO
+            $tasaCambioAplicada = $this->resolveTasaCambio($request);
+
+            $movimientoData = [
+                'tipo_movimiento_id' => 1,
+                'monto' => $request->monto,
+                'moneda' => $request->moneda,
+                'tasa_cambio_aplicada' => $tasaCambioAplicada,
+
+                'descripcion' => $request->comentario,
+                'fecha_operacion' => now(),
+                'estado' => 'completado',
+                'cuenta_origen_id' => null,
+                'cliente_origen_id' => null,
+                'cuenta_destino_id' => null,
+                'cliente_destino_id' => null,
+            ];
+
             if ($request->origen_tipo === 'cuenta') {
                 $origen = Cuenta::lockForUpdate()->findOrFail($request->origen_id);
+                // Validación estricta para cuentas
                 if ($origen->saldo_cuenta < $request->monto) {
                     throw new \Exception('Saldo insuficiente en la cuenta.');
                 }
                 $origen->decrement('saldo_cuenta', $request->monto);
 
-                MovimientoFinanciero::create([
-                    'tipo_movimiento_id' => 1,
-                    'cuenta_origen_id' => $origen->id,
-                    'cuenta_destino_id' => null,
-                    'monto' => $request->monto,
-                    'moneda' => $request->moneda,
-                    'descripcion' => $request->comentario ?? "Gasto desde cuenta: {$origen->nombre_cuenta}",
-                    'fecha_operacion' => now(),
-                    'estado' => 'completado',
-                ]);
-            } else {
+                $movimientoData['cuenta_origen_id'] = $origen->id;
+                $movimientoData['descripcion'] = $request->comentario ?? "Gasto desde cuenta: {$origen->nombre_cuenta}";
+            } else { // origen_tipo === 'cliente'
                 $origen = Cliente::lockForUpdate()->findOrFail($request->origen_id);
-                if ($origen->deuda_pago_cliente < $request->monto) {
-                    throw new \Exception('Saldo insuficiente en el cliente.');
-                }
+
+                // 🟢 CORRECCIÓN: Se elimina la validación de saldo para clientes.
+                // Se permite que 'deuda_pago_cliente' decremente a negativo (crédito).
                 $origen->decrement('deuda_pago_cliente', $request->monto);
 
-                MovimientoFinanciero::create([
-                    'tipo_movimiento_id' => 1,
-                    'cuenta_origen_id' => null,
-                    'cuenta_destino_id' => null,
-                    'monto' => $request->monto,
-                    'moneda' => $request->moneda,
-                    'descripcion' => $request->comentario ?? "Gasto desde cliente: {$origen->nombre_cliente}",
-                    'fecha_operacion' => now(),
-                    'estado' => 'completado',
-                ]);
+                $movimientoData['cliente_origen_id'] = $origen->id;
+                $movimientoData['descripcion'] = $request->comentario ?? "Gasto desde cliente: {$origen->nombre_cliente} (Pago/Crédito)";
             }
+
+            MovimientoFinanciero::create($movimientoData);
 
             DB::commit();
             return Redirect::back()->with('success', "✅ Gasto de {$request->monto} {$request->moneda} registrado con éxito.");
@@ -277,40 +324,46 @@ class TransaccionController extends Controller
             'monto' => 'required|numeric|min:0.01',
             'moneda' => 'required|string|in:USD,EUR,CUP',
             'comentario' => 'nullable|string|max:255',
+            'tasa_cambio_aplicada' => 'nullable|numeric|min:0.0001',
         ]);
 
         DB::beginTransaction();
 
         try {
+            // 1. RESOLVER LA TASA DE CAMBIO
+            $tasaCambioAplicada = $this->resolveTasaCambio($request);
+
+            $movimientoData = [
+                'tipo_movimiento_id' => 2,
+                'monto' => $request->monto,
+                'moneda' => $request->moneda,
+                'tasa_cambio_aplicada' => $tasaCambioAplicada,
+
+                'descripcion' => $request->comentario,
+                'fecha_operacion' => now(),
+                'estado' => 'completado',
+                'cuenta_origen_id' => null,
+                'cliente_origen_id' => null,
+                'cuenta_destino_id' => null,
+                'cliente_destino_id' => null,
+            ];
+
             if ($request->destino_tipo === 'cuenta') {
                 $destino = Cuenta::lockForUpdate()->findOrFail($request->destino_id);
                 $destino->increment('saldo_cuenta', $request->monto);
 
-                MovimientoFinanciero::create([
-                    'tipo_movimiento_id' => 2,
-                    'cuenta_origen_id' => null,
-                    'cuenta_destino_id' => $destino->id,
-                    'monto' => $request->monto,
-                    'moneda' => $request->moneda,
-                    'descripcion' => $request->comentario ?? "Ingreso a cuenta: {$destino->nombre_cuenta}",
-                    'fecha_operacion' => now(),
-                    'estado' => 'completado',
-                ]);
-            } else {
+                $movimientoData['cuenta_destino_id'] = $destino->id;
+                $movimientoData['descripcion'] = $request->comentario ?? "Ingreso a cuenta: {$destino->nombre_cuenta}";
+            } else { // destino_tipo === 'cliente'
                 $destino = Cliente::lockForUpdate()->findOrFail($request->destino_id);
+                // Se incrementa, registrando más deuda o más saldo a nuestro favor, según la interpretación del campo.
                 $destino->increment('deuda_pago_cliente', $request->monto);
 
-                MovimientoFinanciero::create([
-                    'tipo_movimiento_id' => 2,
-                    'cuenta_origen_id' => null,
-                    'cuenta_destino_id' => null,
-                    'monto' => $request->monto,
-                    'moneda' => $request->moneda,
-                    'descripcion' => $request->comentario ?? "Ingreso a cliente: {$destino->nombre_cliente}",
-                    'fecha_operacion' => now(),
-                    'estado' => 'completado',
-                ]);
+                $movimientoData['cliente_destino_id'] = $destino->id;
+                $movimientoData['descripcion'] = $request->comentario ?? "Ingreso a cliente: {$destino->nombre_cliente} (Deuda/Cargo)";
             }
+
+            MovimientoFinanciero::create($movimientoData);
 
             DB::commit();
             return Redirect::back()->with('success', "✅ Ingreso de {$request->monto} {$request->moneda} registrado con éxito.");
@@ -329,47 +382,72 @@ class TransaccionController extends Controller
         $request->validate([
             'origen_tipo' => 'required|string|in:cuenta,cliente',
             'origen_id' => 'required|integer',
-            'destino_tipo' => 'required|string|in:cuenta,cliente|different:origen_tipo,origen_id',
+            'destino_tipo' => 'required|string|in:cuenta,cliente',
             'destino_id' => 'required|integer',
             'monto' => 'required|numeric|min:0.01',
             'moneda' => 'required|string|in:USD,EUR,CUP',
             'comentario' => 'nullable|string|max:255',
+            'tasa_cambio_aplicada' => 'nullable|numeric|min:0.0001',
         ]);
+
+        if ($request->origen_tipo === $request->destino_tipo && (int)$request->origen_id === (int)$request->destino_id) {
+            return Redirect::back()->withErrors([
+                'destino_id' => 'El origen y el destino no pueden ser la misma entidad.'
+            ])->withInput();
+        }
 
         DB::beginTransaction();
 
         try {
-            // Origen
+            // 1. RESOLVER LA TASA DE CAMBIO
+            $tasaCambioAplicada = $this->resolveTasaCambio($request);
+
+            $origenNombre = '';
+            $destinoNombre = '';
+
+            // 1. Manejo del Origen y Actualización de Saldo/Deuda (DECREMENTO)
             if ($request->origen_tipo === 'cuenta') {
                 $origen = Cuenta::lockForUpdate()->findOrFail($request->origen_id);
                 if ($origen->saldo_cuenta < $request->monto) {
                     throw new \Exception('Saldo insuficiente en la cuenta origen.');
                 }
                 $origen->decrement('saldo_cuenta', $request->monto);
-            } else {
+                $origenNombre = "Cuenta: {$origen->nombre_cuenta}";
+            } else { // origen_tipo === 'cliente'
                 $origen = Cliente::lockForUpdate()->findOrFail($request->origen_id);
-                if ($origen->deuda_pago_cliente < $request->monto) {
-                    throw new \Exception('Saldo insuficiente en el cliente origen.');
-                }
+
+                // 🟢 CORRECCIÓN: Se elimina la validación de saldo para clientes.
+                // El cliente puede "transferir" (reducir su saldo/deuda) incluso a negativo.
                 $origen->decrement('deuda_pago_cliente', $request->monto);
+                $origenNombre = "Cliente: {$origen->nombre_cliente}";
             }
 
-            // Destino
+            // 2. Manejo del Destino y Actualización de Saldo/Deuda (INCREMENTO)
             if ($request->destino_tipo === 'cuenta') {
                 $destino = Cuenta::lockForUpdate()->findOrFail($request->destino_id);
                 $destino->increment('saldo_cuenta', $request->monto);
-            } else {
+                $destinoNombre = "Cuenta: {$destino->nombre_cuenta}";
+            } else { // destino_tipo === 'cliente'
                 $destino = Cliente::lockForUpdate()->findOrFail($request->destino_id);
                 $destino->increment('deuda_pago_cliente', $request->monto);
+                $destinoNombre = "Cliente: {$destino->nombre_cliente}";
             }
 
+            // 3. Registro del Movimiento Financiero con IDs de Cliente y Cuenta
             MovimientoFinanciero::create([
                 'tipo_movimiento_id' => 3,
+
                 'cuenta_origen_id' => $request->origen_tipo === 'cuenta' ? $origen->id : null,
+                'cliente_origen_id' => $request->origen_tipo === 'cliente' ? $origen->id : null,
+
                 'cuenta_destino_id' => $request->destino_tipo === 'cuenta' ? $destino->id : null,
+                'cliente_destino_id' => $request->destino_tipo === 'cliente' ? $destino->id : null,
+
                 'monto' => $request->monto,
                 'moneda' => $request->moneda,
-                'descripcion' => $request->comentario ?? "Transferencia de {$request->origen_tipo} a {$request->destino_tipo}",
+                'tasa_cambio_aplicada' => $tasaCambioAplicada,
+
+                'descripcion' => $request->comentario ?? "Transferencia de {$origenNombre} a {$destinoNombre}",
                 'fecha_operacion' => now(),
                 'estado' => 'completado',
             ]);

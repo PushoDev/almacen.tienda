@@ -37,7 +37,6 @@ interface Cuenta {
 interface Cliente {
     id: number;
     nombre_cliente: string;
-    // 💡 Importante: Aunque en TS es number, el valor real del backend podría ser string
     deuda_pago_cliente: number | string | null;
 }
 
@@ -67,12 +66,6 @@ type FormSetter<T> = InertiaFormProps<T>['setData'];
 // COMPONENTE PRINCIPAL (Movimientos)
 // ------------------------------------
 export default function Movimientos({ cuentas, clientes }: Props) {
-    // 🚨 CONSOLE.LOG PARA DEPURACIÓN 🚨
-    console.log('--- DATOS INICIALES ---');
-    console.log('Cuentas recibidas:', cuentas);
-    console.log('Clientes recibidos:', clientes);
-    console.log('-----------------------');
-
     const [alert, setAlert] = useState<AlertState>({ show: false, message: '', type: 'success' });
 
     const showToast = (message: string, type: 'success' | 'error') => {
@@ -100,6 +93,7 @@ export default function Movimientos({ cuentas, clientes }: Props) {
 
     const handleGastoSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        // Solo enviamos los campos que el backend necesita para el Gasto
         const dataToSend = {
             origen_tipo: gastoData.origen_tipo,
             origen_id: gastoData.origen_id,
@@ -107,8 +101,7 @@ export default function Movimientos({ cuentas, clientes }: Props) {
             moneda: gastoData.moneda,
             comentario: gastoData.comentario,
         };
-        // 🚨 CONSOLE.LOG antes de enviar 🚨
-        console.log('Enviando Gasto:', dataToSend);
+
         postGasto(route('transacciones.gastar'), {
             data: dataToSend,
             onSuccess: () => {
@@ -141,6 +134,7 @@ export default function Movimientos({ cuentas, clientes }: Props) {
 
     const handleIngresoSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        // Solo enviamos los campos que el backend necesita para el Ingreso
         const dataToSend = {
             destino_tipo: ingresoData.destino_tipo,
             destino_id: ingresoData.destino_id,
@@ -148,8 +142,7 @@ export default function Movimientos({ cuentas, clientes }: Props) {
             moneda: ingresoData.moneda,
             comentario: ingresoData.comentario,
         };
-        // 🚨 CONSOLE.LOG antes de enviar 🚨
-        console.log('Enviando Ingreso:', dataToSend);
+
         postIngreso(route('transacciones.ingresar'), {
             data: dataToSend,
             onSuccess: () => {
@@ -182,8 +175,13 @@ export default function Movimientos({ cuentas, clientes }: Props) {
 
     const handleTransferSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        // 🚨 CONSOLE.LOG antes de enviar 🚨
-        console.log('Enviando Transferencia:', transferData);
+
+        // Validación de frontend para evitar el mismo origen/destino (aunque el backend también lo hace)
+        if (transferData.origen_tipo === transferData.destino_tipo && transferData.origen_id === transferData.destino_id) {
+            showToast('El origen y el destino de la transferencia no pueden ser la misma entidad.', 'error');
+            return;
+        }
+
         postTransfer(route('transacciones.transferir'), {
             onSuccess: () => {
                 showToast('¡Transferencia realizada con éxito!', 'success');
@@ -191,7 +189,9 @@ export default function Movimientos({ cuentas, clientes }: Props) {
             },
             onError: (errors) => {
                 console.error('Errores de Transferencia:', errors);
-                showToast('Hubo un error al realizar la transferencia. Revisa los campos.', 'error');
+                // Si el error es la validación personalizada del controlador, lo mostramos.
+                const errorMessage = errors.destino_id || 'Hubo un error al realizar la transferencia. Revisa los campos.';
+                showToast(errorMessage, 'error');
             },
         });
     };
@@ -199,9 +199,6 @@ export default function Movimientos({ cuentas, clientes }: Props) {
     // --- MANEJADORES Y AYUDANTES DE RENDERIZADO ---
 
     const handleEntidadChange = (value: string, tipoEntidad: EntidadTipo, campo: 'origen' | 'destino', formSetter: FormSetter<MovimientoForm>) => {
-        // 🚨 CONSOLE.LOG al cambiar entidad 🚨
-        console.log(`Cambiando entidad ${campo}: ID=${value}, Tipo=${tipoEntidad}`);
-
         const id = Number(value);
         let selectedMoneda = '';
 
@@ -209,6 +206,7 @@ export default function Movimientos({ cuentas, clientes }: Props) {
             const selectedCuenta = cuentas.find((c) => c.id === id);
             selectedMoneda = selectedCuenta?.tipo_moneda || '';
         } else if (tipoEntidad === 'cliente') {
+            // Asumiendo que la deuda/pago del cliente es siempre en USD
             selectedMoneda = 'USD';
         }
 
@@ -218,23 +216,25 @@ export default function Movimientos({ cuentas, clientes }: Props) {
             if (campo === 'origen') {
                 newData.origen_tipo = tipoEntidad;
                 newData.origen_id = value;
+                // La moneda de la operación se define por el origen
                 newData.moneda = selectedMoneda;
             }
 
             if (campo === 'destino') {
                 newData.destino_tipo = tipoEntidad;
                 newData.destino_id = value;
+                // Para Ingreso, la moneda también puede ser determinada por el destino
                 if (formSetter === (setIngresoData as FormSetter<MovimientoForm>)) {
                     newData.moneda = selectedMoneda;
                 }
+                // Nota: Para Transferencia, la moneda se rige por el origen, lo cual ya está cubierto arriba
             }
             return newData;
         });
     };
 
     /**
-     * 🟢 CORRECCIÓN CLAVE AQUÍ 🟢
-     * Asegura que deuda_pago_cliente sea un número antes de llamar a .toFixed.
+     * Devuelve una cadena de información sobre la entidad para mostrar en el selector.
      */
     const getEntidadInfo = (id: number, tipo: EntidadTipo): string => {
         if (tipo === 'cuenta') {
@@ -245,7 +245,7 @@ export default function Movimientos({ cuentas, clientes }: Props) {
             const cliente = clientes.find((c) => c.id === id);
             if (!cliente) return 'Cliente no encontrado';
 
-            // ✅ CORRECCIÓN: Convierte el valor a número, usando 0 si es nulo o inválido, antes de usar .toFixed.
+            // ✅ CORRECCIÓN: Convierte el valor a número para garantizar .toFixed funcione.
             const deudaMonto = Number(cliente.deuda_pago_cliente) || 0;
 
             return `${cliente.nombre_cliente} (Cliente) - Deuda/Pago: ${deudaMonto.toFixed(2)} USD`;
@@ -253,7 +253,9 @@ export default function Movimientos({ cuentas, clientes }: Props) {
         return '';
     };
 
-    // La función renderSelectOptions se mantiene igual.
+    /**
+     * Renderiza las opciones de selector, excluyendo la entidad seleccionada en el lado opuesto (solo para Transferencia).
+     */
     const renderSelectOptions = (tipoEntidad: EntidadTipo, exclusionId: string = '', exclusionTipo: string = '') => {
         if (tipoEntidad === 'cuenta') {
             return cuentas
@@ -340,7 +342,7 @@ export default function Movimientos({ cuentas, clientes }: Props) {
                                 {gastoErrors.origen_id && <p className="mt-1 text-sm text-red-500">{gastoErrors.origen_id}</p>}
                             </div>
 
-                            {/* ... (Resto de campos de Gasto, sin cambios) */}
+                            {/* Resto de campos de Gasto */}
                             <div>
                                 <Label htmlFor="moneda_gasto">Moneda</Label>
                                 <Input
@@ -437,7 +439,7 @@ export default function Movimientos({ cuentas, clientes }: Props) {
                                 {ingresoErrors.destino_id && <p className="mt-1 text-sm text-red-500">{ingresoErrors.destino_id}</p>}
                             </div>
 
-                            {/* ... (Resto de campos de Ingreso, sin cambios) */}
+                            {/* Resto de campos de Ingreso */}
                             <div>
                                 <Label htmlFor="moneda_ingreso">Moneda</Label>
                                 <Input
@@ -500,6 +502,8 @@ export default function Movimientos({ cuentas, clientes }: Props) {
                                         if (value === 'cuenta' || value === 'cliente') {
                                             setTransferData('origen_tipo', value as EntidadTipo);
                                             setTransferData('origen_id', '');
+                                            // Limpiamos el destino para forzar una re-selección que evite duplicados
+                                            setTransferData('destino_id', '');
                                             setTransferData('moneda', '');
                                         }
                                     }}
@@ -535,7 +539,12 @@ export default function Movimientos({ cuentas, clientes }: Props) {
                                             />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {renderSelectOptions(transferData.origen_tipo, transferData.destino_id, transferData.destino_tipo)}
+                                            {/* 🟢 CORRECCIÓN: Excluimos solo si el tipo de origen y el tipo de destino son iguales */}
+                                            {renderSelectOptions(
+                                                transferData.origen_tipo,
+                                                transferData.destino_tipo === transferData.origen_tipo ? transferData.destino_id : '',
+                                                transferData.destino_tipo,
+                                            )}
                                         </SelectContent>
                                     </Select>
                                     {transferErrors.origen_id && <p className="mt-1 text-sm text-red-500">{transferErrors.origen_id}</p>}
@@ -587,14 +596,19 @@ export default function Movimientos({ cuentas, clientes }: Props) {
                                             />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {renderSelectOptions(transferData.destino_tipo, transferData.origen_id, transferData.origen_tipo)}
+                                            {/* 🟢 CORRECCIÓN: Excluimos solo si el tipo de destino y el tipo de origen son iguales */}
+                                            {renderSelectOptions(
+                                                transferData.destino_tipo,
+                                                transferData.origen_tipo === transferData.destino_tipo ? transferData.origen_id : '',
+                                                transferData.origen_tipo,
+                                            )}
                                         </SelectContent>
                                     </Select>
                                     {transferErrors.destino_id && <p className="mt-1 text-sm text-red-500">{transferErrors.destino_id}</p>}
                                 </div>
                             </div>
 
-                            {/* ... (Resto de campos de Transferencia, sin cambios) */}
+                            {/* Resto de campos de Transferencia */}
                             <div>
                                 <Label htmlFor="moneda_transferir">Moneda (Determinada por Origen)</Label>
                                 <Input
@@ -639,6 +653,7 @@ export default function Movimientos({ cuentas, clientes }: Props) {
                                     !transferData.destino_id ||
                                     !transferData.monto ||
                                     Number(transferData.monto) <= 0 ||
+                                    // Validamos la no coincidencia en el frontend también
                                     (transferData.origen_tipo === transferData.destino_tipo && transferData.origen_id === transferData.destino_id)
                                 }
                                 className="w-full"
