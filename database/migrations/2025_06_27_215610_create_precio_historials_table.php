@@ -12,9 +12,11 @@ class CreatePrecioHistorialsTable extends Migration
             $table->id();
             $table->foreignId('producto_id')->constrained('productos')->onDelete('cascade');
             $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
-            $table->decimal('precio_anterior', 10, 2)->nullable(); // Precio antes del cambio
-            $table->decimal('precio_nuevo', 10, 2);               // Nuevo precio
-            $table->string('accion')->default('actualizacion');  // Tipo de cambio (opcional)
+            $table->foreignId('almacen_id')->nullable()->constrained('almacens')->onDelete('cascade');
+
+            $table->decimal('precio_anterior', 10, 2)->nullable();
+            $table->decimal('precio_nuevo', 10, 2);
+            $table->string('accion')->default('actualizacion');
             $table->timestamps();
         });
     }

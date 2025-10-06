@@ -9,6 +9,7 @@ class PrecioHistorial extends Model
     protected $fillable = [
         'producto_id',
         'user_id',
+        'almacen_id', // 🚨 AGREGADO
         'precio_anterior',
         'precio_nuevo',
         'accion'
@@ -24,5 +25,11 @@ class PrecioHistorial extends Model
     public function usuario()
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    // 💡 NUEVA RELACIÓN: Con Almacén
+    public function almacen()
+    {
+        return $this->belongsTo(Almacen::class);
     }
 }

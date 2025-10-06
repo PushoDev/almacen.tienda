@@ -2,113 +2,124 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Producto; // ✅ Productos disponibles
-use App\Models\PrecioHistorial; // ✅ Historia
+use App\Models\Producto;
+use App\Models\PrecioHistorial;
+use App\Models\Almacen;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log; // Usaremos Log para manejar el error
+use Illuminate\Support\Facades\Log;
 
 class ProductoVendedorController extends Controller
 {
     /**
-     * Mostrar productos con precios de vendedor
+     * Mostrar productos con precios de vendedor, agrupados por almacén.
      */
     public function index()
     {
         $user = Auth::user();
 
-        // Consulta base de productos
-        $query = Producto::with(['categoria']);
+        $almacenesQuery = Almacen::query();
 
-        // Filtrado por rol y almacenes
-        if ($user->role === 'admin') {
-            $query->with(['almacenes' => fn($q) => $q->withPivot('cantidad')]);
-        } else {
-            $almacenIds = $user->almacenes->pluck('id');
-            $query->whereHas('almacenes', fn($q) => $q->whereIn('almacens.id', $almacenIds))
-                ->with(['almacenes' => fn($q) => $q->whereIn('almacens.id', $almacenIds)->withPivot('cantidad')]);
+        if ($user->role !== 'admin') {
+            $almacenesIds = $user->almacenes->pluck('id');
+            $almacenesQuery->whereIn('id', $almacenesIds);
         }
 
-        // Cargar datos específicos del vendedor actual
-        $query->with(['vendedores' => function ($q) use ($user) {
-            $q->where('user_id', $user->id)
-                ->select('users.id', 'producto_vendedors.precio_venta', 'producto_vendedors.venta_ganancia');
-        }])->get(); // Añadido get() aquí
+        $almacenes = $almacenesQuery->with([
+            'productos' => function ($query) use ($user) {
+                $query->withPivot('cantidad');
 
-        // Obtener productos
-        $productos = $query->get();
+                $query->leftJoin('producto_vendedors', function ($join) use ($user) {
+                    $join->on('productos.id', '=', 'producto_vendedors.producto_id')
+                        ->on('almacen_producto.almacen_id', '=', 'producto_vendedors.almacen_id')
+                        ->where('producto_vendedors.user_id', $user->id);
+                })
+                    ->select(
+                        'productos.*',
+                        'producto_vendedors.precio_venta',
+                        'producto_vendedors.venta_ganancia'
+                    )
+                    ->with('categoria');
+            }
+        ])->get();
 
-        // Transformar datos para el frontend
-        $productosTransformados = $productos->map(function ($producto) use ($user) {
-            $vendedor = $producto->vendedores->first();
+        $almacenesTransformados = $almacenes->map(function ($almacen) {
+            $productos = $almacen->productos->map(function ($producto) use ($almacen) {
+
+                $stockAlmacen = $producto->pivot->cantidad;
+                $precioVenta = $producto->precio_venta;
+                $ganancia = $producto->venta_ganancia;
+
+                return [
+                    'id' => $producto->id,
+                    'nombre_producto' => $producto->nombre_producto,
+                    'marca_producto' => $producto->marca_producto,
+                    'categoria' => $producto->categoria->nombre_categoria ?? 'Sin categoría',
+                    'precio_compra' => $producto->precio_compra_producto,
+                    'stock_almacen' => $stockAlmacen,
+                    'precio_venta' => $precioVenta,
+                    'ganancia' => $ganancia,
+                    'tiene_precio' => ($precioVenta ?? 0) > 0,
+                    'almacen_id' => $almacen->id,
+                ];
+            });
 
             return [
-                'id' => $producto->id,
-                'nombre_producto' => $producto->nombre_producto,
-                'marca_producto' => $producto->marca_producto,
-                'categoria' => $producto->categoria->nombre_categoria ?? 'Sin categoría',
-                'precio_compra' => $producto->precio_compra_producto,
-                'stock_total' => $producto->almacenes->sum('pivot.cantidad'),
-                'precio_venta' => $vendedor?->pivot->precio_venta ?? null,
-                'ganancia' => $vendedor?->pivot->venta_ganancia ?? null,
-                'tiene_precio' => ($vendedor?->pivot->precio_venta ?? 0) > 0,
+                'almacen_id' => $almacen->id,
+                'nombre_almacen' => $almacen->nombre_almacen,
+                'productos' => $productos->filter(fn($p) => $p['stock_almacen'] > 0)->values(),
             ];
         });
 
         return Inertia::render('Productos/Vendor/Index', [
-            'productos' => $productosTransformados,
+            'almacenes' => $almacenesTransformados->filter(fn($a) => $a['productos']->isNotEmpty())->values(),
             'meta' => [
-                'total_productos' => $productosTransformados->count(),
+                'total_almacenes' => $almacenesTransformados->count(),
                 'role_usuario' => $user->role,
             ],
         ]);
     }
 
     /**
-     * Actualizar precio y ganancia (Método principal)
+     * Actualizar precio y ganancia por Almacén.
      */
     public function update(Request $request, $productoId)
     {
         $user = Auth::user();
         $producto = Producto::findOrFail($productoId);
 
-        // Validación de datos
         $validated = $request->validate([
             'precio_venta' => ['required', 'numeric', 'min:0.01'],
+            'almacen_id' => ['required', 'integer', 'exists:almacens,id'],
         ]);
 
-        // Calcular valores
+        $almacenId = $validated['almacen_id'];
+
         $precioVenta = round($validated['precio_venta'], 2);
-        // La ganancia se calcula correctamente con el precio_compra_producto actualizado
         $ganancia = round($precioVenta - $producto->precio_compra_producto, 2);
 
-        // Verificar acceso al producto (solo para vendedores)
-        if ($user->role !== 'admin') {
-            $almacenIds = $user->almacenes->pluck('id');
-            if (!$producto->almacenes->whereIn('id', $almacenIds)->isNotEmpty()) {
-                return response()->json([
-                    'error' => 'No tienes acceso a este producto.',
-                ], 403);
-            }
+        if ($user->role !== 'admin' && !$user->almacenes->contains($almacenId)) {
+            return response()->json([
+                'error' => 'No tienes acceso a este almacén.',
+            ], 403);
         }
 
-        // 💡 Obtenemos el precio anterior antes de actualizar
         $precioAnterior = DB::table('producto_vendedors')
             ->where('producto_id', $productoId)
             ->where('user_id', $user->id)
+            ->where('almacen_id', $almacenId)
             ->value('precio_venta');
 
-        // 🛠️ Flag para detectar cambio de precio
         $precioCambio = $precioAnterior !== null &&
             round($precioAnterior, 2) != $precioVenta;
 
-        // Crear o actualizar el registro pivot
         DB::table('producto_vendedors')->updateOrInsert(
             [
                 'producto_id' => $productoId,
                 'user_id' => $user->id,
+                'almacen_id' => $almacenId,
             ],
             [
                 'precio_venta' => $precioVenta,
@@ -117,14 +128,14 @@ class ProductoVendedorController extends Controller
             ]
         );
 
-        // 📜 Registramos en el historial solo si hubo cambio
         if ($precioCambio) {
             PrecioHistorial::create([
                 'producto_id' => $productoId,
                 'user_id' => $user->id,
+                'almacen_id' => $almacenId,
                 'precio_anterior' => $precioAnterior ?? 0.00,
                 'precio_nuevo' => $precioVenta,
-                'accion' => 'Venta Manual', // 👈 Podrías considerar un campo 'accion' si no existe
+                'accion' => 'Venta Manual - Almacén ID ' . $almacenId,
             ]);
         }
 
@@ -133,74 +144,44 @@ class ProductoVendedorController extends Controller
             'message' => 'Precio actualizado correctamente',
             'new_profit' => $ganancia,
             'new_price' => $precioVenta,
-            'history_recorded' => $precioCambio, // ✅ Información adicional opcional
+            'history_recorded' => $precioCambio,
         ]);
     }
-
-    // ---------------------------------------------------------------------------------------
-    // === NUEVO MÉTODO PARA SINCRONIZAR GANANCIAS POR CAMBIO DE COSTO ===
-    // ---------------------------------------------------------------------------------------
 
     /**
      * Recalcula la ganancia (venta_ganancia) para todos los vendedores
      * que tienen un precio de venta establecido para un producto cuyo
-     * precio de compra (costo) ha cambiado.
-     * * Este método es llamado internamente por TransaccionController.
+     * precio de compra (costo) ha cambiado, A TRAVÉS DE TODOS LOS ALMACENES.
      *
      * @param int $productoId
      * @return \Illuminate\Http\JsonResponse
      */
     public function actualizarGananciaPorCambioCosto($productoId)
     {
-        // Usamos una transacción para asegurar la atomicidad de la actualización masiva
         DB::beginTransaction();
 
         try {
-            // 1. Obtener el producto y su nuevo costo
             $producto = Producto::findOrFail($productoId);
             $nuevoCosto = $producto->precio_compra_producto;
 
-            // 2. Obtener todos los registros pivot (vendedores) para este producto
-            // Bloqueamos los registros para evitar conflictos si un vendedor actualiza al mismo tiempo.
-            $registrosVendedor = DB::table('producto_vendedors')
+            $updatedCount = DB::table('producto_vendedors')
                 ->where('producto_id', $productoId)
-                ->whereNotNull('precio_venta') // Solo vendedores con precio de venta definido
-                ->lockForUpdate() // Bloquear las filas seleccionadas
-                ->get();
-
-            $updatedCount = 0;
-
-            foreach ($registrosVendedor as $registro) {
-                // 3. Recalcular la ganancia: (Precio de Venta ya establecido - Nuevo Costo)
-                $nuevaGanancia = round($registro->precio_venta - $nuevoCosto, 2);
-
-                // 4. Actualizar el registro pivot SOLO con la nueva ganancia
-                DB::table('producto_vendedors')
-                    ->where('producto_id', $productoId)
-                    ->where('user_id', $registro->user_id)
-                    ->update([
-                        'venta_ganancia' => $nuevaGanancia,
-                        'updated_at' => now(),
-                    ]);
-
-                $updatedCount++;
-            }
+                ->whereNotNull('precio_venta')
+                ->update([
+                    'venta_ganancia' => DB::raw("ROUND(precio_venta - {$nuevoCosto}, 2)"),
+                    'updated_at' => now(),
+                ]);
 
             DB::commit();
 
-            // Retornamos una respuesta JSON simple, ya que se llama internamente
             return response()->json([
                 'success' => true,
-                'message' => "Ganancias actualizadas para {$updatedCount} vendedores.",
+                'message' => "Ganancias actualizadas para {$updatedCount} registros de vendedor por almacén.",
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Error al actualizar ganancias por cambio de costo (ProductoID: ' . $productoId . '): ' . $e->getMessage());
 
-            // Retornamos error. El TransaccionController puede continuar si es un error no crítico.
-            // Nota: Como esta función es llamada desde el otro controlador dentro de su propia transacción,
-            // un error aquí no revierte la distribución, sino que solo falla la actualización de la ganancia.
-            // Podrías decidir que esto lance una excepción fatal si prefieres la atomicidad total.
             return response()->json([
                 'error' => 'Error al actualizar las ganancias por cambio de costo.',
                 'details' => $e->getMessage(),
@@ -208,16 +189,12 @@ class ProductoVendedorController extends Controller
         }
     }
 
-    // ---------------------------------------------------------------------------------------
-    // === MÉTODOS EXISTENTES (Historial, create, store, etc.) ===
-    // ---------------------------------------------------------------------------------------
-
     /**
      * Historial de Precios
      */
     public function historial($productoId)
     {
-        $historial = PrecioHistorial::with(['usuario', 'producto'])
+        $historial = PrecioHistorial::with(['usuario', 'producto', 'almacen'])
             ->where('producto_id', $productoId)
             ->latest()
             ->get()
@@ -226,9 +203,10 @@ class ProductoVendedorController extends Controller
                     'id' => $item->id,
                     'producto' => $item->producto->nombre_producto,
                     'usuario' => $item->usuario->name,
+                    'almacen' => $item->almacen->nombre_almacen ?? 'General',
                     'precio_anterior' => $item->precio_anterior,
                     'precio_nuevo' => $item->precio_nuevo,
-                    'accion' => $item->accion ?? 'Desconocida', // Manejo de 'accion' nulo
+                    'accion' => $item->accion ?? 'Desconocida',
                     'fecha' => $item->created_at->format('d/m/Y H:i'),
                 ];
             });

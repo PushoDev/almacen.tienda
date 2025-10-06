@@ -11,18 +11,26 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Nota: Si ya tienes datos, deberías hacer una migración de ALTER TABLE
+        // En este ejemplo, mostramos la estructura final que debe tener la tabla.
         Schema::create('producto_vendedors', function (Blueprint $table) {
 
             $table->foreignId('producto_id')->constrained()->cascadeOnDelete();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
 
+            // 🚨 NUEVA COLUMNA: Identificador del almacén
+            $table->foreignId('almacen_id')->constrained('almacens')->cascadeOnDelete();
+
             $table->decimal('precio_venta', 10, 2)->default(0.00)->comment('Precio asignado por el vendedor');
             $table->decimal('venta_ganancia', 10, 2)->default(0.00);
 
 
-            // Clave compuesta (evita duplicados producto-vendedor)
-            $table->primary(['producto_id', 'user_id']);
-            $table->index(['user_id', 'precio_venta']); // Búsquedas rápidas por vendedor
+            // 🚨 CLAVE COMPUESTA MODIFICADA: Ahora incluye el almacén_id
+            // La clave única es: este producto, para este vendedor, en este almacén.
+            $table->primary(['producto_id', 'user_id', 'almacen_id']);
+
+            // 💡 Índice de vendedor ahora incluye el almacén para búsquedas de stock/precios
+            $table->index(['user_id', 'almacen_id', 'precio_venta']);
 
             $table->timestamps();
         });

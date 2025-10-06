@@ -11,22 +11,22 @@ class ProductoVendedor extends Pivot
 {
     use HasFactory;
 
-    protected $table = 'producto_vendedors'; // Nombre de la tabla
-    public $timestamps = true; // Usa timestamps (created_at, updated_at)
+    protected $table = 'producto_vendedors';
+    public $timestamps = true;
 
-    // Clave primaria compuesta (no autoincremental)
-    protected $primaryKey = ['producto_id', 'user_id'];
-    public $incrementing = false; // Desactiva el autoincremento
+    // 🚨 CLAVE PRIMARIA MODIFICADA: Añadimos 'almacen_id'
+    protected $primaryKey = ['producto_id', 'user_id', 'almacen_id'];
+    public $incrementing = false;
 
-    // Campos asignables masivamente
+    // 🚨 AGREGAMOS 'almacen_id' a los campos asignables masivamente
     protected $fillable = [
         'producto_id',
         'user_id',
+        'almacen_id',
         'precio_venta',
         'venta_ganancia'
     ];
 
-    // Casts para tipos de datos
     protected $casts = [
         'precio_venta' => 'decimal:2',
         'venta_ganancia' => 'decimal:2',
@@ -42,5 +42,11 @@ class ProductoVendedor extends Pivot
     public function vendedor()
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    // 💡 NUEVA RELACIÓN: Con Almacen
+    public function almacen()
+    {
+        return $this->belongsTo(Almacen::class, 'almacen_id');
     }
 }

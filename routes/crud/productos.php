@@ -23,7 +23,7 @@ Route::middleware(['auth', 'verified'])->group(
         // Plantilla (opcional)
         // Route::get('/productos/descargar/plantilla', [ProductoController::class, 'downloadTemplate'])->name('productos.template');
 
-        // Para las Ventas
+        // Ruta para agregar el precio de venta a los Productos
         Route::resource('disponibles', ProductoVendedorController::class);
     }
 );
