@@ -18,6 +18,8 @@ use Inertia\Inertia;
 use Illuminate\Support\Facades\Log;
 use Exception;
 use Illuminate\Support\Facades\Redirect;
+// 1. 💡 IMPORTAR EL CONTROLADOR DE VENDEDORES
+use App\Http\Controllers\ProductoVendedorController;
 
 class TransaccionController extends Controller
 {
@@ -138,6 +140,10 @@ class TransaccionController extends Controller
                     ]);
 
                     $producto->update(['precio_compra_producto' => $nuevoCosto]);
+
+                    // 2. 🚀 LLAMADA CLAVE: Actualizar ganancias de vendedores.
+                    app(ProductoVendedorController::class)
+                        ->actualizarGananciaPorCambioCosto($producto->id);
 
                     $totalUsdDistribuidoProductos += (float)$productoData['amount_usd'];
                 }

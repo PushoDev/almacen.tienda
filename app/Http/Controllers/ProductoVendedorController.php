@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log; // Usaremos Log para manejar el error
 
 class ProductoVendedorController extends Controller
 {
@@ -34,7 +35,7 @@ class ProductoVendedorController extends Controller
         $query->with(['vendedores' => function ($q) use ($user) {
             $q->where('user_id', $user->id)
                 ->select('users.id', 'producto_vendedors.precio_venta', 'producto_vendedors.venta_ganancia');
-        }]);
+        }])->get(); // Añadido get() aquí
 
         // Obtener productos
         $productos = $query->get();
@@ -80,6 +81,7 @@ class ProductoVendedorController extends Controller
 
         // Calcular valores
         $precioVenta = round($validated['precio_venta'], 2);
+        // La ganancia se calcula correctamente con el precio_compra_producto actualizado
         $ganancia = round($precioVenta - $producto->precio_compra_producto, 2);
 
         // Verificar acceso al producto (solo para vendedores)
@@ -122,6 +124,7 @@ class ProductoVendedorController extends Controller
                 'user_id' => $user->id,
                 'precio_anterior' => $precioAnterior ?? 0.00,
                 'precio_nuevo' => $precioVenta,
+                'accion' => 'Venta Manual', // 👈 Podrías considerar un campo 'accion' si no existe
             ]);
         }
 
@@ -133,6 +136,81 @@ class ProductoVendedorController extends Controller
             'history_recorded' => $precioCambio, // ✅ Información adicional opcional
         ]);
     }
+
+    // ---------------------------------------------------------------------------------------
+    // === NUEVO MÉTODO PARA SINCRONIZAR GANANCIAS POR CAMBIO DE COSTO ===
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * Recalcula la ganancia (venta_ganancia) para todos los vendedores
+     * que tienen un precio de venta establecido para un producto cuyo
+     * precio de compra (costo) ha cambiado.
+     * * Este método es llamado internamente por TransaccionController.
+     *
+     * @param int $productoId
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function actualizarGananciaPorCambioCosto($productoId)
+    {
+        // Usamos una transacción para asegurar la atomicidad de la actualización masiva
+        DB::beginTransaction();
+
+        try {
+            // 1. Obtener el producto y su nuevo costo
+            $producto = Producto::findOrFail($productoId);
+            $nuevoCosto = $producto->precio_compra_producto;
+
+            // 2. Obtener todos los registros pivot (vendedores) para este producto
+            // Bloqueamos los registros para evitar conflictos si un vendedor actualiza al mismo tiempo.
+            $registrosVendedor = DB::table('producto_vendedors')
+                ->where('producto_id', $productoId)
+                ->whereNotNull('precio_venta') // Solo vendedores con precio de venta definido
+                ->lockForUpdate() // Bloquear las filas seleccionadas
+                ->get();
+
+            $updatedCount = 0;
+
+            foreach ($registrosVendedor as $registro) {
+                // 3. Recalcular la ganancia: (Precio de Venta ya establecido - Nuevo Costo)
+                $nuevaGanancia = round($registro->precio_venta - $nuevoCosto, 2);
+
+                // 4. Actualizar el registro pivot SOLO con la nueva ganancia
+                DB::table('producto_vendedors')
+                    ->where('producto_id', $productoId)
+                    ->where('user_id', $registro->user_id)
+                    ->update([
+                        'venta_ganancia' => $nuevaGanancia,
+                        'updated_at' => now(),
+                    ]);
+
+                $updatedCount++;
+            }
+
+            DB::commit();
+
+            // Retornamos una respuesta JSON simple, ya que se llama internamente
+            return response()->json([
+                'success' => true,
+                'message' => "Ganancias actualizadas para {$updatedCount} vendedores.",
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error al actualizar ganancias por cambio de costo (ProductoID: ' . $productoId . '): ' . $e->getMessage());
+
+            // Retornamos error. El TransaccionController puede continuar si es un error no crítico.
+            // Nota: Como esta función es llamada desde el otro controlador dentro de su propia transacción,
+            // un error aquí no revierte la distribución, sino que solo falla la actualización de la ganancia.
+            // Podrías decidir que esto lance una excepción fatal si prefieres la atomicidad total.
+            return response()->json([
+                'error' => 'Error al actualizar las ganancias por cambio de costo.',
+                'details' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // === MÉTODOS EXISTENTES (Historial, create, store, etc.) ===
+    // ---------------------------------------------------------------------------------------
 
     /**
      * Historial de Precios
@@ -150,7 +228,7 @@ class ProductoVendedorController extends Controller
                     'usuario' => $item->usuario->name,
                     'precio_anterior' => $item->precio_anterior,
                     'precio_nuevo' => $item->precio_nuevo,
-                    'accion' => $item->accion,
+                    'accion' => $item->accion ?? 'Desconocida', // Manejo de 'accion' nulo
                     'fecha' => $item->created_at->format('d/m/Y H:i'),
                 ];
             });
