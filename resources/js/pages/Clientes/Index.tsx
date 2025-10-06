@@ -205,7 +205,7 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                                 ) : cliente.deuda_pago_cliente === 0 ? (
                                                     <CheckCircle size={14} className="shrink-0 text-green-600 dark:text-green-400" />
                                                 ) : (
-                                                    <AlertCircle size={14} className="shrink-0 text-orange-600 dark:text-orange-400" />
+                                                    <AlertCircle size={14} className="shrink-0 text-green-600 dark:text-green-400" />
                                                 )
                                             ) : null}
 
@@ -216,7 +216,7 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                                             ? 'text-red-600 dark:text-red-400'
                                                             : cliente.deuda_pago_cliente === 0
                                                               ? 'text-green-600 dark:text-green-400'
-                                                              : 'text-orange-600 dark:text-orange-400'
+                                                              : 'text-green-600 dark:text-green-400'
                                                         : 'text-gray-400 italic'
                                                 }
                                             >
