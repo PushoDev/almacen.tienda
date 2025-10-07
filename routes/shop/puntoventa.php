@@ -15,6 +15,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/ventas/tasausd', [VentaController::class, 'getTasaUSD'])->name('ventas.getTasaUSD');
     Route::get('/ventas/tasamlc', [VentaController::class, 'getTasaMLC'])->name('ventas.getTasaMLC');
     Route::post('/ventas/procesar', [VentaController::class, 'procesarVenta'])->name('ventas.procesar');
+    // Estado de las Ventas
+    Route::get('/ventas/listado', [VentaController::class, 'listadoVentas'])->name('ventas.listado');
+    Route::post('/ventas/{venta}/aprobar', [VentaController::class, 'aprobarVenta'])->name('ventas.aprobar');
+    Route::post('/ventas/{venta}/anular', [VentaController::class, 'anularVenta'])->name('ventas.anular');
 
     // Rutas para Compras (nuevas)
     Route::get('/compras/almacenes', [CompraController::class, 'getAlmacen'])->name('compras.almacenes');

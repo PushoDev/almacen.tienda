@@ -21,13 +21,13 @@ import { Table, TableBody, TableCaption, TableHead, TableHeader, TableRow } from
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react'; // Importar router
 import axios from 'axios';
 import { BoxesIcon, Minus, PackagePlus, Plus, Search, ShoppingBag, ShoppingCart, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-// Tipos para los datos
+// Tipos para los datos (Usando los tipos de tu archivo)
 interface Almacen {
     id: number | string;
     nombre_almacen: string;
@@ -50,7 +50,7 @@ interface Producto {
     marca_producto: string;
     categoria_nombre: string;
     precio_compra_producto: number;
-    stock_disponible: number;
+    stock_total: number;
     precio_venta: number | null;
     tiene_precio: boolean;
 }
@@ -63,7 +63,6 @@ interface ItemCarrito {
     subtotal: number;
 }
 
-// Nuevos tipos para pagos
 interface Payment {
     id: string;
     method: 'transferencia' | 'efectivo';
@@ -131,8 +130,8 @@ export default function PuntoVentaOficial({
     // Estados
     const [almacenes, setAlmacenes] = useState<Almacen[]>([]);
     const [clientes, setClientes] = useState<Cliente[]>([]);
-    const [tasaUSD, setTasaUSD] = useState<number>(meta.tasa_usd);
-    const [tasaMLC, setTasaMLC] = useState<number>(meta.tasa_mlc);
+    const [tasaUSD, setTasaUSD] = useState<number>(meta.tasa_usd); // CUP por 1 USD (ej: 320)
+    const [tasaMLC, setTasaMLC] = useState<number>(meta.tasa_mlc); // USD por 1 MLC (ej: 0.8)
     const [cuentas, setCuentas] = useState<Cuenta[]>([]);
     const [productos, setProductos] = useState<Producto[]>([]);
     const [almacenSeleccionado, setAlmacenSeleccionado] = useState<string>('');
@@ -144,35 +143,35 @@ export default function PuntoVentaOficial({
     const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
     const [procesandoVenta, setProcesandoVenta] = useState<boolean>(false);
 
-    // ✅ CORRECCIÓN: Monedas usando useMemo con tasas actualizadas
+    // Definición de monedas usando useMemo
     const currencies: Currency[] = useMemo(
         () => [
             {
                 code: 'USD',
                 name: 'Dólar Estadounidense',
                 symbol: '$ USD',
-                exchangeRate: 1,
+                exchangeRate: 1, // Tasa de USD por 1 USD (1)
                 availableFor: ['transferencia', 'efectivo'],
             },
             {
                 code: 'EUR',
                 name: 'Euro',
                 symbol: '€ EUR',
-                exchangeRate: 1.1,
+                exchangeRate: 1.07, // Asumir 1 EUR = 1.07 USD (la tasa real debería venir del backend/meta si es crucial)
                 availableFor: ['transferencia', 'efectivo'],
             },
             {
                 code: 'MLC',
                 name: 'Moneda Libre Convertible',
                 symbol: '$ MLC',
-                exchangeRate: tasaMLC,
+                exchangeRate: tasaMLC, // Tasa de USD por 1 MLC
                 availableFor: ['transferencia'],
             },
             {
                 code: 'CUP',
                 name: 'Peso Cubano',
                 symbol: '$ CUP',
-                exchangeRate: tasaUSD,
+                exchangeRate: tasaUSD, // Tasa de CUP por 1 USD
                 availableFor: ['transferencia', 'efectivo'],
             },
         ],
@@ -181,7 +180,6 @@ export default function PuntoVentaOficial({
 
     // Nuevos estados para pagos
     const [payments, setPayments] = useState<Payment[]>([]);
-    const [remaining, setRemaining] = useState(0);
     const [currentPayment, setCurrentPayment] = useState<{
         method: 'transferencia' | 'efectivo' | '';
         currency: string;
@@ -196,6 +194,38 @@ export default function PuntoVentaOficial({
         cuenta_id: '',
     });
 
+    // --- Lógica de Conversión Corregida (CRÍTICO) ---
+    /**
+     * Calcula el monto en USD a partir de un monto en moneda local y su tasa de cambio.
+     * @param amount Monto en moneda local.
+     * @param currencyCode Código de la moneda.
+     */
+    const convertToUsd = (amount: number, currencyCode: string) => {
+        const currency = currencies.find((c) => c.code === currencyCode);
+        const exchangeRate = currency?.exchangeRate || 1;
+        let amountInUsd = 0;
+
+        if (exchangeRate === 0 || !exchangeRate) {
+            console.error(`Tasa de cambio no válida (${exchangeRate}) para ${currencyCode}`);
+            return '0.00';
+        }
+
+        if (currencyCode === 'CUP') {
+            // CUP: Monto Local / (CUP por 1 USD) -> División
+            amountInUsd = amount / exchangeRate;
+        } else if (currencyCode === 'MLC' || currencyCode === 'EUR') {
+            // MLC/EUR: Monto Local * (USD por 1 MLC/EUR) -> Multiplicación
+            amountInUsd = amount * exchangeRate;
+        } else {
+            // USD: Monto Local * 1 -> Monto mismo
+            amountInUsd = amount;
+        }
+
+        return amountInUsd.toFixed(2);
+    };
+
+    // --- Lógica de Carga de Datos (Tu código original) ---
+
     // Cargar almacenes
     const cargarAlmacenes = async () => {
         setLoadingAlmacenes(true);
@@ -204,7 +234,6 @@ export default function PuntoVentaOficial({
             setAlmacenes(response.data);
         } catch (error) {
             console.error('Error al cargar almacenes:', error);
-            toast.error('Error al cargar almacenes');
         } finally {
             setLoadingAlmacenes(false);
         }
@@ -218,7 +247,6 @@ export default function PuntoVentaOficial({
             setClientes(response.data);
         } catch (error) {
             console.error('Error al cargar clientes:', error);
-            toast.error('Error al cargar clientes');
         } finally {
             setLoadingClientes(false);
         }
@@ -231,7 +259,6 @@ export default function PuntoVentaOficial({
             setCuentas(response.data);
         } catch (error) {
             console.error('Error al cargar cuentas:', error);
-            toast.error('Error al cargar cuentas');
         }
     };
 
@@ -245,21 +272,16 @@ export default function PuntoVentaOficial({
         setLoadingProductos(true);
         try {
             const response = await axios.get(route('ventas.getProductosPorAlmacen', almacenId));
-            // Asegurarse de que los precios sean números válidos
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const productosProcesados = response.data.map((producto: any) => ({
                 ...producto,
                 precio_venta: producto.precio_venta ? Number(producto.precio_venta) : null,
                 precio_compra_producto: producto.precio_compra_producto ? Number(producto.precio_compra_producto) : 0,
-                stock_disponible: Number(producto.stock_disponible) || 0,
+                stock_total: Number(producto.stock_total) || 0,
             }));
             setProductos(productosProcesados);
-        } catch (error: any) {
+        } catch (error) {
             console.error('Error al cargar productos:', error);
-            if (error.response?.status === 403) {
-                toast.error('No tienes acceso a este almacén');
-            } else {
-                toast.error('Error al cargar productos');
-            }
             setProductos([]);
         } finally {
             setLoadingProductos(false);
@@ -278,7 +300,7 @@ export default function PuntoVentaOficial({
         setAlmacenSeleccionado(value);
         cargarProductos(value);
         setBusqueda('');
-        setCarrito([]); // Limpiar carrito al cambiar almacén
+        setCarrito([]); // Limpiar carrito al cambiar de almacén
     };
 
     // Manejar cambio de cliente
@@ -305,29 +327,31 @@ export default function PuntoVentaOficial({
         setBusqueda('');
     };
 
+    // --- Lógica del Carrito (Tu código original con ajustes) ---
+
     // Agregar producto al carrito
     const agregarAlCarrito = (producto: Producto) => {
-        // Validar que el producto tenga precio
-        if (!producto.tiene_precio || !producto.precio_venta || producto.precio_venta <= 0) {
-            toast.error('Este producto no tiene un precio de venta configurado');
-            return;
-        }
-
-        // Validar stock
-        if (producto.stock_disponible <= 0) {
-            toast.error('Stock insuficiente para este producto');
-            return;
-        }
-
         const idItem = `${producto.id}`;
+
+        const precioVenta = producto.precio_venta && producto.precio_venta > 0 ? producto.precio_venta : 0;
+        if (precioVenta <= 0) {
+            toast.warning('Imposible añadir', { description: 'Producto sin precio de venta.' });
+            return;
+        }
+        if (producto.stock_total <= 0) {
+            toast.warning('Imposible añadir', { description: 'Producto sin stock.' });
+            return;
+        }
+
         const itemExistente = carrito.find((item) => item.id === idItem);
 
         if (itemExistente) {
-            const nuevaCantidad = Math.min(itemExistente.cantidad + 1, producto.stock_disponible);
+            const nuevaCantidad = Math.min(itemExistente.cantidad + 1, itemExistente.producto.stock_total);
             if (nuevaCantidad === itemExistente.cantidad) {
-                toast.warning('No hay más stock disponible para este producto');
+                toast.warning('Límite de Stock', { description: `Solo quedan ${producto.stock_total} unidades.` });
                 return;
             }
+
             setCarrito(
                 carrito.map((item) =>
                     item.id === idItem
@@ -340,7 +364,6 @@ export default function PuntoVentaOficial({
                 ),
             );
         } else {
-            const precioVenta = producto.precio_venta;
             const nuevoItem: ItemCarrito = {
                 id: idItem,
                 producto: producto,
@@ -349,20 +372,24 @@ export default function PuntoVentaOficial({
                 subtotal: precioVenta,
             };
             setCarrito([...carrito, nuevoItem]);
-            toast.success('Producto agregado al carrito');
         }
     };
 
     // Actualizar cantidad de un item
     const actualizarCantidad = (id: string, nuevaCantidad: number) => {
-        if (nuevaCantidad < 1) return;
+        if (nuevaCantidad < 1) {
+            quitarDelCarrito(id); // Quitar si la cantidad baja de 1
+            return;
+        }
 
         const item = carrito.find((item) => item.id === id);
         if (!item) return;
 
-        if (nuevaCantidad > item.producto.stock_disponible) {
-            nuevaCantidad = item.producto.stock_disponible;
-            toast.warning('No hay más stock disponible');
+        // Limitar por stock
+        const stockMax = item.producto.stock_total;
+        if (nuevaCantidad > stockMax) {
+            nuevaCantidad = stockMax;
+            toast.warning('Límite de Stock', { description: `Solo quedan ${stockMax} unidades.` });
         }
 
         setCarrito(
@@ -398,7 +425,6 @@ export default function PuntoVentaOficial({
     // Quitar producto del carrito
     const quitarDelCarrito = (id: string) => {
         setCarrito(carrito.filter((item) => item.id !== id));
-        toast.info('Producto removido del carrito');
     };
 
     // Calcular totales
@@ -412,31 +438,29 @@ export default function PuntoVentaOficial({
     // Incrementar cantidad
     const incrementarCantidad = (id: string) => {
         const item = carrito.find((item) => item.id === id);
-        if (item && item.cantidad < item.producto.stock_disponible) {
+        if (item && item.cantidad < item.producto.stock_total) {
             actualizarCantidad(id, item.cantidad + 1);
-        } else {
-            toast.warning('No hay más stock disponible');
         }
     };
 
     // Decrementar cantidad
     const decrementarCantidad = (id: string) => {
         const item = carrito.find((item) => item.id === id);
-        if (item && item.cantidad > 1) {
+        if (item) {
             actualizarCantidad(id, item.cantidad - 1);
         }
     };
 
-    // =================================================
-    // Funciones para el procesamiento de pagos
-    // =================================================
+    // --- Lógica de Pagos (Tu código original con ajustes) ---
 
     // Calcular el total pagado en USD
     const totalPaid = useMemo(() => payments.reduce((sum, payment) => sum + payment.amountInUsd, 0), [payments]);
     const remainingInUsd = calcularTotal - totalPaid;
 
     // Filtros para opciones disponibles
-    const availableVias = paymentVias.filter((via) => (currentPayment.method ? via.method === currentPayment.method : true));
+    const availableVias = paymentVias.filter((via) =>
+        currentPayment.method ? via.method === currentPayment.method : true,
+    );
 
     const availableCurrencies = currencies.filter((currency) =>
         currentPayment.method ? currency.availableFor.includes(currentPayment.method) : true,
@@ -447,35 +471,6 @@ export default function PuntoVentaOficial({
         if (!currentPayment.currency) return cuentas;
         return cuentas.filter((account) => account.tipo_moneda === currentPayment.currency);
     }, [cuentas, currentPayment.currency]);
-
-    // ✅ CORRECCIÓN: Función de conversión mejorada
-    const convertToUsd = (amount: number, currencyCode: string): number => {
-        const currency = currencies.find((c) => c.code === currencyCode);
-
-        if (!currency) {
-            console.error(`Moneda no encontrada: ${currencyCode}`);
-            return 0;
-        }
-
-        const exchangeRate = currency.exchangeRate;
-
-        if (exchangeRate <= 0 || !exchangeRate) {
-            console.error(`Tasa de cambio no válida: ${exchangeRate} para ${currencyCode}`);
-            return 0;
-        }
-
-        let amountInUsd = amount;
-
-        if (currencyCode === 'CUP') {
-            amountInUsd = amount / exchangeRate;
-        } else if (currencyCode === 'MLC') {
-            amountInUsd = amount * exchangeRate;
-        } else if (currencyCode === 'EUR') {
-            amountInUsd = amount / exchangeRate;
-        }
-
-        return parseFloat(amountInUsd.toFixed(2));
-    };
 
     const handleAddPayment = () => {
         if (
@@ -499,12 +494,20 @@ export default function PuntoVentaOficial({
         }
 
         const exchangeRate = selectedCurrency.exchangeRate;
-        const amountInUsd = convertToUsd(amount, selectedCurrency.code);
+
+        // Uso de la función convertToUsd corregida
+        const amountInUsd = parseFloat(convertToUsd(amount, selectedCurrency.code));
 
         if (amountInUsd === 0 || isNaN(amountInUsd)) {
             toast.error('El monto en USD no puede ser cero o no es válido. Revise la tasa de cambio.');
             return;
         }
+        
+        // Opcional: limitar el monto del pago al restante
+        // if (amountInUsd > remainingInUsd && remainingInUsd > 0.01) {
+        //     toast.warning('Monto Excedido', { description: `El monto máximo restante a pagar es $${remainingInUsd.toFixed(2)} USD.` });
+        //     // return;
+        // }
 
         const newPayment: Payment = {
             id: crypto.randomUUID(),
@@ -525,62 +528,35 @@ export default function PuntoVentaOficial({
             amount: '',
             cuenta_id: '',
         });
-
-        toast.success('Pago agregado correctamente');
     };
 
     const handleRemovePayment = (id: string) => {
         setPayments(payments.filter((payment) => payment.id !== id));
-        toast.info('Pago removido');
     };
 
-    // =================================================
-    // Implementación Completa de handleCompleteSale
-    // =================================================
     const handleCompleteSale = async () => {
-        // 1. Verificaciones críticas iniciales
-        if (!almacenSeleccionado) {
-            toast.error('Selecciona un almacén antes de completar la venta.');
-            return;
-        }
-        if (carrito.length === 0) {
-            toast.error('El carrito está vacío.');
-            return;
-        }
-
-        // 2. Validación de stock en tiempo real
-        for (const item of carrito) {
-            const producto = productos.find((p) => p.id === item.producto.id);
-            if (!producto || producto.stock_disponible < item.cantidad) {
-                toast.error(`Stock insuficiente para: ${item.producto.nombre_producto}`);
-                return;
-            }
-        }
-
-        // 3. Validación de precios
-        for (const item of carrito) {
-            if (!item.precio_venta || item.precio_venta <= 0) {
-                toast.error(`Precio inválido para: ${item.producto.nombre_producto}`);
-                return;
-            }
-        }
-
-        // 4. Validación final de que el total esté cubierto
+        // Validación final de que el total esté cubierto
         if (remainingInUsd > 0.01) {
-            toast.error(`El total a pagar no ha sido cubierto. Restante: $${remainingInUsd.toFixed(2)} USD`);
+            toast.error('Pago Pendiente', { description: `Aún quedan $${remainingInUsd.toFixed(2)} USD por pagar.` });
             return;
         }
 
-        // 5. Validación de que exista al menos un pago
+        // Validación de que exista al menos un pago
         if (payments.length === 0) {
             toast.error('Debe agregar al menos un método de pago para completar la venta.');
             return;
         }
+        
+        // Validación de almacén
+        if (!almacenSeleccionado) {
+            toast.error('Venta Incompleta', { description: 'Debe seleccionar un almacén para la venta.' });
+            return;
+        }
 
-        // 6. Estructurar los datos para el backend
+        // Preparar datos de la venta con tasas temporales
         const datosVenta = {
             almacen_id: almacenSeleccionado,
-            cliente_id: clienteSeleccionado || null,
+            cliente_id: clienteSeleccionado,
             items: carrito.map((item) => ({
                 producto_id: item.producto.id,
                 cantidad: item.cantidad,
@@ -597,6 +573,7 @@ export default function PuntoVentaOficial({
                 monto_usd: p.amountInUsd,
                 cuenta_id: p.cuenta_id,
             })),
+            // Agregar las tasas temporales (las que se guardarán en la venta y se usarán para saldos)
             tasas_temporales: {
                 tasa_usd: tasaUSD,
                 tasa_mlc: tasaMLC,
@@ -606,41 +583,29 @@ export default function PuntoVentaOficial({
         try {
             setProcesandoVenta(true);
 
-            // 7. Llamada al API
+            // Procesar al backend -> Controlador
             const response = await axios.post(route('ventas.procesar'), datosVenta);
 
             if (response.data.success) {
-                toast.success('Venta procesada correctamente. Pendiente de aprobación.');
-
-                // 8. Limpiar estados después de la venta exitosa
+                toast.success('¡Venta Exitosa!', { description: response.data.message });
+                // Limpiar estados después de la venta exitosa
                 setCarrito([]);
                 setPayments([]);
                 setAlmacenSeleccionado('');
                 setClienteSeleccionado('');
-                setProductos([]);
-
-                if (response.data.redirect) {
-                    setTimeout(() => {
-                        window.location.href = response.data.redirect;
-                    }, 2000);
-                }
+                // Redirigir a la vista de detalle (donde se puede anular)
+                router.visit(response.data.redirect);
             } else {
-                toast.error('Error al procesar la venta: ' + (response.data.message || response.data.error));
+                // Manejo de errores de backend como "Stock insuficiente"
+                toast.error('Error al procesar la venta: ' + response.data.error);
             }
         } catch (error: any) {
             console.error('Error al procesar venta:', error);
-
-            if (axios.isAxiosError(error) && error.response) {
-                const errorMessage = error.response.data.message || 'Ocurrió un error en el servidor.';
-                toast.error(errorMessage);
-
-                if (error.response.status === 422) {
-                    console.error('Errores de Validación:', error.response.data.errors);
-                    const firstError = Object.values(error.response.data.errors)[0] as string[];
-                    if (firstError) {
-                        toast.warning(`Validación: ${firstError[0]}`);
-                    }
-                }
+            setProcesandoVenta(false);
+            if (error.response?.data?.error) {
+                toast.error('Error al procesar la venta: ' + error.response.data.error);
+            } else if (error.response?.data?.message) {
+                 toast.error('Error al procesar la venta: ' + error.response.data.message);
             } else {
                 toast.error('Error de red al procesar la venta');
             }
@@ -679,9 +644,9 @@ export default function PuntoVentaOficial({
                 <Separator className="bg-sidebar-accent" />
 
                 {/* Punto de venta */}
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4 lg:grid-cols-3">
                     {/* Columna 1: Select almacenes, clientes, mostrar productos */}
-                    <div className="space-y-4">
+                    <div className="lg:col-span-2 space-y-4">
                         <Card className="border-sidebar-accent @container/card">
                             <CardHeader className="relative">
                                 <CardTitle className="text-sidebar-accent">
@@ -699,6 +664,7 @@ export default function PuntoVentaOficial({
                                 <div className="grid grid-cols-2 gap-4">
                                     {/* Seleccionar Almacén */}
                                     <div>
+                                        <Label>Almacén</Label>
                                         <Select value={almacenSeleccionado} onValueChange={handleAlmacenChange} disabled={loadingAlmacenes}>
                                             <SelectTrigger className="border-sidebar-accent w-full dark:border-white">
                                                 <SelectValue placeholder="Seleccionar Almacén" />
@@ -711,13 +677,13 @@ export default function PuntoVentaOficial({
                                                 ))}
                                             </SelectContent>
                                         </Select>
-                                        {loadingAlmacenes && <p className="mt-1 text-xs text-gray-500">Cargando almacenes...</p>}
                                     </div>
                                     {/* Seleccionar Cliente */}
                                     <div>
+                                        <Label>Cliente</Label>
                                         <Select value={clienteSeleccionado} onValueChange={handleClienteChange} disabled={loadingClientes}>
                                             <SelectTrigger className="border-sidebar-accent w-full dark:border-white">
-                                                <SelectValue placeholder="Seleccionar cliente" />
+                                                <SelectValue placeholder="Seleccionar cliente (Opcional)" />
                                             </SelectTrigger>
                                             <SelectContent className="border-sidebar-accent">
                                                 {clientes.map((cliente) => (
@@ -727,7 +693,6 @@ export default function PuntoVentaOficial({
                                                 ))}
                                             </SelectContent>
                                         </Select>
-                                        {loadingClientes && <p className="mt-1 text-xs text-gray-500">Cargando clientes...</p>}
                                     </div>
                                 </div>
                             </CardContent>
@@ -735,160 +700,156 @@ export default function PuntoVentaOficial({
 
                         <Separator />
 
-                        {/* Tabla para Mostrar los Productos */}
+                        {/* Productos Disponibles: GALERÍA DE TARJETAS */}
                         <Card className="border-sidebar-accent @container/card">
-                            <CardHeader className="relative">
+                            <CardHeader className="relative flex-row items-center justify-between">
                                 <CardTitle>
                                     <div className="text-sidebar-accent flex items-center gap-2">
                                         <BoxesIcon className="shrink-0" />
                                         Productos Disponibles
                                     </div>
                                 </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                {/* Barra de búsqueda */}
+                                {/* Barra de búsqueda integrada en el header */}
                                 {almacenSeleccionado && (
-                                    <div className="border-b p-4">
-                                        <div className="relative max-w-md">
-                                            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                                <Search className="h-4 w-4 text-gray-400" />
-                                            </div>
-                                            <input
-                                                type="text"
-                                                className="border-sidebar-accent block w-full rounded-md border py-2 pr-10 pl-10 text-sm shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                                                placeholder="Buscar productos..."
-                                                value={busqueda}
-                                                onChange={(e) => setBusqueda(e.target.value)}
-                                            />
-                                            {busqueda && (
-                                                <button
-                                                    type="button"
-                                                    onClick={limpiarBusqueda}
-                                                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
-                                                >
-                                                    <X className="h-4 w-4" />
-                                                </button>
-                                            )}
+                                    <div className="relative max-w-md">
+                                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                            <Search className="h-4 w-4 text-gray-400" />
                                         </div>
-                                        {busqueda && productos.length > 0 && (
-                                            <p className="mt-1 text-xs text-gray-500">
-                                                {productosFiltrados.length} de {productos.length} productos encontrados
-                                            </p>
+                                        <input
+                                            type="text"
+                                            className="border-sidebar-accent block w-full rounded-md border py-2 pr-10 pl-10 text-sm shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                            placeholder="Buscar productos..."
+                                            value={busqueda}
+                                            onChange={(e) => setBusqueda(e.target.value)}
+                                        />
+                                        {busqueda && (
+                                            <button
+                                                type="button"
+                                                onClick={limpiarBusqueda}
+                                                className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+                                            >
+                                                <X className="h-4 w-4" />
+                                            </button>
                                         )}
                                     </div>
                                 )}
-
+                            </CardHeader>
+                            <CardContent>
                                 {loadingProductos ? (
                                     <div className="p-8 text-center">
                                         <div className="inline-block h-6 w-6 animate-spin rounded-full border-b-2 border-blue-500"></div>
                                         <p className="mt-2 text-gray-500">Cargando productos...</p>
                                     </div>
-                                ) : almacenSeleccionado ? (
-                                    productosFiltrados && productosFiltrados.length > 0 ? (
-                                        <div className="overflow-x-auto">
-                                            <Table className="rounded-t-lg">
-                                                <TableCaption>Productos disponibles en el almacén seleccionado</TableCaption>
-                                                <TableHeader className="rounded-t-lg border-1 border-t-white">
-                                                    <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent transition-colors">
-                                                        <TableHead className="text-white uppercase">Producto</TableHead>
-                                                        <TableHead className="text-center text-white uppercase">Stock</TableHead>
-                                                        <TableHead className="text-center text-white uppercase">Precio</TableHead>
-                                                        <TableHead className="text-center text-white uppercase">Acción</TableHead>
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody className="rounded-b-md border-1 border-solid border-b-white">
-                                                    {productosFiltrados.map((producto) => (
-                                                        <tr key={producto.id} className="hover:bg-sidebar cursor-pointer">
-                                                            <td className="px-4 py-3">
-                                                                <div>
-                                                                    <div className="text-sidebar-accent text-sm font-medium">
-                                                                        {producto.nombre_producto}
-                                                                    </div>
-                                                                    <div className="text-sm text-gray-500">
-                                                                        {producto.marca_producto || 'Sin marca'} -{' '}
-                                                                        {producto.categoria_nombre || 'Sin categoría'}
-                                                                    </div>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-4 py-3 text-sm whitespace-nowrap text-gray-500">
-                                                                <span
-                                                                    className={`inline-flex rounded-full px-2 text-xs leading-5 font-semibold ${
-                                                                        producto.stock_disponible > 5
-                                                                            ? 'bg-green-100 text-green-800'
-                                                                            : producto.stock_disponible > 0
-                                                                              ? 'bg-yellow-100 text-yellow-800'
-                                                                              : 'bg-red-100 text-red-800'
-                                                                    }`}
-                                                                >
-                                                                    {producto.stock_disponible}
-                                                                </span>
-                                                            </td>
-                                                            <td className="px-4 py-3 text-sm whitespace-nowrap text-emerald-600">
-                                                                {producto.precio_venta && producto.precio_venta > 0 ? (
-                                                                    `$ ${producto.precio_venta.toFixed(2)}`
-                                                                ) : (
-                                                                    <span className="text-red-500">Sin precio</span>
-                                                                )}
-                                                            </td>
-                                                            <td className="px-4 py-3 text-center text-sm whitespace-nowrap">
-                                                                <Tooltip>
-                                                                    <TooltipTrigger asChild>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => agregarAlCarrito(producto)}
-                                                                            className="flex cursor-pointer items-center gap-1 rounded bg-blue-500 px-3 py-1 text-xs text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
-                                                                            disabled={
-                                                                                !producto.tiene_precio ||
-                                                                                producto.stock_disponible <= 0 ||
-                                                                                !producto.precio_venta ||
-                                                                                producto.precio_venta <= 0
-                                                                            }
-                                                                        >
-                                                                            <PackagePlus size={22} className="h-3 w-3" />
-                                                                            Vender
-                                                                        </button>
-                                                                    </TooltipTrigger>
-                                                                    <TooltipContent className="text-white">
-                                                                        <p>Agregar al Pedido</p>
-                                                                    </TooltipContent>
-                                                                </Tooltip>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </TableBody>
-                                            </Table>
-                                        </div>
-                                    ) : (
-                                        <div className="p-8 text-center">
-                                            <p className="text-gray-500">
-                                                {busqueda && productos.length > 0
-                                                    ? 'No se encontraron productos que coincidan con la búsqueda'
-                                                    : productos.length === 0 && !loadingProductos
-                                                      ? 'No hay productos disponibles en este almacén'
-                                                      : 'No hay productos para mostrar'}
-                                            </p>
-                                            {busqueda && productos.length > 0 && (
-                                                <button
-                                                    type="button"
-                                                    onClick={limpiarBusqueda}
-                                                    className="mt-2 text-sm font-medium text-blue-600 hover:text-blue-800"
-                                                >
-                                                    Limpiar búsqueda
-                                                </button>
-                                            )}
-                                        </div>
-                                    )
-                                ) : (
+                                ) : !almacenSeleccionado ? (
                                     <div className="p-8 text-center">
                                         <p className="text-gray-500">Seleccione un almacén para ver los productos</p>
+                                    </div>
+                                ) : productosFiltrados && productosFiltrados.length > 0 ? (
+                                    // GALERÍA DE TARJETAS (Reemplazo de la tabla)
+                                    <div className="grid grid-cols-2 gap-4 p-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                                        {productosFiltrados.map((producto) => {
+                                            const isDisabled =
+                                                !producto.tiene_precio ||
+                                                producto.stock_total <= 0 ||
+                                                !producto.precio_venta ||
+                                                producto.precio_venta <= 0;
+
+                                            return (
+                                                <Card
+                                                    key={producto.id}
+                                                    className={`transition-all duration-200 shadow-lg ${
+                                                        isDisabled
+                                                            ? 'opacity-60 cursor-not-allowed border-gray-300'
+                                                            : 'hover:border-blue-500 cursor-pointer'
+                                                    }`}
+                                                >
+                                                    <CardContent className="p-3" onClick={() => {
+                                                        if (!isDisabled) {
+                                                            agregarAlCarrito(producto);
+                                                        }
+                                                    }}>
+                                                        {/* Información de Stock y Categoría */}
+                                                        <div className="mb-2 flex items-center justify-between">
+                                                            <span
+                                                                className={`inline-flex rounded-full px-2 text-xs leading-5 font-semibold ${
+                                                                    producto.stock_total > 5
+                                                                        ? 'bg-green-100 text-green-800'
+                                                                        : producto.stock_total > 0
+                                                                          ? 'bg-yellow-100 text-yellow-800'
+                                                                          : 'bg-red-100 text-red-800'
+                                                                }`}
+                                                            >
+                                                                Stock: {producto.stock_total}
+                                                            </span>
+                                                            <Badge variant="secondary" className="text-xs">
+                                                                {producto.categoria_nombre || 'Sin Cat.'}
+                                                            </Badge>
+                                                        </div>
+
+                                                        {/* Nombre del Producto */}
+                                                        <div className="text-center">
+                                                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200 line-clamp-2 min-h-[40px]">
+                                                                {producto.nombre_producto}
+                                                            </p>
+                                                            <p className="text-xs text-gray-500">{producto.marca_producto || 'Sin marca'}</p>
+                                                        </div>
+
+                                                        <Separator className="my-3 bg-gray-200 dark:bg-gray-700" />
+
+                                                        {/* Precio y Botón de Añadir */}
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-lg font-bold text-emerald-600">
+                                                                {producto.precio_venta && producto.precio_venta > 0
+                                                                    ? `$ ${producto.precio_venta.toFixed(2)}`
+                                                                    : 'N/A'}
+                                                            </span>
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="default"
+                                                                        className="h-8 w-8 p-0"
+                                                                        disabled={isDisabled}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation(); // Prevenir que el click en el botón active el click de la Card
+                                                                            agregarAlCarrito(producto);
+                                                                        }}
+                                                                    >
+                                                                        <PackagePlus size={16} />
+                                                                    </Button>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent className="text-white">
+                                                                    <p>Agregar al Carrito</p>
+                                                                </TooltipContent>
+                                                            </Tooltip>
+                                                        </div>
+                                                    </CardContent>
+                                                </Card>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <div className="p-8 text-center">
+                                        <p className="text-gray-500">
+                                            No se encontraron productos que coincidan con la búsqueda.
+                                        </p>
+                                        {busqueda && (
+                                            <button
+                                                type="button"
+                                                onClick={limpiarBusqueda}
+                                                className="mt-2 text-sm font-medium text-blue-600 hover:text-blue-800"
+                                            >
+                                                Limpiar búsqueda
+                                            </button>
+                                        )}
                                     </div>
                                 )}
                             </CardContent>
                         </Card>
                     </div>
 
-                    {/* Columna 2: Carrito de Compras */}
-                    <div>
+                    {/* Columna 2: Carrito de Compras y Resumen (Ahora Columna Única) */}
+                    <div className="lg:col-span-1">
                         <div className="flex h-full flex-col rounded-lg border">
                             <div className="bg-sidebar-accent flex items-center justify-between rounded-t-lg border-1 border-solid px-4 py-3 dark:border-zinc-300">
                                 <div>
@@ -899,7 +860,7 @@ export default function PuntoVentaOficial({
                                 </div>
                                 {carrito.length > 0 && (
                                     <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-red-800">
-                                        {carrito.length} producto(s) seleccionado
+                                        {carrito.length} producto(s)
                                     </span>
                                 )}
                             </div>
@@ -926,8 +887,9 @@ export default function PuntoVentaOficial({
                                                         <TooltipTrigger asChild>
                                                             <Button
                                                                 variant="ghost"
+                                                                size="icon"
                                                                 onClick={() => quitarDelCarrito(item.id)}
-                                                                className="ml-2 cursor-pointer text-red-400 hover:bg-red-900 hover:text-white"
+                                                                className="ml-2 cursor-pointer h-6 w-6 text-red-400 hover:bg-red-900 hover:text-white"
                                                             >
                                                                 <Trash2 size={16} className="h-4 w-4" />
                                                             </Button>
@@ -949,29 +911,23 @@ export default function PuntoVentaOficial({
                                                             <Minus className="h-3 w-3" />
                                                         </button>
 
-                                                        <Tooltip>
-                                                            <TooltipTrigger asChild>
-                                                                <Badge variant="secondary" className="text-xs">
-                                                                    <span className="w-8 cursor-help text-center text-sm font-medium text-amber-500">
-                                                                        {item.cantidad}
-                                                                    </span>
-                                                                </Badge>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent className="text-white">
-                                                                <p>Cantidad de Productos</p>
-                                                            </TooltipContent>
-                                                        </Tooltip>
+                                                        <Badge variant="secondary" className="text-xs">
+                                                            <span className="w-8 cursor-help text-center text-sm font-medium text-amber-500">
+                                                                {item.cantidad}
+                                                            </span>
+                                                        </Badge>
+                                                        
 
                                                         <button
                                                             type="button"
                                                             onClick={() => incrementarCantidad(item.id)}
                                                             className="border-sidebar-accent bg-sidebar hover:bg-sidebar-accent cursor-pointer rounded-md border p-1 text-white"
-                                                            disabled={item.cantidad >= item.producto.stock_disponible}
+                                                            disabled={item.cantidad >= item.producto.stock_total}
                                                         >
                                                             <Plus className="h-3 w-3" />
                                                         </button>
 
-                                                        <span className="ml-1 text-xs text-gray-500">(max {item.producto.stock_disponible})</span>
+                                                        <span className="ml-1 text-xs text-gray-500">(max {item.producto.stock_total})</span>
                                                     </div>
 
                                                     <div className="text-right">
@@ -1006,19 +962,19 @@ export default function PuntoVentaOficial({
                                 )}
                             </div>
 
-                            {/* Resumen del carrito */}
+                            {/* Resumen del carrito y Botón de Procesar */}
                             {carrito.length > 0 && (
                                 <div className="rounded-b-lg border-1 border-t border-solid border-gray-200 bg-gray-50 p-4">
                                     <div className="mb-2 flex items-center justify-between">
                                         <span className="text-sm font-medium text-gray-700">Total:</span>
-                                        <span className="text-lg font-bold text-emerald-700">$ {calcularTotal.toFixed(2)}</span>
+                                        <span className="text-lg font-bold text-emerald-700">$ {calcularTotal.toFixed(2)} USD</span>
                                     </div>
                                     {/* AlertDialog de Metodos de Venta */}
                                     <AlertDialog>
                                         <AlertDialogTrigger asChild>
                                             <button
                                                 type="button"
-                                                disabled={procesandoVenta}
+                                                disabled={procesandoVenta || !almacenSeleccionado}
                                                 className="flex w-full cursor-pointer items-center justify-center rounded-md bg-green-600 px-4 py-2 font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
                                             >
                                                 {procesandoVenta ? (
@@ -1038,6 +994,7 @@ export default function PuntoVentaOficial({
                                                     Métodos y procesamiento de la compra de artículos por parte del Cliente
                                                 </AlertDialogDescription>
                                             </AlertDialogHeader>
+                                            
                                             <div className="max-h-[60vh] overflow-y-auto pr-4">
                                                 <div className="sticky top-0 mb-4 flex items-center justify-between border-b bg-white p-2 dark:bg-gray-950">
                                                     <span className="text-sidebar-accent text-sm font-medium">Total a Pagar el Cliente:</span>
@@ -1060,7 +1017,10 @@ export default function PuntoVentaOficial({
                                                                                 - {payment.amount.toFixed(2)} {payment.currency}
                                                                             </span>
                                                                             <div className="text-sm text-gray-500">
-                                                                                = ${payment.amountInUsd.toFixed(2)} USD
+                                                                                = **${payment.amountInUsd.toFixed(2)} USD**
+                                                                            </div>
+                                                                            <div className="text-xs text-gray-400">
+                                                                                Tasa: {payment.exchangeRate} {payment.currency === 'CUP' ? 'CUP/USD' : 'USD/MLC'}
                                                                             </div>
                                                                         </div>
                                                                         <Button
@@ -1076,6 +1036,38 @@ export default function PuntoVentaOficial({
                                                             </ul>
                                                         </div>
                                                     )}
+                                                     {/* Resumen de tasas de cambio */}
+                                                    <div className="border-t pt-4">
+                                                        <h4 className="mb-3 text-center text-sm font-bold text-gray-600">
+                                                            Tasas de Cambio (Ajustar para esta Venta):
+                                                        </h4>
+                                                        <div className="grid gap-4 md:grid-cols-2">
+                                                            <div className='flex items-center space-x-2'>
+                                                                <Label className='whitespace-nowrap'>CUP por 1 USD:</Label>
+                                                                <Input
+                                                                    type="number"
+                                                                    min="0.01"
+                                                                    step="0.01"
+                                                                    value={tasaUSD}
+                                                                    onChange={(e) => setTasaUSD(parseFloat(e.target.value) || 1)}
+                                                                    className="border-sidebar-accent w-full rounded border px-2 py-1 text-left text-sm text-emerald-600 hover:border-emerald-300"
+                                                                    placeholder="0.00"
+                                                                />
+                                                            </div>
+                                                            <div className='flex items-center space-x-2'>
+                                                                <Label className='whitespace-nowrap'>USD por 1 MLC:</Label>
+                                                                <Input
+                                                                    type="number"
+                                                                    min="0.01"
+                                                                    step="0.01"
+                                                                    value={tasaMLC}
+                                                                    onChange={(e) => setTasaMLC(parseFloat(e.target.value) || 1)}
+                                                                    className="border-sidebar-accent w-full rounded border px-2 py-1 text-left text-sm text-emerald-600 hover:border-emerald-300"
+                                                                    placeholder="0.00"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
 
                                                     {/* Formulario para agregar nuevo pago */}
                                                     <div className="space-y-4">
@@ -1087,7 +1079,7 @@ export default function PuntoVentaOficial({
                                                                 <Select
                                                                     value={currentPayment.method}
                                                                     onValueChange={(value: 'transferencia' | 'efectivo' | '') =>
-                                                                        setCurrentPayment({ ...currentPayment, method: value })
+                                                                        setCurrentPayment({ ...currentPayment, method: value, via: value === 'efectivo' ? 'efectivo' : '' }) // Resetear vía si cambia método
                                                                     }
                                                                 >
                                                                     <SelectTrigger>
@@ -1131,7 +1123,7 @@ export default function PuntoVentaOficial({
                                                                     onValueChange={(value) =>
                                                                         setCurrentPayment({ ...currentPayment, cuenta_id: value })
                                                                     }
-                                                                    disabled={!currentPayment.currency}
+                                                                    disabled={!currentPayment.currency || availableAccounts.length === 0}
                                                                 >
                                                                     <SelectTrigger>
                                                                         <SelectValue placeholder="Seleccione cuenta" />
@@ -1144,6 +1136,9 @@ export default function PuntoVentaOficial({
                                                                         ))}
                                                                     </SelectContent>
                                                                 </Select>
+                                                                {availableAccounts.length === 0 && currentPayment.currency && (
+                                                                    <p className="text-red-500 text-xs">No hay cuentas para esta moneda.</p>
+                                                                )}
                                                             </div>
 
                                                             {/* Vía de pago (solo para transferencia) */}
@@ -1206,83 +1201,44 @@ export default function PuntoVentaOficial({
                                                         {currentPayment.amount &&
                                                             currentPayment.currency &&
                                                             parseFloat(currentPayment.amount) > 0 && (
-                                                                <div className="text-sm text-gray-500">
-                                                                    {parseFloat(currentPayment.amount).toFixed(2)} {currentPayment.currency} ={' '}
-                                                                    <span className="font-semibold text-emerald-600">
-                                                                        {convertToUsd(
-                                                                            parseFloat(currentPayment.amount),
-                                                                            currentPayment.currency,
-                                                                        ).toFixed(2)}
+                                                                <div className="text-sm text-gray-500 font-semibold p-2 border rounded">
+                                                                    Monto en Moneda Local: {parseFloat(currentPayment.amount).toFixed(2)} {currentPayment.currency} <br/>
+                                                                    Equivalente en USD:{' '}
+                                                                    <span className="font-bold text-emerald-600">
+                                                                        $ {convertToUsd(parseFloat(currentPayment.amount), currentPayment.currency)}
                                                                     </span>{' '}
                                                                     USD
                                                                 </div>
                                                             )}
                                                     </div>
 
-                                                    {/* Resumen de tasas de cambio */}
-                                                    <div className="mt-4 border-t pt-4">
-                                                        <h4 className="mb-2 animate-pulse text-center text-sm font-medium">
-                                                            Tasas de Cambio (Temporales para esta Venta):
-                                                        </h4>
-                                                        <div className="grid gap-2 md:grid-cols-2">
-                                                            <Badge variant="outline" className="justify-center">
-                                                                MLC = 1 USD
-                                                                <Input
-                                                                    type="number"
-                                                                    min="0.01"
-                                                                    step="0.01"
-                                                                    value={tasaMLC}
-                                                                    onChange={(e) => setTasaMLC(parseFloat(e.target.value) || 1)}
-                                                                    className="border-sidebar-accent w-20 rounded border px-2 py-1 text-left text-sm text-emerald-600 hover:border-emerald-300"
-                                                                    placeholder="0.00"
-                                                                />
-                                                            </Badge>
-                                                            <Badge variant="outline" className="cursor-pointer justify-center">
-                                                                CUP = $ 1.00 USD
-                                                                <Input
-                                                                    type="number"
-                                                                    min="0.01"
-                                                                    step="0.01"
-                                                                    value={tasaUSD}
-                                                                    onChange={(e) => setTasaUSD(parseFloat(e.target.value) || 1)}
-                                                                    className="border-sidebar-accent w-20 rounded border px-2 py-1 text-left text-sm text-emerald-600 hover:border-emerald-300"
-                                                                    placeholder="0.00"
-                                                                />
-                                                            </Badge>
-                                                        </div>
-                                                    </div>
                                                 </div>
-                                            </div>
+                                            </div> {/* Fin de div con scroll */}
+                                            
                                             <div className="flex items-center justify-between border-t pt-4">
-                                                <span className="text-sidebar-accent text-sm font-medium">Monto Restante:</span>
+                                                <span className="text-sidebar-accent text-lg font-bold">Monto Restante:</span>
                                                 <span
-                                                    className={`text-lg font-bold ${remainingInUsd > 0.01 ? 'animate-pulse text-red-600' : 'text-emerald-600'}`}
+                                                    className={`text-2xl font-extrabold ${remainingInUsd > 0.01 ? 'animate-pulse text-red-600' : 'text-emerald-600'}`}
                                                 >
                                                     ${remainingInUsd.toFixed(2)} USD
                                                 </span>
                                             </div>
                                             <AlertDialogFooter>
-                                                <Button
-                                                    className="flex w-full cursor-pointer items-center justify-center rounded-md bg-green-600 px-4 py-2 font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
-                                                    onClick={handleCompleteSale}
-                                                    disabled={remainingInUsd > 0.01 || payments.length === 0 || procesandoVenta}
-                                                >
-                                                    {procesandoVenta ? (
-                                                        <>
-                                                            <div className="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-white"></div>
-                                                            Procesando...
-                                                        </>
-                                                    ) : (
-                                                        'Realizar la Venta'
-                                                    )}
-                                                </Button>
                                                 <AlertDialogCancel className="bg-destructive-foreground hover:bg-destructive cursor-pointer text-white">
                                                     Cancelar
                                                 </AlertDialogCancel>
+                                                <Button
+                                                    className="flex w-full cursor-pointer items-center justify-center rounded-md bg-green-600 px-4 py-2 font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                                    onClick={handleCompleteSale}
+                                                    // Deshabilitar si queda pendiente más de $0.01 (para evitar problemas de punto flotante)
+                                                    disabled={remainingInUsd > 0.01 || payments.length === 0 || procesandoVenta}
+                                                >
+                                                    Realizar la Venta
+                                                </Button>
                                             </AlertDialogFooter>
                                         </AlertDialogContent>
                                     </AlertDialog>
-                                    <p className="mt-2 text-center text-xs text-gray-500">Se enviarán {carrito.length} productos para procesar</p>
+                                    <p className="mt-2 text-center text-xs text-gray-500">Se enviarán {carrito.length} productos y {payments.length} pagos para procesar</p>
                                 </div>
                             )}
                         </div>
