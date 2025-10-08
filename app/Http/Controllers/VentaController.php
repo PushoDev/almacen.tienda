@@ -671,4 +671,89 @@ class VentaController extends Controller
         // Para otras monedas no contempladas
         throw new \Exception("Conversión de moneda no implementada para la cuenta: " . $cuenta->tipo_moneda);
     }
+
+    /**
+     * Obtener Listado de las Ventas
+     */
+    /**
+     * Obtener listado de ventas con filtros y paginación.
+     * Cada usuario ve solo sus ventas, excepto admin que ve todas.
+     */
+    public function listadoVentas(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return redirect()->route('login');
+        }
+
+        // Construir query base
+        $query = Venta::with(['cliente', 'almacen', 'usuario', 'pagos'])
+            ->withCount('detalles');
+
+        // Filtrar por usuario (excepto admin)
+        if ($user->role !== 'admin') {
+            $query->where('user_id', $user->id);
+        }
+
+        // Aplicar filtros
+        if ($request->has('estado') && $request->estado) {
+            $query->where('estado', $request->estado);
+        }
+
+        if ($request->has('almacen_id') && $request->almacen_id) {
+            $query->where('almacen_id', $request->almacen_id);
+        }
+
+        if ($request->has('fecha_desde') && $request->fecha_desde) {
+            $query->whereDate('created_at', '>=', $request->fecha_desde);
+        }
+
+        if ($request->has('fecha_hasta') && $request->fecha_hasta) {
+            $query->whereDate('created_at', '<=', $request->fecha_hasta);
+        }
+
+        // Ordenar y paginar
+        $ventas = $query->orderBy('created_at', 'desc')
+            ->paginate(15)
+            ->through(function ($venta) {
+                return [
+                    'id' => $venta->id,
+                    'cliente' => $venta->cliente ? [
+                        'id' => $venta->cliente->id,
+                        'nombre' => $venta->cliente->nombre_cliente,
+                    ] : null,
+                    'almacen' => [
+                        'id' => $venta->almacen->id,
+                        'nombre' => $venta->almacen->nombre_almacen,
+                    ],
+                    'usuario' => [
+                        'id' => $venta->usuario->id,
+                        'nombre' => $venta->usuario->name,
+                    ],
+                    'total' => $venta->total,
+                    'estado' => $venta->estado,
+                    'total_pagado' => $venta->pagos->sum('monto_equivalente'),
+                    'restante' => $venta->total - $venta->pagos->sum('monto_equivalente'),
+                    'cantidad_items' => $venta->detalles_count,
+                    'fecha' => $venta->created_at->format('d/m/Y H:i'),
+                    'fecha_iso' => $venta->created_at->toISOString(),
+                ];
+            });
+
+        // Obtener almacenes para filtros (solo los que el usuario puede ver)
+        $almacenes = $user->role === 'admin'
+            ? Almacen::select('id', 'nombre_almacen')->get()
+            : $user->almacenes()->select('id', 'nombre_almacen')->get();
+
+        return Inertia::render('Vendor/Listado', [
+            'ventas' => $ventas,
+            'filters' => $request->only(['estado', 'almacen_id', 'fecha_desde', 'fecha_hasta']),
+            'almacenes' => $almacenes,
+            'estados_venta' => [
+                ['value' => 'pendiente', 'label' => 'Pendiente'],
+                ['value' => 'completada', 'label' => 'Completada'],
+                ['value' => 'cancelada', 'label' => 'Cancelada'],
+            ]
+        ]);
+    }
 }

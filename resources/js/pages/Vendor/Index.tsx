@@ -21,9 +21,9 @@ import { Table, TableBody, TableCaption, TableHead, TableHeader, TableRow } from
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
-import { BoxesIcon, Minus, PackagePlus, Plus, Search, ShoppingBag, ShoppingCart, Trash2, X } from 'lucide-react';
+import { BoxesIcon, Eye, Minus, PackagePlus, Plus, Search, ShoppingBag, ShoppingCart, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -675,6 +675,12 @@ export default function PuntoVentaOficial({
                         Rol Actual del Vendedor:{' '}
                         <span className="text-primary font-medium">{meta.role_usuario === 'admin' ? 'Administrador' : 'Vendedor'}</span>
                     </p>
+                    <Link href={route('ventas.listado')}>
+                        <Button variant="secondary" className="flex cursor-pointer items-center gap-1">
+                            <Eye size={14} />
+                            Mis Ventas
+                        </Button>
+                    </Link>
                 </div>
                 <Separator className="bg-sidebar-accent" />
 
