@@ -376,6 +376,9 @@ class VentaController extends Controller
                 throw new \Exception("Usuario no autenticado");
             }
 
+            // ✅ CORRECCIÓN CRÍTICA: Cargar relaciones necesarias ANTES de usarlas
+            $venta->load(['detalles.producto', 'pagos.cuenta']);
+
             $tasaUSDaCUP = $venta->tasa_usd_utilizada;
             $tasaMLCaUSD = $venta->tasa_mlc_utilizada;
 
@@ -389,10 +392,10 @@ class VentaController extends Controller
                     $cantidadAnterior = $almacenProducto->cantidad;
                     $nuevaCantidad = $cantidadAnterior - $detalle->cantidad;
 
-                    // Verificar stock suficiente (doble check por si el stock cambió entre procesarVenta y aprobarVenta)
+                    // Verificar stock suficiente
                     if ($nuevaCantidad < 0) {
-                        $producto = Producto::find($detalle->producto_id);
-                        throw new \Exception("Stock insuficiente para el producto: " . $producto->nombre_producto . " (El stock disponible es menor a la cantidad vendida al momento de la aprobación).");
+                        $producto = $detalle->producto;
+                        throw new \Exception("Stock insuficiente para: {$producto->nombre_producto}. Stock: {$cantidadAnterior}, Vendido: {$detalle->cantidad}");
                     }
 
                     // Registrar en historial de stock
@@ -402,7 +405,7 @@ class VentaController extends Controller
                         'venta_id' => $venta->id,
                         'cantidad_anterior' => $cantidadAnterior,
                         'cantidad_nueva' => $nuevaCantidad,
-                        'diferencia' => -$detalle->cantidad, // Salida
+                        'diferencia' => -$detalle->cantidad,
                         'tipo' => 'venta',
                         'observaciones' => 'Venta aprobada y stock descontado',
                         'user_id' => $user->id,
@@ -411,25 +414,22 @@ class VentaController extends Controller
                     // Actualizar stock
                     $almacenProducto->update(['cantidad' => $nuevaCantidad]);
                 } else {
-                    throw new \Exception("Producto no encontrado en el almacén: " . $detalle->producto_id);
+                    throw new \Exception("Producto no encontrado en el almacén: {$detalle->producto_id}");
                 }
             }
 
             // 3. PROCESAR PAGOS Y ACTUALIZAR CUENTAS
-            $venta->load('pagos.cuenta'); // Recargar las relaciones si no están cargadas
             foreach ($venta->pagos as $pago) {
-                $cuenta = Cuenta::find($pago->cuenta_id);
-                $pagoArray = $pago->toArray(); // Convertir el modelo de pago a array para usar el helper
+                $cuenta = $pago->cuenta; // ✅ Ya viene cargada por el load
+                $pagoArray = $pago->toArray();
 
                 if ($cuenta) {
-                    // Determinar el monto a incrementar basado en la moneda de la cuenta
                     $montoIncremento = $this->calcularMontoIncremento($cuenta, $pagoArray, $tasaUSDaCUP, $tasaMLCaUSD);
-
                     $nuevoSaldo = $cuenta->saldo_cuenta + $montoIncremento;
-                    // Actualizar saldo de la cuenta
+
                     $cuenta->update(['saldo_cuenta' => $nuevoSaldo]);
                 } else {
-                    throw new \Exception("Cuenta no encontrada: " . $pago->cuenta_id);
+                    throw new \Exception("Cuenta no encontrada: {$pago->cuenta_id}");
                 }
             }
 
@@ -442,15 +442,14 @@ class VentaController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Venta aprobada y completada correctamente. Stock y saldos actualizados. 🎉',
+                'message' => 'Venta aprobada y completada correctamente. Stock y saldos actualizados.',
                 'redirect' => route('ventas.show', $venta->id)
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
                 'success' => false,
-                'message' => 'Error al aprobar la venta',
-                'error' => $e->getMessage(),
+                'message' => 'Error al aprobar la venta: ' . $e->getMessage(),
             ], 500);
         }
     }

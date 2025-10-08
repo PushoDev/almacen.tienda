@@ -19,6 +19,8 @@ return new class extends Migration
             $table->decimal('total', 15, 2);
             $table->text('detalles_venta')->nullable();
             $table->enum('estado', ['pendiente', 'completada', 'cancelada'])->default('pendiente');
+            $table->decimal('tasa_usd_utilizada', 10, 4)->nullable();
+            $table->decimal('tasa_mlc_utilizada', 10, 4)->nullable();
             $table->timestamps();
         });
     }

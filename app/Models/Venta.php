@@ -15,7 +15,9 @@ class Venta extends Model
         'cliente_id',
         'total',
         'detalles_venta',
-        'estado'
+        'estado',
+        'tasa_usd_utilizada',
+        'tasa_mlc_utilizada',
     ];
 
     public function usuario()

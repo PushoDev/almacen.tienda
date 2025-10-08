@@ -121,6 +121,7 @@ export default function ResultadoCarrito({ venta }: Props) {
     // Estados para gestionar las acciones
     const [isCancelling, setIsCancelling] = useState(false);
     const [isApproving, setIsApproving] = useState(false);
+    const [currentVenta, setCurrentVenta] = useState<Venta>(venta);
 
     // Formatear fechas
     const formatDate = (dateString: string) => {
@@ -144,13 +145,13 @@ export default function ResultadoCarrito({ venta }: Props) {
     };
 
     // Determinar estados
-    const isVentaPendiente = venta.estado === 'pendiente';
-    const isVentaCompletada = venta.estado === 'completada';
-    const isVentaCancelada = venta.estado === 'cancelada';
+    const isVentaPendiente = currentVenta.estado === 'pendiente';
+    const isVentaCompletada = currentVenta.estado === 'completada';
+    const isVentaCancelada = currentVenta.estado === 'cancelada';
 
     // Obtener color y texto del estado
     const getEstadoConfig = () => {
-        switch (venta.estado) {
+        switch (currentVenta.estado) {
             case 'pendiente':
                 return { color: 'bg-yellow-500', text: 'PENDIENTE', textColor: 'text-yellow-600' };
             case 'completada':
@@ -164,23 +165,56 @@ export default function ResultadoCarrito({ venta }: Props) {
 
     const estadoConfig = getEstadoConfig();
 
-    // FUNCIÓN: Manejar la aprobación de la venta
+    // FUNCIÓN CORREGIDA: Manejar la aprobación de la venta
     const handleAprobarVenta = async () => {
         setIsApproving(true);
         try {
-            const response = await axios.post(route('ventas.aprobar', venta.id));
+            console.log('Iniciando aprobación de venta:', currentVenta.id);
+
+            const response = await axios.post(route('ventas.aprobar', currentVenta.id));
+            console.log('Respuesta del backend:', response.data);
 
             if (response.data.success) {
                 toast.success(response.data.message || 'Venta aprobada correctamente');
-                // Recargar la página para mostrar el nuevo estado
-                router.reload();
+
+                // ✅ CORRECCIÓN: Actualizar el estado local de la venta
+                setCurrentVenta((prev) => ({
+                    ...prev,
+                    estado: 'completada',
+                }));
+
+                // ✅ CORRECCIÓN: Usar router.reload() para recargar los datos actualizados del servidor
+                setTimeout(() => {
+                    router.reload();
+                }, 1500);
             } else {
                 toast.error(response.data.message || 'Error al aprobar la venta');
             }
         } catch (error: any) {
-            console.error('Error al aprobar venta:', error);
-            const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Ocurrió un error al intentar aprobar la venta.';
-            toast.error(errorMessage);
+            console.error('Error completo al aprobar venta:', error);
+
+            // ✅ CORRECCIÓN: Mejor manejo de errores
+            if (error.response) {
+                // El servidor respondió con un código de error
+                const errorMessage =
+                    error.response.data?.message || error.response.data?.error || `Error ${error.response.status}: ${error.response.statusText}`;
+                toast.error(errorMessage);
+
+                // Log detallado para debugging
+                console.error('Detalles del error:', {
+                    status: error.response.status,
+                    data: error.response.data,
+                    headers: error.response.headers,
+                });
+            } else if (error.request) {
+                // La petición fue hecha pero no se recibió respuesta
+                console.error('No se recibió respuesta del servidor:', error.request);
+                toast.error('Error de conexión: No se pudo contactar al servidor');
+            } else {
+                // Algo pasó en la configuración de la petición
+                console.error('Error en la configuración de la petición:', error.message);
+                toast.error('Error al configurar la petición');
+            }
         } finally {
             setIsApproving(false);
         }
@@ -190,12 +224,21 @@ export default function ResultadoCarrito({ venta }: Props) {
     const handleAnularVenta = async () => {
         setIsCancelling(true);
         try {
-            const response = await axios.post(route('ventas.anular', venta.id));
+            const response = await axios.post(route('ventas.anular', currentVenta.id));
 
             if (response.data.success) {
                 toast.success(response.data.message || 'Venta anulada correctamente');
+
+                // Actualizar el estado local de la venta
+                setCurrentVenta((prev) => ({
+                    ...prev,
+                    estado: 'cancelada',
+                }));
+
                 // Recargar la página para mostrar el nuevo estado
-                router.reload();
+                setTimeout(() => {
+                    router.reload();
+                }, 1500);
             } else {
                 toast.error(response.data.message || 'Error al anular la venta');
             }
@@ -210,7 +253,7 @@ export default function ResultadoCarrito({ venta }: Props) {
 
     // Calcular ganancia total
     const calcularGananciaTotal = () => {
-        return venta.items.reduce((total, item) => {
+        return currentVenta.items.reduce((total, item) => {
             const costoTotal = item.cantidad * item.costo_unitario;
             const ingresoTotal = item.subtotal;
             return total + (ingresoTotal - costoTotal);
@@ -221,13 +264,13 @@ export default function ResultadoCarrito({ venta }: Props) {
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title={`Detalle de Venta #${venta.id}`} />
+            <Head title={`Detalle de Venta #${currentVenta.id}`} />
 
             {/* Contenedor principal */}
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
-                    <HeadingSmall title={`Detalle de Venta #${venta.id}`} description="Resumen completo de la venta procesada" />
+                    <HeadingSmall title={`Detalle de Venta #${currentVenta.id}`} description="Resumen completo de la venta procesada" />
 
                     {/* Indicador de estado de la venta */}
                     <div className={`absolute top-4 right-4 rounded-full px-3 py-1 text-sm font-bold text-white ${estadoConfig.color}`}>
@@ -307,7 +350,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                                 <AlertDialogHeader>
                                     <AlertDialogTitle className="text-green-600">Confirmar Aprobación</AlertDialogTitle>
                                     <AlertDialogDescription>
-                                        ¿Está seguro que desea aprobar la Venta <strong>#{venta.id}</strong>?
+                                        ¿Está seguro que desea aprobar la Venta <strong>#{currentVenta.id}</strong>?
                                         <br />
                                         <span className="font-semibold text-green-500">
                                             Esta acción:
@@ -318,13 +361,20 @@ export default function ResultadoCarrito({ venta }: Props) {
                                     </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogCancel disabled={isApproving}>Cancelar</AlertDialogCancel>
                                     <AlertDialogAction
                                         onClick={handleAprobarVenta}
                                         className="bg-green-600 hover:bg-green-700 disabled:opacity-50"
                                         disabled={isApproving}
                                     >
-                                        {isApproving ? 'Aprobando...' : 'Sí, Aprobar Venta'}
+                                        {isApproving ? (
+                                            <div className="flex items-center gap-2">
+                                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                                                Aprobando...
+                                            </div>
+                                        ) : (
+                                            'Sí, Aprobar Venta'
+                                        )}
                                     </AlertDialogAction>
                                 </AlertDialogFooter>
                             </AlertDialogContent>
@@ -349,7 +399,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                                     <AlertDialogTitle className="text-red-600">Confirmar Anulación</AlertDialogTitle>
                                     <AlertDialogDescription>
                                         Esta acción es <strong>irreversible</strong>. ¿Está seguro que desea anular la Venta{' '}
-                                        <strong>#{venta.id}</strong>?
+                                        <strong>#{currentVenta.id}</strong>?
                                         <br />
                                         <span className="font-semibold text-red-500">
                                             {isVentaCompletada
@@ -359,13 +409,20 @@ export default function ResultadoCarrito({ venta }: Props) {
                                     </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogCancel disabled={isCancelling}>Cancelar</AlertDialogCancel>
                                     <AlertDialogAction
                                         onClick={handleAnularVenta}
                                         className="bg-red-600 hover:bg-red-700 disabled:opacity-50"
                                         disabled={isCancelling}
                                     >
-                                        {isCancelling ? 'Anulando...' : 'Sí, Anular Venta'}
+                                        {isCancelling ? (
+                                            <div className="flex items-center gap-2">
+                                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                                                Anulando...
+                                            </div>
+                                        ) : (
+                                            'Sí, Anular Venta'
+                                        )}
                                     </AlertDialogAction>
                                 </AlertDialogFooter>
                             </AlertDialogContent>
@@ -380,7 +437,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                             <Calendar className="text-muted-foreground h-5 w-5" />
                             <h3 className="font-semibold">Fecha y Hora</h3>
                         </div>
-                        <p className="mt-2 text-sm">{formatDate(venta.fecha)}</p>
+                        <p className="mt-2 text-sm">{formatDate(currentVenta.fecha)}</p>
                     </div>
 
                     <div className="bg-card rounded-lg p-4 shadow-sm">
@@ -388,7 +445,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                             <Store className="text-muted-foreground h-5 w-5" />
                             <h3 className="font-semibold">Almacén</h3>
                         </div>
-                        <p className="mt-2 text-sm">{venta.almacen.nombre}</p>
+                        <p className="mt-2 text-sm">{currentVenta.almacen.nombre}</p>
                     </div>
 
                     <div className="bg-card rounded-lg p-4 shadow-sm">
@@ -396,7 +453,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                             <User className="text-muted-foreground h-5 w-5" />
                             <h3 className="font-semibold">Cliente</h3>
                         </div>
-                        <p className="mt-2 text-sm">{venta.cliente ? venta.cliente.nombre : 'Cliente no especificado'}</p>
+                        <p className="mt-2 text-sm">{currentVenta.cliente ? currentVenta.cliente.nombre : 'Cliente no especificado'}</p>
                     </div>
 
                     <div className="bg-card rounded-lg p-4 shadow-sm">
@@ -405,7 +462,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                             <h3 className="font-semibold">Vendedor</h3>
                         </div>
                         <p className="mt-2 text-sm">
-                            {venta.usuario.nombre} ({venta.usuario.rol})
+                            {currentVenta.usuario.nombre} ({currentVenta.usuario.rol})
                         </p>
                     </div>
                 </div>
@@ -430,7 +487,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                                 </tr>
                             </thead>
                             <tbody>
-                                {venta.items.map((item, index) => {
+                                {currentVenta.items.map((item, index) => {
                                     const gananciaUnitaria = item.precio_venta - item.costo_unitario;
                                     const gananciaTotalItem = gananciaUnitaria * item.cantidad;
 
@@ -458,7 +515,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                                     <td colSpan={5} className="py-3 text-right font-semibold text-white">
                                         Total Venta:
                                     </td>
-                                    <td className="py-3 text-center text-lg font-semibold text-white">{formatCurrency(venta.total)}</td>
+                                    <td className="py-3 text-center text-lg font-semibold text-white">{formatCurrency(currentVenta.total)}</td>
                                 </tr>
                                 <tr className="bg-green-50">
                                     <td colSpan={5} className="py-3 text-right font-semibold text-green-800">
@@ -480,8 +537,8 @@ export default function ResultadoCarrito({ venta }: Props) {
                             Detalles de Pago
                         </h3>
 
-                        {venta.pagos.length > 0 ? (
-                            venta.pagos.map((pago, index) => (
+                        {currentVenta.pagos.length > 0 ? (
+                            currentVenta.pagos.map((pago, index) => (
                                 <div key={index} className="bg-muted mb-4 rounded-md p-3 last:mb-0">
                                     <div className="grid grid-cols-2 gap-2">
                                         <div>
@@ -533,17 +590,17 @@ export default function ResultadoCarrito({ venta }: Props) {
                         <div className="space-y-3">
                             <div className="flex justify-between">
                                 <span className="text-muted-foreground">Total de la Venta:</span>
-                                <span className="font-semibold">{formatCurrency(venta.total)}</span>
+                                <span className="font-semibold">{formatCurrency(currentVenta.total)}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-muted-foreground">Total Pagado:</span>
-                                <span className="font-semibold text-green-600">{formatCurrency(venta.total_pagado)}</span>
+                                <span className="font-semibold text-green-600">{formatCurrency(currentVenta.total_pagado)}</span>
                             </div>
                             <Separator />
                             <div className="flex justify-between">
                                 <span className="text-muted-foreground">Restante por Pagar:</span>
-                                <span className={`font-semibold ${venta.restante > 0 ? 'text-orange-500' : 'text-green-600'}`}>
-                                    {formatCurrency(venta.restante)}
+                                <span className={`font-semibold ${currentVenta.restante > 0 ? 'text-orange-500' : 'text-green-600'}`}>
+                                    {formatCurrency(currentVenta.restante)}
                                 </span>
                             </div>
                             <div className="flex justify-between">
@@ -558,11 +615,11 @@ export default function ResultadoCarrito({ venta }: Props) {
                             <Separator />
                             <div className="flex justify-between">
                                 <span className="text-muted-foreground">Tasa USD Utilizada:</span>
-                                <span className="font-semibold">1 USD = {venta.tasa_usd_utilizada} CUP</span>
+                                <span className="font-semibold">1 USD = {currentVenta.tasa_usd_utilizada} CUP</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-muted-foreground">Tasa MLC Utilizada:</span>
-                                <span className="font-semibold">1 MLC = {venta.tasa_mlc_utilizada} USD</span>
+                                <span className="font-semibold">1 MLC = {currentVenta.tasa_mlc_utilizada} USD</span>
                             </div>
                         </div>
 
@@ -579,7 +636,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                             <div className="mt-4 rounded-md bg-red-50 p-3">
                                 <p className="text-sm text-red-800">
                                     <strong>Venta Anulada:</strong> Esta venta fue cancelada.
-                                    {venta.estado === 'completada' && ' Stock y saldos de cuentas fueron revertidos.'}
+                                    {isVentaCompletada && ' Stock y saldos de cuentas fueron revertidos.'}
                                 </p>
                             </div>
                         )}
@@ -587,7 +644,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                 </div>
 
                 {/* Información adicional para administradores */}
-                {venta.usuario.rol === 'admin' && (
+                {currentVenta.usuario.rol === 'admin' && (
                     <div className="bg-card rounded-lg p-6 shadow-sm">
                         <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold">
                             <UserCheck className="h-5 w-5" />
@@ -596,15 +653,15 @@ export default function ResultadoCarrito({ venta }: Props) {
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                             <div>
                                 <p className="text-sm font-medium">ID de Venta:</p>
-                                <p className="text-muted-foreground text-sm">#{venta.id}</p>
+                                <p className="text-muted-foreground text-sm">#{currentVenta.id}</p>
                             </div>
                             <div>
                                 <p className="text-sm font-medium">Vendedor ID:</p>
-                                <p className="text-muted-foreground text-sm">{venta.usuario.id}</p>
+                                <p className="text-muted-foreground text-sm">{currentVenta.usuario.id}</p>
                             </div>
                             <div>
                                 <p className="text-sm font-medium">Almacén ID:</p>
-                                <p className="text-muted-foreground text-sm">{venta.almacen.id}</p>
+                                <p className="text-muted-foreground text-sm">{currentVenta.almacen.id}</p>
                             </div>
                         </div>
                     </div>
