@@ -138,18 +138,9 @@ class CompraController extends Controller
             ];
 
             if ($validated['compra'] === 'deuda_proveedor') {
-                $nombreCuenta = "Deuda - {$proveedor->nombre_proveedor}";
-                $cuentaDeuda = Cuenta::firstOrCreate(
-                    ['nombre_cuenta' => $nombreCuenta],
-                    [
-                        'tipo_cuenta' => 'deudas',
-                        'saldo_cuenta' => 0,
-                        'tipo_moneda' => 'USD',
-                        'notas_cuenta' => "Deuda con: {$proveedor->nombre_proveedor}",
-                    ]
-                );
-                $cuentaDeuda->increment('saldo_cuenta', $total);
-                $compraData['cuenta_id'] = $cuentaDeuda->id;
+                // ✅ CORREGIDO: Actualizar directamente el saldo del proveedor en lugar de crear cuenta de deuda
+                $proveedor->decrement('saldo_proveedor', $total); // Restar el total (hacerlo más negativo)
+                $compraData['cuenta_id'] = null; // No asociar a cuenta de deuda
             } else if ($validated['compra'] === 'pago_cash') {
                 $pagos = $validated['pagos'] ?? [];
                 $pagosClientes = $validated['pagos_clientes'] ?? [];

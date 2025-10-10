@@ -10,6 +10,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -65,7 +66,7 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
 
     // Función para formatear el saldo
     const formatearMoneda = (valor: number | null) => {
-        if (valor === null || valor === undefined) return '$0.00';
+        if (valor === null || valor === undefined || isNaN(valor)) return '$0.00';
         return new Intl.NumberFormat('es-ES', {
             style: 'currency',
             currency: 'USD',
@@ -81,7 +82,15 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
         totalFondos: proveedores.filter((p) => p.saldo_proveedor > 0).length,
         montoTotalDeudas: proveedores.filter((p) => p.saldo_proveedor < 0).reduce((sum, p) => sum + Math.abs(p.saldo_proveedor), 0),
         montoTotalFondos: proveedores.filter((p) => p.saldo_proveedor > 0).reduce((sum, p) => sum + p.saldo_proveedor, 0),
-        saldoNeto: proveedores.reduce((sum, p) => sum + p.saldo_proveedor, 0),
+        // Solo suma de fondos (saldo positivo)
+        saldoNeto: proveedores.filter((p) => p.saldo_proveedor > 0).reduce((sum, p) => sum + p.saldo_proveedor, 0),
+    };
+
+    // Función para determinar el estado del saldo
+    const getEstadoSaldo = (saldo: number) => {
+        if (saldo < 0) return { texto: 'Deuda', color: 'destructive' };
+        if (saldo > 0) return { texto: 'Fondo', color: 'default' };
+        return { texto: 'Neutral', color: 'secondary' };
     };
 
     // Paginación
@@ -149,25 +158,15 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                         </CardContent>
                     </Card>
 
-                    {/* Saldo Neto */}
+                    {/* Saldo Neto - Solo Fondos */}
                     <Card className="bg-card border-border">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Saldo Neto</CardTitle>
+                            <CardTitle className="text-sm font-medium">Total Fondos</CardTitle>
                             <DollarSign className="text-muted-foreground h-4 w-4" />
                         </CardHeader>
                         <CardContent>
-                            <div
-                                className={`text-2xl font-bold ${
-                                    estadisticas.saldoNeto < 0
-                                        ? 'text-destructive'
-                                        : estadisticas.saldoNeto > 0
-                                          ? 'text-green-500'
-                                          : 'text-muted-foreground'
-                                }`}
-                            >
-                                {formatearMoneda(estadisticas.saldoNeto)}
-                            </div>
-                            <p className="text-muted-foreground text-xs">Balance general</p>
+                            <div className="text-2xl font-bold text-green-500">{formatearMoneda(estadisticas.saldoNeto)}</div>
+                            <p className="text-muted-foreground text-xs">Suma de fondos disponibles</p>
                         </CardContent>
                     </Card>
                 </div>
@@ -206,147 +205,147 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                                 <TableHead>Correo</TableHead>
                                 <TableHead>Localidad</TableHead>
                                 <TableHead>Saldo</TableHead>
+                                <TableHead>Estado</TableHead>
                                 <TableHead className="text-right">Acciones</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {proveedoresAmostrar.map((proveedor) => (
-                                <TableRow key={proveedor.id}>
-                                    {/* Nombre */}
-                                    <TableCell className="min-w-[180px]">
-                                        <div className="flex items-center gap-2">
-                                            <Building size={14} className="text-primary shrink-0" />
-                                            <span className="truncate font-medium">{proveedor.nombre_proveedor}</span>
-                                        </div>
-                                    </TableCell>
+                            {proveedoresAmostrar.map((proveedor) => {
+                                const estado = getEstadoSaldo(proveedor.saldo_proveedor);
 
-                                    {/* Teléfono */}
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <Phone size={14} className="shrink-0 text-gray-500" />
-                                            {proveedor.telefono_proveedor || <span className="text-gray-400 italic">Sin teléfono</span>}
-                                        </div>
-                                    </TableCell>
+                                return (
+                                    <TableRow key={proveedor.id}>
+                                        {/* Nombre */}
+                                        <TableCell className="min-w-[180px]">
+                                            <div className="flex items-center gap-2">
+                                                <Building size={14} className="text-primary shrink-0" />
+                                                <span className="truncate font-medium">{proveedor.nombre_proveedor}</span>
+                                            </div>
+                                        </TableCell>
 
-                                    {/* Correo */}
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <Mail size={14} className="shrink-0 text-gray-500" />
-                                            {proveedor.correo_proveedor ? (
-                                                <a
-                                                    href={`mailto:${proveedor.correo_proveedor}`}
-                                                    className="max-w-[160px] truncate text-blue-600 hover:underline"
-                                                >
-                                                    {proveedor.correo_proveedor}
-                                                </a>
-                                            ) : (
-                                                <span className="text-gray-400 italic">Sin correo</span>
-                                            )}
-                                        </div>
-                                    </TableCell>
+                                        {/* Teléfono */}
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <Phone size={14} className="shrink-0 text-gray-500" />
+                                                {proveedor.telefono_proveedor || <span className="text-gray-400 italic">Sin teléfono</span>}
+                                            </div>
+                                        </TableCell>
 
-                                    {/* Localidad */}
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <MapPin size={14} className="shrink-0 text-gray-500" />
-                                            {proveedor.localidad_proveedor ? (
-                                                <span className="truncate">{proveedor.localidad_proveedor}</span>
-                                            ) : (
-                                                <span className="text-gray-400 italic">Sin ubicación</span>
-                                            )}
-                                        </div>
-                                    </TableCell>
-
-                                    {/* Saldo */}
-                                    <TableCell
-                                        aria-label={`Saldo del proveedor: ${
-                                            proveedor.saldo_proveedor !== null && proveedor.saldo_proveedor !== undefined
-                                                ? proveedor.saldo_proveedor < 0
-                                                    ? `-${formatearMoneda(Math.abs(proveedor.saldo_proveedor))} (deuda)`
-                                                    : proveedor.saldo_proveedor === 0
-                                                      ? 'Sin saldo'
-                                                      : `${formatearMoneda(proveedor.saldo_proveedor)} (fondo)`
-                                                : 'Sin información'
-                                        }`}
-                                    >
-                                        <div className={`flex items-center gap-1 font-medium`}>
-                                            {/* Icono según el saldo */}
-                                            {proveedor.saldo_proveedor !== null && proveedor.saldo_proveedor !== undefined ? (
-                                                proveedor.saldo_proveedor < 0 ? (
-                                                    <ArrowDownCircle size={14} className="shrink-0 text-red-600 dark:text-red-400" />
-                                                ) : proveedor.saldo_proveedor === 0 ? (
-                                                    <CheckCircle size={14} className="shrink-0 text-green-600 dark:text-green-400" />
-                                                ) : (
-                                                    <AlertCircle size={14} className="shrink-0 text-green-600 dark:text-green-400" />
-                                                )
-                                            ) : null}
-
-                                            <span
-                                                className={
-                                                    proveedor.saldo_proveedor !== null && proveedor.saldo_proveedor !== undefined
-                                                        ? proveedor.saldo_proveedor < 0
-                                                            ? 'text-red-600 dark:text-red-400'
-                                                            : proveedor.saldo_proveedor === 0
-                                                              ? 'text-green-600 dark:text-green-400'
-                                                              : 'text-green-600 dark:text-green-400'
-                                                        : 'text-gray-400 italic'
-                                                }
-                                            >
-                                                {proveedor.saldo_proveedor !== null && proveedor.saldo_proveedor !== undefined
-                                                    ? proveedor.saldo_proveedor < 0
-                                                        ? `- ${formatearMoneda(Math.abs(proveedor.saldo_proveedor))}`
-                                                        : proveedor.saldo_proveedor === 0
-                                                          ? 'Sin saldo'
-                                                          : formatearMoneda(proveedor.saldo_proveedor)
-                                                    : 'Sin dato'}
-                                            </span>
-                                        </div>
-                                    </TableCell>
-
-                                    {/* Acciones */}
-                                    <TableCell className="text-right">
-                                        <div className="flex justify-end gap-2">
-                                            <Link href={route('proveedores.edit', { proveedor: proveedor.id })}>
-                                                <Button
-                                                    variant="outline"
-                                                    className="cursor-pointer hover:bg-blue-900 hover:text-white dark:hover:bg-blue-700"
-                                                >
-                                                    <Edit3 />
-                                                </Button>
-                                            </Link>
-                                            <AlertDialog>
-                                                <AlertDialogTrigger asChild>
-                                                    <Button
-                                                        variant="ghost"
-                                                        className="hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white"
+                                        {/* Correo */}
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <Mail size={14} className="shrink-0 text-gray-500" />
+                                                {proveedor.correo_proveedor ? (
+                                                    <a
+                                                        href={`mailto:${proveedor.correo_proveedor}`}
+                                                        className="max-w-[160px] truncate text-blue-600 hover:underline"
                                                     >
-                                                        <Trash2 />
+                                                        {proveedor.correo_proveedor}
+                                                    </a>
+                                                ) : (
+                                                    <span className="text-gray-400 italic">Sin correo</span>
+                                                )}
+                                            </div>
+                                        </TableCell>
+
+                                        {/* Localidad */}
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <MapPin size={14} className="shrink-0 text-gray-500" />
+                                                {proveedor.localidad_proveedor ? (
+                                                    <span className="truncate">{proveedor.localidad_proveedor}</span>
+                                                ) : (
+                                                    <span className="text-gray-400 italic">Sin ubicación</span>
+                                                )}
+                                            </div>
+                                        </TableCell>
+
+                                        {/* Saldo */}
+                                        <TableCell>
+                                            <div className={`flex items-center gap-1 font-medium`}>
+                                                {/* Icono según el saldo */}
+                                                {proveedor.saldo_proveedor !== null && proveedor.saldo_proveedor !== undefined ? (
+                                                    proveedor.saldo_proveedor < 0 ? (
+                                                        <ArrowDownCircle size={14} className="shrink-0 text-red-600 dark:text-red-400" />
+                                                    ) : proveedor.saldo_proveedor === 0 ? (
+                                                        <CheckCircle size={14} className="shrink-0 text-green-600 dark:text-green-400" />
+                                                    ) : (
+                                                        <AlertCircle size={14} className="shrink-0 text-green-600 dark:text-green-400" />
+                                                    )
+                                                ) : null}
+
+                                                <span
+                                                    className={
+                                                        proveedor.saldo_proveedor !== null && proveedor.saldo_proveedor !== undefined
+                                                            ? proveedor.saldo_proveedor < 0
+                                                                ? 'text-red-600 dark:text-red-400'
+                                                                : proveedor.saldo_proveedor === 0
+                                                                  ? 'text-green-600 dark:text-green-400'
+                                                                  : 'text-green-600 dark:text-green-400'
+                                                            : 'text-gray-400 italic'
+                                                    }
+                                                >
+                                                    {proveedor.saldo_proveedor !== null && proveedor.saldo_proveedor !== undefined
+                                                        ? proveedor.saldo_proveedor < 0
+                                                            ? `- ${formatearMoneda(Math.abs(proveedor.saldo_proveedor))}`
+                                                            : proveedor.saldo_proveedor === 0
+                                                              ? 'Sin saldo'
+                                                              : formatearMoneda(proveedor.saldo_proveedor)
+                                                        : 'Sin dato'}
+                                                </span>
+                                            </div>
+                                        </TableCell>
+
+                                        {/* Estado */}
+                                        <TableCell>
+                                            <Badge variant={estado.color as 'destructive' | 'default' | 'secondary'}>{estado.texto}</Badge>
+                                        </TableCell>
+
+                                        {/* Acciones */}
+                                        <TableCell className="text-right">
+                                            <div className="flex justify-end gap-2">
+                                                <Link href={route('proveedores.edit', { proveedor: proveedor.id })}>
+                                                    <Button
+                                                        variant="outline"
+                                                        className="cursor-pointer hover:bg-blue-900 hover:text-white dark:hover:bg-blue-700"
+                                                    >
+                                                        <Edit3 />
                                                     </Button>
-                                                </AlertDialogTrigger>
-                                                <AlertDialogContent>
-                                                    <AlertDialogHeader>
-                                                        <AlertDialogTitle className="text-center">Atención</AlertDialogTitle>
-                                                        <AlertDialogDescription>
-                                                            ¿Estás seguro de eliminar este proveedor? Esta acción es irreversible.
-                                                        </AlertDialogDescription>
-                                                    </AlertDialogHeader>
-                                                    <AlertDialogFooter>
-                                                        <AlertDialogAction
-                                                            onClick={() => deleteProveedor(proveedor.id)}
-                                                            className="bg-destructive cursor-pointer hover:bg-red-300"
+                                                </Link>
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button
+                                                            variant="ghost"
+                                                            className="hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white"
                                                         >
-                                                            Aceptar
-                                                        </AlertDialogAction>
-                                                        <AlertDialogCancel className="cursor-pointer text-white hover:bg-emerald-300 hover:text-emerald-950 dark:hover:bg-emerald-300 dark:hover:text-emerald-950">
-                                                            Cancelar
-                                                        </AlertDialogCancel>
-                                                    </AlertDialogFooter>
-                                                </AlertDialogContent>
-                                            </AlertDialog>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
+                                                            <Trash2 />
+                                                        </Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle className="text-center">Atención</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                ¿Estás seguro de eliminar este proveedor? Esta acción es irreversible.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogAction
+                                                                onClick={() => deleteProveedor(proveedor.id)}
+                                                                className="bg-destructive cursor-pointer hover:bg-red-300"
+                                                            >
+                                                                Aceptar
+                                                            </AlertDialogAction>
+                                                            <AlertDialogCancel className="cursor-pointer text-white hover:bg-emerald-300 hover:text-emerald-950 dark:hover:bg-emerald-300 dark:hover:text-emerald-950">
+                                                                Cancelar
+                                                            </AlertDialogCancel>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
                         </TableBody>
                     </Table>
                 </div>

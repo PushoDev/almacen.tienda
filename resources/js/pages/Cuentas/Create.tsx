@@ -30,7 +30,7 @@ export default function CreateCuentasPage() {
     // Manejo del formulario con useForm
     const { data, setData, post, reset, errors, processing } = useForm({
         nombre_cuenta: '',
-        saldo_cuenta: 123.4567, // Valor por defecto
+        saldo_cuenta: 0.0, // Valor por defecto
         deuda: 0, // Valor por defecto
         tipo_cuenta: 'permanentes', // Valor por defecto
         tipo_moneda: 'USD', // Valor por defecto
