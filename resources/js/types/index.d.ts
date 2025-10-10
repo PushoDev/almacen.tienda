@@ -70,8 +70,14 @@ export interface AlmacenProps {
     provincia_almacen?: string | null;
     ciudad_almacen?: string | null;
     notas_almacen?: string | null;
+    // Nuevos campos del responsable
+    nombre_responsable?: string | null;
+    apellido_responsable?: string | null;
+    carnet_responsable?: string | null;
+    telefono_responsable?: string | null;
     created_at: string;
     updated_at: string;
+    productos_count?: number; // Para el withCount
 }
 
 // Interface para Proveedores

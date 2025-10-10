@@ -44,23 +44,33 @@ class AlmacenController extends Controller
         // Validamos los datos del formulario
         $request->validate([
             'nombre_almacen' => ['required', 'string', 'max:255'],
-            'tipo_almacen' => ['required', 'in:almacen,punto_venta,transportacion'], // Validación para tipo_almacen
+            'tipo_almacen' => ['required', 'in:almacen,punto_venta,transportacion'],
             'telefono_almacen' => ['required', 'string', 'unique:almacens,telefono_almacen'],
             'correo_almacen' => ['nullable', 'email'],
             'provincia_almacen' => ['nullable', 'string'],
             'ciudad_almacen' => ['nullable', 'string'],
             'notas_almacen' => ['nullable', 'string'],
+            // Nuevos campos del responsable
+            'nombre_responsable' => ['nullable', 'string', 'max:255'],
+            'apellido_responsable' => ['nullable', 'string', 'max:255'],
+            'carnet_responsable' => ['nullable', 'string', 'max:50'],
+            'telefono_responsable' => ['nullable', 'string', 'max:20'],
         ]);
 
         // Nuevo almacén en la base de datos
         Almacen::create([
             'nombre_almacen' => $request->nombre_almacen,
-            'tipo_almacen' => $request->tipo_almacen, // Guardar el nuevo campo
+            'tipo_almacen' => $request->tipo_almacen,
             'telefono_almacen' => $request->telefono_almacen,
             'correo_almacen' => $request->correo_almacen,
             'provincia_almacen' => $request->provincia_almacen,
             'ciudad_almacen' => $request->ciudad_almacen,
             'notas_almacen' => $request->notas_almacen,
+            // Nuevos campos del responsable
+            'nombre_responsable' => $request->nombre_responsable,
+            'apellido_responsable' => $request->apellido_responsable,
+            'carnet_responsable' => $request->carnet_responsable,
+            'telefono_responsable' => $request->telefono_responsable,
         ]);
 
         // Redirigimos al usuario a la lista de almacenes
@@ -111,7 +121,7 @@ class AlmacenController extends Controller
                 'max:255',
                 'unique:almacens,nombre_almacen,' . $almacen->id
             ],
-            'tipo_almacen' => ['required', 'in:almacen,punto_venta,transportacion'], // Validación para tipo_almacen
+            'tipo_almacen' => ['required', 'in:almacen,punto_venta,transportacion'],
             'telefono_almacen' => [
                 'required',
                 'string',
@@ -121,17 +131,27 @@ class AlmacenController extends Controller
             'provincia_almacen' => ['nullable', 'string'],
             'ciudad_almacen' => ['nullable', 'string'],
             'notas_almacen' => ['nullable', 'string'],
+            // Nuevos campos del responsable
+            'nombre_responsable' => ['nullable', 'string', 'max:255'],
+            'apellido_responsable' => ['nullable', 'string', 'max:255'],
+            'carnet_responsable' => ['nullable', 'string', 'max:50'],
+            'telefono_responsable' => ['nullable', 'string', 'max:20'],
         ]);
 
         // Actualizar el almacén en la base de datos
         $almacen->update([
             'nombre_almacen' => $request->nombre_almacen,
-            'tipo_almacen' => $request->tipo_almacen, // Actualizar el nuevo campo
+            'tipo_almacen' => $request->tipo_almacen,
             'telefono_almacen' => $request->telefono_almacen,
             'correo_almacen' => $request->correo_almacen,
             'provincia_almacen' => $request->provincia_almacen,
             'ciudad_almacen' => $request->ciudad_almacen,
             'notas_almacen' => $request->notas_almacen,
+            // Nuevos campos del responsable
+            'nombre_responsable' => $request->nombre_responsable,
+            'apellido_responsable' => $request->apellido_responsable,
+            'carnet_responsable' => $request->carnet_responsable,
+            'telefono_responsable' => $request->telefono_responsable,
         ]);
 
         // Redirigimos al usuario a la lista de almacenes

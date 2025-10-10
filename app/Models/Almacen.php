@@ -20,7 +20,11 @@ class Almacen extends Model
         'correo_almacen',
         'provincia_almacen',
         'ciudad_almacen',
-        'notas_almacen'
+        'notas_almacen',
+        'nombre_responsable',
+        'apellido_responsable',
+        'carnet_responsable',
+        'telefono_responsable'
     ];
 
     /**
