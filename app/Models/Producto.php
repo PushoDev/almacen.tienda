@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Milon\Barcode\Facades\DNS1DFacade as DNS1D;
+use Illuminate\Support\Facades\Storage;
 
 class Producto extends Model
 {
@@ -15,7 +17,10 @@ class Producto extends Model
     protected $fillable = [
         'nombre_producto',
         'marca_producto',
+        'modelo_producto',
+        'capacidad_producto',
         'codigo_producto',
+        'barcode_image',
         'categoria_id',
         'precio_compra_producto',
         'imagen_producto',
@@ -25,7 +30,102 @@ class Producto extends Model
         'precio_compra_producto' => 'decimal:2',
     ];
 
-    protected $appends = ['imagen_url', 'cantidad_total', 'stock_bajo'];
+    protected $appends = ['imagen_url', 'cantidad_total', 'stock_bajo', 'barcode_image_url'];
+
+    /**
+     * Boot method para generar automáticamente el código de barras y su imagen
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($producto) {
+            if (empty($producto->codigo_producto)) {
+                $codigo = self::generarCodigoBarras($producto);
+                $producto->codigo_producto = $codigo;
+                // Generar la imagen del código de barras
+                $producto->barcode_image = self::generarImagenBarcode($codigo);
+            }
+        });
+
+        static::updating(function ($producto) {
+            // Si el código cambia, regenerar la imagen también
+            if ($producto->isDirty('codigo_producto')) {
+                $producto->barcode_image = self::generarImagenBarcode($producto->codigo_producto);
+            }
+        });
+    }
+
+    /**
+     * Genera el código de barras automáticamente (texto)
+     */
+    public static function generarCodigoBarras($producto)
+    {
+        // Obtener las primeras 3 letras de cada campo (solo letras)
+        $nombre = substr(strtoupper(preg_replace('/[^a-zA-Z]/', '', $producto->nombre_producto)), 0, 3);
+        $marca = substr(strtoupper(preg_replace('/[^a-zA-Z]/', '', $producto->marca_producto ?? '')), 0, 3);
+        $modelo = substr(strtoupper(preg_replace('/[^a-zA-Z]/', '', $producto->modelo_producto ?? '')), 0, 3);
+
+        // Limpiar capacidad (solo números)
+        $capacidad = preg_replace('/[^0-9]/', '', $producto->capacidad_producto ?? '');
+
+        // Rellenar con 'X' si algún campo está vacío
+        $nombre = str_pad($nombre, 3, 'X');
+        $marca = str_pad($marca, 3, 'X');
+        $modelo = str_pad($modelo, 3, 'X');
+
+        // Parte fija del código
+        $parteFija = $nombre . $marca . $modelo . $capacidad;
+
+        // Calcular cuántos dígitos aleatorios necesitamos
+        $longitudFija = strlen($parteFija);
+        $digitosAleatoriosNecesarios = 14 - $longitudFija;
+
+        // Generar números aleatorios si se necesitan
+        $numerosAleatorios = '';
+        if ($digitosAleatoriosNecesarios > 0) {
+            $min = pow(10, $digitosAleatoriosNecesarios - 1);
+            $max = pow(10, $digitosAleatoriosNecesarios) - 1;
+            $numerosAleatorios = rand($min, $max);
+        }
+
+        $codigo = $parteFija . $numerosAleatorios;
+
+        // Asegurar que tenga exactamente 14 caracteres
+        return substr($codigo, 0, 14);
+    }
+
+    /**
+     * Genera la imagen del código de barras y devuelve la ruta
+     */
+    public static function generarImagenBarcode($codigo)
+    {
+        // Asegurarse de que el directorio exista
+        $directory = 'barcodes';
+        if (!Storage::disk('public')->exists($directory)) {
+            Storage::disk('public')->makeDirectory($directory);
+        }
+
+        // Generar el código de barras en formato PNG
+        // CODE128 es compatible con la mayoría de lectores
+        $barcodePNG = DNS1D::getBarcodePNG($codigo, 'C128', 2, 60, [0, 0, 0], true);
+
+        // Decodificar la cadena base64 y guardar el archivo
+        $imageData = base64_decode($barcodePNG);
+        $fileName = $directory . '/' . $codigo . '.png';
+
+        Storage::disk('public')->put($fileName, $imageData);
+
+        return $fileName;
+    }
+
+    /**
+     * Accesor para la URL de la imagen del código de barras
+     */
+    public function getBarcodeImageUrlAttribute()
+    {
+        return $this->barcode_image ? asset('storage/' . $this->barcode_image) : null;
+    }
 
     // 🔹 Relación con categoría
     public function categoria()
@@ -68,5 +168,24 @@ class Producto extends Model
         return $this->imagen_producto
             ? asset('storage/' . $this->imagen_producto)
             : asset('storage/productos/producto-default.png');
+    }
+
+    /**
+     * Scope para buscar por código de barras
+     */
+    public function scopePorCodigo($query, $codigo)
+    {
+        return $query->where('codigo_producto', $codigo);
+    }
+
+    /**
+     * Scope para buscar productos por partes del nombre, marca o modelo
+     */
+    public function scopeBuscar($query, $termino)
+    {
+        return $query->where('nombre_producto', 'LIKE', "%{$termino}%")
+            ->orWhere('marca_producto', 'LIKE', "%{$termino}%")
+            ->orWhere('modelo_producto', 'LIKE', "%{$termino}%")
+            ->orWhere('codigo_producto', 'LIKE', "%{$termino}%");
     }
 }

@@ -15,7 +15,13 @@ return new class extends Migration
             $table->id();
             $table->string('nombre_producto');
             $table->string('marca_producto')->nullable();
-            $table->string('codigo_producto')->nullable()->unique(); // código de barras opcional
+            // NUEVAS COLUMNAS
+            $table->string('modelo_producto')->nullable();
+            $table->string('capacidad_producto')->nullable();
+            // FIN NUEVAS COLUMNAS
+            $table->string('codigo_producto')->nullable()->unique();
+            // Imagen codigo de barras
+            $table->string('barcode_image')->nullable();
             $table->unsignedBigInteger('categoria_id');
             $table->foreign('categoria_id')
                 ->references('id')->on('categorias')
