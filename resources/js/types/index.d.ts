@@ -88,6 +88,7 @@ export interface ProveedorProps {
     correo_proveedor?: string | null;
     localidad_proveedor: string;
     notas_proveedor?: string | null;
+    saldo_proveedor: number; // Nuevo campo
     created_at: string;
     updated_at: string;
 }

@@ -33,6 +33,7 @@ export default function CreateProveedoresPage() {
         correo_proveedor: '',
         localidad_proveedor: '',
         notas_proveedor: '',
+        saldo_proveedor: 0, // Nuevo campo
     });
 
     // Función para enviar el formulario
@@ -56,10 +57,7 @@ export default function CreateProveedoresPage() {
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     {/* Contenido principal */}
-                    <HeadingSmall
-                        title="Opciones Generales del Sistema"
-                        description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento"
-                    />
+                    <HeadingSmall title="Crear Nuevo Proveedor" description="Complete la información del proveedor incluyendo el saldo inicial" />
                     {/* Ícono semitransparente */}
                     <ListCheck
                         size={70}
@@ -87,6 +85,7 @@ export default function CreateProveedoresPage() {
                                         onChange={(e) => setData('nombre_proveedor', e.target.value.toUpperCase())}
                                         autoComplete="nombre_proveedor"
                                         placeholder="Nombre del Proveedor"
+                                        required
                                     />
                                     <InputError className="mt-2" message={errors.nombre_proveedor} />
                                 </div>
@@ -103,6 +102,7 @@ export default function CreateProveedoresPage() {
                                         onChange={(e) => setData('telefono_proveedor', e.target.value)}
                                         autoComplete="telefono_proveedor"
                                         placeholder="Teléfono del Proveedor"
+                                        required
                                     />
                                     <InputError className="mt-2" message={errors.telefono_proveedor} />
                                 </div>
@@ -139,8 +139,47 @@ export default function CreateProveedoresPage() {
                                         onChange={(e) => setData('localidad_proveedor', e.target.value.toUpperCase())}
                                         autoComplete="localidad_proveedor"
                                         placeholder="Localidad"
+                                        required
                                     />
                                     <InputError className="mt-2" message={errors.localidad_proveedor} />
+                                </div>
+
+                                {/* Campo Saldo Inicial */}
+                                <div>
+                                    <Label htmlFor="saldo_proveedor" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        Saldo Inicial:
+                                    </Label>
+                                    <Input
+                                        id="saldo_proveedor"
+                                        type="number"
+                                        step="0.01"
+                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                        value={data.saldo_proveedor}
+                                        onChange={(e) => setData('saldo_proveedor', parseFloat(e.target.value) || 0)}
+                                        autoComplete="saldo_proveedor"
+                                        placeholder="0.00"
+                                    />
+                                    <div className="mt-1 text-xs text-gray-500">
+                                        <span
+                                            className={
+                                                data.saldo_proveedor < 0
+                                                    ? 'text-red-600'
+                                                    : data.saldo_proveedor > 0
+                                                      ? 'text-green-600'
+                                                      : 'text-gray-500'
+                                            }
+                                        >
+                                            {data.saldo_proveedor < 0 ? 'Deuda' : data.saldo_proveedor > 0 ? 'Fondo' : 'Saldo balanceado'}
+                                        </span>
+                                        {data.saldo_proveedor !== 0 && (
+                                            <span className="ml-2">
+                                                {data.saldo_proveedor < 0
+                                                    ? `(El proveedor nos debe ${Math.abs(data.saldo_proveedor).toFixed(2)})`
+                                                    : `(Nosotros le debemos ${data.saldo_proveedor.toFixed(2)})`}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <InputError className="mt-2" message={errors.saldo_proveedor} />
                                 </div>
 
                                 {/* Campo Notas Adicionales */}
@@ -155,9 +194,28 @@ export default function CreateProveedoresPage() {
                                         onChange={(e) => setData('notas_proveedor', e.target.value.toUpperCase())}
                                         autoComplete="notas_proveedor"
                                         placeholder="Notas adicionales sobre el proveedor"
+                                        rows={3}
                                     />
                                     <InputError className="mt-2" message={errors.notas_proveedor} />
                                 </div>
+                            </div>
+                        </div>
+
+                        {/* Información del saldo */}
+                        <div className="rounded-md bg-blue-50 p-4 dark:bg-blue-900/20">
+                            <div className="text-sm text-blue-700 dark:text-blue-300">
+                                <strong>Nota sobre el saldo:</strong>
+                                <ul className="mt-1 list-disc space-y-1 pl-5">
+                                    <li>
+                                        <span className="text-red-600">Saldo negativo</span>: El proveedor nos debe dinero (deuda)
+                                    </li>
+                                    <li>
+                                        <span className="text-green-600">Saldo positivo</span>: Nosotros le debemos al proveedor (fondo)
+                                    </li>
+                                    <li>
+                                        <span className="text-gray-600">Saldo cero</span>: Sin deudas ni fondos
+                                    </li>
+                                </ul>
                             </div>
                         </div>
 
@@ -168,7 +226,7 @@ export default function CreateProveedoresPage() {
                                 disabled={processing}
                                 className="w-full rounded-md bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-700 md:w-auto"
                             >
-                                Crear Proveedor
+                                {processing ? 'Creando...' : 'Crear Proveedor'}
                             </Button>
                         </div>
                     </form>

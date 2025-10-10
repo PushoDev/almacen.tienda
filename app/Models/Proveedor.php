@@ -17,11 +17,32 @@ class Proveedor extends Model
         'correo_proveedor',
         'localidad_proveedor',
         'notas_proveedor',
+        'saldo_proveedor',
     ];
 
     protected $casts = [
-        // No hay campos booleanos ni tipos específicos a castear en este caso.
+        'saldo_proveedor' => 'decimal:2',
     ];
+
+    // Validación similar a la de Cliente para el saldo
+    public function setSaldoProveedorAttribute($value)
+    {
+        if (!is_null($value) && (!is_numeric($value) || $value < -9999999 || $value > 9999999)) {
+            throw new \InvalidArgumentException('El valor del saldo debe estar entre -9999999 y 9999999');
+        }
+        $this->attributes['saldo_proveedor'] = $value;
+    }
+
+    // En el modelo Proveedor, actualiza los scopes:
+    public function scopeConSaldoPositivo($query)
+    {
+        return $query->where('saldo_proveedor', '>', 0);
+    }
+
+    public function scopeConSaldoNegativo($query)
+    {
+        return $query->where('saldo_proveedor', '<', 0);
+    }
 
     // Relación: Un proveedor puede tener muchas compras
     public function compras()

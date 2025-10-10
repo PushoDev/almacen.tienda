@@ -40,6 +40,7 @@ class ProveedorController extends Controller
             'correo_proveedor' => ['nullable', 'email', 'unique:proveedors,correo_proveedor'],
             'localidad_proveedor' => ['required', 'string'],
             'notas_proveedor' => ['nullable', 'string'],
+            'saldo_proveedor' => ['nullable', 'numeric', 'min:-9999999', 'max:9999999'],
         ]);
 
         // Nuevo proveedor en la base de datos
@@ -49,6 +50,7 @@ class ProveedorController extends Controller
             'correo_proveedor' => $request->correo_proveedor,
             'localidad_proveedor' => $request->localidad_proveedor,
             'notas_proveedor' => $request->notas_proveedor,
+            'saldo_proveedor' => $request->saldo_proveedor ?? 0,
         ]);
 
         // Redirigimos al usuario a la lista de proveedores
@@ -100,6 +102,7 @@ class ProveedorController extends Controller
             ],
             'localidad_proveedor' => ['required', 'string'],
             'notas_proveedor' => ['nullable', 'string'],
+            'saldo_proveedor' => ['nullable', 'numeric', 'min:-9999999', 'max:9999999'],
         ]);
 
         // Actualizar el proveedor en la base de datos
@@ -109,6 +112,7 @@ class ProveedorController extends Controller
             'correo_proveedor' => $request->correo_proveedor,
             'localidad_proveedor' => $request->localidad_proveedor,
             'notas_proveedor' => $request->notas_proveedor,
+            'saldo_proveedor' => $request->saldo_proveedor,
         ]);
 
         // Redirigimos al usuario a la lista de proveedores
@@ -122,5 +126,60 @@ class ProveedorController extends Controller
     {
         $proveedor->delete();
         return redirect()->route('proveedores.index')->with('success', 'Proveedor eliminado exitosamente.');
+    }
+
+    /**
+     * Actualizar el saldo del proveedor
+     */
+    public function actualizarSaldo(Request $request, Proveedor $proveedor)
+    {
+        $request->validate([
+            'monto' => ['required', 'numeric', 'min:-9999999', 'max:9999999'],
+            'concepto' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $montoAnterior = $proveedor->saldo_proveedor;
+        $proveedor->actualizarSaldo($request->monto);
+
+        return redirect()->back()->with('success', [
+            'message' => 'Saldo actualizado exitosamente.',
+            'monto_anterior' => $montoAnterior,
+            'monto_nuevo' => $proveedor->saldo_proveedor,
+            'diferencia' => $request->monto
+        ]);
+    }
+
+    /**
+     * Mostrar proveedores con deuda (saldo negativo) - dinero perdido
+     */
+    public function conDeuda()
+    {
+        return Inertia::render('Proveedores/ConDeuda', [
+            'proveedores' => Proveedor::conSaldoNegativo()->get(),
+        ]);
+    }
+
+    /**
+     * Mostrar proveedores con fondo (saldo positivo)
+     */
+    public function conFondo()
+    {
+        return Inertia::render('Proveedores/ConFondo', [
+            'proveedores' => Proveedor::conSaldoPositivo()->get(),
+        ]);
+    }
+
+    /**
+     * Resetear saldo a cero
+     */
+    public function resetearSaldo(Proveedor $proveedor)
+    {
+        $saldoAnterior = $proveedor->saldo_proveedor;
+        $proveedor->update(['saldo_proveedor' => 0]);
+
+        return redirect()->back()->with('success', [
+            'message' => 'Saldo reseteado a cero exitosamente.',
+            'saldo_anterior' => $saldoAnterior
+        ]);
     }
 }

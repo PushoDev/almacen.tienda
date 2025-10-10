@@ -16,6 +16,7 @@ return new class extends Migration
             // Detalles de los Proveedores
             $table->string('nombre_proveedor');
             $table->string('telefono_proveedor')->unique()->nullable();
+            $table->decimal('saldo_proveedor', 15, 8)->default(0)->nullable();
             $table->string('correo_proveedor')->nullable()->unique();
             $table->string('localidad_proveedor')->nullable();
             $table->text('notas_proveedor')->nullable();

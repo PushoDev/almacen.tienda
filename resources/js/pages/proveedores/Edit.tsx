@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
 import { ProveedorProps, type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
-import { ListCheck } from 'lucide-react';
+import { Eye, EyeOff, ListCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -35,6 +35,17 @@ export default function EditarProveedoresPage({ proveedor }: { proveedor: Provee
         notas_proveedor: proveedor.notas_proveedor || '',
     });
 
+    // Función para formatear el saldo
+    const formatearMoneda = (valor: number | null) => {
+        if (valor === null || valor === undefined) return '$0.00';
+        return new Intl.NumberFormat('es-ES', {
+            style: 'currency',
+            currency: 'USD',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 8,
+        }).format(valor);
+    };
+
     // Función para enviar el formulario
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -56,8 +67,8 @@ export default function EditarProveedoresPage({ proveedor }: { proveedor: Provee
                 <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     {/* Contenido principal */}
                     <HeadingSmall
-                        title="Opciones Generales del Sistema"
-                        description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento"
+                        title="Editar Información del Proveedor"
+                        description="Actualice la información del proveedor. El saldo no se puede modificar desde esta vista"
                     />
                     {/* Ícono semitransparente */}
                     <ListCheck
@@ -83,9 +94,10 @@ export default function EditarProveedoresPage({ proveedor }: { proveedor: Provee
                                         id="nombre_proveedor"
                                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                         value={data.nombre_proveedor}
-                                        onChange={(e) => setData('nombre_proveedor', e.target.value)}
+                                        onChange={(e) => setData('nombre_proveedor', e.target.value.toUpperCase())}
                                         autoComplete="nombre_proveedor"
                                         placeholder="Nombre del Proveedor"
+                                        required
                                     />
                                     <InputError className="mt-2" message={errors.nombre_proveedor} />
                                 </div>
@@ -102,6 +114,7 @@ export default function EditarProveedoresPage({ proveedor }: { proveedor: Provee
                                         onChange={(e) => setData('telefono_proveedor', e.target.value)}
                                         autoComplete="telefono_proveedor"
                                         placeholder="Teléfono del Proveedor"
+                                        required
                                     />
                                     <InputError className="mt-2" message={errors.telefono_proveedor} />
                                 </div>
@@ -135,11 +148,54 @@ export default function EditarProveedoresPage({ proveedor }: { proveedor: Provee
                                         id="localidad_proveedor"
                                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                         value={data.localidad_proveedor}
-                                        onChange={(e) => setData('localidad_proveedor', e.target.value)}
+                                        onChange={(e) => setData('localidad_proveedor', e.target.value.toUpperCase())}
                                         autoComplete="localidad_proveedor"
                                         placeholder="Localidad"
+                                        required
                                     />
                                     <InputError className="mt-2" message={errors.localidad_proveedor} />
+                                </div>
+
+                                {/* Campo Saldo Actual (Solo lectura) */}
+                                <div>
+                                    <Label htmlFor="saldo_proveedor" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        Saldo Actual:
+                                    </Label>
+                                    <div className="mt-1 flex items-center">
+                                        <Input
+                                            id="saldo_proveedor"
+                                            type="text"
+                                            className="block w-full rounded-md border-gray-300 bg-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-800"
+                                            value={formatearMoneda(proveedor.saldo_proveedor)}
+                                            readOnly
+                                            disabled
+                                        />
+                                        <EyeOff className="ml-2 h-5 w-5 text-gray-400" />
+                                    </div>
+                                    <div className="mt-2 text-sm">
+                                        <span
+                                            className={
+                                                proveedor.saldo_proveedor < 0
+                                                    ? 'font-semibold text-red-600'
+                                                    : proveedor.saldo_proveedor > 0
+                                                      ? 'font-semibold text-green-600'
+                                                      : 'text-gray-600'
+                                            }
+                                        >
+                                            {proveedor.saldo_proveedor < 0
+                                                ? '🔄 Deuda Activa'
+                                                : proveedor.saldo_proveedor > 0
+                                                  ? '💰 Fondo Disponible'
+                                                  : '⚖️ Saldo Balanceado'}
+                                        </span>
+                                        {proveedor.saldo_proveedor !== 0 && (
+                                            <p className="mt-1 text-xs text-gray-500">
+                                                {proveedor.saldo_proveedor < 0
+                                                    ? `El proveedor nos debe ${formatearMoneda(Math.abs(proveedor.saldo_proveedor))}`
+                                                    : `Nosotros le debemos ${formatearMoneda(proveedor.saldo_proveedor)} al proveedor`}
+                                            </p>
+                                        )}
+                                    </div>
                                 </div>
 
                                 {/* Campo Notas Adicionales */}
@@ -151,21 +207,43 @@ export default function EditarProveedoresPage({ proveedor }: { proveedor: Provee
                                         id="notas_proveedor"
                                         className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                         value={data.notas_proveedor}
-                                        onChange={(e) => setData('notas_proveedor', e.target.value)}
+                                        onChange={(e) => setData('notas_proveedor', e.target.value.toUpperCase())}
                                         autoComplete="notas_proveedor"
                                         placeholder="Notas adicionales sobre el proveedor"
+                                        rows={3}
                                     />
                                     <InputError className="mt-2" message={errors.notas_proveedor} />
                                 </div>
                             </div>
                         </div>
 
+                        {/* Información sobre el saldo */}
+                        <div className="rounded-md bg-amber-50 p-4 dark:bg-amber-900/20">
+                            <div className="text-sm text-amber-700 dark:text-amber-300">
+                                <div className="flex items-center gap-2">
+                                    <Eye className="h-4 w-4" />
+                                    <strong>El saldo no se puede modificar desde esta vista</strong>
+                                </div>
+                                <p className="mt-1">
+                                    Para actualizar el saldo, utilice las funciones específicas del sistema desde la lista de proveedores.
+                                </p>
+                            </div>
+                        </div>
+
                         {/* Botón Actualizar */}
-                        <div className="flex justify-end">
+                        <div className="flex justify-end gap-4">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => window.history.back()}
+                                className="rounded-md px-4 py-2 font-semibold"
+                            >
+                                Cancelar
+                            </Button>
                             <Button
                                 type="submit"
                                 disabled={processing}
-                                className="w-full rounded-md bg-indigo-600 px-4 py-2 font-semibold text-white transition duration-300 ease-in-out hover:bg-indigo-700 md:w-auto"
+                                className="rounded-md bg-indigo-600 px-4 py-2 font-semibold text-white transition duration-300 ease-in-out hover:bg-indigo-700"
                             >
                                 {processing ? 'Actualizando...' : 'Actualizar Proveedor'}
                             </Button>
