@@ -15,8 +15,8 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
-import { ProductoProps, type BreadcrumbItem } from '@/types';
-import { Head, Link, router, useForm } from '@inertiajs/react';
+import { ProductosFilters, ProductosPaginados, ProductosSort, type BreadcrumbItem } from '@/types';
+import { Head, Link, router } from '@inertiajs/react';
 import {
     AlertTriangle,
     BarChart3,
@@ -32,11 +32,13 @@ import {
     Package,
     Package2,
     QrCode,
+    RefreshCw,
+    Search,
     Trash2,
     Upload,
     Wallet,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -172,60 +174,35 @@ function ImportModal({ isOpen, onClose, onImport, almacenes }: ImportModalProps)
     );
 }
 
+interface ProductosPageProps {
+    productos: ProductosPaginados;
+    almacenes?: { id: number; nombre_almacen: string }[];
+    categorias?: { id: number; nombre_categoria: string }[];
+    filters?: ProductosFilters;
+    sort?: ProductosSort;
+}
+
 export default function ProductosPage({
     productos,
     almacenes = [],
-}: {
-    productos: ProductoProps[];
-    almacenes?: { id: number; nombre_almacen: string }[];
-}) {
-    console.log('Productos recibidos:', productos);
-
+    categorias = [],
+    filters = {},
+    sort = { field: 'nombre_producto', direction: 'asc' },
+}: ProductosPageProps) {
     // Estados para gestión de stock
-    const [umbralStockBajo, setUmbralStockBajo] = useState(5);
-    const [soloStockBajo, setSoloStockBajo] = useState(false);
-    const [filtroTipo, setFiltroTipo] = useState<string>('');
-    const [busqueda, setBusqueda] = useState<string>('');
+    const [searchTerm, setSearchTerm] = useState(filters.search || '');
+    const [selectedCategoria, setSelectedCategoria] = useState(filters.categoria_id || '');
+    const [soloStockBajo, setSoloStockBajo] = useState(filters.stock_bajo || false);
 
     // Estados para importación/exportación
     const [almacenExportId, setAlmacenExportId] = useState<number>(1);
     const [showImportModal, setShowImportModal] = useState(false);
-    const { data, setData, post, processing } = useForm({
-        file: null as File | null,
-        almacen_id: 1,
-    });
-
-    // Paginación
-    const [paginaActual, setPaginaActual] = useState(1);
-    const elementosPorPagina = 25;
-
-    // Categorías únicas
-    const categoriasUnicas = [...new Set(productos.map((producto) => producto.categoria))];
 
     // Calcular estadísticas
-    const productosConStockBajo = productos.filter((p) => p.cantidad_total <= umbralStockBajo);
-    const valorTotalInventario = productos.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0);
+    const productosData = productos.data || [];
+    const productosConStockBajo = productosData.filter((p) => p.stock_bajo);
+    const valorTotalInventario = productosData.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0);
     const valorStockBajo = productosConStockBajo.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0);
-
-    // Filtrar productos
-    const productosFiltrados = productos.filter((producto) => {
-        const matchesCategoria = !filtroTipo || producto.categoria === filtroTipo;
-        const matchesBusqueda = producto.nombre_producto.toLowerCase().includes(busqueda.toLowerCase());
-        const matchesStockFilter = !soloStockBajo || producto.cantidad_total <= umbralStockBajo;
-
-        return matchesCategoria && matchesBusqueda && matchesStockFilter;
-    });
-
-    // Paginación
-    const indiceUltimoElemento = paginaActual * elementosPorPagina;
-    const indicePrimerElemento = indiceUltimoElemento - elementosPorPagina;
-    const productosAmostrar = productosFiltrados.slice(indicePrimerElemento, indiceUltimoElemento);
-    const totalPaginas = Math.ceil(productosFiltrados.length / elementosPorPagina);
-
-    // Resetear paginación cuando cambian los filtros
-    useEffect(() => {
-        setPaginaActual(1);
-    }, [filtroTipo, busqueda, soloStockBajo, umbralStockBajo]);
 
     // Eliminar Producto
     const deleteProducto = (id: number) => {
@@ -239,19 +216,40 @@ export default function ProductosPage({
         });
     };
 
+    // Regenerar código de barras
+    const regenerarBarcode = async (id: number) => {
+        try {
+            const response = await fetch(route('productos.regenerar-barcode', { producto: id }), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                },
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                toast.success('Código de barras regenerado correctamente');
+                // Recargar la página para ver los cambios
+                router.reload();
+            } else {
+                toast.error(result.message || 'Error al regenerar el código de barras');
+            }
+        } catch {
+            toast.error('Error al regenerar el código de barras');
+        }
+    };
+
     // Exportar a Excel
     const handleExport = () => {
-        // Crear URL con parámetros
         const url = route('productos.export', { almacen_id: almacenExportId });
-
-        // Crear un enlace temporal y hacer clic
         const link = document.createElement('a');
         link.href = url;
         link.download = `productos-almacen-${almacenExportId}-${new Date().toISOString().split('T')[0]}.xlsx`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-
         toast.success('Exportación iniciada');
     };
 
@@ -268,7 +266,8 @@ export default function ProductosPage({
                 setShowImportModal(false);
             },
             onError: (errors) => {
-                toast.error('Error al importar: ' + (errors.file || errors.almacen_id || 'Error desconocido'));
+                const errorMessage = errors.file || errors.almacen_id || 'Error desconocido';
+                toast.error('Error al importar: ' + errorMessage);
             },
         });
     };
@@ -276,9 +275,55 @@ export default function ProductosPage({
     // Descargar plantilla
     const downloadTemplate = () => {
         toast.info('Función de plantilla en desarrollo');
-        // Implementar cuando tengas la ruta para descargar plantilla
-        // router.get(route('productos.template'));
     };
+
+    // Aplicar filtros
+    const aplicarFiltros = useCallback(() => {
+        const params: ProductosFilters & { sort_field?: string; sort_direction?: string } = {};
+        if (searchTerm) params.search = searchTerm;
+        if (selectedCategoria) params.categoria_id = selectedCategoria;
+        if (soloStockBajo) params.stock_bajo = true;
+        if (sort.field) params.sort_field = sort.field;
+        if (sort.direction) params.sort_direction = sort.direction;
+
+        router.get(route('productos.index'), params, {
+            preserveState: true,
+            replace: true,
+        });
+    }, [searchTerm, selectedCategoria, soloStockBajo, sort.field, sort.direction]);
+
+    // Cambiar ordenamiento
+    const handleSort = (field: string) => {
+        const direction = sort.field === field && sort.direction === 'asc' ? 'desc' : 'asc';
+        router.get(
+            route('productos.index'),
+            {
+                ...filters,
+                sort_field: field,
+                sort_direction: direction,
+            },
+            {
+                preserveState: true,
+                replace: true,
+            },
+        );
+    };
+
+    // Navegación de páginas
+    const navigateToPage = (url: string | null) => {
+        if (url) {
+            router.get(url, {}, { preserveState: true });
+        }
+    };
+
+    // Efecto para aplicar filtros con debounce
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            aplicarFiltros();
+        }, 500);
+
+        return () => clearTimeout(timeoutId);
+    }, [aplicarFiltros]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -286,10 +331,7 @@ export default function ProductosPage({
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
-                    <HeadingSmall
-                        title="Opciones Generales del Sistema"
-                        description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento. Listado de los Productos"
-                    />
+                    <HeadingSmall title="Gestión de Productos" description="Administra y controla el inventario de productos del sistema" />
                     <Package2
                         size={70}
                         color="#d6d3d1"
@@ -304,7 +346,7 @@ export default function ProductosPage({
                     <div className="flex items-center justify-between rounded-lg bg-blue-100 p-4 dark:bg-blue-900">
                         <div>
                             <h3 className="font-semibold">Total Productos</h3>
-                            <p className="text-2xl">{productos.length}</p>
+                            <p className="text-2xl">{productos.total}</p>
                         </div>
                         <BarChart3 className="text-blue-500" size={32} />
                     </div>
@@ -337,22 +379,6 @@ export default function ProductosPage({
                 {/* Controles de Filtro */}
                 <div className="flex flex-wrap items-center justify-between gap-4">
                     <div className="flex items-center gap-2">
-                        <span>Umbral stock bajo:</span>
-                        <select value={umbralStockBajo} onChange={(e) => setUmbralStockBajo(Number(e.target.value))} className="rounded border p-1">
-                            <option value={3} className="bg-background">
-                                3 unidades
-                            </option>
-                            <option value={5} className="bg-background">
-                                5 unidades
-                            </option>
-                            <option value={10} className="bg-background">
-                                10 unidades
-                            </option>
-                            <option value={15} className="bg-background">
-                                15 unidades
-                            </option>
-                        </select>
-
                         <Button
                             variant={soloStockBajo ? 'default' : 'outline'}
                             onClick={() => setSoloStockBajo(!soloStockBajo)}
@@ -363,29 +389,31 @@ export default function ProductosPage({
                         </Button>
                     </div>
 
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                         {/* Buscador */}
-                        <input
-                            type="text"
-                            placeholder="Buscar productos..."
-                            value={busqueda}
-                            onChange={(e) => setBusqueda(e.target.value)}
-                            className="focus:ring-sidebar-accent border-primary rounded-md border px-3 py-1 focus:ring-2 focus:outline-none"
-                        />
+                        <div className="relative">
+                            <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform text-gray-500" />
+                            <input
+                                type="text"
+                                placeholder="Buscar productos..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="focus:ring-sidebar-accent border-primary rounded-md border px-3 py-2 pl-10 focus:ring-2 focus:outline-none"
+                            />
+                        </div>
 
-                        {/* Filtro por categoría*/}
+                        {/* Filtro por categoría */}
                         <select
-                            id="filtro-tipo"
-                            value={filtroTipo}
-                            onChange={(e) => setFiltroTipo(e.target.value)}
-                            className="focus:ring-sidebar-accent border-primary rounded-md border px-3 py-1 focus:ring-2 focus:outline-none"
+                            value={selectedCategoria}
+                            onChange={(e) => setSelectedCategoria(e.target.value)}
+                            className="focus:ring-sidebar-accent border-primary rounded-md border px-3 py-2 focus:ring-2 focus:outline-none"
                         >
                             <option className="bg-background" value="">
                                 Todas las categorías
                             </option>
-                            {categoriasUnicas.map((categoria, index) => (
-                                <option key={index} className="bg-background" value={categoria}>
-                                    {categoria} ({productos.filter((p) => p.categoria === categoria).length})
+                            {categorias.map((categoria) => (
+                                <option key={categoria.id} className="bg-background" value={categoria.id}>
+                                    {categoria.nombre_categoria}
                                 </option>
                             ))}
                         </select>
@@ -394,7 +422,7 @@ export default function ProductosPage({
                         <select
                             value={almacenExportId}
                             onChange={(e) => setAlmacenExportId(Number(e.target.value))}
-                            className="focus:ring-sidebar-accent border-primary rounded-md border px-3 py-1 focus:ring-2 focus:outline-none"
+                            className="focus:ring-sidebar-accent border-primary rounded-md border px-3 py-2 focus:ring-2 focus:outline-none"
                         >
                             {almacenes.map((almacen) => (
                                 <option key={almacen.id} value={almacen.id} className="bg-background">
@@ -425,63 +453,72 @@ export default function ProductosPage({
                     </div>
                 </div>
 
-                {/* Resto del código de la tabla (se mantiene igual) */}
                 {/* Tabla de Productos */}
                 <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
                     <Table>
-                        <TableCaption>Lista de Productos {soloStockBajo && '(Solo productos con stock bajo)'}</TableCaption>
+                        <TableCaption>
+                            Lista de Productos {soloStockBajo && '(Solo productos con stock bajo)'} - Mostrando {productos.from} a {productos.to} de{' '}
+                            {productos.total} productos
+                        </TableCaption>
                         <TableHeader>
                             <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
-                                <TableHead className="w-[100px]">Nombre</TableHead>
+                                <TableHead className="w-[200px] cursor-pointer" onClick={() => handleSort('nombre_producto')}>
+                                    Nombre {sort.field === 'nombre_producto' && (sort.direction === 'asc' ? '↑' : '↓')}
+                                </TableHead>
                                 <TableHead>Marca</TableHead>
+                                <TableHead>Modelo</TableHead>
                                 <TableHead>Código</TableHead>
                                 <TableHead>Categoría</TableHead>
-                                <TableHead>Precio</TableHead>
-                                <TableHead>Cantidad</TableHead>
+                                <TableHead className="cursor-pointer" onClick={() => handleSort('precio_compra_producto')}>
+                                    Precio {sort.field === 'precio_compra_producto' && (sort.direction === 'asc' ? '↑' : '↓')}
+                                </TableHead>
+                                <TableHead className="cursor-pointer" onClick={() => handleSort('cantidad_total')}>
+                                    Cantidad {sort.field === 'cantidad_total' && (sort.direction === 'asc' ? '↑' : '↓')}
+                                </TableHead>
                                 <TableHead>Importe</TableHead>
                                 <TableHead>Imagen</TableHead>
                                 <TableHead className="text-right">Acciones</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {productosAmostrar.map((producto) => {
-                                const isStockBajo = producto.cantidad_total <= umbralStockBajo;
+                            {productosData.map((producto) => {
+                                const isStockBajo = producto.stock_bajo;
 
                                 return (
                                     <TableRow key={producto.id} className={isStockBajo ? 'animate-pulse bg-red-50 dark:bg-red-950/30' : ''}>
                                         <TableCell>
                                             <div className="flex items-center gap-2">
                                                 <Package size={14} className="text-primary shrink-0" />
-                                                <span className="text-primary truncate font-medium">{producto.nombre_producto}</span>
+                                                <div>
+                                                    <span className="text-primary font-medium">{producto.nombre_producto}</span>
+                                                    {producto.capacidad_producto && (
+                                                        <p className="text-xs text-gray-500">{producto.capacidad_producto}</p>
+                                                    )}
+                                                </div>
                                             </div>
                                         </TableCell>
                                         <TableCell>
-                                            <div className="flex items-center gap-2">
-                                                <Badge variant="outline" className="font-mono uppercase">
-                                                    {producto.marca_producto || 'Sin marca'}
-                                                </Badge>
-                                            </div>
+                                            <Badge variant="outline" className="font-mono uppercase">
+                                                {producto.marca_producto || 'Sin marca'}
+                                            </Badge>
                                         </TableCell>
+                                        <TableCell>{producto.modelo_producto || 'N/A'}</TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-2">
                                                 <QrCode size={14} className="shrink-0 text-gray-500" />
-                                                <span>{producto.codigo_producto || 'Sin código'}</span>
+                                                <span className="font-mono text-sm">{producto.codigo_producto}</span>
                                             </div>
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-2">
                                                 <CopyX size={14} className="shrink-0 text-indigo-500" />
-                                                <span>{producto.categoria || 'Sin categoría'}</span>
+                                                <span>{producto.categoria}</span>
                                             </div>
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-2">
                                                 <Wallet size={14} className="shrink-0 text-emerald-500" />
-                                                <span>
-                                                    {typeof producto.precio_compra_producto === 'number'
-                                                        ? `$${producto.precio_compra_producto.toFixed(2)}`
-                                                        : 'Sin precio'}
-                                                </span>
+                                                <span>${producto.precio_compra_producto.toFixed(2)}</span>
                                             </div>
                                         </TableCell>
                                         <TableCell>
@@ -491,6 +528,7 @@ export default function ProductosPage({
                                                 {isStockBajo && (
                                                     <Badge variant="destructive" className="ml-2 animate-pulse">
                                                         <AlertTriangle size={12} className="mr-1" />
+                                                        Bajo
                                                     </Badge>
                                                 )}
                                             </div>
@@ -498,7 +536,7 @@ export default function ProductosPage({
                                         <TableCell>
                                             <div className="flex items-center gap-2">
                                                 <DollarSign size={14} className="shrink-0 text-emerald-500" />
-                                                <span>$ {(producto.precio_compra_producto * producto.cantidad_total).toFixed(2)}</span>
+                                                <span>${(producto.precio_compra_producto * producto.cantidad_total).toFixed(2)}</span>
                                             </div>
                                         </TableCell>
                                         <TableCell>
@@ -509,56 +547,69 @@ export default function ProductosPage({
                                                     className="h-10 w-10 rounded-full object-cover"
                                                 />
                                             ) : (
-                                                'Sin imagen'
+                                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-200">
+                                                    <Package size={16} className="text-gray-500" />
+                                                </div>
                                             )}
                                         </TableCell>
                                         <TableCell className="text-right">
-                                            {/* Botón Detalles */}
-                                            <Link href={route('productos.show', { producto: producto.id })}>
-                                                <Button variant="outline" className="hover:bg-chart-3 cursor-pointer hover:text-white">
-                                                    <Eye />
-                                                </Button>
-                                            </Link>
-                                            {/* Botón Editar */}
-                                            <Link href={route('productos.edit', { producto: producto.id })}>
+                                            <div className="flex justify-end gap-1">
+                                                {/* Botón Detalles */}
+                                                <Link href={route('productos.show', { producto: producto.id })}>
+                                                    <Button variant="outline" size="sm" className="hover:bg-chart-3 cursor-pointer">
+                                                        <Eye size={14} />
+                                                    </Button>
+                                                </Link>
+
+                                                {/* Botón Editar */}
+                                                <Link href={route('productos.edit', { producto: producto.id })}>
+                                                    <Button variant="outline" size="sm" className="cursor-pointer hover:bg-blue-600 hover:text-white">
+                                                        <Edit3 size={14} />
+                                                    </Button>
+                                                </Link>
+
+                                                {/* Botón Regenerar Código de Barras */}
                                                 <Button
                                                     variant="outline"
-                                                    className="cursor-pointer hover:bg-blue-900 hover:text-white dark:hover:bg-blue-700"
+                                                    size="sm"
+                                                    className="cursor-pointer hover:bg-purple-600 hover:text-white"
+                                                    onClick={() => regenerarBarcode(producto.id)}
+                                                    title="Regenerar código de barras"
                                                 >
-                                                    <Edit3 />
+                                                    <RefreshCw size={14} />
                                                 </Button>
-                                            </Link>
 
-                                            {/* Diálogo de Confirmación para Eliminar */}
-                                            <AlertDialog>
-                                                <AlertDialogTrigger asChild>
-                                                    <Button
-                                                        variant="ghost"
-                                                        className="hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white"
-                                                    >
-                                                        <Trash2 />
-                                                    </Button>
-                                                </AlertDialogTrigger>
-                                                <AlertDialogContent>
-                                                    <AlertDialogHeader>
-                                                        <AlertDialogTitle className="text-center">Atención</AlertDialogTitle>
-                                                        <AlertDialogDescription>
-                                                            ¿Estás seguro de eliminar este producto? Esta acción es irreversible.
-                                                        </AlertDialogDescription>
-                                                    </AlertDialogHeader>
-                                                    <AlertDialogFooter>
-                                                        <AlertDialogAction
-                                                            onClick={() => deleteProducto(producto.id)}
-                                                            className="bg-destructive cursor-pointer hover:bg-red-300"
+                                                {/* Diálogo de Confirmación para Eliminar */}
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white"
                                                         >
-                                                            Aceptar
-                                                        </AlertDialogAction>
-                                                        <AlertDialogCancel className="cursor-pointer text-white hover:bg-emerald-300 hover:text-emerald-950 dark:hover:bg-emerald-300 dark:hover:text-emerald-950">
-                                                            Cancelar
-                                                        </AlertDialogCancel>
-                                                    </AlertDialogFooter>
-                                                </AlertDialogContent>
-                                            </AlertDialog>
+                                                            <Trash2 size={14} />
+                                                        </Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle className="text-center">Confirmar Eliminación</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                ¿Estás seguro de eliminar el producto "{producto.nombre_producto}"? Esta acción es
+                                                                irreversible y eliminará también el código de barras asociado.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel className="cursor-pointer">Cancelar</AlertDialogCancel>
+                                                            <AlertDialogAction
+                                                                onClick={() => deleteProducto(producto.id)}
+                                                                className="bg-destructive cursor-pointer hover:bg-red-600"
+                                                            >
+                                                                Eliminar
+                                                            </AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 );
@@ -566,13 +617,14 @@ export default function ProductosPage({
                         </TableBody>
                         <TableFooter>
                             <TableRow>
-                                <TableCell colSpan={5} className="bg-gray-700">
+                                <TableCell colSpan={6} className="bg-sidebar-accent">
                                     Total de Productos {soloStockBajo && 'con Stock Bajo'}
                                 </TableCell>
-                                <TableCell className="bg-gray-700 text-center font-bold">{productosFiltrados.length}</TableCell>
-                                <TableCell colSpan={3} className="bg-gray-700 text-right">
-                                    Valor Total: $
-                                    {productosFiltrados.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0).toFixed(2)}
+                                <TableCell className="bg-sidebar-accent text-center font-bold">
+                                    {productosData.reduce((sum, p) => sum + p.cantidad_total, 0)}
+                                </TableCell>
+                                <TableCell colSpan={3} className="bg-sidebar-accent text-right font-bold">
+                                    Valor Total: ${productosData.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0).toFixed(2)}
                                 </TableCell>
                             </TableRow>
                         </TableFooter>
@@ -580,17 +632,27 @@ export default function ProductosPage({
                 </div>
 
                 {/* Controles de Paginación */}
-                <div className="mt-4 flex items-center justify-between">
-                    <Button onClick={() => setPaginaActual((prev) => Math.max(prev - 1, 1))} disabled={paginaActual === 1}>
-                        Anterior
-                    </Button>
-                    <span>
-                        Página {paginaActual} de {totalPaginas} - {productosFiltrados.length} productos
-                    </span>
-                    <Button onClick={() => setPaginaActual((prev) => Math.min(prev + 1, totalPaginas))} disabled={paginaActual === totalPaginas}>
-                        Siguiente
-                    </Button>
-                </div>
+                {productos.links && productos.links.length > 3 && (
+                    <div className="mt-4 flex items-center justify-between">
+                        <div className="text-sm text-gray-600">
+                            Mostrando {productos.from} a {productos.to} de {productos.total} resultados
+                        </div>
+                        <div className="flex gap-1">
+                            {productos.links.map((link, index) => (
+                                <Button
+                                    key={index}
+                                    variant={link.active ? 'default' : 'outline'}
+                                    size="sm"
+                                    onClick={() => navigateToPage(link.url)}
+                                    disabled={!link.url || link.active}
+                                    className="cursor-pointer"
+                                >
+                                    {link.label.replace('&laquo;', '«').replace('&raquo;', '»')}
+                                </Button>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* Modal de Importación */}
                 <ImportModal isOpen={showImportModal} onClose={() => setShowImportModal(false)} onImport={handleImport} almacenes={almacenes} />

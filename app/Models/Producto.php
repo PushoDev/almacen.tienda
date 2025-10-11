@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Milon\Barcode\Facades\DNS1DFacade as DNS1D;
 use Illuminate\Support\Facades\Storage;
+use Exception;
 
 class Producto extends Model
 {
@@ -43,15 +44,37 @@ class Producto extends Model
             if (empty($producto->codigo_producto)) {
                 $codigo = self::generarCodigoBarras($producto);
                 $producto->codigo_producto = $codigo;
+
                 // Generar la imagen del código de barras
-                $producto->barcode_image = self::generarImagenBarcode($codigo);
+                try {
+                    $producto->barcode_image = self::generarImagenBarcode($codigo);
+                } catch (Exception $e) {
+                    // Si falla la generación de imagen, al menos guardamos el código
+                    logger()->error('Error generando imagen de código de barras: ' . $e->getMessage());
+                }
             }
         });
 
         static::updating(function ($producto) {
-            // Si el código cambia, regenerar la imagen también
-            if ($producto->isDirty('codigo_producto')) {
-                $producto->barcode_image = self::generarImagenBarcode($producto->codigo_producto);
+            // Si alguno de los campos base cambia, regenerar el código e imagen
+            if ($producto->isDirty(['nombre_producto', 'marca_producto', 'modelo_producto', 'capacidad_producto'])) {
+                $codigo = self::generarCodigoBarras($producto);
+                $producto->codigo_producto = $codigo;
+
+                try {
+                    $producto->barcode_image = self::generarImagenBarcode($codigo);
+                } catch (Exception $e) {
+                    logger()->error('Error generando imagen de código de barras: ' . $e->getMessage());
+                }
+            }
+
+            // Si solo cambió el código manualmente, regenerar la imagen
+            elseif ($producto->isDirty('codigo_producto')) {
+                try {
+                    $producto->barcode_image = self::generarImagenBarcode($producto->codigo_producto);
+                } catch (Exception $e) {
+                    logger()->error('Error generando imagen de código de barras: ' . $e->getMessage());
+                }
             }
         });
     }
@@ -76,6 +99,11 @@ class Producto extends Model
 
         // Parte fija del código
         $parteFija = $nombre . $marca . $modelo . $capacidad;
+
+        // Si la parte fija tiene más de 14 caracteres, truncar a 14
+        if (strlen($parteFija) > 14) {
+            $parteFija = substr($parteFija, 0, 14);
+        }
 
         // Calcular cuántos dígitos aleatorios necesitamos
         $longitudFija = strlen($parteFija);
@@ -106,15 +134,35 @@ class Producto extends Model
             Storage::disk('public')->makeDirectory($directory);
         }
 
+        // Verificar que el código no esté vacío
+        if (empty($codigo)) {
+            throw new Exception('El código para generar el código de barras está vacío');
+        }
+
         // Generar el código de barras en formato PNG
         // CODE128 es compatible con la mayoría de lectores
         $barcodePNG = DNS1D::getBarcodePNG($codigo, 'C128', 2, 60, [0, 0, 0], true);
 
+        // Verificar que se generó correctamente
+        if (empty($barcodePNG)) {
+            throw new Exception('No se pudo generar la imagen del código de barras');
+        }
+
         // Decodificar la cadena base64 y guardar el archivo
         $imageData = base64_decode($barcodePNG);
+
+        if ($imageData === false) {
+            throw new Exception('Error al decodificar la imagen del código de barras');
+        }
+
         $fileName = $directory . '/' . $codigo . '.png';
 
-        Storage::disk('public')->put($fileName, $imageData);
+        // Guardar la imagen
+        $saved = Storage::disk('public')->put($fileName, $imageData);
+
+        if (!$saved) {
+            throw new Exception('No se pudo guardar la imagen del código de barras en el almacenamiento');
+        }
 
         return $fileName;
     }
@@ -124,7 +172,30 @@ class Producto extends Model
      */
     public function getBarcodeImageUrlAttribute()
     {
-        return $this->barcode_image ? asset('storage/' . $this->barcode_image) : null;
+        if (!$this->barcode_image) {
+            return null;
+        }
+
+        // Verificar si el archivo existe
+        if (!Storage::disk('public')->exists($this->barcode_image)) {
+            return null;
+        }
+
+        return asset('storage/' . $this->barcode_image);
+    }
+
+    /**
+     * Regenera la imagen del código de barras
+     */
+    public function regenerarBarcodeImage()
+    {
+        try {
+            $this->barcode_image = self::generarImagenBarcode($this->codigo_producto);
+            return $this->save();
+        } catch (Exception $e) {
+            logger()->error('Error regenerando imagen de código de barras: ' . $e->getMessage());
+            return false;
+        }
     }
 
     // 🔹 Relación con categoría
@@ -165,9 +236,16 @@ class Producto extends Model
     // 🔥 Accesor para URL de imagen
     public function getImagenUrlAttribute(): string
     {
-        return $this->imagen_producto
-            ? asset('storage/' . $this->imagen_producto)
-            : asset('storage/productos/producto-default.png');
+        if (!$this->imagen_producto) {
+            return asset('storage/productos/producto-default.png');
+        }
+
+        // Verificar si existe la imagen
+        if (!Storage::disk('public')->exists($this->imagen_producto)) {
+            return asset('storage/productos/producto-default.png');
+        }
+
+        return asset('storage/' . $this->imagen_producto);
     }
 
     /**
@@ -187,5 +265,24 @@ class Producto extends Model
             ->orWhere('marca_producto', 'LIKE', "%{$termino}%")
             ->orWhere('modelo_producto', 'LIKE', "%{$termino}%")
             ->orWhere('codigo_producto', 'LIKE', "%{$termino}%");
+    }
+
+    /**
+     * Verifica si la imagen del código de barras existe físicamente
+     */
+    public function barcodeImageExists(): bool
+    {
+        return $this->barcode_image && Storage::disk('public')->exists($this->barcode_image);
+    }
+
+    /**
+     * Elimina la imagen física del código de barras
+     */
+    public function eliminarBarcodeImage(): bool
+    {
+        if ($this->barcode_image && Storage::disk('public')->exists($this->barcode_image)) {
+            return Storage::disk('public')->delete($this->barcode_image);
+        }
+        return false;
     }
 }

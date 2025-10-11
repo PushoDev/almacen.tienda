@@ -123,13 +123,20 @@ export interface ProductoProps {
     id: number;
     nombre_producto: string;
     marca_producto: string;
+    modelo_producto?: string;
+    capacidad_producto?: string;
     codigo_producto: string;
-    categoria: string; // Cambiado de "categoria?: string" a "categoria: string"
+    categoria: string;
+    categoria_id: number;
     precio_compra_producto: number;
     cantidad_total: number;
     imagen_url?: string;
+    barcode_image_url?: string;
     precio_venta?: number;
+    ganancia?: number;
     stock_bajo: boolean;
+    created_at?: string;
+    updated_at?: string;
     almacenes?: Array<{
         id: number;
         nombre_almacen: string;
@@ -137,11 +144,38 @@ export interface ProductoProps {
         provincia_almacen: string;
         telefono_almacen?: string;
         correo_almacen?: string;
-        cantidad: number; // Movido desde pivot
-        stock_bajo: boolean; // Nueva propiedad
+        cantidad: number;
+        stock_bajo: boolean;
     }>;
-    created_at?: string;
-    updated_at?: string;
+}
+
+// Interface para la respuesta paginada
+export interface ProductosPaginados {
+    data: ProductoProps[];
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+    from: number;
+    to: number;
+    links: Array<{
+        url: string | null;
+        label: string;
+        active: boolean;
+    }>;
+}
+
+// Interface para filtros
+export interface ProductosFilters {
+    search?: string;
+    categoria_id?: string;
+    stock_bajo?: boolean;
+}
+
+// Interface para ordenamiento
+export interface ProductosSort {
+    field: string;
+    direction: string;
 }
 
 // Interface para Clientes

@@ -12,40 +12,102 @@ use Illuminate\Support\Facades\Auth;
 use App\Exports\ProductoExport;
 use App\Imports\ProductoImport;
 use Maatwebsite\Excel\Facades\Excel;
+use Illuminate\Support\Facades\DB;
 
 class ProductoController extends Controller
 {
     /**
-     * Listado de productos
+     * Listado de productos con paginación y búsqueda
      */
-    public function index()
+    public function index(Request $request)
     {
         $user = Auth::user();
 
-        $productos = Producto::with('categoria', 'almacenes')
+        // Query base con relaciones
+        $query = Producto::with(['categoria', 'almacenes'])
             ->with(['vendedores' => function ($query) use ($user) {
                 $query->where('users.id', $user->id);
-            }])->get();
+            }]);
 
-        return Inertia::render('Productos/Index', [
-            'productos' => $productos->map(fn($producto) => [
+        // Búsqueda
+        if ($request->has('search') && $request->search != '') {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('nombre_producto', 'LIKE', "%{$search}%")
+                    ->orWhere('marca_producto', 'LIKE', "%{$search}%")
+                    ->orWhere('modelo_producto', 'LIKE', "%{$search}%")
+                    ->orWhere('codigo_producto', 'LIKE', "%{$search}%")
+                    ->orWhereHas('categoria', function ($q) use ($search) {
+                        $q->where('nombre_categoria', 'LIKE', "%{$search}%");
+                    });
+            });
+        }
+
+        // Filtro por categoría
+        if ($request->has('categoria_id') && $request->categoria_id != '') {
+            $query->where('categoria_id', $request->categoria_id);
+        }
+
+        // Filtro por stock bajo
+        if ($request->has('stock_bajo') && $request->stock_bajo) {
+            $query->having('cantidad_total', '<', 3);
+        }
+
+        // Ordenamiento
+        $sortField = $request->get('sort_field', 'nombre_producto');
+        $sortDirection = $request->get('sort_direction', 'asc');
+
+        if (in_array($sortField, ['nombre_producto', 'marca_producto', 'codigo_producto', 'precio_compra_producto', 'cantidad_total'])) {
+            $query->orderBy($sortField, $sortDirection);
+        }
+
+        $productos = $query->get()->map(function ($producto) {
+            return [
                 'id' => $producto->id,
                 'nombre_producto' => $producto->nombre_producto,
                 'marca_producto' => $producto->marca_producto,
+                'modelo_producto' => $producto->modelo_producto,
+                'capacidad_producto' => $producto->capacidad_producto,
                 'codigo_producto' => $producto->codigo_producto,
                 'categoria' => $producto->categoria?->nombre_categoria,
+                'categoria_id' => $producto->categoria_id,
                 'precio_compra_producto' => (float) $producto->precio_compra_producto,
                 'cantidad_total' => $producto->cantidad_total,
                 'imagen_url' => $producto->imagen_url,
+                'barcode_image_url' => $producto->barcode_image_url,
                 'precio_venta' => $producto->vendedores->first()->pivot->precio_venta ?? null,
                 'stock_bajo' => $producto->stock_bajo,
-            ]),
-            'almacenes' => Almacen::select('id', 'nombre_almacen')->get()->toArray(), // ← AÑADIDO para el frontend
+                'created_at' => $producto->created_at?->toISOString(),
+                'updated_at' => $producto->updated_at?->toISOString(),
+            ];
+        });
+
+        // Aplicar paginación manual para los campos calculados
+        if ($request->has('stock_bajo') && $request->stock_bajo) {
+            $productos = $productos->filter(fn($producto) => $producto['stock_bajo']);
+        }
+
+        $perPage = $request->get('per_page', 15);
+        $currentPage = $request->get('page', 1);
+        $paginatedProducts = new \Illuminate\Pagination\LengthAwarePaginator(
+            $productos->forPage($currentPage, $perPage),
+            $productos->count(),
+            $perPage,
+            $currentPage,
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
+
+        return Inertia::render('Productos/Index', [
+            'productos' => $paginatedProducts,
+            'almacenes' => Almacen::select('id', 'nombre_almacen')->get(),
+            'categorias' => Categoria::select('id', 'nombre_categoria')->get(),
+            'filters' => $request->only(['search', 'categoria_id', 'stock_bajo']),
+            'sort' => ['field' => $sortField, 'direction' => $sortDirection],
         ]);
     }
 
     /**
-     * Mostrar producto con detalle por almacén
+     * Mostrar producto con detalle completo
      */
     public function show(Producto $producto)
     {
@@ -53,22 +115,28 @@ class ProductoController extends Controller
 
         $producto->load(['categoria', 'almacenes', 'vendedores' => function ($query) use ($user) {
             $query->where('users.id', $user->id)
-                ->select('users.id', 'producto_vendedors.precio_venta');
+                ->select('users.id', 'producto_vendedors.precio_venta', 'producto_vendedors.venta_ganancia');
         }]);
 
         $precioVenta = $producto->vendedores->first()->pivot->precio_venta ?? null;
+        $ganancia = $producto->vendedores->first()->pivot->venta_ganancia ?? null;
 
         return Inertia::render('Productos/Show', [
             'producto' => [
                 'id' => $producto->id,
                 'nombre_producto' => $producto->nombre_producto,
                 'marca_producto' => $producto->marca_producto,
+                'modelo_producto' => $producto->modelo_producto,
+                'capacidad_producto' => $producto->capacidad_producto,
                 'codigo_producto' => $producto->codigo_producto,
                 'categoria' => $producto->categoria?->nombre_categoria,
+                'categoria_id' => $producto->categoria_id,
                 'precio_compra_producto' => (float) $producto->precio_compra_producto,
                 'cantidad_total' => $producto->cantidad_total,
                 'imagen_url' => $producto->imagen_url,
+                'barcode_image_url' => $producto->barcode_image_url,
                 'precio_venta' => $precioVenta,
+                'ganancia' => $ganancia,
                 'stock_bajo' => $producto->stock_bajo,
                 'almacenes' => $producto->almacenes->map(fn($almacen) => [
                     'id' => $almacen->id,
@@ -80,33 +148,52 @@ class ProductoController extends Controller
                     'cantidad' => $almacen->pivot->cantidad,
                     'stock_bajo' => $almacen->pivot->cantidad < 3,
                 ]),
+                'created_at' => $producto->created_at?->toISOString(),
+                'updated_at' => $producto->updated_at?->toISOString(),
             ],
-            'precio_venta' => $precioVenta,
         ]);
     }
 
     /**
-     * Editar producto
+     * Editar producto con datos completos
      */
     public function edit(Producto $producto)
     {
+        $producto->load(['almacenes', 'categoria']);
+
         return Inertia::render('Productos/Edit', [
-            'producto' => $producto->load('almacenes'),
-            'categorias' => Categoria::all(),
+            'producto' => [
+                'id' => $producto->id,
+                'nombre_producto' => $producto->nombre_producto,
+                'marca_producto' => $producto->marca_producto,
+                'modelo_producto' => $producto->modelo_producto,
+                'capacidad_producto' => $producto->capacidad_producto,
+                'codigo_producto' => $producto->codigo_producto,
+                'categoria_id' => $producto->categoria_id,
+                'precio_compra_producto' => (float) $producto->precio_compra_producto,
+                'imagen_url' => $producto->imagen_url,
+                'barcode_image_url' => $producto->barcode_image_url,
+                'cantidad_total' => $producto->cantidad_total,
+                'stock_bajo' => $producto->stock_bajo,
+            ],
+            'categorias' => Categoria::select('id', 'nombre_categoria')->get(),
         ]);
     }
 
     /**
-     * Actualizar producto
+     * Actualizar producto con validación mejorada
      */
     public function update(Request $request, Producto $producto)
     {
         $validatedData = $request->validate([
             'nombre_producto' => ['required', 'string', 'max:255'],
             'marca_producto' => ['nullable', 'string', 'max:255'],
+            'modelo_producto' => ['nullable', 'string', 'max:255'],
+            'capacidad_producto' => ['nullable', 'string', 'max:255'],
             'codigo_producto' => [
                 'nullable',
                 'string',
+                'max:14',
                 'unique:productos,codigo_producto,' . $producto->id,
             ],
             'categoria_id' => ['required', 'exists:categorias,id'],
@@ -114,36 +201,165 @@ class ProductoController extends Controller
             'imagen_producto' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'],
         ]);
 
-        $imagenPath = $producto->imagen_producto;
+        DB::beginTransaction();
+        try {
+            $imagenPath = $producto->imagen_producto;
 
-        if ($request->hasFile('imagen_producto')) {
-            if ($imagenPath && $imagenPath !== 'productos/producto-default.png') {
-                Storage::disk('public')->delete($imagenPath);
+            // Manejar imagen de producto
+            if ($request->hasFile('imagen_producto')) {
+                // Eliminar imagen anterior si no es la default
+                if ($imagenPath && $imagenPath !== 'productos/producto-default.png') {
+                    Storage::disk('public')->delete($imagenPath);
+                }
+                $imagenPath = $request->file('imagen_producto')->store('productos', 'public');
             }
-            $imagenPath = $request->file('imagen_producto')->store('productos', 'public');
+
+            $updateData = array_merge($validatedData, [
+                'imagen_producto' => $imagenPath,
+            ]);
+
+            $producto->update($updateData);
+
+            DB::commit();
+
+            return redirect()->route('productos.index')
+                ->with('success', 'Producto actualizado correctamente.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect()->back()
+                ->with('error', 'Error al actualizar el producto: ' . $e->getMessage());
         }
-
-        $producto->update(array_merge($validatedData, [
-            'imagen_producto' => $imagenPath,
-        ]));
-
-        return redirect()->route('productos.index')->with('success', 'Producto actualizado correctamente.');
     }
 
     /**
-     * Eliminar producto
+     * Eliminar producto con transacción
      */
     public function destroy(Producto $producto)
     {
-        if ($producto->imagen_producto && $producto->imagen_producto !== 'productos/producto-default.png') {
-            Storage::disk('public')->delete($producto->imagen_producto);
+        DB::beginTransaction();
+        try {
+            // Eliminar imagen del producto si no es la default
+            if ($producto->imagen_producto && $producto->imagen_producto !== 'productos/producto-default.png') {
+                Storage::disk('public')->delete($producto->imagen_producto);
+            }
+
+            // Eliminar imagen del código de barras
+            if ($producto->barcode_image) {
+                Storage::disk('public')->delete($producto->barcode_image);
+            }
+
+            // Eliminar relaciones
+            $producto->almacenes()->detach();
+            $producto->vendedores()->detach();
+
+            // Eliminar producto
+            $producto->delete();
+
+            DB::commit();
+
+            return redirect()->route('productos.index')
+                ->with('success', 'Producto eliminado correctamente.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect()->back()
+                ->with('error', 'Error al eliminar el producto: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Búsqueda rápida de productos para selects o autocompletado
+     */
+    public function search(Request $request)
+    {
+        $query = Producto::with('categoria');
+
+        if ($request->has('q') && $request->q != '') {
+            $search = $request->q;
+            $query->where(function ($q) use ($search) {
+                $q->where('nombre_producto', 'LIKE', "%{$search}%")
+                    ->orWhere('marca_producto', 'LIKE', "%{$search}%")
+                    ->orWhere('codigo_producto', 'LIKE', "%{$search}%");
+            });
         }
 
-        $producto->almacenes()->detach();
-        $producto->delete();
+        $productos = $query->limit(10)->get()->map(function ($producto) {
+            return [
+                'id' => $producto->id,
+                'nombre' => $producto->nombre_producto,
+                'marca' => $producto->marca_producto,
+                'codigo' => $producto->codigo_producto,
+                'categoria' => $producto->categoria?->nombre_categoria,
+                'precio_compra' => (float) $producto->precio_compra_producto,
+                'cantidad_total' => $producto->cantidad_total,
+                'imagen_url' => $producto->imagen_url,
+            ];
+        });
 
-        return redirect()->route('productos.index')->with('success', 'Producto eliminado correctamente.');
+        return response()->json($productos);
     }
+
+    /**
+     * Regenerar código de barras para un producto
+     */
+    public function regenerarBarcode(Producto $producto)
+    {
+        try {
+            $success = $producto->regenerarBarcodeImage();
+
+            if ($success) {
+                return response()->json([
+                    'success' => true,
+                    'barcode_image_url' => $producto->barcode_image_url,
+                    'message' => 'Código de barras regenerado correctamente'
+                ]);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al regenerar el código de barras'
+            ], 500);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Obtener producto por código de barras
+     */
+    public function porCodigo($codigo)
+    {
+        $producto = Producto::porCodigo($codigo)
+            ->with('categoria', 'almacenes')
+            ->first();
+
+        if (!$producto) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Producto no encontrado'
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'producto' => [
+                'id' => $producto->id,
+                'nombre_producto' => $producto->nombre_producto,
+                'marca_producto' => $producto->marca_producto,
+                'codigo_producto' => $producto->codigo_producto,
+                'categoria' => $producto->categoria?->nombre_categoria,
+                'precio_compra_producto' => (float) $producto->precio_compra_producto,
+                'cantidad_total' => $producto->cantidad_total,
+                'imagen_url' => $producto->imagen_url,
+                'barcode_image_url' => $producto->barcode_image_url,
+            ]
+        ]);
+    }
+
+    // Los métodos export e import se mantienen igual que los tenías
+    // ... (mantener los métodos export, import, importToAlmacen que ya tenías)
 
     /**
      * Exportar productos a Excel
@@ -152,7 +368,6 @@ class ProductoController extends Controller
     {
         $almacenId = $request->get('almacen_id', 1);
 
-        // Validar que el almacén exista
         if (!Almacen::find($almacenId)) {
             return redirect()->back()->withErrors(['error' => 'El almacén especificado no existe.']);
         }
@@ -164,7 +379,7 @@ class ProductoController extends Controller
     }
 
     /**
-     * Importar productos desde Excel y asignar al almacén
+     * Importar productos desde Excel
      */
     public function import(Request $request)
     {
@@ -190,7 +405,7 @@ class ProductoController extends Controller
     }
 
     /**
-     * Importar a un almacén específico (ruta con parámetro)
+     * Importar a un almacén específico
      */
     public function importToAlmacen(Request $request, $almacenId)
     {
@@ -198,7 +413,6 @@ class ProductoController extends Controller
             'file' => 'required|mimes:xlsx,xls|max:2048'
         ]);
 
-        // Validar que el almacén exista
         if (!Almacen::find($almacenId)) {
             return redirect()->back()->withErrors(['error' => 'El almacén especificado no existe.']);
         }
@@ -216,47 +430,4 @@ class ProductoController extends Controller
                 ->withErrors(['error' => 'Error al importar: ' . $e->getMessage()]);
         }
     }
-
-    /**
-     * Descargar plantilla para importación (OPCIONAL - descomenta si la necesitas)
-     */
-    /*
-    public function downloadTemplate()
-    {
-        $template = [
-            [
-                'nombre_producto',
-                'marca',
-                'codigo',
-                'categoria',
-                'precio_compra',
-                'cantidad',
-                'imagen'
-            ],
-            [
-                'Laptop HP',
-                'HP',
-                'LP-HP001',
-                'Tecnología',
-                '1500.00',
-                '10',
-                ''
-            ],
-            [
-                'Mouse Inalámbrico',
-                'Logitech',
-                'M-LOG001',
-                'Accesorios',
-                '25.50',
-                '5',
-                ''
-            ]
-        ];
-
-        return Excel::download(
-            new \App\Exports\TemplateExport($template),
-            'plantilla-importacion-productos.xlsx'
-        );
-    }
-    */
 }
