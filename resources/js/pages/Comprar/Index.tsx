@@ -23,13 +23,80 @@ import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, Tabl
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
-import { AlmacenProps, CategoriasProps, ClienteProps, CuentaNegocioProps, ProductoComprarProps, ProveedorProps, type BreadcrumbItem } from '@/types';
+import { AlmacenProps, CategoriasProps, ClienteProps, CuentaNegocioProps, ProveedorProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { format } from 'date-fns';
 import { BadgeMinus, BookCheck, CalendarIcon, Edit2, HardDriveUpload, PlusIcon, ShoppingBasket, Trash2Icon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+
+// =================================================================
+// 🚨 ATRIBUTOS DE PRODUCTO ACTUALIZADOS EN TYPESCRIPT
+// =================================================================
+export interface ProductoComprarProps {
+    id: number;
+    almacen_id: number; // Ahora es number en el array principal
+    producto: string;
+    marca?: string; // Nuevo
+    modelo?: string; // Nuevo
+    capacidad?: string; // Nuevo
+    categoria: string;
+    codigo: string; // Se mantiene, pero se autogenera en el backend si está vacío
+    cantidad: number;
+    precio: number;
+}
+// =================================================================
+
+// =================================================================
+// ⚡ FUNCIÓN DE GENERACIÓN DE CÓDIGO EN FRONTEND (Réplica de Laravel)
+// =================================================================
+const generarCodigoLocal = (producto: string, marca: string, modelo: string, capacidad: string): string => {
+    // 1. Limpiar y truncar (max 3 chars)
+    const cleanAndTruncate = (value: string | undefined): string => {
+        if (!value) return '';
+        const cleaned = value.toUpperCase().replace(/[^A-Z0-9]/g, ''); // Permite números en Marca/Modelo/Capacidad
+        return cleaned.substring(0, 3);
+    };
+
+    // Nombre solo toma letras para ser consistente con el modelo
+    const nombre = cleanAndTruncate(producto).replace(/[^A-Z]/g, '');
+    const marcaClean = cleanAndTruncate(marca);
+    const modeloClean = cleanAndTruncate(modelo);
+
+    // 2. Limpiar capacidad (solo números)
+    const capacidadNumeros = (capacidad || '').replace(/[^0-9]/g, '');
+
+    // 3. Rellenar con 'X'
+    const nombrePadded = nombre.padEnd(3, 'X');
+    const marcaPadded = marcaClean.padEnd(3, 'X');
+    const modeloPadded = modeloClean.padEnd(3, 'X');
+
+    // 4. Formar la parte fija
+    let parteFija = nombrePadded + marcaPadded + modeloPadded + capacidadNumeros;
+
+    // 5. Truncar a 14 si es muy larga
+    if (parteFija.length > 14) {
+        parteFija = parteFija.substring(0, 14);
+    }
+
+    // 6. Rellenar con dígitos aleatorios para llegar a 14
+    let codigo = parteFija;
+    const longitudRestante = 14 - codigo.length;
+
+    if (longitudRestante > 0) {
+        let randomDigits = '';
+        for (let i = 0; i < longitudRestante; i++) {
+            // Generar un dígito aleatorio (0-9)
+            randomDigits += Math.floor(Math.random() * 10).toString();
+        }
+        codigo += randomDigits;
+    }
+
+    // Asegurar que sean exactamente 14
+    return codigo.substring(0, 14);
+};
+// =================================================================
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -62,9 +129,12 @@ export default function ComprarPage() {
     const [clientes, setClientes] = useState<ClienteProps[]>([]);
     const [loading, setLoading] = useState(true);
 
-    const [tempFormData, setTempFormData] = useState<Omit<ProductoComprarProps, 'id'>>({
-        almacen_id: '', // Nuevo campo para el almacén
+    const [tempFormData, setTempFormData] = useState<Omit<ProductoComprarProps, 'id' | 'almacen_id'> & { almacen_id: string }>({
+        almacen_id: '',
         producto: '',
+        marca: '',
+        modelo: '',
+        capacidad: '',
         categoria: '',
         codigo: '',
         cantidad: 0,
@@ -86,9 +156,20 @@ export default function ComprarPage() {
     const [searchProveedor, setSearchProveedor] = useState('');
     const [searchCategoria, setSearchCategoria] = useState('');
 
+    // =================================================================
+    // 💥 CORRECCIÓN AQUÍ: Forzar 'codigo' a cadena vacía para el backend
+    // =================================================================
     useEffect(() => {
-        setData('productos', productos);
+        // Prepara los datos para el backend, asegurando que el código esté vacío
+        // para que el modelo de Laravel lo autogenere si es un producto nuevo.
+        const productosParaBackend = productos.map((p) => ({
+            ...p,
+            almacen_id: parseInt(p.almacen_id as any),
+            codigo: '', // <-- Se envía vacío para que Laravel genere el código de barras
+        }));
+        setData('productos', productosParaBackend as ProductoComprarProps[]);
     }, [productos]);
+    // =================================================================
 
     useEffect(() => {
         const cargarDatos = async () => {
@@ -119,13 +200,20 @@ export default function ComprarPage() {
         cargarDatos();
     }, []);
 
+    // =================================================================
+    // 🚀 CAMBIO CLAVE: Conversión a mayúsculas para todos los campos de texto
+    // =================================================================
     const handleTempInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
         setTempFormData((prev) => ({
             ...prev,
-            [name]: name === 'cantidad' || name === 'precio' ? parseFloat(value) || 0 : value,
+            [name]:
+                name === 'cantidad' || name === 'precio'
+                    ? parseFloat(value) || 0 // Campos numéricos se mantienen como números
+                    : value.toUpperCase(), // Todos los demás campos de texto se convierten a mayúsculas
         }));
     };
+    // =================================================================
 
     const handleTempSelectChange = (name: string, value: string) => {
         setTempFormData((prev) => ({
@@ -134,23 +222,45 @@ export default function ComprarPage() {
         }));
     };
 
+    const resetTempForm = () => {
+        setTempFormData({
+            almacen_id: '',
+            producto: '',
+            marca: '',
+            modelo: '',
+            capacidad: '',
+            categoria: '',
+            codigo: '', // Restablecer el código
+            cantidad: 0,
+            precio: 0,
+        });
+    };
+
     const agregarProducto = () => {
-        if (
-            !tempFormData.producto ||
-            !tempFormData.categoria ||
-            !tempFormData.codigo ||
-            tempFormData.cantidad <= 0 ||
-            tempFormData.precio <= 0 ||
-            !tempFormData.almacen_id
-        ) {
-            toast.warning('Por favor, completa todos los campos del formulario, incluyendo el almacén de destino.');
+        if (!tempFormData.producto || !tempFormData.categoria || tempFormData.cantidad <= 0 || tempFormData.precio <= 0 || !tempFormData.almacen_id) {
+            toast.warning('Por favor, completa los campos obligatorios (Producto, Categoría, Cantidad, Precio y Almacén).');
             return;
         }
 
+        // ⚡ Generar código localmente para VISUALIZACIÓN en la tabla
+        const nuevoCodigo = generarCodigoLocal(
+            tempFormData.producto,
+            tempFormData.marca || '',
+            tempFormData.modelo || '',
+            tempFormData.capacidad || '',
+        );
+
         const nuevoProducto: ProductoComprarProps = {
             id: editingProductId || Date.now(),
-            ...tempFormData,
-            almacen_id: parseInt(tempFormData.almacen_id as any), // Convertir a número
+            almacen_id: parseInt(tempFormData.almacen_id as any),
+            producto: tempFormData.producto,
+            marca: tempFormData.marca,
+            modelo: tempFormData.modelo,
+            capacidad: tempFormData.capacidad,
+            categoria: tempFormData.categoria,
+            codigo: nuevoCodigo, // <-- Se utiliza el código generado (solo para visualización local)
+            cantidad: tempFormData.cantidad,
+            precio: tempFormData.precio,
         };
 
         if (editingProductId) {
@@ -160,7 +270,7 @@ export default function ComprarPage() {
             setProductos((prev) => [...prev, nuevoProducto]);
         }
 
-        setTempFormData({ almacen_id: '', producto: '', categoria: '', codigo: '', cantidad: 0, precio: 0 });
+        resetTempForm();
     };
 
     const eliminarProducto = (id: number) => {
@@ -170,17 +280,58 @@ export default function ComprarPage() {
     const editarProducto = (id: number) => {
         const productoParaEditar = productos.find((p) => p.id === id);
         if (productoParaEditar) {
+            // Cargar todos los campos, incluido 'codigo', para preservarlo durante la edición
             setTempFormData({
-                almacen_id: productoParaEditar.almacen_id.toString(), // Convertir a string para el Select
+                almacen_id: productoParaEditar.almacen_id.toString(),
                 producto: productoParaEditar.producto,
+                marca: productoParaEditar.marca || '',
+                modelo: productoParaEditar.modelo || '',
+                capacidad: productoParaEditar.capacidad || '',
                 categoria: productoParaEditar.categoria,
-                codigo: productoParaEditar.codigo,
+                codigo: productoParaEditar.codigo, // <-- Preservar el código existente/simulado
                 cantidad: productoParaEditar.cantidad,
                 precio: productoParaEditar.precio,
             });
             setEditingProductId(id);
             setIsDialogOpen(true);
         }
+    };
+
+    const handleActualizarProducto = () => {
+        if (
+            !tempFormData.producto.trim() ||
+            !tempFormData.categoria.trim() ||
+            tempFormData.cantidad <= 0 ||
+            tempFormData.precio <= 0 ||
+            !tempFormData.almacen_id
+        ) {
+            toast.warning('Por favor, completa los campos obligatorios válidos (Producto, Categoría, Cantidad, Precio y Almacén).');
+            return;
+        }
+
+        setProductos((prev) =>
+            prev.map((prod) =>
+                prod.id === editingProductId
+                    ? ({
+                          id: editingProductId,
+                          almacen_id: parseInt(tempFormData.almacen_id),
+                          producto: tempFormData.producto,
+                          marca: tempFormData.marca,
+                          modelo: tempFormData.modelo,
+                          capacidad: tempFormData.capacidad,
+                          categoria: tempFormData.categoria,
+                          codigo: tempFormData.codigo, // <-- Se mantiene el código preservado
+                          cantidad: tempFormData.cantidad,
+                          precio: tempFormData.precio,
+                      } as ProductoComprarProps)
+                    : prod,
+            ),
+        );
+
+        resetTempForm();
+        setEditingProductId(null);
+        toast.success('Producto actualizado correctamente');
+        setIsDialogOpen(false);
     };
 
     const calcularTotal = () => {
@@ -196,27 +347,19 @@ export default function ComprarPage() {
             return;
         }
 
-        if (!data.proveedor || !data.fecha) {
-            toast.warning('Por favor, complete todos los campos necesarios.');
+        if (!data.proveedor || !date) {
+            toast.warning('Por favor, complete la Fecha y el Proveedor.');
             return;
         }
 
-        if (date) {
-            setData('fecha', format(date, 'yyyy-MM-dd'));
-        }
+        setData('fecha', format(date, 'yyyy-MM-dd'));
 
         post(route('comprar.store'), {
             preserveScroll: true,
             onSuccess: () => {
+                // Al tener éxito, el backend ya generó y guardó los códigos
                 setProductos([]);
-                setTempFormData({
-                    almacen_id: '',
-                    producto: '',
-                    categoria: '',
-                    codigo: '',
-                    cantidad: 0,
-                    precio: 0,
-                });
+                resetTempForm();
                 toast.success('Compra realizada exitosamente!', {
                     description: 'Los productos han sido agregados al inventario.',
                 });
@@ -260,6 +403,7 @@ export default function ComprarPage() {
 
                 <Separator className="col-span-4" />
 
+                {/* Sección de Datos Generales de la Compra (Mantenida) */}
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-sidebar-accent text-center">Nuevos Productos</CardTitle>
@@ -336,13 +480,7 @@ export default function ComprarPage() {
                                                     </SelectItem>
                                                 ))
                                             ) : searchProveedor.trim() ? (
-                                                <SelectItem
-                                                    value={searchProveedor.trim()}
-                                                    onSelect={() => {
-                                                        setData('proveedor', searchProveedor.trim());
-                                                        setSearchProveedor('');
-                                                    }}
-                                                >
+                                                <SelectItem value={searchProveedor.trim()}>
                                                     ➕ Crear nuevo proveedor: <strong>{searchProveedor.trim()}</strong>
                                                 </SelectItem>
                                             ) : (
@@ -357,15 +495,17 @@ export default function ComprarPage() {
                     </CardContent>
                 </Card>
 
+                {/* Sección de Ingreso de Producto (ACTUALIZADA LA ESTRUCTURA) */}
                 <Card>
                     <CardHeader>
                         <CardDescription className="text-center dark:text-emerald-400">Ingrese Datos del Producto a Comprar</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="grid grid-cols-4 gap-4">
-                            {/* Almacén Destino (Individual) */}
+                            {/* Fila 1 */}
+                            {/* 1. Almacén Destino (Individual) */}
                             <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="almacen_id">Almacén Destino</Label>
+                                <Label htmlFor="almacen_id">Almacén Destino *</Label>
                                 <Select
                                     name="almacen_id"
                                     value={tempFormData.almacen_id}
@@ -384,9 +524,9 @@ export default function ComprarPage() {
                                 </Select>
                             </div>
 
-                            {/* Nombre del Producto */}
+                            {/* 2. Nombre del Producto */}
                             <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="nombre_producto">Nombre del Producto</Label>
+                                <Label htmlFor="nombre_producto">Nombre del Producto *</Label>
                                 <Input
                                     type="text"
                                     name="producto"
@@ -394,25 +534,36 @@ export default function ComprarPage() {
                                     value={tempFormData.producto}
                                     onChange={handleTempInputChange}
                                 />
-                                {errors['productos.0.producto'] && <InputError message={errors['productos.0.producto']} />}
                             </div>
 
-                            {/* Código del Producto */}
+                            {/* 3. Marca del Producto (NUEVO) */}
                             <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="codigo_producto">Código del Producto</Label>
+                                <Label htmlFor="marca_producto">Marca</Label>
+                                <Input type="text" name="marca" placeholder="Marca" value={tempFormData.marca} onChange={handleTempInputChange} />
+                            </div>
+
+                            {/* 4. Modelo del Producto (NUEVO) */}
+                            <div className="grid w-full max-w-sm items-center gap-1">
+                                <Label htmlFor="modelo_producto">Modelo</Label>
+                                <Input type="text" name="modelo" placeholder="Modelo" value={tempFormData.modelo} onChange={handleTempInputChange} />
+                            </div>
+
+                            {/* Fila 2 */}
+                            {/* 5. Capacidad del Producto (NUEVO) */}
+                            <div className="grid w-full max-w-sm items-center gap-1">
+                                <Label htmlFor="capacidad_producto">Capacidad/Tamaño</Label>
                                 <Input
                                     type="text"
-                                    name="codigo"
-                                    placeholder="Código Producto"
-                                    value={tempFormData.codigo}
+                                    name="capacidad"
+                                    placeholder="Ej: 1TB, 16GB"
+                                    value={tempFormData.capacidad}
                                     onChange={handleTempInputChange}
                                 />
-                                {errors['productos.0.codigo'] && <InputError message={errors['productos.0.codigo']} />}
                             </div>
 
-                            {/* Categoría del Producto */}
+                            {/* 6. Categoría del Producto (Movida) */}
                             <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="categorias">Categoría</Label>
+                                <Label htmlFor="categorias">Categoría *</Label>
                                 <Select
                                     name="categoria"
                                     value={tempFormData.categoria}
@@ -457,9 +608,9 @@ export default function ComprarPage() {
                                 {errors.categorias && <InputError message={errors.categorias} />}
                             </div>
 
-                            {/* Precio de Compra */}
+                            {/* 7. Precio de Compra (Movido) */}
                             <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="precio_producto">Precio</Label>
+                                <Label htmlFor="precio_producto">Precio *</Label>
                                 <Input
                                     type="number"
                                     name="precio"
@@ -470,9 +621,9 @@ export default function ComprarPage() {
                                 {errors['productos.0.precio'] && <InputError message={errors['productos.0.precio']} />}
                             </div>
 
-                            {/* Cantidad de Productos */}
+                            {/* 8. Cantidad de Productos (Movida) */}
                             <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="cantidad_producto">Cantidad</Label>
+                                <Label htmlFor="cantidad_producto">Cantidad *</Label>
                                 <Input
                                     type="number"
                                     name="cantidad"
@@ -482,32 +633,32 @@ export default function ComprarPage() {
                                 />
                                 {errors['productos.0.cantidad'] && <InputError message={errors['productos.0.cantidad']} />}
                             </div>
+                        </div>
 
-                            {/* Botón Agregar */}
-                            <div className="mt-6 grid w-full max-w-sm items-center gap-1">
-                                <Button
-                                    variant="secondary"
-                                    className="cursor-pointer hover:animate-pulse hover:bg-blue-400"
-                                    onClick={agregarProducto}
-                                >
-                                    <PlusIcon />
-                                    Agregar Producto
-                                </Button>
-                            </div>
+                        {/* Botón Agregar (Fuera del grid principal para mejor control) */}
+                        <div className="mt-6 flex justify-end">
+                            <Button variant="secondary" className="cursor-pointer hover:animate-pulse hover:bg-blue-400" onClick={agregarProducto}>
+                                <PlusIcon />
+                                Agregar Producto
+                            </Button>
                         </div>
                     </CardContent>
                 </Card>
 
+                {/* Sección de la Tabla de Productos (Mantenida) */}
                 <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
                     <Table>
                         <TableCaption className="text-sidebar-accent">Lista de los Productos a Comprar</TableCaption>
                         <TableHeader>
                             <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
                                 <TableHead>Producto</TableHead>
+                                <TableHead>Marca</TableHead>
+                                <TableHead>Modelo</TableHead>
+                                <TableHead>Capacidad</TableHead>
                                 <TableHead>Almacén</TableHead>
                                 <TableHead>Categoria</TableHead>
-                                <TableHead>Código</TableHead>
-                                <TableHead>Cantidad</TableHead>
+                                <TableHead>Código</TableHead> {/* Se muestra en la tabla */}
+                                <TableHead>Cant.</TableHead>
                                 <TableHead>Precio</TableHead>
                                 <TableHead>Importe</TableHead>
                                 <TableHead className="text-right">Acciones</TableHead>
@@ -517,9 +668,12 @@ export default function ComprarPage() {
                             {productos.map((p) => (
                                 <TableRow key={p.id}>
                                     <TableCell className="font-medium">{p.producto}</TableCell>
+                                    <TableCell>{p.marca || 'N/A'}</TableCell>
+                                    <TableCell>{p.modelo || 'N/A'}</TableCell>
+                                    <TableCell>{p.capacidad || 'N/A'}</TableCell>
                                     <TableCell>{almacens.find((a) => a.id === p.almacen_id)?.nombre_almacen || 'Desconocido'}</TableCell>
                                     <TableCell>{p.categoria}</TableCell>
-                                    <TableCell>{p.codigo}</TableCell>
+                                    <TableCell>{p.codigo || 'ERROR'}</TableCell> {/* Muestra el código generado localmente */}
                                     <TableCell>{p.cantidad}</TableCell>
                                     <TableCell>${p.precio.toFixed(2)}</TableCell>
                                     <TableCell>${(p.cantidad * p.precio).toFixed(2)}</TableCell>
@@ -543,9 +697,10 @@ export default function ComprarPage() {
                                                 </AlertDialogHeader>
 
                                                 <div className="grid gap-4 py-4">
+                                                    {/* Fila 1 */}
                                                     <div className="grid grid-cols-4 items-center gap-4">
                                                         <Label htmlFor="edit-almacen" className="text-right">
-                                                            Almacén
+                                                            Almacén *
                                                         </Label>
                                                         <Select
                                                             name="almacen_id"
@@ -567,15 +722,57 @@ export default function ComprarPage() {
 
                                                     <div className="grid grid-cols-4 items-center gap-4">
                                                         <Label htmlFor="edit-producto" className="text-right">
-                                                            Nombre
+                                                            Nombre *
                                                         </Label>
                                                         <Input
                                                             id="edit-producto"
+                                                            name="producto"
                                                             value={tempFormData.producto}
-                                                            onChange={(e) => handleTempInputChange(e as any)}
+                                                            onChange={handleTempInputChange}
                                                             className="col-span-3"
                                                         />
                                                     </div>
+
+                                                    {/* NUEVOS CAMPOS */}
+                                                    <div className="grid grid-cols-4 items-center gap-4">
+                                                        <Label htmlFor="edit-marca" className="text-right">
+                                                            Marca
+                                                        </Label>
+                                                        <Input
+                                                            id="edit-marca"
+                                                            name="marca"
+                                                            value={tempFormData.marca}
+                                                            onChange={handleTempInputChange}
+                                                            className="col-span-3"
+                                                        />
+                                                    </div>
+
+                                                    <div className="grid grid-cols-4 items-center gap-4">
+                                                        <Label htmlFor="edit-modelo" className="text-right">
+                                                            Modelo
+                                                        </Label>
+                                                        <Input
+                                                            id="edit-modelo"
+                                                            name="modelo"
+                                                            value={tempFormData.modelo}
+                                                            onChange={handleTempInputChange}
+                                                            className="col-span-3"
+                                                        />
+                                                    </div>
+
+                                                    <div className="grid grid-cols-4 items-center gap-4">
+                                                        <Label htmlFor="edit-capacidad" className="text-right">
+                                                            Capacidad
+                                                        </Label>
+                                                        <Input
+                                                            id="edit-capacidad"
+                                                            name="capacidad"
+                                                            value={tempFormData.capacidad}
+                                                            onChange={handleTempInputChange}
+                                                            className="col-span-3"
+                                                        />
+                                                    </div>
+                                                    {/* FIN NUEVOS CAMPOS */}
 
                                                     <div className="grid grid-cols-4 items-center gap-4">
                                                         <Label htmlFor="edit-codigo" className="text-right">
@@ -583,15 +780,17 @@ export default function ComprarPage() {
                                                         </Label>
                                                         <Input
                                                             id="edit-codigo"
-                                                            value={tempFormData.codigo}
-                                                            onChange={(e) => handleTempInputChange(e as any)}
-                                                            className="col-span-3"
+                                                            name="codigo"
+                                                            value={tempFormData.codigo || 'Generando...'}
+                                                            className="col-span-3 bg-gray-100 dark:bg-gray-700"
+                                                            disabled
                                                         />
                                                     </div>
 
+                                                    {/* Fila 2 */}
                                                     <div className="grid grid-cols-4 items-center gap-4">
                                                         <Label htmlFor="edit-categoria" className="text-right">
-                                                            Categoría
+                                                            Categoría *
                                                         </Label>
                                                         <Select
                                                             value={tempFormData.categoria}
@@ -606,7 +805,7 @@ export default function ComprarPage() {
                                                                     className="mb-2 w-full rounded border border-gray-300 p-2"
                                                                     placeholder="Buscar o crear categoría..."
                                                                     value={searchCategoria}
-                                                                    onChange={(e) => setSearchCategoria(e.target.value)}
+                                                                    onChange={(e) => setSearchCategoria(e.target.value.toUpperCase())}
                                                                     onKeyDown={(e) => {
                                                                         if (e.key === 'Enter') {
                                                                             e.preventDefault();
@@ -635,9 +834,10 @@ export default function ComprarPage() {
                                                         </Select>
                                                     </div>
 
+                                                    {/* Fila 3 */}
                                                     <div className="grid grid-cols-4 items-center gap-4">
                                                         <Label htmlFor="edit-precio" className="text-right">
-                                                            Precio
+                                                            Precio *
                                                         </Label>
                                                         <Input
                                                             id="edit-precio"
@@ -645,21 +845,21 @@ export default function ComprarPage() {
                                                             step="0.01"
                                                             name="precio"
                                                             value={tempFormData.precio || ''}
-                                                            onChange={(e) => handleTempInputChange(e as any)}
+                                                            onChange={handleTempInputChange}
                                                             className="col-span-3"
                                                         />
                                                     </div>
 
                                                     <div className="grid grid-cols-4 items-center gap-4">
                                                         <Label htmlFor="edit-cantidad" className="text-right">
-                                                            Cantidad
+                                                            Cantidad *
                                                         </Label>
                                                         <Input
                                                             id="edit-cantidad"
                                                             type="number"
                                                             name="cantidad"
                                                             value={tempFormData.cantidad || ''}
-                                                            onChange={(e) => handleTempInputChange(e as any)}
+                                                            onChange={handleTempInputChange}
                                                             className="col-span-3"
                                                         />
                                                     </div>
@@ -667,46 +867,7 @@ export default function ComprarPage() {
 
                                                 <AlertDialogFooter>
                                                     <AlertDialogCancel onClick={() => setIsDialogOpen(false)}>Cancelar</AlertDialogCancel>
-                                                    <Button
-                                                        className="cursor-pointer"
-                                                        onClick={() => {
-                                                            if (
-                                                                !tempFormData.producto.trim() ||
-                                                                !tempFormData.categoria.trim() ||
-                                                                !tempFormData.codigo.trim() ||
-                                                                tempFormData.cantidad <= 0 ||
-                                                                tempFormData.precio <= 0 ||
-                                                                !tempFormData.almacen_id
-                                                            ) {
-                                                                toast.warning('Por favor, completa todos los campos válidos.');
-                                                                return;
-                                                            }
-
-                                                            setProductos((prev) =>
-                                                                prev.map((prod) =>
-                                                                    prod.id === editingProductId
-                                                                        ? {
-                                                                              ...tempFormData,
-                                                                              id: editingProductId,
-                                                                              almacen_id: parseInt(tempFormData.almacen_id as any),
-                                                                          }
-                                                                        : prod,
-                                                                ),
-                                                            );
-
-                                                            setTempFormData({
-                                                                almacen_id: '',
-                                                                producto: '',
-                                                                categoria: '',
-                                                                codigo: '',
-                                                                cantidad: 0,
-                                                                precio: 0,
-                                                            });
-
-                                                            toast.success('Producto actualizado correctamente');
-                                                            setIsDialogOpen(false);
-                                                        }}
-                                                    >
+                                                    <Button className="cursor-pointer" onClick={handleActualizarProducto}>
                                                         <HardDriveUpload className="mr-2 h-4 w-4" />
                                                         Actualizar
                                                     </Button>
@@ -726,7 +887,7 @@ export default function ComprarPage() {
                         </TableBody>
                         <TableFooter>
                             <TableRow>
-                                <TableCell colSpan={4} className="bg-gray-500 text-center text-white">
+                                <TableCell colSpan={6} className="bg-gray-500 text-center text-white">
                                     {productos.length} Tipo de Mercancía
                                 </TableCell>
                                 <TableCell className="bg-gray-600 text-amber-300">{productos.reduce((t, p) => t + p.cantidad, 0)} Unidades</TableCell>
@@ -738,6 +899,7 @@ export default function ComprarPage() {
                     </Table>
                 </div>
 
+                {/* Sección del Modal de Compra (Mantenida) */}
                 <div className="flex justify-center gap-4 p-4">
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
@@ -746,8 +908,6 @@ export default function ComprarPage() {
                             </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent className="max-h-[90vh] overflow-y-auto">
-                            {' '}
-                            {/* Aquí agregué el scroll */}
                             <AlertDialogHeader>
                                 <AlertDialogTitle>Tipo de Compra</AlertDialogTitle>
                                 <AlertDialogDescription>Seleccione si desea pagar ahora o comprar y pagar luego</AlertDialogDescription>

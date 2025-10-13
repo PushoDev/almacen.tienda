@@ -100,6 +100,7 @@ class CompraController extends Controller
      */
     public function store(Request $request)
     {
+        // 1. Validar la entrada
         $validated = $request->validate([
             'compra' => 'required|in:deuda_proveedor,pago_cash',
             'proveedor' => 'required|string|max:255',
@@ -107,12 +108,12 @@ class CompraController extends Controller
             'productos' => 'required|array|min:1',
             'productos.*.almacen_id' => 'required|exists:almacens,id',
             'productos.*.producto' => 'required|string|max:255',
+            // Nuevos campos opcionales del producto
+            'productos.*.marca' => 'nullable|string|max:255',
+            'productos.*.modelo' => 'nullable|string|max:255',
+            'productos.*.capacidad' => 'nullable|string|max:255',
+            // El campo 'codigo' ya no se valida como clave, el modelo lo genera
             'productos.*.categoria' => 'required|string|max:255',
-            'productos.*.codigo' => [
-                'required',
-                'string',
-                'max:255',
-            ],
             'productos.*.cantidad' => 'required|integer|min:1',
             'productos.*.precio' => 'required|numeric|min:0',
             'pagos' => 'array|nullable',
@@ -126,8 +127,8 @@ class CompraController extends Controller
         DB::beginTransaction();
 
         try {
+            // Lógica de proveedor y cálculo total
             $proveedor = Proveedor::firstOrCreate(['nombre_proveedor' => $validated['proveedor']]);
-
             $total = collect($validated['productos'])->sum(fn($p) => $p['cantidad'] * $p['precio']);
 
             $compraData = [
@@ -137,10 +138,10 @@ class CompraController extends Controller
                 'tipo_compra' => $validated['compra'],
             ];
 
+            // 2. Lógica de Pagos y Deuda (Mantenida)
             if ($validated['compra'] === 'deuda_proveedor') {
-                // ✅ CORREGIDO: Actualizar directamente el saldo del proveedor en lugar de crear cuenta de deuda
-                $proveedor->decrement('saldo_proveedor', $total); // Restar el total (hacerlo más negativo)
-                $compraData['cuenta_id'] = null; // No asociar a cuenta de deuda
+                $proveedor->decrement('saldo_proveedor', $total);
+                $compraData['cuenta_id'] = null;
             } else if ($validated['compra'] === 'pago_cash') {
                 $pagos = $validated['pagos'] ?? [];
                 $pagosClientes = $validated['pagos_clientes'] ?? [];
@@ -149,14 +150,13 @@ class CompraController extends Controller
                     throw new \Exception("Debe especificar al menos un método de pago (cuenta o cliente).");
                 }
 
-                $sumaPagosCuentas = collect($pagos)->sum('monto');
-                $sumaPagosClientes = collect($pagosClientes)->sum('monto');
-                $sumaTotalPagos = $sumaPagosCuentas + $sumaPagosClientes;
+                $sumaTotalPagos = collect($pagos)->sum('monto') + collect($pagosClientes)->sum('monto');
 
                 if (abs($sumaTotalPagos - $total) > 0.01) {
                     throw new \Exception("La suma de los pagos ({$sumaTotalPagos}) no coincide con el total de la compra ({$total}).");
                 }
 
+                // Procesar pagos con cuentas
                 foreach ($pagos as $pago) {
                     $cuenta = Cuenta::findOrFail($pago['cuenta_id']);
                     if ($cuenta->saldo_cuenta < $pago['monto']) {
@@ -165,16 +165,13 @@ class CompraController extends Controller
                     $cuenta->decrement('saldo_cuenta', $pago['monto']);
                 }
 
+                // Procesar pagos con clientes (deuda)
                 foreach ($pagosClientes as $pagoCliente) {
                     $cliente = Cliente::findOrFail($pagoCliente['cliente_id']);
                     $cliente->decrement('deuda_pago_cliente', $pagoCliente['monto']);
                 }
 
-                if (!empty($pagos)) {
-                    $compraData['cuenta_id'] = $pagos[0]['cuenta_id'];
-                } else {
-                    $compraData['cuenta_id'] = null;
-                }
+                $compraData['cuenta_id'] = !empty($pagos) ? $pagos[0]['cuenta_id'] : null;
             }
 
             $compra = Compra::create($compraData);
@@ -183,20 +180,50 @@ class CompraController extends Controller
             foreach ($validated['productos'] as $item) {
                 $categoria = Categoria::firstOrCreate(['nombre_categoria' => $item['categoria']]);
 
-                $producto = Producto::firstOrNew(['codigo_producto' => $item['codigo']]);
+                // ------------------------------------------------------------------------------------
+                // 3. CORRECCIÓN CLAVE: Buscar por atributos descriptivos (nombre, marca, etc.),
+                // no por el código de barras (que viene vacío del FE para forzar la autogeneración).
+                // ------------------------------------------------------------------------------------
+                $searchAttributes = [
+                    'nombre_producto' => $item['producto'],
+                    'categoria_id' => $categoria->id,
+                    // Usar null para los campos opcionales si no se proporcionan
+                    'marca_producto' => $item['marca'] ?? null,
+                    'modelo_producto' => $item['modelo'] ?? null,
+                    'capacidad_producto' => $item['capacidad'] ?? null,
+                ];
+
+                // Buscar el producto por sus atributos.
+                $producto = Producto::where($searchAttributes)->first();
+
+                $isNew = !$producto;
+
+                if ($isNew) {
+                    $producto = new Producto();
+                    // Al ser nuevo, inicializamos el código a null para que el método 'creating' lo autogenere.
+                    $producto->codigo_producto = null;
+                }
+                // ------------------------------------------------------------------------------------
+
+                // 4. ACTUALIZAR LOS CAMPOS DEL PRODUCTO
                 $producto->fill([
                     'nombre_producto' => $item['producto'],
+                    'marca_producto' => $item['marca'] ?? null, // Usar null para mantener consistencia
+                    'modelo_producto' => $item['modelo'] ?? null, // Usar null para mantener consistencia
+                    'capacidad_producto' => $item['capacidad'] ?? null, // Usar null para mantener consistencia
                     'categoria_id' => $categoria->id,
                     'precio_compra_producto' => $item['precio'],
                     'imagen_producto' => $producto->imagen_producto ?? 'productos/producto-default.png',
                 ]);
-                $producto->save();
+                $producto->save(); // ⬅️ Si es nuevo, aquí se activa la autogeneración del código de barras.
 
-                // Asociar producto a la compra, AHORA CON EL ID DEL ALMACÉN
+                // 5. Lógica de Inventario (Mantenida)
+
+                // Asociar producto a la compra
                 $compra->productos()->attach($producto->id, [
                     'cantidad' => $item['cantidad'],
                     'precio' => $item['precio'],
-                    'almacen_id' => $item['almacen_id'], // ¡¡ESTA ES LA LÍNEA CLAVE!!
+                    'almacen_id' => $item['almacen_id'],
                 ]);
 
                 // Actualizar inventario en el almacén específico
@@ -208,9 +235,14 @@ class CompraController extends Controller
                 $almacenProducto->cantidad = ($almacenProducto->cantidad ?? 0) + $item['cantidad'];
                 $almacenProducto->save();
 
-                // Preparamos los datos para la vista, cargando el almacén
+                // 6. Preparar datos para la vista
                 $productosConAlmacen[] = [
                     'nombre_producto' => $producto->nombre_producto,
+                    'marca_producto' => $producto->marca_producto,
+                    'modelo_producto' => $producto->modelo_producto,
+                    'capacidad_producto' => $producto->capacidad_producto,
+                    'codigo_producto' => $producto->codigo_producto, // Usa el código final generado
+                    'categoria' => $categoria->nombre_categoria,
                     'pivot' => [
                         'cantidad' => $item['cantidad'],
                         'precio' => $item['precio'],
@@ -221,13 +253,15 @@ class CompraController extends Controller
 
             DB::commit();
 
+            // Renderizar la vista de la compra realizada
             return Inertia::render('Comprar/Show', [
                 'compra' => $compra->load('proveedor'),
                 'productos' => $productosConAlmacen,
-                'success' => 'Compra registrada correctamente'
+                'success' => 'Compra registrada y productos actualizados correctamente'
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+            // Mostrar un error claro al usuario
             return back()->withErrors(['error' => 'Error al procesar la compra: ' . $e->getMessage()]);
         }
     }
