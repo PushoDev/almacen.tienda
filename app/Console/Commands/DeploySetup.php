@@ -17,8 +17,8 @@ class DeploySetup extends Command
 
         // 1. Crear carpetas si no existen
         $directories = [
-            storage_path('app/public/storage/productos'),
-            storage_path('app/public/storage/barcodes'),
+            storage_path('app/public/productos'),
+            storage_path('app/public/barcodes'),
         ];
 
         foreach ($directories as $dir) {
@@ -28,9 +28,13 @@ class DeploySetup extends Command
             }
         }
 
-        // 2. Ejecutar storage:link
-        $this->call('storage:link');
-        $this->info('storage:link ejecutado.');
+        // 2. Ejecutar storage:link si no existe
+        if (!File::exists(public_path('storage'))) {
+            $this->call('storage:link');
+            $this->info('storage:link ejecutado.');
+        } else {
+            $this->info('storage:link ya existe.');
+        }
 
         // 3. Limpiar caches
         $this->call('cache:clear');
