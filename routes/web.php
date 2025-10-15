@@ -45,6 +45,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     require __DIR__ . '/crud/cuentas.php';
     // Clientes
     require __DIR__ . '/crud/clientes.php';
+    // Monedas
+    require __DIR__ . '/crud/monedas.php';
 
     /**
      * Rutas de las Acciones Generales

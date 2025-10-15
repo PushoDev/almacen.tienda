@@ -11,7 +11,7 @@ import {
     ChartNoAxesCombinedIcon,
     Contact,
     FileText,
-    GitCommit,
+    GitCommit, HandCoins,
     Landmark,
     LayoutGrid,
     MessageSquare,
@@ -20,7 +20,7 @@ import {
     ShoppingBasket,
     ShoppingCart,
     StoreIcon,
-    Users,
+    Users
 } from 'lucide-react';
 import AppLogo from './app-logo';
 
@@ -47,6 +47,12 @@ const allNavItems: NavItem[] = [
         title: 'Logistica Total',
         href: '/logistica',
         icon: ChartNoAxesCombinedIcon,
+        roles: ['admin'],
+    },
+    {
+        title: 'Gestión de Monedas',
+        href: '/monedas',
+        icon: HandCoins,
         roles: ['admin'],
     },
     {
@@ -79,12 +85,6 @@ const allNavItems: NavItem[] = [
         icon: ShoppingBasket,
         roles: ['admin', 'vendedor'],
     },
-    // {
-    //     title: 'Tops Productos',
-    //     href: '#',
-    //     icon: ArrowUpNarrowWide,
-    //     roles: ['admin'],
-    // },
     {
         title: 'Proveedores',
         href: '/proveedores',
@@ -140,7 +140,7 @@ const footerNavItems: NavItem[] = [
         title: 'Documentación',
         href: 'https://documentacion-glorietapos.vercel.app/',
         icon: BookOpen,
-        roles: ['admin', 'vendedor'],
+        roles: ['vendedor'],
     },
 ];
 
