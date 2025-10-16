@@ -5,10 +5,10 @@ namespace Database\Seeders;
 use App\Models\User;
 use App\Models\Almacen;
 use App\Models\Cliente;
+use App\Models\Moneda; // AGREGAR ESTA LÍNEA
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
-
 use Illuminate\Support\Facades\DB;
 
 class DatabaseSeeder extends Seeder
@@ -69,6 +69,20 @@ class DatabaseSeeder extends Seeder
             'password' => Hash::make('yusi2025'),
             'role' => 'vendedor',
         ]);
+
+        // ========== AGREGAR MONEDA POR DEFECTO ==========
+        Moneda::firstOrCreate(
+            ['codigo_moneda' => 'USD'],
+            [
+                'nombre_moneda' => 'Dólar Estadounidense',
+                'simbolo_moneda' => '$',
+                'tasa_cambio' => 1.0,
+                'commission' => 0,
+                'estado' => true,
+                'principal' => true,
+            ]
+        );
+        // ========== FIN MONEDA POR DEFECTO ==========
 
         // Crear el almacén predeterminado
         Almacen::firstOrCreate(

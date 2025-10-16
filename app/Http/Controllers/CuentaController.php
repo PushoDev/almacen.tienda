@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Cuenta;
+use App\Models\Moneda;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -14,17 +15,25 @@ class CuentaController extends Controller
      */
     public function index()
     {
-        $cuentas = Cuenta::all(); // Obtener todas las cuentas
+        $cuentas = Cuenta::with('moneda')->get(); // Cargar la relación con moneda
 
         return Inertia::render('Cuentas/Index', [
             'cuentas' => $cuentas->map(function ($cuenta) {
                 return [
                     'id' => $cuenta->id,
                     'nombre_cuenta' => $cuenta->nombre_cuenta,
+                    'tipo' => $cuenta->tipo,
                     'saldo_cuenta' => $cuenta->saldo_cuenta,
                     'deuda' => $cuenta->deuda,
                     'tipo_cuenta' => $cuenta->tipo_cuenta,
-                    'tipo_moneda' => $cuenta->tipo_moneda,
+                    'moneda_id' => $cuenta->moneda_id,
+                    'moneda' => $cuenta->moneda ? [
+                        'id' => $cuenta->moneda->id,
+                        'nombre_moneda' => $cuenta->moneda->nombre_moneda,
+                        'codigo_moneda' => $cuenta->moneda->codigo_moneda,
+                        'simbolo_moneda' => $cuenta->moneda->simbolo_moneda,
+                    ] : null,
+                    'estado' => $cuenta->estado,
                     'notas_cuenta' => $cuenta->notas_cuenta,
                     'created_at' => $cuenta->created_at->format('Y-m-d H:i:s'),
                     'updated_at' => $cuenta->updated_at->format('Y-m-d H:i:s'),
@@ -39,7 +48,19 @@ class CuentaController extends Controller
      */
     public function create()
     {
-        return Inertia::render('Cuentas/Create');
+        return Inertia::render('Cuentas/Create', [
+            'monedas' => Moneda::where('estado', true)
+                ->select('id', 'nombre_moneda', 'codigo_moneda', 'simbolo_moneda')
+                ->get()
+                ->map(function ($moneda) {
+                    return [
+                        'id' => $moneda->id,
+                        'nombre_completo' => $moneda->nombre_moneda . ' (' . $moneda->codigo_moneda . ')',
+                        'codigo_moneda' => $moneda->codigo_moneda,
+                        'simbolo_moneda' => $moneda->simbolo_moneda,
+                    ];
+                }),
+        ]);
     }
 
     /**
@@ -50,20 +71,24 @@ class CuentaController extends Controller
         // Validamos los datos del formulario
         $validated = $request->validate([
             'nombre_cuenta' => ['required', 'string', 'max:255', 'unique:cuentas,nombre_cuenta'],
-            'saldo_cuenta' => ['nullable', 'numeric'],
-            'tipo_moneda' => ['required', 'in:USD,EUR,MLC,CUP'], // Agregamos validación para tipo_moneda
-            'deuda' => ['nullable', 'numeric'],
+            'tipo' => ['required', 'in:caja,banco,tarjeta,efectivo,otro'],
+            'saldo_cuenta' => ['nullable', 'numeric', 'min:0'],
+            'moneda_id' => ['required', 'exists:monedas,id'], // Cambiamos tipo_moneda por moneda_id
+            'deuda' => ['nullable', 'numeric', 'min:0'],
             'tipo_cuenta' => ['required', 'in:permanentes,temporales,deudas'],
+            'estado' => ['required', 'in:activa,inactiva'],
             'notas_cuenta' => ['nullable', 'string'],
         ]);
 
         // Crear la cuenta en la base de datos
         Cuenta::create([
             'nombre_cuenta' => $validated['nombre_cuenta'],
-            'saldo_cuenta' => $validated['saldo_cuenta'] ?? 123.4567, // Valor por defecto si no se proporciona
-            'tipo_moneda' => $validated['tipo_moneda'], // Aseguramos que se guarde el tipo de moneda
-            'deuda' => $validated['deuda'] ?? 0, // Valor por defecto si no se proporciona
+            'tipo' => $validated['tipo'],
+            'saldo_cuenta' => $validated['saldo_cuenta'] ?? 0.00,
+            'moneda_id' => $validated['moneda_id'], // Usamos moneda_id en lugar de tipo_moneda
+            'deuda' => $validated['deuda'] ?? 0,
             'tipo_cuenta' => $validated['tipo_cuenta'],
+            'estado' => $validated['estado'],
             'notas_cuenta' => $validated['notas_cuenta'],
         ]);
 
@@ -76,14 +101,24 @@ class CuentaController extends Controller
      */
     public function show(Cuenta $cuenta)
     {
+        $cuenta->load('moneda'); // Cargar la relación
+
         return Inertia::render('Cuentas/Show', [
             'cuenta' => [
                 'id' => $cuenta->id,
                 'nombre_cuenta' => $cuenta->nombre_cuenta,
+                'tipo' => $cuenta->tipo,
                 'saldo_cuenta' => $cuenta->saldo_cuenta,
-                'tipo_moneda' => $cuenta->tipo_moneda,
+                'moneda_id' => $cuenta->moneda_id,
+                'moneda' => $cuenta->moneda ? [
+                    'id' => $cuenta->moneda->id,
+                    'nombre_moneda' => $cuenta->moneda->nombre_moneda,
+                    'codigo_moneda' => $cuenta->moneda->codigo_moneda,
+                    'simbolo_moneda' => $cuenta->moneda->simbolo_moneda,
+                ] : null,
                 'deuda' => $cuenta->deuda,
                 'tipo_cuenta' => $cuenta->tipo_cuenta,
+                'estado' => $cuenta->estado,
                 'notas_cuenta' => $cuenta->notas_cuenta,
                 'created_at' => $cuenta->created_at->format('Y-m-d H:i:s'),
                 'updated_at' => $cuenta->updated_at->format('Y-m-d H:i:s'),
@@ -96,16 +131,37 @@ class CuentaController extends Controller
      */
     public function edit(Cuenta $cuenta)
     {
+        $cuenta->load('moneda'); // Cargar la relación
+
         return Inertia::render('Cuentas/Edit', [
             'cuenta' => [
                 'id' => $cuenta->id,
                 'nombre_cuenta' => $cuenta->nombre_cuenta,
+                'tipo' => $cuenta->tipo,
                 'saldo_cuenta' => $cuenta->saldo_cuenta,
-                'tipo_moneda' => $cuenta->tipo_moneda,
+                'moneda_id' => $cuenta->moneda_id,
+                'moneda' => $cuenta->moneda ? [
+                    'id' => $cuenta->moneda->id,
+                    'nombre_moneda' => $cuenta->moneda->nombre_moneda,
+                    'codigo_moneda' => $cuenta->moneda->codigo_moneda,
+                    'simbolo_moneda' => $cuenta->moneda->simbolo_moneda,
+                ] : null,
                 'deuda' => $cuenta->deuda,
                 'tipo_cuenta' => $cuenta->tipo_cuenta,
+                'estado' => $cuenta->estado,
                 'notas_cuenta' => $cuenta->notas_cuenta,
             ],
+            'monedas' => Moneda::where('estado', true)
+                ->select('id', 'nombre_moneda', 'codigo_moneda', 'simbolo_moneda')
+                ->get()
+                ->map(function ($moneda) {
+                    return [
+                        'id' => $moneda->id,
+                        'nombre_completo' => $moneda->nombre_moneda . ' (' . $moneda->codigo_moneda . ')',
+                        'codigo_moneda' => $moneda->codigo_moneda,
+                        'simbolo_moneda' => $moneda->simbolo_moneda,
+                    ];
+                }),
         ]);
     }
 
@@ -122,20 +178,24 @@ class CuentaController extends Controller
                 'max:255',
                 'unique:cuentas,nombre_cuenta,' . $cuenta->id,
             ],
-            'saldo_cuenta' => ['nullable', 'numeric'],
-            'tipo_moneda' => ['required', 'in:USD,EUR,MLC,CUP'], // Validación para tipo_moneda
-            'deuda' => ['nullable', 'numeric'],
+            'tipo' => ['required', 'in:caja,banco,tarjeta,efectivo,otro'],
+            'saldo_cuenta' => ['nullable', 'numeric', 'min:0'],
+            'moneda_id' => ['required', 'exists:monedas,id'], // Cambiamos tipo_moneda por moneda_id
+            'deuda' => ['nullable', 'numeric', 'min:0'],
             'tipo_cuenta' => ['required', 'in:permanentes,temporales,deudas'],
+            'estado' => ['required', 'in:activa,inactiva'],
             'notas_cuenta' => ['nullable', 'string'],
         ]);
 
         // Actualizar la cuenta en la base de datos
         $cuenta->update([
             'nombre_cuenta' => $validated['nombre_cuenta'],
+            'tipo' => $validated['tipo'],
             'saldo_cuenta' => $validated['saldo_cuenta'] ?? $cuenta->saldo_cuenta,
-            'tipo_moneda' => $validated['tipo_moneda'], // Aseguramos que se actualice el tipo de moneda
+            'moneda_id' => $validated['moneda_id'], // Usamos moneda_id en lugar de tipo_moneda
             'deuda' => $validated['deuda'] ?? $cuenta->deuda,
             'tipo_cuenta' => $validated['tipo_cuenta'],
+            'estado' => $validated['estado'],
             'notas_cuenta' => $validated['notas_cuenta'],
         ]);
 
@@ -154,6 +214,22 @@ class CuentaController extends Controller
 
     public function getDeudas()
     {
-        return response()->json(Cuenta::where('tipo_cuenta', 'deudas')->get());
+        return response()->json(
+            Cuenta::where('tipo_cuenta', 'deudas')
+                ->with('moneda')
+                ->get()
+                ->map(function ($cuenta) {
+                    return [
+                        'id' => $cuenta->id,
+                        'nombre_cuenta' => $cuenta->nombre_cuenta,
+                        'saldo_cuenta' => $cuenta->saldo_cuenta,
+                        'deuda' => $cuenta->deuda,
+                        'moneda' => $cuenta->moneda ? [
+                            'codigo_moneda' => $cuenta->moneda->codigo_moneda,
+                            'simbolo_moneda' => $cuenta->moneda->simbolo_moneda,
+                        ] : null,
+                    ];
+                })
+        );
     }
 }

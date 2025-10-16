@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Cuenta extends Model
 {
@@ -20,6 +21,7 @@ class Cuenta extends Model
         'tipo_moneda',
         'deuda',
         'tipo_cuenta',
+        'moneda_id',
         'notas_cuenta',
         // NUEVOS CAMPOS
         'tipo',
@@ -30,10 +32,17 @@ class Cuenta extends Model
     protected $casts = [
         'saldo_cuenta' => 'double',
         'deuda' => 'double',
+        'estado' => 'string',
         'tipo_cuenta' => 'string',
         'tipo_moneda' => 'string',
         'tipo' => 'string',
     ];
+
+    // Relacion con las monedas
+    public function moneda(): BelongsTo
+    {
+        return $this->belongsTo(Moneda::class);
+    }
 
     // Relación con compras (opcional) - MANTENIDA
     public function compras()
