@@ -57,12 +57,18 @@ export default function MonedaEdit() {
     const { props } = usePage<PageProps>();
     const { moneda, moneda_principal, es_principal_actual, errors } = props;
 
+    // Función para formatear a 2 decimales asegurando que sea número
+    const formatToTwoDecimals = (value: number | string): number => {
+        const numValue = typeof value === 'string' ? parseFloat(value) : value;
+        return parseFloat(numValue.toFixed(2));
+    };
+
     const { data, setData, put, processing, reset } = useForm({
         codigo_moneda: moneda.codigo_moneda,
         nombre_moneda: moneda.nombre_moneda,
         simbolo_moneda: moneda.simbolo_moneda,
-        tasa_cambio: moneda.tasa_cambio,
-        commission: moneda.commission,
+        tasa_cambio: formatToTwoDecimals(moneda.tasa_cambio),
+        commission: formatToTwoDecimals(moneda.commission),
         estado: moneda.estado,
         principal: moneda.principal,
     });
@@ -103,6 +109,12 @@ export default function MonedaEdit() {
                 `Esta moneda será establecida como principal, reemplazando a ${moneda_principal?.nombre_moneda || 'la moneda principal actual'}`,
             );
         }
+    };
+
+    // Función para manejar cambios en números con 2 decimales
+    const handleNumberChange = (field: 'tasa_cambio' | 'commission', value: string) => {
+        const numValue = parseFloat(value) || 0;
+        setData(field, formatToTwoDecimals(numValue));
     };
 
     const esMonedaPrincipalActual = es_principal_actual;
@@ -202,11 +214,11 @@ export default function MonedaEdit() {
                                         <Input
                                             id="tasa_cambio"
                                             type="number"
-                                            step="0.000001"
-                                            min="0.000001"
-                                            placeholder="1.000000"
+                                            step="0.01"
+                                            min="0.01"
+                                            placeholder="1.00"
                                             value={data.tasa_cambio}
-                                            onChange={(e) => setData('tasa_cambio', parseFloat(e.target.value) || 0)}
+                                            onChange={(e) => handleNumberChange('tasa_cambio', e.target.value)}
                                             className={errors?.tasa_cambio ? 'border-red-500' : ''}
                                         />
                                         {errors?.tasa_cambio && <p className="text-sm text-red-500">{errors.tasa_cambio}</p>}
@@ -220,11 +232,11 @@ export default function MonedaEdit() {
                                         <Input
                                             id="commission"
                                             type="number"
-                                            step="0.0001"
+                                            step="0.01"
                                             min="0"
-                                            placeholder="0.0000"
+                                            placeholder="0.00"
                                             value={data.commission}
-                                            onChange={(e) => setData('commission', parseFloat(e.target.value) || 0)}
+                                            onChange={(e) => handleNumberChange('commission', e.target.value)}
                                             className={errors?.commission ? 'border-red-500' : ''}
                                         />
                                         {errors?.commission && <p className="text-sm text-red-500">{errors.commission}</p>}

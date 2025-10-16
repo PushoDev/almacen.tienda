@@ -120,7 +120,8 @@ export default function MonedasIndex() {
         }
     };
 
-    const formatNumber = (num: number, decimals: number = 6) => {
+    const formatNumber = (num: number, decimals: number = 2) => {
+        // Cambiado de 6 a 2 decimales por defecto
         return new Intl.NumberFormat('es-VE', {
             minimumFractionDigits: decimals,
             maximumFractionDigits: decimals,
@@ -182,8 +183,8 @@ export default function MonedasIndex() {
                                             <TableCell className="font-mono font-bold">{moneda.codigo_moneda}</TableCell>
                                             <TableCell className="font-medium">{moneda.nombre_moneda}</TableCell>
                                             <TableCell>{moneda.simbolo_moneda}</TableCell>
-                                            <TableCell>{formatNumber(moneda.tasa_cambio)}</TableCell>
-                                            <TableCell>{formatNumber(moneda.commission, 4)}%</TableCell>
+                                            <TableCell>{formatNumber(moneda.tasa_cambio, 2)}</TableCell> {/* 2 decimales para tasa */}
+                                            <TableCell>{formatNumber(moneda.commission, 4)}%</TableCell> {/* 4 decimales para comisión */}
                                             <TableCell>
                                                 <Badge
                                                     variant={moneda.estado ? 'default' : 'secondary'}

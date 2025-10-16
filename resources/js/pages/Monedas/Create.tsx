@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
-import { ArrowLeft, Coins, Save } from 'lucide-react';
+import { Coins, Save } from 'lucide-react';
 import { useEffect } from 'react';
 import { toast } from 'sonner';
 
@@ -96,12 +96,6 @@ export default function MonedaCreate() {
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     <div className="flex items-center gap-4">
-                        <Button variant="outline" size="sm" asChild>
-                            <Link href="/monedas">
-                                <ArrowLeft className="mr-2 h-4 w-4" />
-                                Volver
-                            </Link>
-                        </Button>
                         <HeadingSmall title="Crear Nueva Moneda" description="Agrega una nueva moneda al sistema con todos sus detalles." />
                     </div>
                     <Coins
@@ -131,7 +125,7 @@ export default function MonedaCreate() {
                                             id="codigo_moneda"
                                             type="text"
                                             maxLength={3}
-                                            placeholder="Ej: USD, EUR, VES"
+                                            placeholder="Ej: USD, EUR, CUP"
                                             value={data.codigo_moneda}
                                             onChange={(e) => setData('codigo_moneda', e.target.value.toUpperCase())}
                                             className={errors?.codigo_moneda ? 'border-red-500' : ''}
@@ -164,9 +158,9 @@ export default function MonedaCreate() {
                                     <Input
                                         id="simbolo_moneda"
                                         type="text"
-                                        placeholder="Ej: $, €, Bs."
+                                        placeholder="Ej: $, €, Zelle."
                                         value={data.simbolo_moneda}
-                                        onChange={(e) => setData('simbolo_moneda', e.target.value)}
+                                        onChange={(e) => setData('simbolo_moneda', e.target.value.toUpperCase())}
                                         className={errors?.simbolo_moneda ? 'border-red-500' : ''}
                                     />
                                     {errors?.simbolo_moneda && <p className="text-sm text-red-500">{errors.simbolo_moneda}</p>}
@@ -183,9 +177,9 @@ export default function MonedaCreate() {
                                             type="number"
                                             step="0.000001"
                                             min="0.000001"
-                                            placeholder="1.000000"
+                                            placeholder="1.0"
                                             value={data.tasa_cambio}
-                                            onChange={(e) => setData('tasa_cambio', parseFloat(e.target.value) || 0)}
+                                            onChange={(e) => setData('tasa_cambio', parseFloat(e.target.value) || '')}
                                             className={errors?.tasa_cambio ? 'border-red-500' : ''}
                                         />
                                         {errors?.tasa_cambio && <p className="text-sm text-red-500">{errors.tasa_cambio}</p>}

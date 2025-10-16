@@ -43,15 +43,15 @@ class MonedaController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'codigo_moneda' => 'required|string|max:3|unique:monedas,codigo_moneda',
-            'nombre_moneda' => 'required|string|max:100',
+            'codigo_moneda' => 'required|string|max:10',
+            'nombre_moneda' => 'required|string|max:100|unique:monedas,nombre_moneda',
             'simbolo_moneda' => 'required|string|max:10',
             'tasa_cambio' => 'required|numeric|min:0.000001',
             'commission' => 'required|numeric|min:0',
             'estado' => 'boolean',
             'principal' => 'boolean',
         ], [
-            'codigo_moneda.unique' => 'El código de moneda ya existe.',
+            'nombre_moneda.unique' => 'El nombre de moneda ya existe.',
             'tasa_cambio.min' => 'La tasa de cambio debe ser mayor a 0.',
         ]);
 
@@ -118,15 +118,15 @@ class MonedaController extends Controller
     public function update(Request $request, Moneda $moneda)
     {
         $validator = Validator::make($request->all(), [
-            'codigo_moneda' => 'required|string|max:3|unique:monedas,codigo_moneda,' . $moneda->id,
-            'nombre_moneda' => 'required|string|max:100',
+            'codigo_moneda' => 'required|string|max:10',
+            'nombre_moneda' => 'required|string|max:100|unique:monedas,nombre_moneda,' . $moneda->id,
             'simbolo_moneda' => 'required|string|max:10',
             'tasa_cambio' => 'required|numeric|min:0.000001',
             'commission' => 'required|numeric|min:0',
             'estado' => 'boolean',
             'principal' => 'boolean',
         ], [
-            'codigo_moneda.unique' => 'El código de moneda ya existe.',
+            'nombre_moneda.unique' => 'El nombre de moneda ya existe.',
             'tasa_cambio.min' => 'La tasa de cambio debe ser mayor a 0.',
         ]);
 

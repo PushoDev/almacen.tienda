@@ -10,9 +10,9 @@ return new class extends Migration
     {
         Schema::create('monedas', function (Blueprint $table) {
             $table->id();
-            $table->string('codigo_moneda', 3)->unique(); // USD, EUR, etc.
-            $table->string('nombre_moneda');
-            $table->string('simbolo_moneda', 10);
+            $table->string('codigo_moneda'); // USD, CUP, etc.
+            $table->string('nombre_moneda')->unique();
+            $table->string('simbolo_moneda', 14);
             $table->decimal('tasa_cambio', 15, 6)->default(1); // Tasa respecto a moneda principal
             $table->decimal('commission', 8, 4)->default(0); // Comisión porcentual
             $table->boolean('estado')->default(true);
