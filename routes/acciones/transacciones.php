@@ -35,5 +35,9 @@ Route::middleware(['auth', 'verified'])->group(
         // Ruta para Transferencia
         Route::post('transacciones/transferir', [TransaccionController::class, 'transferir'])
             ->name('transacciones.transferir');
+
+        // ✅ NUEVA RUTA: Gastos por Transportación
+        Route::post('transacciones/gasto-transportacion', [TransaccionController::class, 'gastoTransportacion'])
+            ->name('transacciones.gasto-transportacion');
     }
 );

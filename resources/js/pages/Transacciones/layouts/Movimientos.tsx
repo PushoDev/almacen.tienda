@@ -6,13 +6,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-// 💡 CORRECCIÓN 1: Importamos FormDataType de Inertia, que ayuda con el error TS2344.
-import { FormDataType, InertiaFormProps, useForm } from '@inertiajs/react';
+import { useForm } from '@inertiajs/react'; // ✅ REMOVED FormDataType import
 import { DollarSign, User } from 'lucide-react';
 import React, { useState } from 'react';
 
 // ------------------------------------
-// TIPOS DE DATOS Y UTILIDADES
+// TIPOS DE DATOS Y UTILIDADES ACTUALIZADOS
 // ------------------------------------
 interface AlertState {
     show: boolean;
@@ -27,12 +26,26 @@ const ToastAlert: React.FC<AlertState> = ({ show, message, type }) => {
     return <div className={`${baseClasses} ${colorClasses}`}>{message}</div>;
 };
 
+// ✅ INTERFACES ACTUALIZADAS con el sistema de monedas
+interface Moneda {
+    id: number;
+    codigo_moneda: string;
+    nombre_moneda: string;
+    simbolo_moneda: string;
+    tasa_cambio: number;
+    estado: boolean;
+    principal: boolean;
+}
+
 interface Cuenta {
     id: number;
     nombre_cuenta: string;
-    tipo_moneda: string;
     saldo_cuenta: number;
     deuda: number;
+    tipo_cuenta: string;
+    estado: string;
+    moneda_id: number;
+    moneda: Moneda;
 }
 
 interface Cliente {
@@ -44,83 +57,78 @@ interface Cliente {
 interface Props {
     cuentas: Cuenta[];
     clientes: Cliente[];
-    tasaCambioActual: number | null; // Acepta null por si no está definida en la base de datos.
+    monedasActivas: Moneda[];
 }
 
 type EntidadTipo = 'cuenta' | 'cliente';
 
-interface BaseForm {
+// ✅ INTERFAZ SIMPLIFICADA sin FormDataType
+interface MovimientoForm {
+    origen_tipo: EntidadTipo;
+    origen_id: string;
+    destino_tipo: EntidadTipo;
+    destino_id: string;
     monto: string;
     moneda: string;
     comentario: string;
     tasa_cambio_aplicada: string;
 }
 
-// 💡 CORRECCIÓN 2: Aseguramos que MovimientoForm extienda FormDataType para resolver el error TS2344
-interface MovimientoForm extends BaseForm, FormDataType {
-    origen_tipo: EntidadTipo;
-    origen_id: string;
-    destino_tipo: EntidadTipo;
-    destino_id: string;
-}
-
-// 💡 CORRECCIÓN 3: Definimos FormSetter con un tipo más seguro.
-type FormSetter<T extends FormDataType> = InertiaFormProps<T>['setData'];
+// ✅ TIPO SIMPLIFICADO para setData
+type FormSetter = (data: MovimientoForm | ((data: MovimientoForm) => MovimientoForm)) => void;
 
 // ------------------------------------
-// COMPONENTE AUXILIAR PARA LA TASA DE CAMBIO
+// COMPONENTE AUXILIAR PARA LA TASA DE CAMBIO CORREGIDO
 // ------------------------------------
 interface TasaCambioProps {
-    data: BaseForm;
-    // Usamos el tipo genérico con la restricción FormDataType para FormSetter.
-    setData: FormSetter<MovimientoForm>;
+    data: MovimientoForm;
+    setData: FormSetter;
     errors: Record<string, string>;
-    defaultRate: number | null;
+    monedasActivas: Moneda[];
 }
 
-const TasaCambioInput: React.FC<TasaCambioProps> = ({ data, setData, errors, defaultRate }) => {
-    // Solo mostramos el campo si la moneda es CUP
-    if (data.moneda !== 'CUP') {
+const TasaCambioInput: React.FC<TasaCambioProps> = ({ data, setData, errors, monedasActivas }) => {
+    // Solo mostramos el campo si la moneda necesita conversión (no es USD)
+    const monedaSeleccionada = monedasActivas.find((m) => m.codigo_moneda === data.moneda);
+
+    if (!monedaSeleccionada || data.moneda === 'USD') {
         return null;
     }
 
-    // 💡 CORRECCIÓN 4: Manejo seguro del valor por defecto para evitar 'Cannot read properties of undefined (reading 'toFixed')'
-    const safeDefaultRate = defaultRate && defaultRate > 0 ? defaultRate : 0;
+    // ✅ CORRECCIÓN: Asegurar que tasa_cambio sea un número
+    const tasaPorDefecto =
+        typeof monedaSeleccionada.tasa_cambio === 'number' ? monedaSeleccionada.tasa_cambio : Number(monedaSeleccionada.tasa_cambio) || 0;
 
     return (
         <div>
-            <Label htmlFor="tasa_cambio">Tasa de Cambio Aplicada (USD a CUP)</Label>
+            <Label htmlFor="tasa_cambio">Tasa de Cambio Aplicada (USD a {data.moneda})</Label>
             <Input
                 type="number"
                 id="tasa_cambio"
                 value={data.tasa_cambio_aplicada}
-                onChange={(e) => setData('tasa_cambio_aplicada', e.target.value)}
+                onChange={(e) => setData({ ...data, tasa_cambio_aplicada: e.target.value })}
                 step="0.0001"
                 min="0.0001"
-                placeholder={`Tasa actual: ${safeDefaultRate.toFixed(4)}`} // Usamos el valor seguro aquí
+                placeholder={`Tasa por defecto: ${tasaPorDefecto.toFixed(4)}`}
             />
-            <p className="mt-1 text-xs text-gray-500">Solo aplica para operaciones en CUP. La tasa se envía al backend.</p>
+            <p className="mt-1 text-xs text-gray-500">Solo aplica para operaciones en {data.moneda}. La tasa se envía al backend.</p>
             {errors.tasa_cambio_aplicada && <p className="mt-1 text-sm text-red-500">{errors.tasa_cambio_aplicada}</p>}
         </div>
     );
 };
 
 // ------------------------------------
-// COMPONENTE PRINCIPAL (Movimientos)
+// COMPONENTE PRINCIPAL (Movimientos) CORREGIDO
 // ------------------------------------
-export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Props) {
+export default function Movimientos({ cuentas, clientes, monedasActivas }: Props) {
     const [alert, setAlert] = useState<AlertState>({ show: false, message: '', type: 'success' });
-
-    // Aseguramos que la tasa sea al menos 0 para prevenir errores de .toFixed si viene null
-    const safeTasaCambioActual = tasaCambioActual ?? 0;
 
     const showToast = (message: string, type: 'success' | 'error') => {
         setAlert({ show: true, message, type });
         setTimeout(() => setAlert({ show: false, message: '', type: 'success' }), 4000);
     };
 
-    // --- FORMULARIOS ---
-    // Usamos MovimientoForm en la definición del tipo
+    // --- FORMULARIOS SIMPLIFICADOS ---
     const {
         data: gastoData,
         setData: setGastoData,
@@ -142,19 +150,8 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
     const handleGastoSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
-        // 💡 CORRECCIÓN 5: Simplificamos el post.
-        // Ahora pasamos la data directamente como el primer argumento.
+        // ✅ CORRECCIÓN: Enviar datos correctamente
         postGasto(route('transacciones.gastar'), {
-            onSuccess: () => {
-                showToast('¡Gasto registrado con éxito!', 'success');
-                // Al reiniciar, la tasa también se limpia
-                resetGasto();
-            },
-            onError: (errors) => {
-                console.error('Errores de Gasto:', errors);
-                showToast('Hubo un error al registrar el gasto. Revisa los campos.', 'error');
-            },
-            // Aseguramos que solo se envíen los campos necesarios para la ruta
             data: {
                 origen_tipo: gastoData.origen_tipo,
                 origen_id: gastoData.origen_id,
@@ -162,6 +159,14 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
                 moneda: gastoData.moneda,
                 comentario: gastoData.comentario,
                 tasa_cambio_aplicada: gastoData.tasa_cambio_aplicada,
+            },
+            onSuccess: () => {
+                showToast('¡Gasto registrado con éxito!', 'success');
+                resetGasto();
+            },
+            onError: (errors) => {
+                console.error('Errores de Gasto:', errors);
+                showToast('Hubo un error al registrar el gasto. Revisa los campos.', 'error');
             },
         });
     };
@@ -187,17 +192,7 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
     const handleIngresoSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
-        // 💡 CORRECCIÓN 5: Simplificamos el post.
         postIngreso(route('transacciones.ingresar'), {
-            onSuccess: () => {
-                showToast('¡Ingreso registrado con éxito!', 'success');
-                resetIngreso();
-            },
-            onError: (errors) => {
-                console.error('Errores de Ingreso:', errors);
-                showToast('Hubo un error al registrar el ingreso. Revisa los campos.', 'error');
-            },
-            // Aseguramos que solo se envíen los campos necesarios para la ruta
             data: {
                 destino_tipo: ingresoData.destino_tipo,
                 destino_id: ingresoData.destino_id,
@@ -205,6 +200,14 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
                 moneda: ingresoData.moneda,
                 comentario: ingresoData.comentario,
                 tasa_cambio_aplicada: ingresoData.tasa_cambio_aplicada,
+            },
+            onSuccess: () => {
+                showToast('¡Ingreso registrado con éxito!', 'success');
+                resetIngreso();
+            },
+            onError: (errors) => {
+                console.error('Errores de Ingreso:', errors);
+                showToast('Hubo un error al registrar el ingreso. Revisa los campos.', 'error');
             },
         });
     };
@@ -235,8 +238,17 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
             return;
         }
 
-        // 💡 CORRECCIÓN 5: Simplificamos el post.
         postTransfer(route('transacciones.transferir'), {
+            data: {
+                origen_tipo: transferData.origen_tipo,
+                origen_id: transferData.origen_id,
+                destino_tipo: transferData.destino_tipo,
+                destino_id: transferData.destino_id,
+                monto: transferData.monto,
+                moneda: transferData.moneda,
+                comentario: transferData.comentario,
+                tasa_cambio_aplicada: transferData.tasa_cambio_aplicada,
+            },
             onSuccess: () => {
                 showToast('¡Transferencia realizada con éxito!', 'success');
                 resetTransfer();
@@ -249,35 +261,38 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
         });
     };
 
-    // --- MANEJADORES Y AYUDANTES DE RENDERIZADO ---
+    // --- MANEJADORES Y AYUDANTES DE RENDERIZADO ACTUALIZADOS ---
 
-    // 💡 CORRECCIÓN 6: Usamos el tipo genérico para FormSetter en el argumento.
-    const handleEntidadChange = (value: string, tipoEntidad: EntidadTipo, campo: 'origen' | 'destino', formSetter: FormSetter<MovimientoForm>) => {
+    const handleEntidadChange = (value: string, tipoEntidad: EntidadTipo, campo: 'origen' | 'destino', formSetter: FormSetter) => {
         const id = Number(value);
         let selectedMoneda = '';
         let initialTasa = '';
 
         if (tipoEntidad === 'cuenta') {
             const selectedCuenta = cuentas.find((c) => c.id === id);
-            selectedMoneda = selectedCuenta?.tipo_moneda || '';
+            selectedMoneda = selectedCuenta?.moneda.codigo_moneda || '';
 
-            // Si la moneda es CUP, sugiere la tasa actual del sistema
-            if (selectedMoneda === 'CUP' && safeTasaCambioActual > 0) {
-                initialTasa = String(safeTasaCambioActual);
+            // ✅ ACTUALIZADO: Obtener tasa de la moneda seleccionada
+            if (selectedMoneda && selectedMoneda !== 'USD') {
+                const monedaInfo = monedasActivas.find((m) => m.codigo_moneda === selectedMoneda);
+                if (monedaInfo) {
+                    // ✅ CORRECCIÓN: Asegurar que la tasa sea un número
+                    const tasa = typeof monedaInfo.tasa_cambio === 'number' ? monedaInfo.tasa_cambio : Number(monedaInfo.tasa_cambio) || 0;
+                    initialTasa = String(tasa);
+                }
             }
         } else if (tipoEntidad === 'cliente') {
             // Asumiendo que la deuda/pago del cliente es siempre en USD
             selectedMoneda = 'USD';
-            initialTasa = ''; // Los clientes no tienen tasa de cambio aplicada, ya están en USD.
+            initialTasa = '';
         }
 
         formSetter((data) => {
-            const newData: MovimientoForm = { ...data };
+            const newData = { ...data };
 
             if (campo === 'origen') {
                 newData.origen_tipo = tipoEntidad;
                 newData.origen_id = value;
-                // La moneda y tasa de la operación se define por el origen
                 newData.moneda = selectedMoneda;
                 newData.tasa_cambio_aplicada = initialTasa;
             }
@@ -285,8 +300,7 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
             if (campo === 'destino') {
                 newData.destino_tipo = tipoEntidad;
                 newData.destino_id = value;
-                // Para Ingreso, la moneda y tasa es determinada por el destino
-                if (formSetter === (setIngresoData as FormSetter<MovimientoForm>)) {
+                if (formSetter === setIngresoData) {
                     newData.moneda = selectedMoneda;
                     newData.tasa_cambio_aplicada = initialTasa;
                 }
@@ -301,15 +315,15 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
     const getEntidadInfo = (id: number, tipo: EntidadTipo): string => {
         if (tipo === 'cuenta') {
             const cuenta = cuentas.find((c) => c.id === id);
-            return cuenta ? `${cuenta.nombre_cuenta} (${cuenta.tipo_moneda}) - Saldo: ${cuenta.saldo_cuenta.toFixed(2)}` : 'Cuenta no encontrada';
+            return cuenta
+                ? `${cuenta.nombre_cuenta} (${cuenta.moneda.codigo_moneda}) - Saldo: ${cuenta.saldo_cuenta.toFixed(2)}`
+                : 'Cuenta no encontrada';
         }
         if (tipo === 'cliente') {
             const cliente = clientes.find((c) => c.id === id);
             if (!cliente) return 'Cliente no encontrado';
 
             const deudaMonto = Number(cliente.deuda_pago_cliente) || 0;
-
-            // Muestra USD ya que la moneda del cliente siempre se asume como USD
             return `${cliente.nombre_cliente} (Cliente) - Deuda/Pago: ${deudaMonto.toFixed(2)} USD`;
         }
         return '';
@@ -344,7 +358,13 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
         <Card>
             <CardHeader>
                 <CardTitle>Movimientos Financieros</CardTitle>
-                <CardDescription>Registre entradas (Ingreso), salidas (Gasto) o movimientos entre sus entidades (Transferencia).</CardDescription>
+                <CardDescription>
+                    Registre entradas (Ingreso), salidas (Gasto) o movimientos entre sus entidades (Transferencia).
+                    <br />
+                    <span className="text-muted-foreground text-xs">
+                        ✅ Sistema actualizado con monedas dinámicas: {monedasActivas.map((m) => m.codigo_moneda).join(', ')}
+                    </span>
+                </CardDescription>
             </CardHeader>
             <CardContent>
                 <Tabs defaultValue="gasto">
@@ -354,9 +374,7 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
                         <TabsTrigger value="transferir">Transferir</TabsTrigger>
                     </TabsList>
 
-                    {/* =======================================================
-                        1. FORMULARIO DE GASTO
-                    ======================================================= */}
+                    {/* FORMULARIO DE GASTO */}
                     <TabsContent value="gasto" className="mt-4">
                         <form onSubmit={handleGastoSubmit} className="space-y-4">
                             {/* Selector de Tipo de Origen */}
@@ -367,10 +385,13 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
                                     value={gastoData.origen_tipo || 'cuenta'}
                                     onValueChange={(value: string) => {
                                         if (value === 'cuenta' || value === 'cliente') {
-                                            setGastoData('origen_tipo', value as EntidadTipo);
-                                            setGastoData('origen_id', '');
-                                            setGastoData('moneda', '');
-                                            setGastoData('tasa_cambio_aplicada', '');
+                                            setGastoData({
+                                                ...gastoData,
+                                                origen_tipo: value as EntidadTipo,
+                                                origen_id: '',
+                                                moneda: '',
+                                                tasa_cambio_aplicada: '',
+                                            });
                                         }
                                     }}
                                     className="justify-start"
@@ -390,9 +411,7 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
                                     Entidad de Origen ({gastoData.origen_tipo === 'cuenta' ? 'Cuenta' : 'Cliente'})
                                 </Label>
                                 <Select
-                                    onValueChange={(value) =>
-                                        handleEntidadChange(value, gastoData.origen_tipo, 'origen', setGastoData as FormSetter<MovimientoForm>)
-                                    }
+                                    onValueChange={(value) => handleEntidadChange(value, gastoData.origen_tipo, 'origen', setGastoData)}
                                     value={gastoData.origen_id}
                                 >
                                     <SelectTrigger>
@@ -423,7 +442,7 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
                                     type="number"
                                     id="monto_gasto"
                                     value={gastoData.monto}
-                                    onChange={(e) => setGastoData('monto', e.target.value)}
+                                    onChange={(e) => setGastoData({ ...gastoData, monto: e.target.value })}
                                     step="0.01"
                                     min="0.01"
                                     placeholder="0.00"
@@ -431,20 +450,15 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
                                 {gastoErrors.monto && <p className="mt-1 text-sm text-red-500">{gastoErrors.monto}</p>}
                             </div>
 
-                            {/* Tasa de Cambio Condicional */}
-                            <TasaCambioInput
-                                data={gastoData}
-                                setData={setGastoData as FormSetter<MovimientoForm>}
-                                errors={gastoErrors}
-                                defaultRate={safeTasaCambioActual}
-                            />
+                            {/* ✅ Tasa de Cambio Condicional CORREGIDA */}
+                            <TasaCambioInput data={gastoData} setData={setGastoData} errors={gastoErrors} monedasActivas={monedasActivas} />
 
                             <div>
                                 <Label htmlFor="comentario_gasto">Comentario / Concepto</Label>
                                 <Textarea
                                     id="comentario_gasto"
                                     value={gastoData.comentario}
-                                    onChange={(e) => setGastoData('comentario', e.target.value)}
+                                    onChange={(e) => setGastoData({ ...gastoData, comentario: e.target.value })}
                                     placeholder="Descripción del gasto..."
                                 />
                                 {gastoErrors.comentario && <p className="mt-1 text-sm text-red-500">{gastoErrors.comentario}</p>}
@@ -460,9 +474,7 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
                         </form>
                     </TabsContent>
 
-                    {/* =======================================================
-                        2. FORMULARIO DE INGRESO
-                    ======================================================= */}
+                    {/* FORMULARIO DE INGRESO */}
                     <TabsContent value="ingreso" className="mt-4">
                         <form onSubmit={handleIngresoSubmit} className="space-y-4">
                             {/* Selector de Tipo de Destino */}
@@ -473,10 +485,13 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
                                     value={ingresoData.destino_tipo || 'cuenta'}
                                     onValueChange={(value: string) => {
                                         if (value === 'cuenta' || value === 'cliente') {
-                                            setIngresoData('destino_tipo', value as EntidadTipo);
-                                            setIngresoData('destino_id', '');
-                                            setIngresoData('moneda', '');
-                                            setIngresoData('tasa_cambio_aplicada', '');
+                                            setIngresoData({
+                                                ...ingresoData,
+                                                destino_tipo: value as EntidadTipo,
+                                                destino_id: '',
+                                                moneda: '',
+                                                tasa_cambio_aplicada: '',
+                                            });
                                         }
                                     }}
                                     className="justify-start"
@@ -496,9 +511,7 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
                                     Entidad de Destino ({ingresoData.destino_tipo === 'cuenta' ? 'Cuenta' : 'Cliente'})
                                 </Label>
                                 <Select
-                                    onValueChange={(value) =>
-                                        handleEntidadChange(value, ingresoData.destino_tipo, 'destino', setIngresoData as FormSetter<MovimientoForm>)
-                                    }
+                                    onValueChange={(value) => handleEntidadChange(value, ingresoData.destino_tipo, 'destino', setIngresoData)}
                                     value={ingresoData.destino_id}
                                 >
                                     <SelectTrigger>
@@ -529,7 +542,7 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
                                     type="number"
                                     id="monto_ingreso"
                                     value={ingresoData.monto}
-                                    onChange={(e) => setIngresoData('monto', e.target.value)}
+                                    onChange={(e) => setIngresoData({ ...ingresoData, monto: e.target.value })}
                                     step="0.01"
                                     min="0.01"
                                     placeholder="0.00"
@@ -537,20 +550,15 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
                                 {ingresoErrors.monto && <p className="mt-1 text-sm text-red-500">{ingresoErrors.monto}</p>}
                             </div>
 
-                            {/* Tasa de Cambio Condicional */}
-                            <TasaCambioInput
-                                data={ingresoData}
-                                setData={setIngresoData as FormSetter<MovimientoForm>}
-                                errors={ingresoErrors}
-                                defaultRate={safeTasaCambioActual}
-                            />
+                            {/* ✅ Tasa de Cambio Condicional CORREGIDA */}
+                            <TasaCambioInput data={ingresoData} setData={setIngresoData} errors={ingresoErrors} monedasActivas={monedasActivas} />
 
                             <div>
                                 <Label htmlFor="comentario_ingreso">Comentario / Concepto</Label>
                                 <Textarea
                                     id="comentario_ingreso"
                                     value={ingresoData.comentario}
-                                    onChange={(e) => setIngresoData('comentario', e.target.value)}
+                                    onChange={(e) => setIngresoData({ ...ingresoData, comentario: e.target.value })}
                                     placeholder="Descripción del ingreso..."
                                 />
                                 {ingresoErrors.comentario && <p className="mt-1 text-sm text-red-500">{ingresoErrors.comentario}</p>}
@@ -566,9 +574,7 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
                         </form>
                     </TabsContent>
 
-                    {/* =======================================================
-                        3. FORMULARIO DE TRANSFERENCIA
-                    ======================================================= */}
+                    {/* FORMULARIO DE TRANSFERENCIA */}
                     <TabsContent value="transferir" className="mt-4">
                         <form onSubmit={handleTransferSubmit} className="space-y-4">
                             {/* === Origen === */}
@@ -580,12 +586,14 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
                                     value={transferData.origen_tipo || 'cuenta'}
                                     onValueChange={(value: string) => {
                                         if (value === 'cuenta' || value === 'cliente') {
-                                            setTransferData('origen_tipo', value as EntidadTipo);
-                                            setTransferData('origen_id', '');
-                                            // Limpiamos el destino para forzar una re-selección que evite duplicados
-                                            setTransferData('destino_id', '');
-                                            setTransferData('moneda', '');
-                                            setTransferData('tasa_cambio_aplicada', '');
+                                            setTransferData({
+                                                ...transferData,
+                                                origen_tipo: value as EntidadTipo,
+                                                origen_id: '',
+                                                destino_id: '',
+                                                moneda: '',
+                                                tasa_cambio_aplicada: '',
+                                            });
                                         }
                                     }}
                                     className="mb-2 justify-start"
@@ -604,14 +612,7 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
                                         Entidad de Origen ({transferData.origen_tipo === 'cuenta' ? 'Cuenta' : 'Cliente'})
                                     </Label>
                                     <Select
-                                        onValueChange={(value) =>
-                                            handleEntidadChange(
-                                                value,
-                                                transferData.origen_tipo,
-                                                'origen',
-                                                setTransferData as FormSetter<MovimientoForm>,
-                                            )
-                                        }
+                                        onValueChange={(value) => handleEntidadChange(value, transferData.origen_tipo, 'origen', setTransferData)}
                                         value={transferData.origen_id}
                                     >
                                         <SelectTrigger>
@@ -620,7 +621,6 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
                                             />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {/* Excluimos solo si el tipo de origen y el tipo de destino son iguales */}
                                             {renderSelectOptions(
                                                 transferData.origen_tipo,
                                                 transferData.destino_tipo === transferData.origen_tipo ? transferData.destino_id : '',
@@ -641,8 +641,11 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
                                     value={transferData.destino_tipo || 'cuenta'}
                                     onValueChange={(value: string) => {
                                         if (value === 'cuenta' || value === 'cliente') {
-                                            setTransferData('destino_tipo', value as EntidadTipo);
-                                            setTransferData('destino_id', '');
+                                            setTransferData({
+                                                ...transferData,
+                                                destino_tipo: value as EntidadTipo,
+                                                destino_id: '',
+                                            });
                                         }
                                     }}
                                     className="mb-2 justify-start"
@@ -661,14 +664,7 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
                                         Entidad de Destino ({transferData.destino_tipo === 'cuenta' ? 'Cuenta' : 'Cliente'})
                                     </Label>
                                     <Select
-                                        onValueChange={(value) =>
-                                            handleEntidadChange(
-                                                value,
-                                                transferData.destino_tipo,
-                                                'destino',
-                                                setTransferData as FormSetter<MovimientoForm>,
-                                            )
-                                        }
+                                        onValueChange={(value) => handleEntidadChange(value, transferData.destino_tipo, 'destino', setTransferData)}
                                         value={transferData.destino_id}
                                     >
                                         <SelectTrigger>
@@ -677,7 +673,6 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
                                             />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {/* Excluimos solo si el tipo de destino y el tipo de origen son iguales */}
                                             {renderSelectOptions(
                                                 transferData.destino_tipo,
                                                 transferData.origen_tipo === transferData.destino_tipo ? transferData.origen_id : '',
@@ -707,7 +702,7 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
                                     type="number"
                                     id="monto_transferir"
                                     value={transferData.monto}
-                                    onChange={(e) => setTransferData('monto', e.target.value)}
+                                    onChange={(e) => setTransferData({ ...transferData, monto: e.target.value })}
                                     step="0.01"
                                     min="0.01"
                                     placeholder="0.00"
@@ -715,20 +710,15 @@ export default function Movimientos({ cuentas, clientes, tasaCambioActual }: Pro
                                 {transferErrors.monto && <p className="mt-1 text-sm text-red-500">{transferErrors.monto}</p>}
                             </div>
 
-                            {/* Tasa de Cambio Condicional */}
-                            <TasaCambioInput
-                                data={transferData}
-                                setData={setTransferData as FormSetter<MovimientoForm>}
-                                errors={transferErrors}
-                                defaultRate={safeTasaCambioActual}
-                            />
+                            {/* ✅ Tasa de Cambio Condicional CORREGIDA */}
+                            <TasaCambioInput data={transferData} setData={setTransferData} errors={transferErrors} monedasActivas={monedasActivas} />
 
                             <div>
                                 <Label htmlFor="comentario_transferir">Comentario</Label>
                                 <Textarea
                                     id="comentario_transferir"
                                     value={transferData.comentario}
-                                    onChange={(e) => setTransferData('comentario', e.target.value)}
+                                    onChange={(e) => setTransferData({ ...transferData, comentario: e.target.value })}
                                     placeholder="Descripción de la transferencia..."
                                 />
                                 {transferErrors.comentario && <p className="mt-1 text-sm text-red-500">{transferErrors.comentario}</p>}

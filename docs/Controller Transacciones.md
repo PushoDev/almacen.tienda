@@ -6,7 +6,7 @@ use App\Models\Compra;
 use App\Models\Cuenta;
 use App\Models\Cliente;
 use App\Models\Producto;
-use App\Models\Moneda;
+use App\Models\Moneda; // ✅ Reemplaza TasaCambio
 use App\Models\CostDistribution;
 use App\Models\CostDistributionItem;
 use App\Models\CostoHistorial;
@@ -35,7 +35,7 @@ class TransaccionController extends Controller
         $cuentas = Cuenta::with('moneda')->get();
         $clientes = Cliente::all();
 
-        // ✅ Obtener monedas activas y tasa CUP por defecto
+        // ✅ NUEVO: Obtener monedas activas y tasa CUP por defecto
         $monedasActivas = Moneda::where('estado', true)->get();
         $monedaCUP = Moneda::where('codigo_moneda', 'CUP')
             ->where('estado', true)
@@ -60,12 +60,12 @@ class TransaccionController extends Controller
             'productos' => fn($query) => $query->withPivot('cantidad', 'precio')
         ]);
 
-        // ✅ Filtrar cuentas que tengan moneda con código CUP
-        $cuentas = Cuenta::whereHas('moneda', function ($query) {
+        // ✅ NUEVO: Filtrar cuentas que tengan moneda con código CUP
+        $cuentas = Cuenta::whereHas('moneda', function($query) {
             $query->where('codigo_moneda', 'CUP')->where('estado', true);
         })->with('moneda')->get();
 
-        // ✅ Obtener moneda CUP por defecto
+        // ✅ NUEVO: Obtener moneda CUP por defecto
         $monedaCUP = Moneda::where('codigo_moneda', 'CUP')
             ->where('estado', true)
             ->orderBy('tasa_cambio', 'desc')
@@ -97,13 +97,13 @@ class TransaccionController extends Controller
                 return redirect()->back()->with('error', 'No se puede usar una cuenta de deudas para esta operación.');
             }
 
-            // ✅ Validar que la cuenta tenga moneda CUP
+            // ✅ NUEVO: Validar que la cuenta tenga moneda CUP
             if ($cuenta->moneda->codigo_moneda !== 'CUP') {
                 DB::rollBack();
                 return redirect()->back()->with('error', 'Solo se pueden usar cuentas en moneda CUP para esta operación.');
             }
 
-            // ✅ Obtener tasa de cambio desde la moneda de la cuenta
+            // ✅ NUEVO: Obtener tasa de cambio desde la moneda de la cuenta
             $tasa_cambio = $validatedData['exchange_rate'] ?? $cuenta->moneda->tasa_cambio;
 
             if (!$tasa_cambio || $tasa_cambio == 0) {
@@ -284,7 +284,7 @@ class TransaccionController extends Controller
     private function resolveTasaCambio(Request $request): ?float
     {
         $monedaPrincipal = $this->obtenerMonedaPrincipal();
-
+        
         // Si la moneda de la transacción es la principal, no necesita conversión
         if ($request->moneda === $monedaPrincipal->codigo_moneda) {
             return 1.0;
@@ -311,7 +311,7 @@ class TransaccionController extends Controller
     }
 
     // =======================================================
-    // === MÉTODOS DE MOVIMIENTOS FINANCIEROS ACTUALIZADOS ===
+    // === MÉTODOS ACTUALIZADOS DE MOVIMIENTOS FINANCIEROS ===
     // =======================================================
 
     /**
@@ -351,12 +351,12 @@ class TransaccionController extends Controller
 
             if ($request->origen_tipo === 'cuenta') {
                 $origen = Cuenta::with('moneda')->lockForUpdate()->findOrFail($request->origen_id);
-
+                
                 // ✅ Validar que la moneda de la cuenta coincida
                 if ($origen->moneda->codigo_moneda !== $request->moneda) {
                     throw new \Exception("La moneda de la cuenta ({$origen->moneda->codigo_moneda}) no coincide con la transacción ({$request->moneda}).");
                 }
-
+                
                 if ($origen->saldo_cuenta < $request->monto) {
                     throw new \Exception('Saldo insuficiente en la cuenta.');
                 }
@@ -420,12 +420,12 @@ class TransaccionController extends Controller
 
             if ($request->destino_tipo === 'cuenta') {
                 $destino = Cuenta::with('moneda')->lockForUpdate()->findOrFail($request->destino_id);
-
+                
                 // ✅ Validar que la moneda de la cuenta coincida
                 if ($destino->moneda->codigo_moneda !== $request->moneda) {
                     throw new \Exception("La moneda de la cuenta ({$destino->moneda->codigo_moneda}) no coincide con la transacción ({$request->moneda}).");
                 }
-
+                
                 $destino->increment('saldo_cuenta', $request->monto);
 
                 $movimientoData['cuenta_destino_id'] = $destino->id;
@@ -484,11 +484,11 @@ class TransaccionController extends Controller
             // Manejo del Origen
             if ($request->origen_tipo === 'cuenta') {
                 $origen = Cuenta::with('moneda')->lockForUpdate()->findOrFail($request->origen_id);
-
+                
                 if ($origen->moneda->codigo_moneda !== $request->moneda) {
                     throw new \Exception("La moneda de la cuenta origen ({$origen->moneda->codigo_moneda}) no coincide con la transacción ({$request->moneda}).");
                 }
-
+                
                 if ($origen->saldo_cuenta < $request->monto) {
                     throw new \Exception('Saldo insuficiente en la cuenta origen.');
                 }
@@ -503,11 +503,11 @@ class TransaccionController extends Controller
             // Manejo del Destino
             if ($request->destino_tipo === 'cuenta') {
                 $destino = Cuenta::with('moneda')->lockForUpdate()->findOrFail($request->destino_id);
-
+                
                 if ($destino->moneda->codigo_moneda !== $request->moneda) {
                     throw new \Exception("La moneda de la cuenta destino ({$destino->moneda->codigo_moneda}) no coincide con la transacción ({$request->moneda}).");
                 }
-
+                
                 $destino->increment('saldo_cuenta', $request->monto);
                 $destinoNombre = "Cuenta: {$destino->nombre_cuenta}";
             } else {
@@ -537,158 +537,5 @@ class TransaccionController extends Controller
             Log::error('Error al registrar transferencia: ' . $e->getMessage());
             return Redirect::back()->with('error', '❌ Error al registrar la transferencia: ' . $e->getMessage());
         }
-    }
-
-    // =======================================================
-    // === MÉTODO NUEVO: GASTOS POR TRANSPORTACIÓN ===
-    // =======================================================
-
-    /**
-     * Registrar Gasto por Transportación y distribuir entre productos de una compra
-     */
-    public function gastoTransportacion(Request $request)
-    {
-        $request->validate([
-            'compra_id' => 'required|exists:compras,id',
-            'cuenta_id' => 'required|exists:cuentas,id',
-            'monto' => 'required|numeric|min:0.01',
-            'moneda' => 'required|string|in:CUP', // Solo CUP por ahora
-            'comentario' => 'nullable|string|max:255',
-            'tasa_cambio_aplicada' => 'nullable|numeric|min:0.0001',
-            'distribucion_tipo' => 'required|string|in:proporcional,igualitario,manual',
-            // Para distribución manual
-            'distribucion_productos' => 'nullable|array',
-            'distribucion_productos.*.producto_id' => 'required|exists:productos,id',
-            'distribucion_productos.*.monto_usd' => 'required|numeric|min:0',
-        ]);
-
-        DB::beginTransaction();
-
-        try {
-            $compra = Compra::with('productos')->findOrFail($request->compra_id);
-            $cuenta = Cuenta::with('moneda')->findOrFail($request->cuenta_id);
-
-            // Validar que la cuenta sea CUP
-            if ($cuenta->moneda->codigo_moneda !== 'CUP') {
-                throw new \Exception('Solo se pueden usar cuentas en CUP para gastos de transportación.');
-            }
-
-            // Validar saldo suficiente
-            if ($cuenta->saldo_cuenta < $request->monto) {
-                throw new \Exception('Saldo insuficiente en la cuenta.');
-            }
-
-            $tasa_cambio = $request->tasa_cambio_aplicada ?? $cuenta->moneda->tasa_cambio;
-            $montoTotalUSD = $request->monto / $tasa_cambio;
-
-            // Diferentes métodos de distribución
-            $distribuciones = $this->distribuirTransportacion(
-                $compra,
-                $montoTotalUSD,
-                $request->distribucion_tipo,
-                $request->distribucion_productos ?? []
-            );
-
-            // Registrar el movimiento financiero
-            MovimientoFinanciero::create([
-                'tipo_movimiento_id' => 1, // Gasto
-                'cuenta_origen_id' => $cuenta->id,
-                'cliente_origen_id' => null,
-                'cuenta_destino_id' => null,
-                'cliente_destino_id' => null,
-                'monto' => $request->monto,
-                'moneda' => 'CUP',
-                'tasa_cambio_aplicada' => $tasa_cambio,
-                'descripcion' => $request->comentario ?? "Gasto por transportación - Compra #{$compra->id}",
-                'fecha_operacion' => now(),
-                'estado' => 'completado',
-            ]);
-
-            // Actualizar costos de productos
-            foreach ($distribuciones as $distribucion) {
-                $producto = Producto::find($distribucion['producto_id']);
-                $nuevoCosto = $producto->precio_compra_producto + $distribucion['monto_usd'];
-
-                CostoHistorial::create([
-                    'product_id' => $producto->id,
-                    'old_cost_usd' => $producto->precio_compra_producto,
-                    'new_cost_usd' => $nuevoCosto,
-                    'comentario' => 'Ajuste por gasto de transportación.',
-                ]);
-
-                $producto->update(['precio_compra_producto' => $nuevoCosto]);
-
-                // Actualizar ganancias de vendedores
-                app(ProductoVendedorController::class)
-                    ->actualizarGananciaPorCambioCosto($producto->id);
-            }
-
-            // Descontar de la cuenta
-            $cuenta->decrement('saldo_cuenta', $request->monto);
-
-            DB::commit();
-
-            return Redirect::back()->with(
-                'success',
-                "✅ Gasto por transportación de {$request->monto} CUP distribuido entre " .
-                    count($distribuciones) . " productos."
-            );
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Error en gasto por transportación: ' . $e->getMessage());
-            return Redirect::back()->with('error', '❌ Error: ' . $e->getMessage());
-        }
-    }
-
-    /**
-     * Distribuye el monto de transportación entre productos
-     */
-    private function distribuirTransportacion(Compra $compra, float $montoTotalUSD, string $tipo, array $distribucionManual = []): array
-    {
-        $productos = $compra->productos;
-        $distribuciones = [];
-
-        switch ($tipo) {
-            case 'proporcional':
-                // Distribuir proporcionalmente al costo de cada producto
-                $costoTotal = $productos->sum('precio_compra_producto');
-                foreach ($productos as $producto) {
-                    $porcentaje = $producto->precio_compra_producto / $costoTotal;
-                    $montoUSD = $montoTotalUSD * $porcentaje;
-                    $distribuciones[] = [
-                        'producto_id' => $producto->id,
-                        'monto_usd' => $montoUSD
-                    ];
-                }
-                break;
-
-            case 'igualitario':
-                // Distribuir igualmente entre todos los productos
-                $montoPorProducto = $montoTotalUSD / $productos->count();
-                foreach ($productos as $producto) {
-                    $distribuciones[] = [
-                        'producto_id' => $producto->id,
-                        'monto_usd' => $montoPorProducto
-                    ];
-                }
-                break;
-
-            case 'manual':
-                // Usar distribución proporcionada por el usuario
-                foreach ($distribucionManual as $item) {
-                    $distribuciones[] = [
-                        'producto_id' => $item['producto_id'],
-                        'monto_usd' => $item['monto_usd']
-                    ];
-                }
-                // Validar que la suma coincida
-                $sumaManual = collect($distribucionManual)->sum('monto_usd');
-                if (abs($sumaManual - $montoTotalUSD) > 0.01) {
-                    throw new \Exception("La distribución manual no coincide con el monto total.");
-                }
-                break;
-        }
-
-        return $distribuciones;
     }
 }

@@ -10,7 +10,7 @@ import { Head, useForm } from '@inertiajs/react';
 import { AlertCircle, Banknote, DollarSign, Euro, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 
-// --- Funciones de formato (sin cambios) ---
+// --- Funciones de formato ---
 const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('es-ES', {
         style: 'currency',
@@ -27,7 +27,27 @@ const formatCupCurrency = (value: number) => {
     }).format(value);
 };
 
-// --- Interfaces (sin cambios) ---
+// --- INTERFACES ---
+interface Moneda {
+    id: number;
+    codigo_moneda: string;
+    nombre_moneda: string;
+    simbolo_moneda: string;
+    tasa_cambio: number;
+    estado: boolean;
+    principal: boolean;
+}
+
+interface Cuenta {
+    id: number;
+    nombre_cuenta: string;
+    saldo_cuenta: number;
+    tipo_cuenta: string;
+    estado: string;
+    moneda_id: number;
+    moneda: Moneda;
+}
+
 interface Compra {
     id: number;
     productos: Array<{
@@ -41,13 +61,6 @@ interface Compra {
     }>;
 }
 
-interface Cuenta {
-    id: number;
-    nombre_cuenta: string;
-    saldo_cuenta: number;
-    tipo_moneda: string;
-}
-
 interface Props {
     compra: Compra;
     cuentas: Cuenta[];
@@ -59,30 +72,32 @@ export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }
         purchase_id: compra.id,
         account_id: '',
         amount_cup: '',
-        exchange_rate: tasaCambioActual,
+        exchange_rate: tasaCambioActual.toString(), // Mantener como string para permitir borrado
         details: '',
         productos: compra.productos.map((producto) => ({
             product_id: producto.id,
             product_name: producto.nombre_producto,
             old_cost_usd: producto.precio_compra_producto,
             cantidad: producto.pivot.cantidad,
-            amount_usd: '0',
+            amount_usd: '0', // Permitir escritura libre
         })),
     });
 
-    // --- Cálculos y Lógica de Estado (sin cambios) ---
-    const amountCup = parseFloat(data.amount_cup as string) || 0;
-    const totalUsdToDistribute = amountCup / (data.exchange_rate || 1);
+    // ✅ FILTRAR CUENTAS CUP
+    const cuentasCup = cuentas.filter((cuenta) => cuenta.moneda.codigo_moneda === 'CUP' && cuenta.estado === 'activa');
+
+    // --- Cálculos ---
+    const exchangeRate = parseFloat(data.exchange_rate) || tasaCambioActual;
+    const amountCup = parseFloat(data.amount_cup) || 0;
+    const totalUsdToDistribute = amountCup / exchangeRate;
     const distributedTotal = data.productos.reduce((acc, prod) => acc + (parseFloat(prod.amount_usd) || 0), 0);
     const remainingUsd = totalUsdToDistribute - distributedTotal;
-    const remainingCup = remainingUsd * (data.exchange_rate || 1);
-
-    const cuentasCup = cuentas.filter((cuenta) => cuenta.tipo_moneda === 'CUP');
+    const remainingCup = remainingUsd * exchangeRate;
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
-        // Validaciones del lado del cliente (sin cambios, son correctas)
+        // Validaciones
         if (!data.account_id) {
             toast.error('Debe seleccionar una cuenta de origen');
             return;
@@ -100,24 +115,16 @@ export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }
             return;
         }
 
-        // Envío de datos al controlador
         post(route('distribuir.costos.manual'), {
-            onSuccess: () => {
-                // El controlador ya envía un mensaje 'success', por lo que no es necesario un toast aquí.
-                // Inertia mostrará automáticamente el mensaje flash.
-            },
-            // ✅ MEJORA: Manejo de errores más específico.
-            // El objeto 'errors' que viene de Laravel contiene los mensajes de validación por campo.
+            onSuccess: () => {},
             onError: (errors) => {
-                // Obtenemos el primer mensaje de error del objeto y lo mostramos.
                 const firstError = Object.values(errors)[0];
                 toast.error(firstError || 'Ocurrió un error. Por favor, revisa los datos.');
-                console.error('Errores de validación:', errors); // Opcional: para depurar en consola.
             },
         });
     };
 
-    // --- Manejadores de eventos y renderizado (sin cambios) ---
+    // ✅ PERMITIR ESCRITURA LIBRE - SIN FORMATEO AUTOMÁTICO
     const handleProductChange = (index: number, event: React.ChangeEvent<HTMLInputElement>) => {
         const { value } = event.target;
         const newProducts = [...data.productos];
@@ -125,11 +132,23 @@ export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }
         setData('productos', newProducts);
     };
 
+    // ✅ PERMITIR ESCRITURA LIBRE EN TASA DE CAMBIO - SIN FORMATEO AUTOMÁTICO
+    const handleExchangeRateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setData('exchange_rate', value);
+    };
+
+    // ✅ FORMATO SOLO PARA DISPLAY, NO PARA INPUT
+    const formatDisplayNumber = (value: number | string): string => {
+        const num = typeof value === 'string' ? parseFloat(value) : value;
+        return isNaN(num) ? '0.00' : num.toFixed(2);
+    };
+
     const distributeRemaining = () => {
         if (remainingUsd > 0.01) {
             const newProducts = data.productos.map((producto) => ({
                 ...producto,
-                amount_usd: (parseFloat(producto.amount_usd) + remainingUsd / data.productos.length).toFixed(2),
+                amount_usd: (parseFloat(producto.amount_usd) + remainingUsd / data.productos.length).toString(),
             }));
             setData('productos', newProducts);
         }
@@ -157,7 +176,7 @@ export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }
                 <div className="bg-card rounded-lg p-6 shadow-md">
                     <h2 className="mb-4 text-xl font-bold">Detalles de Prorrateo para Compra #{compra.id}</h2>
                     <form onSubmit={handleSubmit} className="space-y-6">
-                        {/* --- Sección de Datos Principales (sin cambios) --- */}
+                        {/* --- Sección de Datos Principales --- */}
                         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                             <div>
                                 <Label htmlFor="accountId" className="flex items-center gap-1">
@@ -171,6 +190,7 @@ export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }
                                         {cuentasCup.map((cuenta) => (
                                             <SelectItem key={cuenta.id} value={String(cuenta.id)}>
                                                 {cuenta.nombre_cuenta} - Saldo: {formatCupCurrency(cuenta.saldo_cuenta)}
+                                                <span className="text-muted-foreground ml-2 text-xs">({cuenta.moneda.codigo_moneda})</span>
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
@@ -200,18 +220,19 @@ export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }
                                 <Input
                                     id="exchangeRate"
                                     type="number"
-                                    step="0.0001"
-                                    min="0.0001"
+                                    step="any" // ✅ PERMITIR CUALQUIER VALOR
+                                    min="0.01"
                                     value={data.exchange_rate}
-                                    onChange={(e) => setData('exchange_rate', parseFloat(e.target.value) || tasaCambioActual)}
+                                    onChange={handleExchangeRateChange}
                                     placeholder="Tasa de cambio"
                                     className="mt-1"
                                 />
                                 {errors.exchange_rate && <div className="mt-1 text-sm text-red-500">{errors.exchange_rate}</div>}
+                                <p className="text-muted-foreground mt-1 text-xs">Tasa actual: {formatDisplayNumber(tasaCambioActual)} CUP/USD</p>
                             </div>
                         </div>
 
-                        {/* --- Paneles de Resumen (sin cambios) --- */}
+                        {/* --- Paneles de Resumen --- */}
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <div className="rounded-lg border p-4">
                                 <h4 className="mb-2 font-semibold">Resumen de Distribución</h4>
@@ -260,7 +281,7 @@ export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }
                             )}
                         </div>
 
-                        {/* --- Tabla de Productos (sin cambios) --- */}
+                        {/* --- Tabla de Productos --- */}
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
                                 <h3 className="text-lg font-semibold">Productos de la Compra</h3>
@@ -290,7 +311,7 @@ export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }
                                                 <TableCell>
                                                     <Input
                                                         type="number"
-                                                        step="0.01"
+                                                        step="any" // ✅ PERMITIR CUALQUIER VALOR
                                                         min="0"
                                                         onChange={(e) => handleProductChange(index, e)}
                                                         value={producto.amount_usd}
@@ -306,7 +327,7 @@ export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }
                             </Table>
                         </div>
 
-                        {/* --- Comentario y Botón (sin cambios) --- */}
+                        {/* --- Comentario y Botón --- */}
                         <div>
                             <Label htmlFor="details">Comentario (opcional)</Label>
                             <Input

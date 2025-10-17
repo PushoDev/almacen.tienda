@@ -8,7 +8,34 @@ import { Banknote, Repeat } from 'lucide-react';
 import CostosAdicionales from './layouts/CostosAdicionales';
 import Movimientos from './layouts/Movimientos';
 
-// 1. Define las interfaces para los datos que recibes desde el backend
+// ✅ INTERFACES ACTUALIZADAS con el sistema de monedas
+interface Moneda {
+    id: number;
+    codigo_moneda: string;
+    nombre_moneda: string;
+    simbolo_moneda: string;
+    tasa_cambio: number;
+    estado: boolean;
+    principal: boolean;
+}
+
+interface Cuenta {
+    id: number;
+    nombre_cuenta: string;
+    saldo_cuenta: number;
+    deuda: number;
+    tipo_cuenta: string;
+    estado: string;
+    moneda_id: number;
+    moneda: Moneda; // ✅ RELACIÓN CON MONEDA
+}
+
+interface Cliente {
+    id: number;
+    nombre_cliente: string;
+    deuda_pago_cliente: number;
+}
+
 interface Compra {
     id: number;
     fecha_compra: string;
@@ -16,27 +43,12 @@ interface Compra {
     productos: any[];
 }
 
-interface Cuenta {
-    id: number;
-    nombre_cuenta: string;
-    tipo_moneda: string;
-    saldo_cuenta: number;
-    deuda: number;
-}
-
-// NUEVA INTERFAZ para Clientes
-interface Cliente {
-    id: number;
-    nombre_cliente: string;
-    deuda_pago_cliente: number; // Esto es el 'saldo' que afecta el movimiento
-}
-
-// 2. Define la interfaz principal de las props
 interface Props {
     compras: Compra[];
     cuentas: Cuenta[];
-    clientes: Cliente[]; // AÑADIDO: Lista de Clientes
+    clientes: Cliente[];
     tasaCambioActual: number;
+    monedasActivas: Moneda[]; // ✅ NUEVA PROP
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -58,9 +70,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-// 3. Usa la interfaz de props en la función del componente
-// Asegúrate de desestructurar la nueva prop 'clientes'
-export default function Transacciones({ compras, cuentas, clientes, tasaCambioActual }: Props) {
+export default function Transacciones({ compras, cuentas, clientes, tasaCambioActual, monedasActivas }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Transacciones" />
@@ -78,8 +88,6 @@ export default function Transacciones({ compras, cuentas, clientes, tasaCambioAc
 
                 {/* Opciones de Transacciones */}
                 <Tabs defaultValue="movimientos">
-                    {' '}
-                    {/* Cambié el valor por defecto para mostrar movimientos primero */}
                     <TabsList className="grid w-full grid-cols-2">
                         <TabsTrigger value="movimientos" className="flex items-center gap-2">
                             <Repeat className="h-4 w-4" />
@@ -87,15 +95,18 @@ export default function Transacciones({ compras, cuentas, clientes, tasaCambioAc
                         </TabsTrigger>
                         <TabsTrigger value="costos" className="flex items-center gap-2">
                             <Banknote className="h-4 w-4" />
-                            Gastos por Transportación
+                            Distribuir Costos por Transportación
                         </TabsTrigger>
                     </TabsList>
-                    {/* PASO CLAVE 1: Pasar la prop 'clientes' al componente Movimientos */}
+
+                    {/* ✅ Pestaña Movimientos - Actualizada con monedasActivas */}
                     <TabsContent value="movimientos">
-                        <Movimientos cuentas={cuentas} clientes={clientes} />
+                        <Movimientos cuentas={cuentas} clientes={clientes} monedasActivas={monedasActivas} />
                     </TabsContent>
+
+                    {/* ✅ Pestaña Distribuir Costos - Ahora incluirá tanto distribución manual como transportación */}
                     <TabsContent value="costos">
-                        <CostosAdicionales compras={compras} cuentas={cuentas} tasaCambioActual={tasaCambioActual} />
+                        <CostosAdicionales compras={compras} cuentas={cuentas} tasaCambioActual={tasaCambioActual} monedasActivas={monedasActivas} />
                     </TabsContent>
                 </Tabs>
             </div>
