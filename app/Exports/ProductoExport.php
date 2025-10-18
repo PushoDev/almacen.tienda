@@ -18,9 +18,7 @@ class ProductoExport implements FromCollection, WithHeadings, WithMapping
 
     public function collection()
     {
-        return Producto::with(['categoria', 'almacenes' => function ($query) {
-            $query->where('almacen_id', $this->almacenId);
-        }])->get();
+        return Producto::with(['categoria', 'almacenes'])->get();
     }
 
     public function headings(): array
@@ -29,33 +27,28 @@ class ProductoExport implements FromCollection, WithHeadings, WithMapping
             'ID',
             'Nombre del Producto',
             'Marca',
-            'Código',
+            'Modelo',
+            'Capacidad',
+            'Código de Barras',
             'Categoría',
             'Precio de Compra',
-            'Cantidad en Almacén',
-            'Imagen',
-            'Stock Total',
+            'Stock Total', // Cambiado de "Cantidad en Almacén" a "Stock Total"
             '¿Stock Bajo?'
         ];
     }
 
     public function map($producto): array
     {
-        $cantidadEnAlmacen = 0;
-        if ($producto->almacenes->isNotEmpty()) {
-            $cantidadEnAlmacen = $producto->almacenes->first()->pivot->cantidad ?? 0;
-        }
-
         return [
             $producto->id,
             $producto->nombre_producto,
             $producto->marca_producto,
+            $producto->modelo_producto,
+            $producto->capacidad_producto,
             $producto->codigo_producto,
             $producto->categoria->nombre_categoria ?? 'Sin categoría',
             $producto->precio_compra_producto,
-            $cantidadEnAlmacen,
-            $producto->imagen_producto,
-            $producto->cantidad_total,
+            $producto->cantidad_total, // Usamos el atributo calculado cantidad_total
             $producto->stock_bajo ? 'SÍ' : 'NO'
         ];
     }

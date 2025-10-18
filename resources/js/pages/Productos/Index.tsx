@@ -65,6 +65,7 @@ function ImportModal({ isOpen, onClose, onImport, almacenes }: ImportModalProps)
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [almacenId, setAlmacenId] = useState<number>(1);
     const [isDragging, setIsDragging] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
 
     const handleFileSelect = (file: File) => {
         if (file.type.includes('excel') || file.type.includes('spreadsheet') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
@@ -91,13 +92,19 @@ function ImportModal({ isOpen, onClose, onImport, almacenes }: ImportModalProps)
         if (file) handleFileSelect(file);
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedFile) {
             toast.error('Por favor, selecciona un archivo');
             return;
         }
-        onImport(selectedFile, almacenId);
+
+        setIsImporting(true);
+        try {
+            await onImport(selectedFile, almacenId);
+        } finally {
+            setIsImporting(false);
+        }
     };
 
     if (!isOpen) return null;
@@ -111,7 +118,12 @@ function ImportModal({ isOpen, onClose, onImport, almacenes }: ImportModalProps)
                     {/* Selector de almacén */}
                     <div>
                         <label className="mb-2 block text-sm font-medium">Almacén de destino</label>
-                        <select value={almacenId} onChange={(e) => setAlmacenId(Number(e.target.value))} className="w-full rounded-md border p-2">
+                        <select
+                            value={almacenId}
+                            onChange={(e) => setAlmacenId(Number(e.target.value))}
+                            className="w-full rounded-md border p-2"
+                            disabled={isImporting}
+                        >
                             {almacenes.map((almacen) => (
                                 <option key={almacen.id} value={almacen.id} className="bg-background">
                                     {almacen.nombre_almacen}
@@ -124,11 +136,11 @@ function ImportModal({ isOpen, onClose, onImport, almacenes }: ImportModalProps)
                     <div
                         className={`cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition-colors ${
                             isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
-                        }`}
+                        } ${isImporting ? 'opacity-50' : ''}`}
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
-                        onClick={() => document.getElementById('file-input')?.click()}
+                        onClick={() => !isImporting && document.getElementById('file-input')?.click()}
                     >
                         <CloudUpload className="mx-auto mb-2" size={24} />
                         <p className="text-sm text-gray-600">
@@ -145,6 +157,7 @@ function ImportModal({ isOpen, onClose, onImport, almacenes }: ImportModalProps)
                                 const file = e.target.files?.[0];
                                 if (file) handleFileSelect(file);
                             }}
+                            disabled={isImporting}
                         />
                     </div>
 
@@ -152,7 +165,15 @@ function ImportModal({ isOpen, onClose, onImport, almacenes }: ImportModalProps)
                     <div className="border-sidebar-accent rounded border p-3 text-sm">
                         <p className="mb-1 font-medium">Formato requerido:</p>
                         <ul className="list-inside list-disc space-y-1">
-                            <li>Columnas: nombre_producto, marca, codigo, categoria, precio_compra, cantidad</li>
+                            <li>
+                                <strong>Columnas obligatorias:</strong> nombre_producto, categoria, precio_compra, cantidad
+                            </li>
+                            <li>
+                                <strong>Columnas opcionales:</strong> marca, modelo, capacidad
+                            </li>
+                            <li>
+                                <strong>Nota:</strong> El código de barras se genera automáticamente
+                            </li>
                             <li>Formato: .xlsx o .xls</li>
                             <li>Tamaño máximo: 2MB</li>
                         </ul>
@@ -160,12 +181,21 @@ function ImportModal({ isOpen, onClose, onImport, almacenes }: ImportModalProps)
 
                     {/* Botones */}
                     <div className="flex justify-end gap-2">
-                        <Button type="button" variant="outline" className="cursor-pointer" onClick={onClose}>
+                        <Button type="button" variant="outline" className="cursor-pointer" onClick={onClose} disabled={isImporting}>
                             Cancelar
                         </Button>
-                        <Button type="submit" disabled={!selectedFile} className="cursor-pointer bg-green-600 hover:bg-green-700">
-                            <Upload size={16} className="mr-2" />
-                            Importar
+                        <Button type="submit" disabled={!selectedFile || isImporting} className="cursor-pointer bg-green-600 hover:bg-green-700">
+                            {isImporting ? (
+                                <>
+                                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                                    Importando...
+                                </>
+                            ) : (
+                                <>
+                                    <Upload size={16} className="mr-2" />
+                                    Importar
+                                </>
+                            )}
                         </Button>
                     </div>
                 </form>
@@ -246,35 +276,58 @@ export default function ProductosPage({
         const url = route('productos.export', { almacen_id: almacenExportId });
         const link = document.createElement('a');
         link.href = url;
-        link.download = `productos-almacen-${almacenExportId}-${new Date().toISOString().split('T')[0]}.xlsx`;
+
+        const almacenSeleccionado = almacenes.find((a) => a.id === almacenExportId);
+        const nombreAlmacen = almacenSeleccionado ? almacenSeleccionado.nombre_almacen : almacenExportId.toString();
+        const fecha = new Date().toISOString().split('T')[0];
+
+        link.download = `productos-almacen-${nombreAlmacen}-${fecha}.xlsx`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        toast.success('Exportación iniciada');
+        toast.success('Exportación iniciada. El archivo incluye el stock total de productos.');
     };
 
-    // Importar desde Excel
-    const handleImport = (file: File, almacenId: number) => {
+    // Importar desde Excel - VERSIÓN SIMPLIFICADA
+    const handleImport = async (file: File, almacenId: number) => {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('almacen_id', almacenId.toString());
 
-        router.post(route('productos.import'), formData, {
-            forceFormData: true,
-            onSuccess: () => {
-                toast.success('Productos importados correctamente');
-                setShowImportModal(false);
-            },
-            onError: (errors) => {
-                const errorMessage = errors.file || errors.almacen_id || 'Error desconocido';
-                toast.error('Error al importar: ' + errorMessage);
-            },
-        });
+        try {
+            await router.post(route('productos.import'), formData, {
+                forceFormData: true,
+            });
+
+            toast.success('Productos importados correctamente. Los códigos de barras se generaron automáticamente.');
+            setShowImportModal(false);
+        } catch (error: any) {
+            const errorMessage = error?.message || 'Error desconocido al importar';
+            toast.error('Error al importar: ' + errorMessage);
+        }
     };
 
     // Descargar plantilla
     const downloadTemplate = () => {
-        toast.info('Función de plantilla en desarrollo');
+        // Crear contenido CSV con las columnas correctas
+        const headers = ['nombre_producto', 'categoria', 'precio_compra', 'cantidad', 'marca', 'modelo', 'capacidad'];
+        const exampleData = ['Laptop Dell', 'Electrónicos', '1500.00', '10', 'Dell', 'XPS 13', '512GB SSD'];
+
+        let csvContent = headers.join(',') + '\n';
+        csvContent += exampleData.join(',') + '\n';
+        csvContent += 'Smartphone Samsung,Tecnología,800.00,5,Samsung,Galaxy S23,256GB' + '\n';
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'plantilla-productos.csv');
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        toast.info('Plantilla descargada. Recuerda: El código de barras se genera automáticamente.');
     };
 
     // Aplicar filtros
@@ -331,7 +384,10 @@ export default function ProductosPage({
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
-                    <HeadingSmall title="Gestión de Productos" description="Administra y controla el inventario de productos del sistema" />
+                    <HeadingSmall
+                        title="Gestión de Productos"
+                        description="Administra y controla el inventario de productos del sistema. Los códigos de barras se generan automáticamente."
+                    />
                     <Package2
                         size={70}
                         color="#d6d3d1"
@@ -467,6 +523,7 @@ export default function ProductosPage({
                                 </TableHead>
                                 <TableHead>Marca</TableHead>
                                 <TableHead>Modelo</TableHead>
+                                <TableHead>Capacidad</TableHead>
                                 <TableHead>Código</TableHead>
                                 <TableHead>Categoría</TableHead>
                                 <TableHead className="cursor-pointer" onClick={() => handleSort('precio_compra_producto')}>
@@ -491,9 +548,6 @@ export default function ProductosPage({
                                                 <Package size={14} className="text-primary shrink-0" />
                                                 <div>
                                                     <span className="text-primary font-medium">{producto.nombre_producto}</span>
-                                                    {producto.capacidad_producto && (
-                                                        <p className="text-xs text-gray-500">{producto.capacidad_producto}</p>
-                                                    )}
                                                 </div>
                                             </div>
                                         </TableCell>
@@ -503,6 +557,7 @@ export default function ProductosPage({
                                             </Badge>
                                         </TableCell>
                                         <TableCell>{producto.modelo_producto || 'N/A'}</TableCell>
+                                        <TableCell>{producto.capacidad_producto || 'N/A'}</TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-2">
                                                 <QrCode size={14} className="shrink-0 text-gray-500" />
@@ -623,7 +678,7 @@ export default function ProductosPage({
                                 <TableCell className="bg-sidebar-accent text-center font-bold">
                                     {productosData.reduce((sum, p) => sum + p.cantidad_total, 0)}
                                 </TableCell>
-                                <TableCell colSpan={3} className="bg-sidebar-accent text-right font-bold">
+                                <TableCell colSpan={4} className="bg-sidebar-accent text-right font-bold">
                                     Valor Total: ${productosData.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0).toFixed(2)}
                                 </TableCell>
                             </TableRow>

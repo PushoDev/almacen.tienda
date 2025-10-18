@@ -13,6 +13,7 @@ use App\Exports\ProductoExport;
 use App\Imports\ProductoImport;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class ProductoController extends Controller
 {
@@ -358,9 +359,6 @@ class ProductoController extends Controller
         ]);
     }
 
-    // Los métodos export e import se mantienen igual que los tenías
-    // ... (mantener los métodos export, import, importToAlmacen que ya tenías)
-
     /**
      * Exportar productos a Excel
      */
@@ -368,13 +366,14 @@ class ProductoController extends Controller
     {
         $almacenId = $request->get('almacen_id', 1);
 
-        if (!Almacen::find($almacenId)) {
+        $almacen = Almacen::find($almacenId);
+        if (!$almacen) {
             return redirect()->back()->withErrors(['error' => 'El almacén especificado no existe.']);
         }
 
         return Excel::download(
             new ProductoExport($almacenId),
-            'productos-almacen-' . $almacenId . '-' . date('Y-m-d') . '.xlsx'
+            'productos-almacen-' . $almacen->nombre_almacen . '-' . date('Y-m-d') . '.xlsx'
         );
     }
 
@@ -383,20 +382,30 @@ class ProductoController extends Controller
      */
     public function import(Request $request)
     {
-        $request->validate([
-            'file' => 'required|mimes:xlsx,xls|max:2048',
-            'almacen_id' => 'sometimes|integer|exists:almacens,id'
-        ]);
+        // Validación básica
+        if (!$request->hasFile('file')) {
+            return redirect()->back()->withErrors(['error' => 'No se seleccionó ningún archivo.']);
+        }
+
+        $file = $request->file('file');
+
+        // Validar tipo de archivo
+        $allowedTypes = ['xlsx', 'xls'];
+        $extension = $file->getClientOriginalExtension();
+
+        if (!in_array($extension, $allowedTypes)) {
+            return redirect()->back()->withErrors(['error' => 'El archivo debe ser de tipo Excel (.xlsx o .xls).']);
+        }
 
         $almacenId = $request->get('almacen_id', 1);
 
         try {
             $import = new ProductoImport($almacenId);
-            Excel::import($import, $request->file('file'));
+            Excel::import($import, $file);
 
             return redirect()
                 ->route('productos.index')
-                ->with('success', 'Productos importados y asignados al almacén correctamente');
+                ->with('success', 'Productos importados correctamente. Los códigos de barras se generaron automáticamente.');
         } catch (\Exception $e) {
             return redirect()
                 ->back()
@@ -409,9 +418,16 @@ class ProductoController extends Controller
      */
     public function importToAlmacen(Request $request, $almacenId)
     {
-        $request->validate([
-            'file' => 'required|mimes:xlsx,xls|max:2048'
-        ]);
+        if (!$request->hasFile('file')) {
+            return redirect()->back()->withErrors(['error' => 'No se seleccionó ningún archivo.']);
+        }
+
+        $file = $request->file('file');
+        $extension = $file->getClientOriginalExtension();
+
+        if (!in_array($extension, ['xlsx', 'xls'])) {
+            return redirect()->back()->withErrors(['error' => 'El archivo debe ser de tipo Excel (.xlsx o .xls).']);
+        }
 
         if (!Almacen::find($almacenId)) {
             return redirect()->back()->withErrors(['error' => 'El almacén especificado no existe.']);
@@ -419,15 +435,13 @@ class ProductoController extends Controller
 
         try {
             $import = new ProductoImport($almacenId);
-            Excel::import($import, $request->file('file'));
+            Excel::import($import, $file);
 
             return redirect()
                 ->route('productos.index')
-                ->with('success', "Productos importados al almacén {$almacenId} correctamente");
+                ->with('success', "Productos importados al almacén {$almacenId} correctamente. Los códigos de barras se generaron automáticamente.");
         } catch (\Exception $e) {
-            return redirect()
-                ->back()
-                ->withErrors(['error' => 'Error al importar: ' . $e->getMessage()]);
+            return redirect()->back()->withErrors(['error' => 'Error al importar: ' . $e->getMessage()]);
         }
     }
 }
