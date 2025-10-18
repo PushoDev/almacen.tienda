@@ -18,6 +18,7 @@ class MovimientoFinanciero extends Model
         'cliente_origen_id',
         'cuenta_destino_id',
         'cliente_destino_id',
+        'proveedor_destino_id',
         'monto',
         'moneda',
         'tasa_cambio_aplicada',
@@ -76,5 +77,13 @@ class MovimientoFinanciero extends Model
     public function clienteDestino(): BelongsTo
     {
         return $this->belongsTo(Cliente::class, 'cliente_destino_id');
+    }
+
+    /**
+     * Proveedor el cual recivira monto para pagos
+     */
+    public function proveedorDestino(): BelongsTo
+    {
+        return $this->belongsTo(Proveedor::class, 'proveedor_destino_id');
     }
 }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Compra;
 use App\Models\Cuenta;
 use App\Models\Cliente;
+use App\Models\Proveedor;
 use App\Models\Producto;
 use App\Models\Moneda;
 use App\Models\CostDistribution;
@@ -34,6 +35,7 @@ class TransaccionController extends Controller
 
         $cuentas = Cuenta::with('moneda')->get();
         $clientes = Cliente::all();
+        $proveedores = Proveedor::all();
 
         // ✅ Obtener monedas activas y tasa CUP por defecto
         $monedasActivas = Moneda::where('estado', true)->get();
@@ -46,6 +48,7 @@ class TransaccionController extends Controller
             'compras' => $compras,
             'cuentas' => $cuentas,
             'clientes' => $clientes,
+            'proveedores' => $proveedores,
             'monedasActivas' => $monedasActivas,
             'tasaCambioActual' => $monedaCUP ? $monedaCUP->tasa_cambio : 0,
         ]);
@@ -185,6 +188,7 @@ class TransaccionController extends Controller
                     'cliente_origen_id' => null,
                     'cuenta_destino_id' => null,
                     'cliente_destino_id' => null,
+                    'proveedor_destino_id' => null,
                     'monto' => $montoCupProductos,
                     'moneda' => 'CUP',
                     'tasa_cambio_aplicada' => $tasa_cambio,
@@ -201,6 +205,7 @@ class TransaccionController extends Controller
                     'cliente_origen_id' => null,
                     'cuenta_destino_id' => null,
                     'cliente_destino_id' => null,
+                    'proveedor_destino_id' => null,
                     'monto' => $totalCupSobrante,
                     'moneda' => 'CUP',
                     'tasa_cambio_aplicada' => $tasa_cambio,
@@ -347,6 +352,7 @@ class TransaccionController extends Controller
                 'cliente_origen_id' => null,
                 'cuenta_destino_id' => null,
                 'cliente_destino_id' => null,
+                'proveedor_destino_id' => null,
             ];
 
             if ($request->origen_tipo === 'cuenta') {
@@ -384,14 +390,14 @@ class TransaccionController extends Controller
     }
 
     /**
-     * Registrar Ingreso (Cuenta o Cliente)
+     * Registrar Ingreso (Cuenta, Cliente o Proveedor)
      */
     public function ingresar(Request $request)
     {
         $monedasValidas = $this->obtenerCodigosMonedasActivas();
 
         $request->validate([
-            'destino_tipo' => 'required|string|in:cuenta,cliente',
+            'destino_tipo' => 'required|string|in:cuenta,cliente,proveedor',
             'destino_id' => 'required|integer',
             'monto' => 'required|numeric|min:0.01',
             'moneda' => 'required|string|in:' . implode(',', $monedasValidas),
@@ -416,6 +422,7 @@ class TransaccionController extends Controller
                 'cliente_origen_id' => null,
                 'cuenta_destino_id' => null,
                 'cliente_destino_id' => null,
+                'proveedor_destino_id' => null,
             ];
 
             if ($request->destino_tipo === 'cuenta') {
@@ -430,12 +437,19 @@ class TransaccionController extends Controller
 
                 $movimientoData['cuenta_destino_id'] = $destino->id;
                 $movimientoData['descripcion'] = $request->comentario ?? "Ingreso a cuenta: {$destino->nombre_cuenta}";
-            } else {
+            } else if ($request->destino_tipo === 'cliente') {
                 $destino = Cliente::lockForUpdate()->findOrFail($request->destino_id);
                 $destino->increment('deuda_pago_cliente', $request->monto);
 
                 $movimientoData['cliente_destino_id'] = $destino->id;
                 $movimientoData['descripcion'] = $request->comentario ?? "Ingreso a cliente: {$destino->nombre_cliente}";
+            } else {
+                // ✅ NUEVO: Manejo de proveedores
+                $destino = Proveedor::lockForUpdate()->findOrFail($request->destino_id);
+                $destino->increment('saldo_proveedor', $request->monto);
+
+                $movimientoData['proveedor_destino_id'] = $destino->id;
+                $movimientoData['descripcion'] = $request->comentario ?? "Ingreso a proveedor: {$destino->nombre_proveedor}";
             }
 
             MovimientoFinanciero::create($movimientoData);
@@ -450,7 +464,7 @@ class TransaccionController extends Controller
     }
 
     /**
-     * Registrar Transferencia (Cuenta ↔ Cliente)
+     * Registrar Transferencia (Cuenta ↔ Cliente ↔ Proveedor)
      */
     public function transferir(Request $request)
     {
@@ -459,7 +473,7 @@ class TransaccionController extends Controller
         $request->validate([
             'origen_tipo' => 'required|string|in:cuenta,cliente',
             'origen_id' => 'required|integer',
-            'destino_tipo' => 'required|string|in:cuenta,cliente',
+            'destino_tipo' => 'required|string|in:cuenta,cliente,proveedor',
             'destino_id' => 'required|integer',
             'monto' => 'required|numeric|min:0.01',
             'moneda' => 'required|string|in:' . implode(',', $monedasValidas),
@@ -510,10 +524,15 @@ class TransaccionController extends Controller
 
                 $destino->increment('saldo_cuenta', $request->monto);
                 $destinoNombre = "Cuenta: {$destino->nombre_cuenta}";
-            } else {
+            } else if ($request->destino_tipo === 'cliente') {
                 $destino = Cliente::lockForUpdate()->findOrFail($request->destino_id);
                 $destino->increment('deuda_pago_cliente', $request->monto);
                 $destinoNombre = "Cliente: {$destino->nombre_cliente}";
+            } else {
+                // ✅ NUEVO: Manejo de proveedores como destino
+                $destino = Proveedor::lockForUpdate()->findOrFail($request->destino_id);
+                $destino->increment('saldo_proveedor', $request->monto);
+                $destinoNombre = "Proveedor: {$destino->nombre_proveedor}";
             }
 
             MovimientoFinanciero::create([
@@ -522,6 +541,7 @@ class TransaccionController extends Controller
                 'cliente_origen_id' => $request->origen_tipo === 'cliente' ? $origen->id : null,
                 'cuenta_destino_id' => $request->destino_tipo === 'cuenta' ? $destino->id : null,
                 'cliente_destino_id' => $request->destino_tipo === 'cliente' ? $destino->id : null,
+                'proveedor_destino_id' => $request->destino_tipo === 'proveedor' ? $destino->id : null,
                 'monto' => $request->monto,
                 'moneda' => $request->moneda,
                 'tasa_cambio_aplicada' => $tasaCambioAplicada,
@@ -552,11 +572,10 @@ class TransaccionController extends Controller
             'compra_id' => 'required|exists:compras,id',
             'cuenta_id' => 'required|exists:cuentas,id',
             'monto' => 'required|numeric|min:0.01',
-            'moneda' => 'required|string|in:CUP', // Solo CUP por ahora
+            'moneda' => 'required|string|in:CUP',
             'comentario' => 'nullable|string|max:255',
             'tasa_cambio_aplicada' => 'nullable|numeric|min:0.0001',
             'distribucion_tipo' => 'required|string|in:proporcional,igualitario,manual',
-            // Para distribución manual
             'distribucion_productos' => 'nullable|array',
             'distribucion_productos.*.producto_id' => 'required|exists:productos,id',
             'distribucion_productos.*.monto_usd' => 'required|numeric|min:0',
@@ -591,11 +610,12 @@ class TransaccionController extends Controller
 
             // Registrar el movimiento financiero
             MovimientoFinanciero::create([
-                'tipo_movimiento_id' => 1, // Gasto
+                'tipo_movimiento_id' => 1,
                 'cuenta_origen_id' => $cuenta->id,
                 'cliente_origen_id' => null,
                 'cuenta_destino_id' => null,
                 'cliente_destino_id' => null,
+                'proveedor_destino_id' => null,
                 'monto' => $request->monto,
                 'moneda' => 'CUP',
                 'tasa_cambio_aplicada' => $tasa_cambio,
@@ -650,7 +670,6 @@ class TransaccionController extends Controller
 
         switch ($tipo) {
             case 'proporcional':
-                // Distribuir proporcionalmente al costo de cada producto
                 $costoTotal = $productos->sum('precio_compra_producto');
                 foreach ($productos as $producto) {
                     $porcentaje = $producto->precio_compra_producto / $costoTotal;
@@ -663,7 +682,6 @@ class TransaccionController extends Controller
                 break;
 
             case 'igualitario':
-                // Distribuir igualmente entre todos los productos
                 $montoPorProducto = $montoTotalUSD / $productos->count();
                 foreach ($productos as $producto) {
                     $distribuciones[] = [
@@ -674,14 +692,12 @@ class TransaccionController extends Controller
                 break;
 
             case 'manual':
-                // Usar distribución proporcionada por el usuario
                 foreach ($distribucionManual as $item) {
                     $distribuciones[] = [
                         'producto_id' => $item['producto_id'],
                         'monto_usd' => $item['monto_usd']
                     ];
                 }
-                // Validar que la suma coincida
                 $sumaManual = collect($distribucionManual)->sum('monto_usd');
                 if (abs($sumaManual - $montoTotalUSD) > 0.01) {
                     throw new \Exception("La distribución manual no coincide con el monto total.");

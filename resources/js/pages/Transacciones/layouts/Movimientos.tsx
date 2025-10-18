@@ -6,8 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { useForm } from '@inertiajs/react'; // ✅ REMOVED FormDataType import
-import { DollarSign, User } from 'lucide-react';
+import { useForm } from '@inertiajs/react';
+import { Building, DollarSign, User } from 'lucide-react';
 import React, { useState } from 'react';
 
 // ------------------------------------
@@ -54,13 +54,25 @@ interface Cliente {
     deuda_pago_cliente: number | string | null;
 }
 
+// ✅ INTERFAZ PARA PROVEEDORES
+interface Proveedor {
+    id: number;
+    nombre_proveedor: string;
+    telefono_proveedor: string | null;
+    saldo_proveedor: number;
+    correo_proveedor: string | null;
+    localidad_proveedor: string | null;
+    notas_proveedor: string | null;
+}
+
 interface Props {
     cuentas: Cuenta[];
     clientes: Cliente[];
+    proveedores: Proveedor[];
     monedasActivas: Moneda[];
 }
 
-type EntidadTipo = 'cuenta' | 'cliente';
+type EntidadTipo = 'cuenta' | 'cliente' | 'proveedor';
 
 // ✅ INTERFAZ SIMPLIFICADA sin FormDataType
 interface MovimientoForm {
@@ -120,7 +132,7 @@ const TasaCambioInput: React.FC<TasaCambioProps> = ({ data, setData, errors, mon
 // ------------------------------------
 // COMPONENTE PRINCIPAL (Movimientos) CORREGIDO
 // ------------------------------------
-export default function Movimientos({ cuentas, clientes, monedasActivas }: Props) {
+export default function Movimientos({ cuentas, clientes, proveedores, monedasActivas }: Props) {
     const [alert, setAlert] = useState<AlertState>({ show: false, message: '', type: 'success' });
 
     const showToast = (message: string, type: 'success' | 'error') => {
@@ -281,8 +293,8 @@ export default function Movimientos({ cuentas, clientes, monedasActivas }: Props
                     initialTasa = String(tasa);
                 }
             }
-        } else if (tipoEntidad === 'cliente') {
-            // Asumiendo que la deuda/pago del cliente es siempre en USD
+        } else if (tipoEntidad === 'cliente' || tipoEntidad === 'proveedor') {
+            // Asumiendo que la deuda/pago del cliente y saldo de proveedores es siempre en USD
             selectedMoneda = 'USD';
             initialTasa = '';
         }
@@ -326,6 +338,15 @@ export default function Movimientos({ cuentas, clientes, monedasActivas }: Props
             const deudaMonto = Number(cliente.deuda_pago_cliente) || 0;
             return `${cliente.nombre_cliente} (Cliente) - Deuda/Pago: ${deudaMonto.toFixed(2)} USD`;
         }
+        if (tipo === 'proveedor') {
+            const proveedor = proveedores.find((p) => p.id === id);
+            if (!proveedor) return 'Proveedor no encontrado';
+
+            // ✅ CORRECCIÓN: Asegurar que saldo_proveedor sea un número
+            const saldo = typeof proveedor.saldo_proveedor === 'number' ? proveedor.saldo_proveedor : Number(proveedor.saldo_proveedor) || 0;
+
+            return `${proveedor.nombre_proveedor} (Proveedor) - Saldo: ${saldo.toFixed(2)} USD`;
+        }
         return '';
     };
 
@@ -348,6 +369,15 @@ export default function Movimientos({ cuentas, clientes, monedasActivas }: Props
                 .map((cliente) => (
                     <SelectItem key={`cl-${cliente.id}`} value={String(cliente.id)}>
                         {getEntidadInfo(cliente.id, 'cliente')}
+                    </SelectItem>
+                ));
+        }
+        if (tipoEntidad === 'proveedor') {
+            return proveedores
+                .filter((p) => !(exclusionId === String(p.id) && exclusionTipo === 'proveedor'))
+                .map((proveedor) => (
+                    <SelectItem key={`p-${proveedor.id}`} value={String(proveedor.id)}>
+                        {getEntidadInfo(proveedor.id, 'proveedor')}
                     </SelectItem>
                 ));
         }
@@ -484,7 +514,7 @@ export default function Movimientos({ cuentas, clientes, monedasActivas }: Props
                                     type="single"
                                     value={ingresoData.destino_tipo || 'cuenta'}
                                     onValueChange={(value: string) => {
-                                        if (value === 'cuenta' || value === 'cliente') {
+                                        if (value === 'cuenta' || value === 'cliente' || value === 'proveedor') {
                                             setIngresoData({
                                                 ...ingresoData,
                                                 destino_tipo: value as EntidadTipo,
@@ -502,13 +532,22 @@ export default function Movimientos({ cuentas, clientes, monedasActivas }: Props
                                     <ToggleGroupItem value="cliente" aria-label="Cliente">
                                         <User className="mr-2 h-4 w-4" /> Cliente (Afecta Deuda)
                                     </ToggleGroupItem>
+                                    <ToggleGroupItem value="proveedor" aria-label="Proveedor">
+                                        <Building className="mr-2 h-4 w-4" /> Proveedor
+                                    </ToggleGroupItem>
                                 </ToggleGroup>
                             </div>
 
                             {/* Selector de Entidad de Destino */}
                             <div>
                                 <Label htmlFor="destino_id_ingreso">
-                                    Entidad de Destino ({ingresoData.destino_tipo === 'cuenta' ? 'Cuenta' : 'Cliente'})
+                                    Entidad de Destino (
+                                    {ingresoData.destino_tipo === 'cuenta'
+                                        ? 'Cuenta'
+                                        : ingresoData.destino_tipo === 'cliente'
+                                          ? 'Cliente'
+                                          : 'Proveedor'}
+                                    )
                                 </Label>
                                 <Select
                                     onValueChange={(value) => handleEntidadChange(value, ingresoData.destino_tipo, 'destino', setIngresoData)}
@@ -516,7 +555,13 @@ export default function Movimientos({ cuentas, clientes, monedasActivas }: Props
                                 >
                                     <SelectTrigger>
                                         <SelectValue
-                                            placeholder={`Seleccione ${ingresoData.destino_tipo === 'cuenta' ? 'la cuenta' : 'el cliente'} donde entra el dinero`}
+                                            placeholder={`Seleccione ${
+                                                ingresoData.destino_tipo === 'cuenta'
+                                                    ? 'la cuenta'
+                                                    : ingresoData.destino_tipo === 'cliente'
+                                                      ? 'el cliente'
+                                                      : 'el proveedor'
+                                            } donde entra el dinero`}
                                         />
                                     </SelectTrigger>
                                     <SelectContent>{renderSelectOptions(ingresoData.destino_tipo)}</SelectContent>
@@ -640,7 +685,7 @@ export default function Movimientos({ cuentas, clientes, monedasActivas }: Props
                                     type="single"
                                     value={transferData.destino_tipo || 'cuenta'}
                                     onValueChange={(value: string) => {
-                                        if (value === 'cuenta' || value === 'cliente') {
+                                        if (value === 'cuenta' || value === 'cliente' || value === 'proveedor') {
                                             setTransferData({
                                                 ...transferData,
                                                 destino_tipo: value as EntidadTipo,
@@ -656,12 +701,21 @@ export default function Movimientos({ cuentas, clientes, monedasActivas }: Props
                                     <ToggleGroupItem value="cliente" aria-label="Cliente">
                                         <User className="mr-2 h-4 w-4" /> Cliente
                                     </ToggleGroupItem>
+                                    <ToggleGroupItem value="proveedor" aria-label="Proveedor">
+                                        <Building className="mr-2 h-4 w-4" /> Proveedor
+                                    </ToggleGroupItem>
                                 </ToggleGroup>
 
                                 {/* Entidad de Destino */}
                                 <div>
                                     <Label htmlFor="destino_id_transfer">
-                                        Entidad de Destino ({transferData.destino_tipo === 'cuenta' ? 'Cuenta' : 'Cliente'})
+                                        Entidad de Destino (
+                                        {transferData.destino_tipo === 'cuenta'
+                                            ? 'Cuenta'
+                                            : transferData.destino_tipo === 'cliente'
+                                              ? 'Cliente'
+                                              : 'Proveedor'}
+                                        )
                                     </Label>
                                     <Select
                                         onValueChange={(value) => handleEntidadChange(value, transferData.destino_tipo, 'destino', setTransferData)}
@@ -669,7 +723,13 @@ export default function Movimientos({ cuentas, clientes, monedasActivas }: Props
                                     >
                                         <SelectTrigger>
                                             <SelectValue
-                                                placeholder={`Seleccione ${transferData.destino_tipo === 'cuenta' ? 'cuenta' : 'cliente'} de destino`}
+                                                placeholder={`Seleccione ${
+                                                    transferData.destino_tipo === 'cuenta'
+                                                        ? 'cuenta'
+                                                        : transferData.destino_tipo === 'cliente'
+                                                          ? 'cliente'
+                                                          : 'proveedor'
+                                                } de destino`}
                                             />
                                         </SelectTrigger>
                                         <SelectContent>

@@ -27,7 +27,7 @@ interface Cuenta {
     tipo_cuenta: string;
     estado: string;
     moneda_id: number;
-    moneda: Moneda; // ✅ RELACIÓN CON MONEDA
+    moneda: Moneda;
 }
 
 interface Cliente {
@@ -36,19 +36,35 @@ interface Cliente {
     deuda_pago_cliente: number;
 }
 
+// ✅ INTERFAZ COMPLETA PARA PROVEEDORES
+interface Proveedor {
+    id: number;
+    nombre_proveedor: string;
+    telefono_proveedor: string | null;
+    saldo_proveedor: number;
+    correo_proveedor: string | null;
+    localidad_proveedor: string | null;
+    notas_proveedor: string | null;
+}
+
 interface Compra {
     id: number;
     fecha_compra: string;
     total_compra: number;
-    productos: any[];
+    productos: Array<{
+        id: number;
+        nombre_producto: string;
+        precio_compra_producto: number;
+    }>;
 }
 
 interface Props {
     compras: Compra[];
     cuentas: Cuenta[];
     clientes: Cliente[];
+    proveedores: Proveedor[];
     tasaCambioActual: number;
-    monedasActivas: Moneda[]; // ✅ NUEVA PROP
+    monedasActivas: Moneda[];
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -70,14 +86,17 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function Transacciones({ compras, cuentas, clientes, tasaCambioActual, monedasActivas }: Props) {
+export default function Transacciones({ compras, cuentas, clientes, proveedores, tasaCambioActual, monedasActivas }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Transacciones" />
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
-                    <HeadingSmall title="Transacciones" description="Administre las transacciones de su negocio" />
+                    <HeadingSmall
+                        title="Transacciones"
+                        description="Administre las transacciones financieras, distribución de costos y movimientos entre cuentas, clientes y proveedores"
+                    />
                     <Banknote
                         size={70}
                         color="#d6d3d1"
@@ -87,25 +106,25 @@ export default function Transacciones({ compras, cuentas, clientes, tasaCambioAc
                 <Separator className="col-span-4" />
 
                 {/* Opciones de Transacciones */}
-                <Tabs defaultValue="movimientos">
+                <Tabs defaultValue="movimientos" className="w-full">
                     <TabsList className="grid w-full grid-cols-2">
                         <TabsTrigger value="movimientos" className="flex items-center gap-2">
                             <Repeat className="h-4 w-4" />
-                            Movimientos
+                            Movimientos Financieros
                         </TabsTrigger>
                         <TabsTrigger value="costos" className="flex items-center gap-2">
                             <Banknote className="h-4 w-4" />
-                            Distribuir Costos por Transportación
+                            Distribuir Costos
                         </TabsTrigger>
                     </TabsList>
 
-                    {/* ✅ Pestaña Movimientos - Actualizada con monedasActivas */}
-                    <TabsContent value="movimientos">
-                        <Movimientos cuentas={cuentas} clientes={clientes} monedasActivas={monedasActivas} />
+                    {/* ✅ Pestaña Movimientos - Actualizada con proveedores */}
+                    <TabsContent value="movimientos" className="space-y-4">
+                        <Movimientos cuentas={cuentas} clientes={clientes} proveedores={proveedores} monedasActivas={monedasActivas} />
                     </TabsContent>
 
-                    {/* ✅ Pestaña Distribuir Costos - Ahora incluirá tanto distribución manual como transportación */}
-                    <TabsContent value="costos">
+                    {/* ✅ Pestaña Distribuir Costos */}
+                    <TabsContent value="costos" className="space-y-4">
                         <CostosAdicionales compras={compras} cuentas={cuentas} tasaCambioActual={tasaCambioActual} monedasActivas={monedasActivas} />
                     </TabsContent>
                 </Tabs>
