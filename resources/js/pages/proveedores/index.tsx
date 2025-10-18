@@ -26,6 +26,7 @@ import {
     CheckCircle,
     DollarSign,
     Edit3,
+    Eye,
     FileText,
     Handshake,
     Mail,
@@ -219,7 +220,12 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                                         <TableCell className="min-w-[180px]">
                                             <div className="flex items-center gap-2">
                                                 <Building size={14} className="text-primary shrink-0" />
-                                                <span className="truncate font-medium">{proveedor.nombre_proveedor}</span>
+                                                <Link
+                                                    href={route('proveedores.show', { proveedor: proveedor.id })}
+                                                    className="truncate font-medium hover:text-blue-600 hover:underline"
+                                                >
+                                                    {proveedor.nombre_proveedor}
+                                                </Link>
                                             </div>
                                         </TableCell>
 
@@ -304,21 +310,37 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                                         {/* Acciones */}
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-2">
-                                                <Link href={route('proveedores.edit', { proveedor: proveedor.id })}>
+                                                {/* Botón Ver Detalles */}
+                                                <Link href={route('proveedores.show', { proveedor: proveedor.id })}>
                                                     <Button
                                                         variant="outline"
                                                         className="cursor-pointer hover:bg-blue-900 hover:text-white dark:hover:bg-blue-700"
+                                                        title="Ver detalles"
                                                     >
-                                                        <Edit3 />
+                                                        <Eye size={16} />
                                                     </Button>
                                                 </Link>
+
+                                                {/* Botón Editar */}
+                                                <Link href={route('proveedores.edit', { proveedor: proveedor.id })}>
+                                                    <Button
+                                                        variant="outline"
+                                                        className="cursor-pointer hover:bg-green-900 hover:text-white dark:hover:bg-green-700"
+                                                        title="Editar proveedor"
+                                                    >
+                                                        <Edit3 size={16} />
+                                                    </Button>
+                                                </Link>
+
+                                                {/* Botón Eliminar */}
                                                 <AlertDialog>
                                                     <AlertDialogTrigger asChild>
                                                         <Button
                                                             variant="ghost"
                                                             className="hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white"
+                                                            title="Eliminar proveedor"
                                                         >
-                                                            <Trash2 />
+                                                            <Trash2 size={16} />
                                                         </Button>
                                                     </AlertDialogTrigger>
                                                     <AlertDialogContent>

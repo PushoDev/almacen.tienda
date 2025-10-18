@@ -44,9 +44,18 @@ class Proveedor extends Model
         return $query->where('saldo_proveedor', '<', 0);
     }
 
+
+    /**
+     * Detalles de los Proveedores
+     */
     // Relación: Un proveedor puede tener muchas compras
     public function compras()
     {
         return $this->hasMany(Compra::class);
+    }
+    // Relación: En cuanto a movimientos financieros
+    public function movimientosComoDestino()
+    {
+        return $this->hasMany(MovimientoFinanciero::class, 'proveedor_destino_id');
     }
 }

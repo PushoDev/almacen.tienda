@@ -544,3 +544,62 @@ export interface PagoVentaResponseProps {
         saldo_cuenta: number;
     };
 }
+
+// Agrega estas interfaces en tu archivo index.d.ts
+
+// Interface para Producto en Compra
+export interface ProductoCompra {
+    id: number;
+    nombre_producto: string;
+    marca_producto?: string;
+    modelo_producto?: string;
+    capacidad_producto?: string;
+    codigo_producto?: string;
+    categoria?: {
+        nombre_categoria: string;
+    };
+    pivot: {
+        cantidad: number;
+        precio: number;
+        almacen_id: number;
+    };
+}
+
+// Interface para Compra del Proveedor
+export interface CompraProveedor {
+    id: number;
+    fecha_compra: string;
+    tipo_compra: 'deuda_proveedor' | 'pago_cash';
+    total_compra: number;
+    productos: ProductoCompra[];
+    proveedor_id: number;
+}
+
+// Interface para Transacciones del Proveedor
+export interface TransaccionProveedor {
+    id: number;
+    fecha_operacion: string;
+    tipo_movimiento_id: number;
+    descripcion: string;
+    monto: number;
+    moneda: string;
+    tasa_cambio_aplicada?: number;
+    cuenta_origen_id?: number;
+    cliente_origen_id?: number;
+    cuenta_origen?: {
+        nombre_cuenta: string;
+    };
+    cliente_origen?: {
+        nombre_cliente: string;
+    };
+    proveedor_destino_id: number;
+}
+
+// Interface para Estadísticas del Proveedor
+export interface EstadisticasProveedor {
+    total_compras: number;
+    monto_total_compras: number;
+    total_transacciones: number;
+    monto_total_ingresos: number;
+    saldo_actual: number;
+}

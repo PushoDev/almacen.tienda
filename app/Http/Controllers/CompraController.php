@@ -10,6 +10,7 @@ use App\Models\Compra;
 use App\Models\Cuenta;
 use App\Models\Producto;
 use App\Models\Proveedor;
+use App\Models\Moneda; // ✅ AGREGAR IMPORT DE MONEDA
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -63,16 +64,20 @@ class CompraController extends Controller
     }
 
     /**
-     * Devuelve una lista de cuentas permanentes y temporales.
+     * Devuelve una lista de cuentas permanentes y temporales SOLO EN USD.
      *
      * @return \Illuminate\Http\JsonResponse
      */
     public function getCuentas()
     {
         $cuentas = Cuenta::whereIn('tipo_cuenta', ['permanentes', 'temporales'])
-            ->whereIn('tipo_moneda', ['USD', 'EUR'])
-            ->select('id', 'nombre_cuenta', 'saldo_cuenta', 'tipo_moneda')
+            ->whereHas('moneda', function ($query) {
+                $query->where('codigo_moneda', 'USD')->where('estado', true);
+            })
+            ->with('moneda') // ✅ CARGAR RELACIÓN MONEDA
+            ->select('id', 'nombre_cuenta', 'saldo_cuenta', 'moneda_id')
             ->get();
+
         return response()->json($cuentas);
     }
 
@@ -83,8 +88,16 @@ class CompraController extends Controller
      */
     public function index()
     {
+        // ✅ OBTENER CUENTAS SOLO EN USD
+        $cuentasUSD = Cuenta::whereIn('tipo_cuenta', ['permanentes', 'temporales'])
+            ->whereHas('moneda', function ($query) {
+                $query->where('codigo_moneda', 'USD')->where('estado', true);
+            })
+            ->with('moneda')
+            ->get();
+
         return Inertia::render('Comprar/Index', [
-            'cuentas' => Cuenta::all(),
+            'cuentas' => $cuentasUSD, // ✅ USAR CUENTAS FILTRADAS
             'almacenes' => Almacen::all(),
             'proveedores' => Proveedor::all(),
             'categorias' => Categoria::all(),
@@ -156,9 +169,15 @@ class CompraController extends Controller
                     throw new \Exception("La suma de los pagos ({$sumaTotalPagos}) no coincide con el total de la compra ({$total}).");
                 }
 
-                // Procesar pagos con cuentas
+                // ✅ VALIDAR QUE LAS CUENTAS SEAN EN USD
                 foreach ($pagos as $pago) {
-                    $cuenta = Cuenta::findOrFail($pago['cuenta_id']);
+                    $cuenta = Cuenta::with('moneda')->findOrFail($pago['cuenta_id']);
+
+                    // Verificar que la cuenta tenga moneda USD
+                    if ($cuenta->moneda->codigo_moneda !== 'USD') {
+                        throw new \Exception("La cuenta {$cuenta->nombre_cuenta} no es una cuenta en USD. Solo se permiten cuentas en USD para compras.");
+                    }
+
                     if ($cuenta->saldo_cuenta < $pago['monto']) {
                         throw new \Exception("Saldo insuficiente en la cuenta: {$cuenta->nombre_cuenta}");
                     }

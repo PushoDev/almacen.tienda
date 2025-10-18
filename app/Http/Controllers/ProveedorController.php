@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Proveedor;
+use App\Models\Compra;
+use App\Models\MovimientoFinanciero;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -62,8 +64,43 @@ class ProveedorController extends Controller
      */
     public function show(Proveedor $proveedor)
     {
+        // Cargar compras del proveedor con relaciones
+        $compras = Compra::with([
+            'productos' => function ($query) {
+                $query->withPivot('cantidad', 'precio', 'almacen_id');
+            },
+            'productos.categoria'
+        ])
+            ->where('proveedor_id', $proveedor->id)
+            ->orderBy('fecha_compra', 'desc')
+            ->get();
+
+        // Cargar transacciones financieras relacionadas con el proveedor (SOLO como destino)
+        $transacciones = MovimientoFinanciero::with([
+            'cuentaOrigen',
+            'cuentaDestino',
+            'clienteOrigen',
+            'clienteDestino',
+            'tipoMovimiento'
+        ])
+            ->where('proveedor_destino_id', $proveedor->id)
+            ->orderBy('fecha_operacion', 'desc')
+            ->get();
+
+        // Calcular estadísticas
+        $estadisticas = [
+            'total_compras' => $compras->count(),
+            'monto_total_compras' => $compras->sum('total_compra'),
+            'total_transacciones' => $transacciones->count(),
+            'monto_total_ingresos' => $transacciones->sum('monto'), // Solo ingresos (proveedor como destino)
+            'saldo_actual' => $proveedor->saldo_proveedor,
+        ];
+
         return Inertia::render('Proveedores/Show', [
             'proveedor' => $proveedor,
+            'compras' => $compras,
+            'transacciones' => $transacciones,
+            'estadisticas' => $estadisticas,
         ]);
     }
 
