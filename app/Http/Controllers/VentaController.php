@@ -132,7 +132,7 @@ class VentaController extends Controller
     }
 
     /**
-     * Cargar cuentas filtradas por moneda.
+     * Cargar cuentas filtradas por moneda - MEJORADO
      */
     public function getCuentasFiltradas(Request $request)
     {
@@ -145,11 +145,16 @@ class VentaController extends Controller
             return response()->json([]);
         }
 
-        // Buscar cuentas que coincidan por moneda_id O por tipo_moneda
+        // MEJORADO: Buscar cuentas que coincidan EXACTAMENTE con la moneda seleccionada
         $cuentas = Cuenta::with('moneda')
             ->where(function ($query) use ($moneda) {
-                $query->where('moneda_id', $moneda->id)
-                    ->orWhere('tipo_moneda', $moneda->codigo_moneda);
+                // Cuentas con moneda_id que coincide exactamente
+                $query->where('moneda_id', $moneda->id);
+            })
+            ->orWhere(function ($query) use ($moneda) {
+                // Cuentas legacy con tipo_moneda que coincide exactamente con el código
+                $query->whereNull('moneda_id')
+                    ->where('tipo_moneda', $moneda->codigo_moneda);
             })
             ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta')
             ->get()
@@ -175,12 +180,26 @@ class VentaController extends Controller
     }
 
     /**
-     * Cargar todas las monedas activas.
+     * Cargar todas las monedas activas - MEJORADO
      */
     public function getMonedas()
     {
         $monedas = Moneda::where('estado', true)->get();
-        return response()->json($monedas);
+
+        // MEJORADO: Asegurar que los IDs sean consistentes
+        $monedasFormateadas = $monedas->map(function ($moneda) {
+            return [
+                'id' => (string)$moneda->id, // Convertir a string para consistencia con frontend
+                'codigo_moneda' => $moneda->codigo_moneda,
+                'nombre_moneda' => $moneda->nombre_moneda,
+                'simbolo_moneda' => $moneda->simbolo_moneda,
+                'tasa_cambio' => (float)$moneda->tasa_cambio,
+                'principal' => (bool)$moneda->principal,
+                'estado' => (bool)$moneda->estado,
+            ];
+        });
+
+        return response()->json($monedasFormateadas);
     }
 
     // ========================================================================
@@ -188,7 +207,7 @@ class VentaController extends Controller
     // ========================================================================
 
     /**
-     * Muestra la vista principal para realizar ventas.
+     * Muestra la vista principal para realizar ventas - MEJORADO
      */
     public function index()
     {
@@ -197,14 +216,25 @@ class VentaController extends Controller
             return redirect()->route('login');
         }
 
-        $monedas = Moneda::where('estado', true)->get();
+        $monedas = Moneda::where('estado', true)->get()
+            ->map(function ($moneda) {
+                return [
+                    'id' => (string)$moneda->id, // Convertir a string para consistencia
+                    'codigo_moneda' => $moneda->codigo_moneda,
+                    'nombre_moneda' => $moneda->nombre_moneda,
+                    'simbolo_moneda' => $moneda->simbolo_moneda,
+                    'tasa_cambio' => (float)$moneda->tasa_cambio,
+                    'principal' => (bool)$moneda->principal,
+                    'estado' => (bool)$moneda->estado,
+                ];
+            });
 
         return Inertia::render('Vendor/Index', [
             'meta' => [
                 'role_usuario' => $user->role,
                 'almacenes_usuario' => $user->role === 'admin'
-                    ? Almacen::select('id', 'nombre_almacen')->get()->map(fn($a) => ['id' => $a->id, 'nombre' => $a->nombre_almacen])
-                    : $user->almacenes->map(fn($a) => ['id' => $a->id, 'nombre' => $a->nombre_almacen]),
+                    ? Almacen::select('id', 'nombre_almacen')->get()->map(fn($a) => ['id' => (string)$a->id, 'nombre' => $a->nombre_almacen])
+                    : $user->almacenes->map(fn($a) => ['id' => (string)$a->id, 'nombre' => $a->nombre_almacen]),
                 'monedas' => $monedas,
             ]
         ]);
@@ -301,7 +331,7 @@ class VentaController extends Controller
     // ========================================================================
 
     /**
-     * Procesa la venta con tasas de cambio editables por operación.
+     * Procesa la venta con tasas de cambio editables por operación - MEJORADO
      */
     public function procesarVenta(Request $request)
     {
@@ -351,7 +381,7 @@ class VentaController extends Controller
                 }
             }
 
-            // Validar que las cuentas coincidan con la moneda del pago - CORREGIDO
+            // MEJORADO: Validar que las cuentas coincidan con la moneda del pago
             foreach ($validatedData['pagos'] as $index => $pago) {
                 $cuenta = Cuenta::with('moneda')->find($pago['cuenta_id']);
                 if (!$cuenta) {
@@ -363,10 +393,11 @@ class VentaController extends Controller
                     throw new \Exception('Moneda de pago no encontrada');
                 }
 
-                // Validar compatibilidad de moneda
-                if ($cuenta->moneda_id) {
-                    // Si la cuenta tiene moneda_id, debe coincidir exactamente
-                    if ($cuenta->moneda_id != $pago['moneda_id']) {
+                // Validación mejorada de compatibilidad de moneda
+                $monedaCuenta = $cuenta->moneda;
+                if ($monedaCuenta) {
+                    // Si la cuenta tiene moneda relacionada, comparar IDs
+                    if ($monedaCuenta->id != $pago['moneda_id']) {
                         throw new \Exception("La cuenta seleccionada ({$cuenta->nombre_cuenta}) no coincide con la moneda del pago");
                     }
                 } else {
@@ -426,9 +457,12 @@ class VentaController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+            \Log::error('Error al procesar venta: ' . $e->getMessage());
+            \Log::error('Datos de la venta: ', $validatedData);
+
             return response()->json([
                 'success' => false,
-                'message' => 'Error al procesar la venta',
+                'message' => 'Error al procesar la venta: ' . $e->getMessage(),
                 'error' => $e->getMessage(),
             ], 500);
         }
@@ -544,6 +578,7 @@ class VentaController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+            \Log::error('Error al aprobar venta: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Error al aprobar la venta: ' . $e->getMessage(),
@@ -625,6 +660,7 @@ class VentaController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+            \Log::error('Error al anular venta: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Error al anular la venta',
@@ -660,6 +696,7 @@ class VentaController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+            \Log::error('Error al actualizar tasas: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Error al actualizar las tasas de cambio',

@@ -50,7 +50,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-// Interfaces para tipar los datos de la venta
+// Interfaces actualizadas según el controlador
 interface Producto {
     id: number;
     nombre: string;
@@ -66,18 +66,28 @@ interface Item {
     costo_unitario: number;
 }
 
+interface MonedaPago {
+    id: number;
+    codigo: string;
+    nombre: string;
+    simbolo?: string;
+}
+
+interface CuentaPago {
+    id: number;
+    nombre: string;
+    moneda: MonedaPago | null;
+}
+
 interface Pago {
     metodo: string;
-    moneda: string;
+    moneda: MonedaPago | null;
     monto: number;
-    via: string;
+    via: string | null;
     tasa_cambio: number;
-    monto_usd: number;
-    cuenta: {
-        id: number;
-        nombre: string;
-        moneda: string;
-    };
+    monto_equivalente: number;
+    cuenta: CuentaPago;
+    referencia?: string | null;
 }
 
 interface Cliente {
@@ -97,6 +107,13 @@ interface Usuario {
     rol: string;
 }
 
+interface MonedaPrincipal {
+    id: number;
+    codigo: string;
+    nombre: string;
+    simbolo?: string;
+}
+
 interface Venta {
     id: number;
     almacen: Almacen;
@@ -108,9 +125,9 @@ interface Venta {
     pagos: Pago[];
     total_pagado: number;
     restante: number;
-    tasa_usd_utilizada: number;
-    tasa_mlc_utilizada: number;
     estado: 'pendiente' | 'completada' | 'cancelada';
+    moneda_principal: MonedaPrincipal | null;
+    tasa_cambio_principal: number;
 }
 
 interface Props {
@@ -118,6 +135,8 @@ interface Props {
 }
 
 export default function ResultadoCarrito({ venta }: Props) {
+    console.log('🔍 Venta recibida en el frontend:', venta);
+
     // Estados para gestionar las acciones
     const [isCancelling, setIsCancelling] = useState(false);
     const [isApproving, setIsApproving] = useState(false);
@@ -135,13 +154,18 @@ export default function ResultadoCarrito({ venta }: Props) {
         });
     };
 
-    // Formatear moneda
-    const formatCurrency = (amount: number, currency: string = 'USD') => {
+    // Formatear moneda mejorado
+    const formatCurrency = (amount: number, currencyCode: string = 'USD') => {
         return new Intl.NumberFormat('es-ES', {
             style: 'currency',
-            currency: currency,
+            currency: currencyCode,
             minimumFractionDigits: 2,
         }).format(amount);
+    };
+
+    // Obtener símbolo de moneda
+    const getCurrencySymbol = (moneda: MonedaPago | MonedaPrincipal | null) => {
+        return moneda?.simbolo || moneda?.codigo || 'USD';
     };
 
     // Determinar estados
@@ -167,52 +191,42 @@ export default function ResultadoCarrito({ venta }: Props) {
 
     // FUNCIÓN CORREGIDA: Manejar la aprobación de la venta
     const handleAprobarVenta = async () => {
+        console.log('🔄 Iniciando aprobación de venta:', currentVenta.id);
         setIsApproving(true);
         try {
-            console.log('Iniciando aprobación de venta:', currentVenta.id);
-
             const response = await axios.post(route('ventas.aprobar', currentVenta.id));
-            console.log('Respuesta del backend:', response.data);
+            console.log('✅ Respuesta del backend al aprobar:', response.data);
 
             if (response.data.success) {
                 toast.success(response.data.message || 'Venta aprobada correctamente');
 
-                // ✅ CORRECCIÓN: Actualizar el estado local de la venta
+                // Actualizar el estado local de la venta
                 setCurrentVenta((prev) => ({
                     ...prev,
                     estado: 'completada',
                 }));
 
-                // ✅ CORRECCIÓN: Usar router.reload() para recargar los datos actualizados del servidor
+                // Recargar la página para mostrar el nuevo estado
                 setTimeout(() => {
                     router.reload();
                 }, 1500);
             } else {
+                console.error('❌ Error en respuesta del backend:', response.data);
                 toast.error(response.data.message || 'Error al aprobar la venta');
             }
         } catch (error: any) {
-            console.error('Error completo al aprobar venta:', error);
+            console.error('💥 Error completo al aprobar venta:', error);
 
-            // ✅ CORRECCIÓN: Mejor manejo de errores
             if (error.response) {
-                // El servidor respondió con un código de error
                 const errorMessage =
                     error.response.data?.message || error.response.data?.error || `Error ${error.response.status}: ${error.response.statusText}`;
+                console.error('📋 Detalles del error:', error.response.data);
                 toast.error(errorMessage);
-
-                // Log detallado para debugging
-                console.error('Detalles del error:', {
-                    status: error.response.status,
-                    data: error.response.data,
-                    headers: error.response.headers,
-                });
             } else if (error.request) {
-                // La petición fue hecha pero no se recibió respuesta
-                console.error('No se recibió respuesta del servidor:', error.request);
+                console.error('🌐 Error de conexión:', error.request);
                 toast.error('Error de conexión: No se pudo contactar al servidor');
             } else {
-                // Algo pasó en la configuración de la petición
-                console.error('Error en la configuración de la petición:', error.message);
+                console.error('⚙️ Error de configuración:', error.message);
                 toast.error('Error al configurar la petición');
             }
         } finally {
@@ -222,9 +236,11 @@ export default function ResultadoCarrito({ venta }: Props) {
 
     // FUNCIÓN: Manejar la anulación de la venta
     const handleAnularVenta = async () => {
+        console.log('🔄 Iniciando anulación de venta:', currentVenta.id);
         setIsCancelling(true);
         try {
             const response = await axios.post(route('ventas.anular', currentVenta.id));
+            console.log('✅ Respuesta del backend al anular:', response.data);
 
             if (response.data.success) {
                 toast.success(response.data.message || 'Venta anulada correctamente');
@@ -240,10 +256,11 @@ export default function ResultadoCarrito({ venta }: Props) {
                     router.reload();
                 }, 1500);
             } else {
+                console.error('❌ Error en respuesta del backend:', response.data);
                 toast.error(response.data.message || 'Error al anular la venta');
             }
         } catch (error: any) {
-            console.error('Error al anular venta:', error);
+            console.error('💥 Error completo al anular venta:', error);
             const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Ocurrió un error al intentar anular la venta.';
             toast.error(errorMessage);
         } finally {
@@ -253,14 +270,24 @@ export default function ResultadoCarrito({ venta }: Props) {
 
     // Calcular ganancia total
     const calcularGananciaTotal = () => {
-        return currentVenta.items.reduce((total, item) => {
+        const ganancia = currentVenta.items.reduce((total, item) => {
             const costoTotal = item.cantidad * item.costo_unitario;
             const ingresoTotal = item.subtotal;
             return total + (ingresoTotal - costoTotal);
         }, 0);
+
+        console.log('💰 Ganancia calculada:', ganancia);
+        return ganancia;
     };
 
     const gananciaTotal = calcularGananciaTotal();
+
+    // Obtener moneda principal
+    const monedaPrincipal = currentVenta.moneda_principal;
+    const simboloMonedaPrincipal = getCurrencySymbol(monedaPrincipal);
+
+    console.log('🎯 Moneda principal:', monedaPrincipal);
+    console.log('📊 Pagos recibidos:', currentVenta.pagos);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -502,10 +529,10 @@ export default function ResultadoCarrito({ venta }: Props) {
                                                 </div>
                                             </td>
                                             <td className="p-3">{item.cantidad}</td>
-                                            <td className="p-3">{formatCurrency(item.precio_venta)}</td>
-                                            <td className="p-3 text-red-600">{formatCurrency(item.costo_unitario)}</td>
-                                            <td className="p-3 text-green-600">{formatCurrency(gananciaUnitaria)}</td>
-                                            <td className="p-3 font-medium">{formatCurrency(item.subtotal)}</td>
+                                            <td className="p-3">{formatCurrency(item.precio_venta, simboloMonedaPrincipal)}</td>
+                                            <td className="p-3 text-red-600">{formatCurrency(item.costo_unitario, simboloMonedaPrincipal)}</td>
+                                            <td className="p-3 text-green-600">{formatCurrency(gananciaUnitaria, simboloMonedaPrincipal)}</td>
+                                            <td className="p-3 font-medium">{formatCurrency(item.subtotal, simboloMonedaPrincipal)}</td>
                                         </tr>
                                     );
                                 })}
@@ -515,13 +542,17 @@ export default function ResultadoCarrito({ venta }: Props) {
                                     <td colSpan={5} className="py-3 text-right font-semibold text-white">
                                         Total Venta:
                                     </td>
-                                    <td className="py-3 text-center text-lg font-semibold text-white">{formatCurrency(currentVenta.total)}</td>
+                                    <td className="py-3 text-center text-lg font-semibold text-white">
+                                        {formatCurrency(currentVenta.total, simboloMonedaPrincipal)}
+                                    </td>
                                 </tr>
                                 <tr className="bg-green-50">
                                     <td colSpan={5} className="py-3 text-right font-semibold text-green-800">
                                         Ganancia Total:
                                     </td>
-                                    <td className="py-3 text-center text-lg font-semibold text-green-800">{formatCurrency(gananciaTotal)}</td>
+                                    <td className="py-3 text-center text-lg font-semibold text-green-800">
+                                        {formatCurrency(gananciaTotal, simboloMonedaPrincipal)}
+                                    </td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -538,44 +569,56 @@ export default function ResultadoCarrito({ venta }: Props) {
                         </h3>
 
                         {currentVenta.pagos.length > 0 ? (
-                            currentVenta.pagos.map((pago, index) => (
-                                <div key={index} className="bg-muted mb-4 rounded-md p-3 last:mb-0">
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div>
-                                            <p className="text-sm font-medium">Método:</p>
-                                            <p className="text-sm capitalize">{pago.metodo}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-sm font-medium">Moneda:</p>
-                                            <p className="text-sm">{pago.moneda}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-sm font-medium">Monto Original:</p>
-                                            <p className="text-sm">{formatCurrency(pago.monto, pago.moneda)}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-sm font-medium">Equivalente USD:</p>
-                                            <p className="text-sm">{formatCurrency(pago.monto_usd)}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-sm font-medium">Tasa Cambio:</p>
-                                            <p className="text-sm">{pago.tasa_cambio}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-sm font-medium">Cuenta:</p>
-                                            <p className="text-sm">
-                                                {pago.cuenta.nombre} ({pago.cuenta.moneda})
-                                            </p>
-                                        </div>
-                                        {pago.via && (
-                                            <div className="col-span-2">
-                                                <p className="text-sm font-medium">Vía:</p>
-                                                <p className="text-sm capitalize">{pago.via}</p>
+                            currentVenta.pagos.map((pago, index) => {
+                                console.log(`📄 Procesando pago ${index}:`, pago);
+                                const simboloMonedaPago = getCurrencySymbol(pago.moneda);
+                                const simboloMonedaCuenta = getCurrencySymbol(pago.cuenta.moneda);
+
+                                return (
+                                    <div key={index} className="bg-muted mb-4 rounded-md p-3 last:mb-0">
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div>
+                                                <p className="text-sm font-medium">Método:</p>
+                                                <p className="text-sm capitalize">{pago.metodo}</p>
                                             </div>
-                                        )}
+                                            <div>
+                                                <p className="text-sm font-medium">Moneda:</p>
+                                                <p className="text-sm">{pago.moneda?.nombre || 'No especificada'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-medium">Monto Original:</p>
+                                                <p className="text-sm">{formatCurrency(pago.monto, simboloMonedaPago)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-medium">Equivalente {simboloMonedaPrincipal}:</p>
+                                                <p className="text-sm">{formatCurrency(pago.monto_equivalente, simboloMonedaPrincipal)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-medium">Tasa Cambio:</p>
+                                                <p className="text-sm">{pago.tasa_cambio}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-medium">Cuenta:</p>
+                                                <p className="text-sm">
+                                                    {pago.cuenta.nombre} ({pago.cuenta.moneda?.nombre || simboloMonedaCuenta})
+                                                </p>
+                                            </div>
+                                            {pago.via && (
+                                                <div className="col-span-2">
+                                                    <p className="text-sm font-medium">Vía:</p>
+                                                    <p className="text-sm capitalize">{pago.via}</p>
+                                                </div>
+                                            )}
+                                            {pago.referencia && (
+                                                <div className="col-span-2">
+                                                    <p className="text-sm font-medium">Referencia:</p>
+                                                    <p className="text-sm">{pago.referencia}</p>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                            ))
+                                );
+                            })
                         ) : (
                             <p className="text-muted-foreground text-center">No hay pagos registrados</p>
                         )}
@@ -590,22 +633,24 @@ export default function ResultadoCarrito({ venta }: Props) {
                         <div className="space-y-3">
                             <div className="flex justify-between">
                                 <span className="text-muted-foreground">Total de la Venta:</span>
-                                <span className="font-semibold">{formatCurrency(currentVenta.total)}</span>
+                                <span className="font-semibold">{formatCurrency(currentVenta.total, simboloMonedaPrincipal)}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-muted-foreground">Total Pagado:</span>
-                                <span className="font-semibold text-green-600">{formatCurrency(currentVenta.total_pagado)}</span>
+                                <span className="font-semibold text-green-600">
+                                    {formatCurrency(currentVenta.total_pagado, simboloMonedaPrincipal)}
+                                </span>
                             </div>
                             <Separator />
                             <div className="flex justify-between">
                                 <span className="text-muted-foreground">Restante por Pagar:</span>
                                 <span className={`font-semibold ${currentVenta.restante > 0 ? 'text-orange-500' : 'text-green-600'}`}>
-                                    {formatCurrency(currentVenta.restante)}
+                                    {formatCurrency(currentVenta.restante, simboloMonedaPrincipal)}
                                 </span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-muted-foreground">Ganancia Total:</span>
-                                <span className="font-semibold text-green-600">{formatCurrency(gananciaTotal)}</span>
+                                <span className="font-semibold text-green-600">{formatCurrency(gananciaTotal, simboloMonedaPrincipal)}</span>
                             </div>
                             <Separator />
                             <div className="flex justify-between">
@@ -614,12 +659,12 @@ export default function ResultadoCarrito({ venta }: Props) {
                             </div>
                             <Separator />
                             <div className="flex justify-between">
-                                <span className="text-muted-foreground">Tasa USD Utilizada:</span>
-                                <span className="font-semibold">1 USD = {currentVenta.tasa_usd_utilizada} CUP</span>
+                                <span className="text-muted-foreground">Moneda Principal:</span>
+                                <span className="font-semibold">{monedaPrincipal?.nombre || 'No especificada'}</span>
                             </div>
                             <div className="flex justify-between">
-                                <span className="text-muted-foreground">Tasa MLC Utilizada:</span>
-                                <span className="font-semibold">1 MLC = {currentVenta.tasa_mlc_utilizada} USD</span>
+                                <span className="text-muted-foreground">Tasa Cambio Principal:</span>
+                                <span className="font-semibold">{currentVenta.tasa_cambio_principal}</span>
                             </div>
                         </div>
 
