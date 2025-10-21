@@ -13,13 +13,19 @@ class PagoVenta extends Model
     protected $fillable = [
         'venta_id',
         'tipo_pago',
-        'tipo_moneda',
+        'moneda_id', // CAMBIO: Reemplaza tipo_moneda
         'cuenta_id',
         'via_pago',
         'monto',
-        'tasa_cambio',
+        'tasa_cambio_aplicada', // CAMBIO: Nombre más descriptivo
         'monto_equivalente',
         'referencia'
+    ];
+
+    protected $casts = [
+        'tasa_cambio_aplicada' => 'decimal:6',
+        'monto' => 'decimal:2',
+        'monto_equivalente' => 'decimal:2',
     ];
 
     public function venta()
@@ -30,5 +36,11 @@ class PagoVenta extends Model
     public function cuenta()
     {
         return $this->belongsTo(Cuenta::class);
+    }
+
+    // NUEVA: Relación con moneda
+    public function moneda()
+    {
+        return $this->belongsTo(Moneda::class);
     }
 }
