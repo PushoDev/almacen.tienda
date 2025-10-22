@@ -36,6 +36,7 @@ class Compra extends Model
         return $this->belongsTo(Cliente::class);
     }
 
+    // Relación con cuentas a través de compra_pago
     public function cuentas()
     {
         return $this->belongsToMany(Cuenta::class, 'compra_pago')
@@ -49,6 +50,7 @@ class Compra extends Model
             ->withPivot('cantidad', 'precio');
     }
 
+    // Relación con pagos - CORREGIDA para usar el nombre correcto de la tabla
     public function pagos()
     {
         return $this->hasMany(CompraPago::class, 'compra_id');

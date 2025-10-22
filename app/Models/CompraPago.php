@@ -6,7 +6,6 @@ use Illuminate\Database\Eloquent\Model;
 
 class CompraPago extends Model
 {
-
     protected $fillable = [
         'compra_id',
         'cuenta_id',
@@ -15,11 +14,14 @@ class CompraPago extends Model
         'tipo_pago'
     ];
 
+    /**
+     * Especificar el nombre de la tabla exacto que existe en producción
+     */
+    protected $table = 'compra_pago'; // Asegurar que use el nombre correcto
 
     /**
      * Relaciones
      */
-
     public function compra()
     {
         return $this->belongsTo(Compra::class);
