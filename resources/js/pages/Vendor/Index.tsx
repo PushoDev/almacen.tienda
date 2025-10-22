@@ -91,6 +91,7 @@ interface Payment {
     exchangeRate: number;
     amountInUsd: number;
     cuenta_id: string;
+    referencia?: string;
     moneda_info?: {
         codigo: string;
         nombre: string;
@@ -129,8 +130,8 @@ const paymentVias: PaymentVia[] = [
 ];
 
 export default function PuntoVentaOficial({
-    meta,
-}: {
+                                              meta,
+                                          }: {
     meta: {
         role_usuario: string;
         almacenes_usuario: {
@@ -160,12 +161,14 @@ export default function PuntoVentaOficial({
         via: string;
         amount: string;
         cuenta_id: string;
+        referencia: string;
     }>({
         method: '',
         moneda_id: '',
         via: '',
         amount: '',
         cuenta_id: '',
+        referencia: '',
     });
     const [cuentasFiltradas, setCuentasFiltradas] = useState<Cuenta[]>([]);
     const [cargandoCuentas, setCargandoCuentas] = useState<boolean>(false);
@@ -219,7 +222,6 @@ export default function PuntoVentaOficial({
         }
     };
 
-    // CORREGIDO: Nueva función para cargar cuentas filtradas por moneda
     const cargarCuentasFiltradas = async (monedaId: string) => {
         if (!monedaId) {
             console.log('No hay moneda ID, limpiando cuentas filtradas');
@@ -295,7 +297,6 @@ export default function PuntoVentaOficial({
         setClienteSeleccionado(value);
     };
 
-    // CORREGIDO: Manejar cambio de moneda para cargar cuentas filtradas
     const handleMonedaChange = (monedaId: string) => {
         console.log('Moneda seleccionada:', monedaId);
         const selectedCurrency = currencies.find((c) => c.id === monedaId);
@@ -350,10 +351,10 @@ export default function PuntoVentaOficial({
                 carrito.map((item) =>
                     item.id === idItem
                         ? {
-                              ...item,
-                              cantidad: nuevaCantidad,
-                              subtotal: nuevaCantidad * item.precio_venta,
-                          }
+                            ...item,
+                            cantidad: nuevaCantidad,
+                            subtotal: nuevaCantidad * item.precio_venta,
+                        }
                         : item,
                 ),
             );
@@ -383,10 +384,10 @@ export default function PuntoVentaOficial({
             carrito.map((itemCarrito) =>
                 itemCarrito.id === id
                     ? {
-                          ...itemCarrito,
-                          cantidad: nuevaCantidad,
-                          subtotal: nuevaCantidad * itemCarrito.precio_venta,
-                      }
+                        ...itemCarrito,
+                        cantidad: nuevaCantidad,
+                        subtotal: nuevaCantidad * itemCarrito.precio_venta,
+                    }
                     : itemCarrito,
             ),
         );
@@ -398,10 +399,10 @@ export default function PuntoVentaOficial({
             carrito.map((item) =>
                 item.id === id
                     ? {
-                          ...item,
-                          precio_venta: nuevoPrecio,
-                          subtotal: item.cantidad * nuevoPrecio,
-                      }
+                        ...item,
+                        precio_venta: nuevoPrecio,
+                        subtotal: item.cantidad * nuevoPrecio,
+                    }
                     : item,
             ),
         );
@@ -438,6 +439,7 @@ export default function PuntoVentaOficial({
     const totalPaid = useMemo(() => payments.reduce((sum, payment) => sum + payment.amountInUsd, 0), [payments]);
     const remainingInUsd = calcularTotal - totalPaid;
 
+    // ✅ CORRECCIÓN: Función convertToUsd corregida - DIVIDIR en lugar de multiplicar
     const convertToUsd = (amount: number, currencyId: string): number => {
         const currency = currencies.find((c) => c.id === currencyId);
         if (!currency) {
@@ -445,6 +447,8 @@ export default function PuntoVentaOficial({
             return 0;
         }
         console.log(`Convirtiendo ${amount} ${currency.symbol} a USD. Tasa: ${currency.exchangeRate}`);
+
+        // ✅ CORRECCIÓN: DIVIDIR en lugar de multiplicar
         return amount / currency.exchangeRate;
     };
 
@@ -452,10 +456,12 @@ export default function PuntoVentaOficial({
         console.log('Intentando agregar pago:', currentPayment);
         console.log('Cuentas filtradas disponibles:', cuentasFiltradas);
 
+        // ✅ CORRECCIÓN: Validación actualizada con campo referencia
         if (
             !currentPayment.method ||
             !currentPayment.moneda_id ||
             (currentPayment.method === 'transferencia' && !currentPayment.via) ||
+            (currentPayment.method === 'transferencia' && !currentPayment.referencia) || // ✅ NUEVA VALIDACIÓN
             !currentPayment.amount ||
             parseFloat(currentPayment.amount) <= 0 ||
             !currentPayment.cuenta_id
@@ -464,6 +470,7 @@ export default function PuntoVentaOficial({
                 method: currentPayment.method,
                 moneda_id: currentPayment.moneda_id,
                 via: currentPayment.via,
+                referencia: currentPayment.referencia,
                 amount: currentPayment.amount,
                 cuenta_id: currentPayment.cuenta_id,
             });
@@ -502,6 +509,7 @@ export default function PuntoVentaOficial({
             exchangeRate: exchangeRate,
             amountInUsd: amountInUsd,
             cuenta_id: currentPayment.cuenta_id,
+            referencia: currentPayment.method === 'transferencia' ? currentPayment.referencia : undefined, // ✅ INCLUIR REFERENCIA
             moneda_info: {
                 codigo: selectedCurrency.code,
                 nombre: selectedCurrency.name,
@@ -511,12 +519,15 @@ export default function PuntoVentaOficial({
 
         console.log('Nuevo pago agregado:', newPayment);
         setPayments([...payments, newPayment]);
+
+        // ✅ CORRECCIÓN: Resetear todos los campos incluyendo referencia
         setCurrentPayment({
             method: '',
             moneda_id: '',
             via: '',
             amount: '',
             cuenta_id: '',
+            referencia: '',
         });
         setCuentasFiltradas([]);
 
@@ -583,6 +594,7 @@ export default function PuntoVentaOficial({
                 tasa_cambio: p.exchangeRate,
                 monto_equivalente: p.amountInUsd,
                 cuenta_id: p.cuenta_id,
+                referencia: p.referencia, // ✅ INCLUIR REFERENCIA EN EL ENVÍO
             })),
             moneda_principal_id: monedaPrincipal?.id,
             tasa_cambio_principal: tasaCambioPrincipal,
@@ -636,7 +648,6 @@ export default function PuntoVentaOficial({
         return { label: 'Agotado', variant: 'destructive' as const };
     };
 
-    // NUEVO: Obtener información de la moneda seleccionada
     const selectedCurrencyInfo = currentPayment.moneda_id ? getCurrencyInfo(currentPayment.moneda_id) : null;
 
     return (
@@ -995,12 +1006,12 @@ export default function PuntoVentaOficial({
                                                         {/* Resumen de pagos existentes */}
                                                         {payments.length > 0 && (
                                                             <div className="rounded-lg border p-4">
-                                                                <h4 className="mb-3 font-medium">Pagos Agregados</h4>
+                                                                <h4 className="mb-3 font-medium">Pagos Agregados ({payments.length})</h4>
                                                                 <div className="space-y-2">
                                                                     {payments.map((payment) => (
                                                                         <div
                                                                             key={payment.id}
-                                                                            className="flex items-center justify-between rounded border p-2"
+                                                                            className="flex items-center justify-between rounded border p-3"
                                                                         >
                                                                             <div className="flex-1">
                                                                                 <p className="font-medium">
@@ -1009,8 +1020,11 @@ export default function PuntoVentaOficial({
                                                                                         : 'Efectivo'}
                                                                                 </p>
                                                                                 <p className="text-sm text-gray-500">
-                                                                                    {payment.amount.toFixed(2)} {payment.moneda_info?.simbolo}= $
-                                                                                    {payment.amountInUsd.toFixed(2)} USD
+                                                                                    {payment.amount.toFixed(2)} {payment.moneda_info?.simbolo}
+                                                                                    {payment.referencia && ` - Ref: ${payment.referencia}`}
+                                                                                </p>
+                                                                                <p className="text-sm text-green-600">
+                                                                                    = ${payment.amountInUsd.toFixed(2)} USD
                                                                                 </p>
                                                                             </div>
                                                                             <Button
@@ -1040,6 +1054,7 @@ export default function PuntoVentaOficial({
                                                                                 ...currentPayment,
                                                                                 method: value,
                                                                                 via: value === 'efectivo' ? 'efectivo' : '',
+                                                                                referencia: value === 'efectivo' ? '' : currentPayment.referencia,
                                                                             };
                                                                             console.log('Método de pago cambiado:', newPayment);
                                                                             setCurrentPayment(newPayment);
@@ -1092,8 +1107,8 @@ export default function PuntoVentaOficial({
                                                                                     cargandoCuentas
                                                                                         ? 'Cargando cuentas...'
                                                                                         : cuentasFiltradas.length === 0
-                                                                                          ? 'No hay cuentas disponibles'
-                                                                                          : 'Seleccione cuenta'
+                                                                                            ? 'No hay cuentas disponibles'
+                                                                                            : 'Seleccione cuenta'
                                                                                 }
                                                                             />
                                                                         </SelectTrigger>
@@ -1140,6 +1155,22 @@ export default function PuntoVentaOficial({
                                                                 )}
                                                             </div>
 
+                                                            {/* ✅ CORRECCIÓN: Campo de referencia para transferencias */}
+                                                            {currentPayment.method === 'transferencia' && (
+                                                                <div className="space-y-2">
+                                                                    <Label>Referencia / Número de Operación</Label>
+                                                                    <Input
+                                                                        value={currentPayment.referencia}
+                                                                        onChange={(e) => {
+                                                                            console.log('Referencia cambiada:', e.target.value);
+                                                                            setCurrentPayment({ ...currentPayment, referencia: e.target.value });
+                                                                        }}
+                                                                        placeholder="Ingrese el número de referencia"
+                                                                        required
+                                                                    />
+                                                                </div>
+                                                            )}
+
                                                             {/* Información de tasa de cambio */}
                                                             {selectedCurrencyInfo && (
                                                                 <div className="rounded-lg bg-blue-50 p-3 text-sm">
@@ -1175,6 +1206,7 @@ export default function PuntoVentaOficial({
                                                                             !currentPayment.method ||
                                                                             !currentPayment.moneda_id ||
                                                                             (currentPayment.method === 'transferencia' && !currentPayment.via) ||
+                                                                            (currentPayment.method === 'transferencia' && !currentPayment.referencia) || // ✅ VALIDACIÓN ACTUALIZADA
                                                                             !currentPayment.amount ||
                                                                             parseFloat(currentPayment.amount) <= 0 ||
                                                                             !currentPayment.cuenta_id
