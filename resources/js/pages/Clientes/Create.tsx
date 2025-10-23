@@ -217,12 +217,12 @@ export default function CreateClientePage() {
                                                         <TooltipContent>
                                                             <div className="space-y-2">
                                                                 <p className="flex items-center gap-1">
-                                                                    <AlertCircle size={12} className="text-red-500" />
-                                                                    <strong>&gt; 0:</strong> Cliente nos debe
+                                                                    <CheckCircle size={12} className="text-green-500" />
+                                                                    <strong>&gt; 0:</strong> Fondo disponible (tienes fondo con cliente)
                                                                 </p>
                                                                 <p className="flex items-center gap-1">
-                                                                    <CheckCircle size={12} className="text-green-500" />
-                                                                    <strong>&lt; 0:</strong> Tenemos fondo con cliente
+                                                                    <AlertCircle size={12} className="text-red-500" />
+                                                                    <strong>&lt; 0:</strong> Deuda pendiente (le debes al cliente)
                                                                 </p>
                                                                 <p className="flex items-center gap-1">
                                                                     <CheckCircle size={12} className="text-gray-500" />
@@ -239,8 +239,10 @@ export default function CreateClientePage() {
                                                     id="deuda_pago_cliente"
                                                     type="number"
                                                     step="0.00000001"
+                                                    min="-9999999"
+                                                    max="9999999"
                                                     value={data.deuda_pago_cliente || ''}
-                                                    onChange={(e) => setData('deuda_pago_cliente', parseFloat(e.target.value))}
+                                                    onChange={(e) => setData('deuda_pago_cliente', parseFloat(e.target.value) || 0)}
                                                     placeholder="0.00"
                                                     className="[appearance:textfield] pl-10 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                                 />
@@ -248,21 +250,21 @@ export default function CreateClientePage() {
                                             <div
                                                 className={`flex items-center gap-1 text-sm ${
                                                     data.deuda_pago_cliente > 0
-                                                        ? 'text-red-600'
+                                                        ? 'text-green-600'
                                                         : data.deuda_pago_cliente < 0
-                                                          ? 'text-green-600'
+                                                          ? 'text-red-600'
                                                           : 'text-gray-600'
                                                 }`}
                                             >
                                                 {data.deuda_pago_cliente > 0 ? (
                                                     <>
-                                                        <AlertCircle size={14} />
-                                                        <span>El cliente tendrá deuda inicial</span>
+                                                        <CheckCircle size={14} />
+                                                        <span>La empresa tendrá fondo disponible con el cliente</span>
                                                     </>
                                                 ) : data.deuda_pago_cliente < 0 ? (
                                                     <>
-                                                        <CheckCircle size={14} />
-                                                        <span>La empresa tendrá fondo con el cliente</span>
+                                                        <AlertCircle size={14} />
+                                                        <span>La empresa tendrá deuda pendiente con el cliente</span>
                                                     </>
                                                 ) : (
                                                     <>
@@ -355,13 +357,17 @@ export default function CreateClientePage() {
                                                     <span
                                                         className={
                                                             data.deuda_pago_cliente > 0
-                                                                ? 'text-red-600'
+                                                                ? 'text-green-600'
                                                                 : data.deuda_pago_cliente < 0
-                                                                  ? 'text-green-600'
+                                                                  ? 'text-red-600'
                                                                   : 'text-gray-600'
                                                         }
                                                     >
-                                                        {data.deuda_pago_cliente > 0 ? ' Deuda' : data.deuda_pago_cliente < 0 ? ' Fondo' : ' Neutral'}
+                                                        {data.deuda_pago_cliente > 0
+                                                            ? ` Fondo: $${Math.abs(data.deuda_pago_cliente).toFixed(2)}`
+                                                            : data.deuda_pago_cliente < 0
+                                                              ? ` Deuda: $${Math.abs(data.deuda_pago_cliente).toFixed(2)}`
+                                                              : ' Neutral'}
                                                     </span>
                                                 </p>
                                             </div>

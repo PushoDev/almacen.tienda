@@ -80,26 +80,28 @@ export default function EditClientePage({ cliente }: EditClientePageProps) {
         }).format(valor);
     };
 
-    const getEstadoFinanciero = (deuda: number | null) => {
-        if (deuda === null || deuda === undefined) {
+    // ACTUALIZADO: Nueva lógica coherente con Proveedores
+    const getEstadoFinanciero = (saldo: number | null) => {
+        if (saldo === null || saldo === undefined) {
             return { tipo: 'sin-info', color: 'gray', icon: History, texto: 'Sin información' };
         }
 
-        if (deuda > 0) {
-            return {
-                tipo: 'deuda',
-                color: 'red',
-                icon: AlertCircle,
-                texto: 'Deuda pendiente',
-                descripcion: 'El cliente tiene deuda con la empresa',
-            };
-        } else if (deuda < 0) {
+        // NUEVA LÓGICA (igual que Proveedores):
+        if (saldo > 0) {
             return {
                 tipo: 'fondo',
                 color: 'green',
                 icon: CheckCircle,
                 texto: 'Fondo disponible',
-                descripcion: 'La empresa tiene fondo con el cliente',
+                descripcion: 'Tienes fondo disponible con el cliente',
+            };
+        } else if (saldo < 0) {
+            return {
+                tipo: 'deuda',
+                color: 'red',
+                icon: AlertCircle,
+                texto: 'Deuda pendiente',
+                descripcion: 'Tienes deuda pendiente con el cliente',
             };
         } else {
             return {
@@ -345,12 +347,12 @@ export default function EditClientePage({ cliente }: EditClientePageProps) {
                                                         <TooltipContent>
                                                             <div className="space-y-2">
                                                                 <p className="flex items-center gap-1">
-                                                                    <AlertCircle size={12} className="text-red-500" />
-                                                                    <strong>&gt; 0:</strong> Cliente nos debe
+                                                                    <CheckCircle size={12} className="text-green-500" />
+                                                                    <strong>&gt; 0:</strong> Fondo disponible (tienes fondo con cliente)
                                                                 </p>
                                                                 <p className="flex items-center gap-1">
-                                                                    <CheckCircle size={12} className="text-green-500" />
-                                                                    <strong>&lt; 0:</strong> Tenemos fondo con cliente
+                                                                    <AlertCircle size={12} className="text-red-500" />
+                                                                    <strong>&lt; 0:</strong> Deuda pendiente (le debes al cliente)
                                                                 </p>
                                                                 <p className="flex items-center gap-1">
                                                                     <CheckCircle size={12} className="text-gray-500" />
@@ -367,8 +369,10 @@ export default function EditClientePage({ cliente }: EditClientePageProps) {
                                                     id="deuda_pago_cliente"
                                                     type="number"
                                                     step="0.00000001"
+                                                    min="-9999999"
+                                                    max="9999999"
                                                     value={data.deuda_pago_cliente || ''}
-                                                    onChange={(e) => setData('deuda_pago_cliente', parseFloat(e.target.value))}
+                                                    onChange={(e) => setData('deuda_pago_cliente', parseFloat(e.target.value) || 0)}
                                                     placeholder="0.00"
                                                     className="[appearance:textfield] pl-10 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                                                 />
@@ -376,17 +380,17 @@ export default function EditClientePage({ cliente }: EditClientePageProps) {
                                             <div
                                                 className={`flex items-center gap-1 text-sm ${
                                                     data.deuda_pago_cliente > 0
-                                                        ? 'text-red-600'
+                                                        ? 'text-green-600'
                                                         : data.deuda_pago_cliente < 0
-                                                          ? 'text-green-600'
+                                                          ? 'text-red-600'
                                                           : 'text-gray-600'
                                                 }`}
                                             >
                                                 <EstadoNuevoIcon size={14} />
                                                 {data.deuda_pago_cliente > 0 ? (
-                                                    <span>El cliente tendrá deuda</span>
+                                                    <span>La empresa tendrá fondo disponible con el cliente</span>
                                                 ) : data.deuda_pago_cliente < 0 ? (
-                                                    <span>La empresa tendrá fondo con el cliente</span>
+                                                    <span>La empresa tendrá deuda pendiente con el cliente</span>
                                                 ) : (
                                                     <span>Sin deudas ni fondos</span>
                                                 )}

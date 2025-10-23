@@ -85,21 +85,21 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
     const [paginaActual, setPaginaActual] = useState(1);
     const elementosPorPagina = 10;
 
-    // Calcular métricas para los widgets (CORREGIDO)
+    // Calcular métricas para los widgets (ACTUALIZADO con nueva lógica)
     const metricas = useMemo(() => {
         const totalClientes = clientes.length;
         const clientesFisicos = clientes.filter((c) => c.tipo_cliente === 'fisico').length;
         const clientesAsociados = clientes.filter((c) => c.tipo_cliente === 'asociado').length;
 
-        // CORRECCIÓN:
-        // > 0 = Cliente nos debe (deuda)
-        // < 0 = Nosotros le debemos (fondo/credito)
-        const deudaTotal = clientes.reduce(
+        // NUEVA LÓGICA (igual que Proveedores):
+        // > 0 = Fondo disponible (tienes fondo con cliente)
+        // < 0 = Deuda pendiente (le debes al cliente)
+        const fondoTotal = clientes.reduce(
             (sum, cliente) => sum + (cliente.deuda_pago_cliente && cliente.deuda_pago_cliente > 0 ? cliente.deuda_pago_cliente : 0),
             0,
         );
 
-        const fondoTotal = clientes.reduce(
+        const deudaTotal = clientes.reduce(
             (sum, cliente) => sum + (cliente.deuda_pago_cliente && cliente.deuda_pago_cliente < 0 ? Math.abs(cliente.deuda_pago_cliente) : 0),
             0,
         );
@@ -108,8 +108,8 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
             totalClientes,
             clientesFisicos,
             clientesAsociados,
-            deudaTotal, // Lo que los clientes nos deben
-            fondoTotal, // Lo que nosotros debemos a los clientes
+            fondoTotal, // Fondos disponibles con clientes
+            deudaTotal, // Deudas que tenemos con clientes
         };
     }, [clientes]);
 
@@ -133,27 +133,28 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
     const clientesAmostrar = clientesFiltrados.slice(indicePrimerElemento, indiceUltimoElemento);
     const totalPaginas = Math.ceil(clientesFiltrados.length / elementosPorPagina);
 
-    // Función para determinar el estado financiero (CORREGIDA)
-    const getEstadoFinanciero = (deuda: number | null) => {
-        if (deuda === null || deuda === undefined) {
+    // Función para determinar el estado financiero (ACTUALIZADA con nueva lógica)
+    const getEstadoFinanciero = (saldo: number | null) => {
+        if (saldo === null || saldo === undefined) {
             return { tipo: 'sin-info', color: 'gray', icon: Minus, texto: 'Sin información' };
         }
 
-        if (deuda > 0) {
-            return {
-                tipo: 'deuda',
-                color: 'red',
-                icon: AlertCircle,
-                texto: 'Deuda pendiente',
-                descripcion: 'El cliente tiene deuda con la empresa',
-            };
-        } else if (deuda < 0) {
+        // NUEVA LÓGICA (igual que Proveedores):
+        if (saldo > 0) {
             return {
                 tipo: 'fondo',
                 color: 'green',
                 icon: ArrowDownCircle,
                 texto: 'Fondo disponible',
-                descripcion: 'La empresa tiene fondo con el cliente',
+                descripcion: 'Tienes fondo disponible con el cliente',
+            };
+        } else if (saldo < 0) {
+            return {
+                tipo: 'deuda',
+                color: 'red',
+                icon: AlertCircle,
+                texto: 'Deuda pendiente',
+                descripcion: 'Tienes deuda pendiente con el cliente',
             };
         } else {
             return {
@@ -161,7 +162,7 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                 color: 'gray',
                 icon: CheckCircle,
                 texto: 'Al día',
-                descripcion: 'Sin deudas ni fondos pendientes',
+                descripcion: 'Sin fondos ni deudas pendientes',
             };
         }
     };
@@ -184,7 +185,7 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                         />
                     </div>
 
-                    {/* Widgets de Métricas (CORREGIDOS) */}
+                    {/* Widgets de Métricas (ACTUALIZADOS con nueva lógica) */}
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                         <Card className="relative overflow-hidden">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -201,23 +202,23 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
 
                         <Card className="relative overflow-hidden">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">Deuda Total</CardTitle>
-                                <TrendingUp className="h-4 w-4 text-red-500" />
+                                <CardTitle className="text-sm font-medium">Fondo Total</CardTitle>
+                                <TrendingUp className="h-4 w-4 text-green-500" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold text-red-600">{formatearMoneda(metricas.deudaTotal)}</div>
-                                <p className="text-muted-foreground text-xs">Clientes nos deben</p>
+                                <div className="text-2xl font-bold text-green-600">{formatearMoneda(metricas.fondoTotal)}</div>
+                                <p className="text-muted-foreground text-xs">Fondos disponibles con clientes</p>
                             </CardContent>
                         </Card>
 
                         <Card className="relative overflow-hidden">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">Fondo Total</CardTitle>
-                                <TrendingDown className="h-4 w-4 text-green-500" />
+                                <CardTitle className="text-sm font-medium">Deuda Total</CardTitle>
+                                <TrendingDown className="h-4 w-4 text-red-500" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold text-green-600">{formatearMoneda(metricas.fondoTotal)}</div>
-                                <p className="text-muted-foreground text-xs">Tenemos con clientes</p>
+                                <div className="text-2xl font-bold text-red-600">{formatearMoneda(metricas.deudaTotal)}</div>
+                                <p className="text-muted-foreground text-xs">Deudas pendientes con clientes</p>
                             </CardContent>
                         </Card>
 
@@ -229,19 +230,19 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                             <CardContent>
                                 <div
                                     className={`text-2xl font-bold ${
-                                        metricas.deudaTotal > metricas.fondoTotal
-                                            ? 'text-red-600'
-                                            : metricas.fondoTotal > metricas.deudaTotal
-                                              ? 'text-green-600'
+                                        metricas.fondoTotal > metricas.deudaTotal
+                                            ? 'text-green-600'
+                                            : metricas.deudaTotal > metricas.fondoTotal
+                                              ? 'text-red-600'
                                               : 'text-gray-600'
                                     }`}
                                 >
-                                    {formatearMoneda(metricas.deudaTotal - metricas.fondoTotal)}
+                                    {formatearMoneda(metricas.fondoTotal - metricas.deudaTotal)}
                                 </div>
                                 <p className="text-muted-foreground text-xs">
-                                    {metricas.deudaTotal > metricas.fondoTotal
+                                    {metricas.fondoTotal > metricas.deudaTotal
                                         ? 'A favor empresa'
-                                        : metricas.fondoTotal > metricas.deudaTotal
+                                        : metricas.deudaTotal > metricas.fondoTotal
                                           ? 'A favor clientes'
                                           : 'Equilibrado'}
                                 </p>
@@ -393,7 +394,7 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                                         </Badge>
                                                     </TableCell>
 
-                                                    {/* Estado Financiero (CORREGIDO) */}
+                                                    {/* Estado Financiero (ACTUALIZADO con nueva lógica) */}
                                                     <TableCell>
                                                         <Tooltip>
                                                             <TooltipTrigger asChild>
@@ -414,7 +415,7 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                                                             <span className="font-medium">
                                                                                 {cliente.deuda_pago_cliente !== null &&
                                                                                 cliente.deuda_pago_cliente !== undefined
-                                                                                    ? estado.tipo === 'fondo'
+                                                                                    ? estado.tipo === 'deuda'
                                                                                         ? formatearMoneda(Math.abs(cliente.deuda_pago_cliente))
                                                                                         : formatearMoneda(cliente.deuda_pago_cliente)
                                                                                     : ''}
@@ -441,7 +442,7 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                                                     <p className="mt-1 text-xs">
                                                                         Valor:{' '}
                                                                         {formatearMoneda(
-                                                                            estado.tipo === 'fondo'
+                                                                            estado.tipo === 'deuda'
                                                                                 ? Math.abs(cliente.deuda_pago_cliente)
                                                                                 : cliente.deuda_pago_cliente,
                                                                         )}
