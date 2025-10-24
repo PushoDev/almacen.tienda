@@ -13,6 +13,7 @@ import {
     AlertCircle,
     ArrowDownCircle,
     ArrowLeft,
+    ArrowRightLeft,
     Building,
     Calendar,
     CheckCircle,
@@ -27,6 +28,8 @@ import {
     Phone,
     ShoppingCart,
     Store,
+    TrendingDown,
+    TrendingUp,
     User,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -70,9 +73,54 @@ interface CompraCliente {
     };
 }
 
+// Definir tipos para movimientos financieros
+interface TipoMovimientoFinanciero {
+    id: number;
+    nombre: string;
+}
+
+interface MovimientoFinanciero {
+    id: number;
+    tipo_movimiento_id: number;
+    tipo_movimiento: TipoMovimientoFinanciero;
+    cuenta_origen_id?: number;
+    cuenta_origen?: {
+        id: number;
+        nombre_cuenta: string;
+    };
+    cliente_origen_id?: number;
+    cliente_origen?: {
+        id: number;
+        nombre_cliente: string;
+    };
+    cuenta_destino_id?: number;
+    cuenta_destino?: {
+        id: number;
+        nombre_cuenta: string;
+    };
+    cliente_destino_id?: number;
+    cliente_destino?: {
+        id: number;
+        nombre_cliente: string;
+    };
+    proveedor_destino_id?: number;
+    proveedor_destino?: {
+        id: number;
+        nombre_proveedor: string;
+    };
+    monto: number;
+    moneda: string;
+    tasa_cambio_aplicada: number;
+    descripcion: string;
+    fecha_operacion: string;
+    estado: string;
+}
+
 interface ShowClientePageProps {
     cliente: ClienteProps & {
         compras_como_pagador?: CompraCliente[];
+        movimientos_como_origen?: MovimientoFinanciero[];
+        movimientos_como_destino?: MovimientoFinanciero[];
     };
 }
 
@@ -91,8 +139,178 @@ const breadcrumbs = (clienteNombre: string): BreadcrumbItem[] => [
     },
 ];
 
+// Componente para renderizar la tabla de transacciones
+const TablaTransacciones = ({
+    movimientos,
+    cliente,
+    formatearMoneda,
+    formatearFecha,
+}: {
+    movimientos: MovimientoFinanciero[];
+    cliente: any;
+    formatearMoneda: (valor: number | null | undefined) => string;
+    formatearFecha: (fecha: string) => string;
+}) => {
+    // Función para obtener icono de tipo de movimiento
+    const getMovimientoIcon = (tipoMovimientoId: number) => {
+        switch (tipoMovimientoId) {
+            case 1: // Gasto
+                return TrendingDown;
+            case 2: // Ingreso
+                return TrendingUp;
+            case 3: // Transferencia
+                return ArrowRightLeft;
+            default:
+                return DollarSign;
+        }
+    };
+
+    // Función para obtener color de tipo de movimiento
+    const getMovimientoColor = (tipoMovimientoId: number) => {
+        switch (tipoMovimientoId) {
+            case 1: // Gasto
+                return 'text-red-600 bg-red-50 border-red-200';
+            case 2: // Ingreso
+                return 'text-green-600 bg-green-50 border-green-200';
+            case 3: // Transferencia
+                return 'text-blue-600 bg-blue-50 border-blue-200';
+            default:
+                return 'text-gray-600 bg-gray-50 border-gray-200';
+        }
+    };
+
+    return (
+        <ScrollArea className="h-[400px]">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>Fecha</TableHead>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Descripción</TableHead>
+                        <TableHead>Monto</TableHead>
+                        <TableHead>Moneda</TableHead>
+                        <TableHead>Dirección</TableHead>
+                        <TableHead>Detalles</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {movimientos.length > 0 ? (
+                        movimientos.map((movimiento) => {
+                            const MovimientoIcon = getMovimientoIcon(movimiento.tipo_movimiento_id);
+                            const colorClase = getMovimientoColor(movimiento.tipo_movimiento_id);
+                            const direccion = movimiento.cliente_origen_id === cliente.id ? 'origen' : 'destino';
+
+                            return (
+                                <TableRow key={movimiento.id} className="hover:bg-muted/50">
+                                    <TableCell>
+                                        <div className="flex items-center gap-1">
+                                            <Calendar size={12} className="text-muted-foreground" />
+                                            <span className="text-sm">{formatearFecha(movimiento.fecha_operacion)}</span>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Badge variant="outline" className={`flex w-28 items-center gap-1 ${colorClase}`}>
+                                            <MovimientoIcon size={12} />
+                                            {movimiento.tipo_movimiento.nombre}
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                        <span className="text-sm">{movimiento.descripcion}</span>
+                                    </TableCell>
+                                    <TableCell>
+                                        <span
+                                            className={`font-medium ${
+                                                movimiento.tipo_movimiento_id === 1
+                                                    ? 'text-red-600'
+                                                    : movimiento.tipo_movimiento_id === 2
+                                                      ? 'text-green-600'
+                                                      : 'text-blue-600'
+                                            }`}
+                                        >
+                                            {formatearMoneda(movimiento.monto)}
+                                        </span>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Badge variant="secondary">{movimiento.moneda}</Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Badge
+                                            variant="outline"
+                                            className={direccion === 'origen' ? 'bg-orange-100 text-orange-800' : 'bg-purple-100 text-purple-800'}
+                                        >
+                                            {direccion === 'origen' ? 'Origen' : 'Destino'}
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button variant="ghost" size="sm">
+                                                    <Eye size={14} />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                                <div className="space-y-1 text-xs">
+                                                    <p>
+                                                        <strong>Tipo:</strong> {movimiento.tipo_movimiento.nombre}
+                                                    </p>
+                                                    <p>
+                                                        <strong>Monto:</strong> {formatearMoneda(movimiento.monto)} {movimiento.moneda}
+                                                    </p>
+                                                    <p>
+                                                        <strong>Tasa:</strong> {movimiento.tasa_cambio_aplicada}
+                                                    </p>
+                                                    {movimiento.cuenta_origen && (
+                                                        <p>
+                                                            <strong>Cuenta Origen:</strong> {movimiento.cuenta_origen.nombre_cuenta}
+                                                        </p>
+                                                    )}
+                                                    {movimiento.cliente_origen && movimiento.cliente_origen.id !== cliente.id && (
+                                                        <p>
+                                                            <strong>Cliente Origen:</strong> {movimiento.cliente_origen.nombre_cliente}
+                                                        </p>
+                                                    )}
+                                                    {movimiento.cuenta_destino && (
+                                                        <p>
+                                                            <strong>Cuenta Destino:</strong> {movimiento.cuenta_destino.nombre_cuenta}
+                                                        </p>
+                                                    )}
+                                                    {movimiento.cliente_destino && movimiento.cliente_destino.id !== cliente.id && (
+                                                        <p>
+                                                            <strong>Cliente Destino:</strong> {movimiento.cliente_destino.nombre_cliente}
+                                                        </p>
+                                                    )}
+                                                    {movimiento.proveedor_destino && (
+                                                        <p>
+                                                            <strong>Proveedor Destino:</strong> {movimiento.proveedor_destino.nombre_proveedor}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </TableCell>
+                                </TableRow>
+                            );
+                        })
+                    ) : (
+                        <TableRow>
+                            <TableCell colSpan={7} className="text-muted-foreground py-8 text-center">
+                                <div className="flex flex-col items-center gap-2">
+                                    <ArrowRightLeft size={32} className="opacity-50" />
+                                    <p>No hay transacciones financieras registradas</p>
+                                    <p className="text-sm">Las transacciones donde este cliente participe aparecerán aquí</p>
+                                </div>
+                            </TableCell>
+                        </TableRow>
+                    )}
+                </TableBody>
+            </Table>
+        </ScrollArea>
+    );
+};
+
 export default function ShowClientePage({ cliente }: ShowClientePageProps) {
     const [activeTab, setActiveTab] = useState('resumen');
+    const [activeTransaccionesTab, setActiveTransaccionesTab] = useState('todas');
 
     // ✅ CORREGIDO: Acepta number | null | undefined
     const formatearMoneda = (valor: number | null | undefined) => {
@@ -112,15 +330,24 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
         });
     };
 
-    // Calcular métricas basadas en las compras como pagador
+    // Calcular métricas basadas en las compras como pagador y transacciones
     const metricas = useMemo(() => {
         const compras = cliente.compras_como_pagador || [];
+        const movimientosOrigen = cliente.movimientos_como_origen || [];
+        const movimientosDestino = cliente.movimientos_como_destino || [];
+
         const totalCompras = compras.length;
-        const montoTotalAportado = compras.reduce((sum, compra) => sum + compra.pivot.monto, 0);
-        const montoTotalCompras = compras.reduce((sum, compra) => sum + compra.total_compra, 0);
+        const montoTotalAportado = compras.reduce((sum, compra) => sum + Number(compra.pivot.monto), 0);
+        const montoTotalCompras = compras.reduce((sum, compra) => sum + Number(compra.total_compra), 0);
+
+        // Calcular métricas de transacciones
+        const totalTransacciones = movimientosOrigen.length + movimientosDestino.length;
+        const montoTransaccionesOrigen = movimientosOrigen.reduce((sum, mov) => sum + Number(mov.monto), 0);
+        const montoTransaccionesDestino = movimientosDestino.reduce((sum, mov) => sum + Number(mov.monto), 0);
+        const saldoNetoTransacciones = montoTransaccionesDestino - montoTransaccionesOrigen;
 
         // ✅ CORREGIDO: Manejar null/undefined
-        const deudaActual = cliente.deuda_pago_cliente ?? 0;
+        const deudaActual = Number(cliente.deuda_pago_cliente) || 0;
 
         return {
             totalCompras,
@@ -128,8 +355,12 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
             montoTotalCompras,
             deudaActual,
             comprasConProveedor: Array.from(new Set(compras.map((c) => c.proveedor.nombre_proveedor))).length,
+            totalTransacciones,
+            montoTransaccionesOrigen,
+            montoTransaccionesDestino,
+            saldoNetoTransacciones,
         };
-    }, [cliente.compras_como_pagador, cliente.deuda_pago_cliente]);
+    }, [cliente.compras_como_pagador, cliente.movimientos_como_origen, cliente.movimientos_como_destino, cliente.deuda_pago_cliente]);
 
     // ✅ CORREGIDO: Acepta number | null | undefined
     const getEstadoFinanciero = (deuda: number | null | undefined) => {
@@ -168,10 +399,39 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
     const estado = getEstadoFinanciero(cliente.deuda_pago_cliente);
     const EstadoIcon = estado.icon;
 
+    // Combinar y ordenar movimientos para la pestaña "todas"
+    const todosMovimientos = useMemo(() => {
+        const movimientosOrigen = cliente.movimientos_como_origen || [];
+        const movimientosDestino = cliente.movimientos_como_destino || [];
+
+        return [...movimientosOrigen, ...movimientosDestino].sort(
+            (a, b) => new Date(b.fecha_operacion).getTime() - new Date(a.fecha_operacion).getTime(),
+        );
+    }, [cliente.movimientos_como_origen, cliente.movimientos_como_destino]);
+
+    // Obtener movimientos filtrados según la pestaña activa
+    const getMovimientosFiltrados = () => {
+        switch (activeTransaccionesTab) {
+            case 'origen':
+                return cliente.movimientos_como_origen || [];
+            case 'destino':
+                return cliente.movimientos_como_destino || [];
+            case 'todas':
+            default:
+                return todosMovimientos;
+        }
+    };
+
+    const movimientosFiltrados = getMovimientosFiltrados();
+
     console.log('Cliente data:', cliente);
     console.log('Compras como pagador:', cliente.compras_como_pagador);
+    console.log('Movimientos como origen:', cliente.movimientos_como_origen);
+    console.log('Movimientos como destino:', cliente.movimientos_como_destino);
     console.log('Métricas calculadas:', metricas);
     console.log('Active tab:', activeTab);
+    console.log('Active transacciones tab:', activeTransaccionesTab);
+    console.log('Movimientos filtrados:', movimientosFiltrados);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs(cliente.nombre_cliente)}>
@@ -183,7 +443,7 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                         <div className="flex items-center justify-between">
                             <HeadingSmall
                                 title={`Cliente: ${cliente.nombre_cliente}`}
-                                description="Información detallada e historial de compras como método de pago"
+                                description="Información detallada e historial de compras y transacciones financieras"
                             />
                             <div className="flex items-center gap-3">
                                 <Tooltip>
@@ -347,17 +607,15 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                                         </CardContent>
                                     </Card>
 
-                                    {/* Monto Total Aportado */}
+                                    {/* Total Transacciones */}
                                     <Card>
                                         <CardContent className="p-4">
                                             <div className="flex items-center gap-2">
-                                                <DollarSign className="h-4 w-4 text-emerald-500" />
-                                                <span className="text-sm font-medium">Monto Aportado</span>
+                                                <ArrowRightLeft className="h-4 w-4 text-purple-500" />
+                                                <span className="text-sm font-medium">Transacciones</span>
                                             </div>
-                                            <div className="mt-2 text-2xl font-bold text-emerald-600">
-                                                {formatearMoneda(metricas.montoTotalAportado)}
-                                            </div>
-                                            <p className="text-muted-foreground text-xs">En compras</p>
+                                            <div className="mt-2 text-2xl font-bold text-purple-600">{metricas.totalTransacciones}</div>
+                                            <p className="text-muted-foreground text-xs">Financieras</p>
                                         </CardContent>
                                     </Card>
 
@@ -365,25 +623,24 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                                     <Card>
                                         <CardContent className="p-4">
                                             <div className="flex items-center gap-2">
-                                                <Store className="h-4 w-4 text-purple-500" />
+                                                <Store className="h-4 w-4 text-orange-500" />
                                                 <span className="text-sm font-medium">Actividad</span>
                                             </div>
                                             <div className="mt-2 space-y-1">
                                                 <div className="flex justify-between text-xs">
-                                                    <span>Total Compras:</span>
-                                                    <span className="font-medium">{formatearMoneda(metricas.montoTotalCompras)}</span>
+                                                    <span>Monto Aportado:</span>
+                                                    <span className="font-medium">{formatearMoneda(metricas.montoTotalAportado)}</span>
                                                 </div>
                                                 <div className="flex justify-between text-xs">
-                                                    <span>Proveedores:</span>
-                                                    <span className="font-medium">{metricas.comprasConProveedor}</span>
+                                                    <span>Trans. Entrada:</span>
+                                                    <span className="font-medium text-green-600">
+                                                        {formatearMoneda(metricas.montoTransaccionesDestino)}
+                                                    </span>
                                                 </div>
                                                 <div className="flex justify-between text-xs">
-                                                    <span>Participación:</span>
-                                                    <span className="font-medium">
-                                                        {metricas.montoTotalCompras > 0
-                                                            ? ((metricas.montoTotalAportado / metricas.montoTotalCompras) * 100).toFixed(1)
-                                                            : 0}
-                                                        %
+                                                    <span>Trans. Salida:</span>
+                                                    <span className="font-medium text-red-600">
+                                                        {formatearMoneda(metricas.montoTransaccionesOrigen)}
                                                     </span>
                                                 </div>
                                             </div>
@@ -404,8 +661,8 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                             <CardDescription>Historial de compras en las que este cliente ha sido utilizado como método de pago</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            {/* ✅ CORREGIDO: Tabs con estructura correcta */}
-                            <Tabs value={activeTab} onValueChange={setActiveTab}>
+                            {/* ✅ CORREGIDO: Tabs con estructura correcta - usando defaultValue en lugar de value */}
+                            <Tabs defaultValue="resumen" onValueChange={setActiveTab}>
                                 <TabsList className="grid w-full grid-cols-2">
                                     <TabsTrigger value="resumen">Resumen General</TabsTrigger>
                                     <TabsTrigger value="detalles">Detalles de Compras</TabsTrigger>
@@ -621,6 +878,133 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                                             <span>Total aportado: {formatearMoneda(metricas.montoTotalAportado)}</span>
                                         </div>
                                     )}
+                                </TabsContent>
+                            </Tabs>
+                        </CardContent>
+                    </Card>
+
+                    {/* Historial de Transacciones Financieras */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <ArrowRightLeft className="h-5 w-5" />
+                                Transacciones Financieras
+                            </CardTitle>
+                            <CardDescription>Historial de gastos, ingresos y transferencias donde el cliente ha participado</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {/* ✅ CORREGIDO: Tabs con estructura correcta - usando defaultValue en lugar de value */}
+                            <Tabs defaultValue="todas" onValueChange={setActiveTransaccionesTab}>
+                                <TabsList className="grid w-full grid-cols-4">
+                                    <TabsTrigger value="todas">Todas</TabsTrigger>
+                                    <TabsTrigger value="origen">Como Origen</TabsTrigger>
+                                    <TabsTrigger value="destino">Como Destino</TabsTrigger>
+                                    <TabsTrigger value="resumen">Resumen</TabsTrigger>
+                                </TabsList>
+
+                                {/* ✅ CORREGIDO: TabsContent para cada pestaña */}
+                                <TabsContent value="todas" className="space-y-4">
+                                    <TablaTransacciones
+                                        movimientos={movimientosFiltrados}
+                                        cliente={cliente}
+                                        formatearMoneda={formatearMoneda}
+                                        formatearFecha={formatearFecha}
+                                    />
+                                    {movimientosFiltrados.length > 0 && (
+                                        <div className="text-muted-foreground flex items-center justify-between text-sm">
+                                            <span>
+                                                Mostrando {movimientosFiltrados.length} transacción{movimientosFiltrados.length !== 1 ? 'es' : ''}
+                                            </span>
+                                            <span>
+                                                Total: {formatearMoneda(movimientosFiltrados.reduce((sum, mov) => sum + Number(mov.monto), 0))}
+                                            </span>
+                                        </div>
+                                    )}
+                                </TabsContent>
+
+                                <TabsContent value="origen" className="space-y-4">
+                                    <TablaTransacciones
+                                        movimientos={movimientosFiltrados}
+                                        cliente={cliente}
+                                        formatearMoneda={formatearMoneda}
+                                        formatearFecha={formatearFecha}
+                                    />
+                                    {movimientosFiltrados.length > 0 && (
+                                        <div className="text-muted-foreground flex items-center justify-between text-sm">
+                                            <span>
+                                                Mostrando {movimientosFiltrados.length} transacción{movimientosFiltrados.length !== 1 ? 'es' : ''}{' '}
+                                                como origen
+                                            </span>
+                                            <span>
+                                                Total: {formatearMoneda(movimientosFiltrados.reduce((sum, mov) => sum + Number(mov.monto), 0))}
+                                            </span>
+                                        </div>
+                                    )}
+                                </TabsContent>
+
+                                <TabsContent value="destino" className="space-y-4">
+                                    <TablaTransacciones
+                                        movimientos={movimientosFiltrados}
+                                        cliente={cliente}
+                                        formatearMoneda={formatearMoneda}
+                                        formatearFecha={formatearFecha}
+                                    />
+                                    {movimientosFiltrados.length > 0 && (
+                                        <div className="text-muted-foreground flex items-center justify-between text-sm">
+                                            <span>
+                                                Mostrando {movimientosFiltrados.length} transacción{movimientosFiltrados.length !== 1 ? 'es' : ''}{' '}
+                                                como destino
+                                            </span>
+                                            <span>
+                                                Total: {formatearMoneda(movimientosFiltrados.reduce((sum, mov) => sum + Number(mov.monto), 0))}
+                                            </span>
+                                        </div>
+                                    )}
+                                </TabsContent>
+
+                                <TabsContent value="resumen" className="space-y-4">
+                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                                        <Card>
+                                            <CardContent className="p-4">
+                                                <div className="flex items-center gap-2">
+                                                    <TrendingUp className="h-4 w-4 text-green-500" />
+                                                    <span className="text-sm font-medium">Entradas</span>
+                                                </div>
+                                                <div className="mt-2 text-2xl font-bold text-green-600">
+                                                    {formatearMoneda(metricas.montoTransaccionesDestino)}
+                                                </div>
+                                                <p className="text-muted-foreground text-xs">Como destino</p>
+                                            </CardContent>
+                                        </Card>
+                                        <Card>
+                                            <CardContent className="p-4">
+                                                <div className="flex items-center gap-2">
+                                                    <TrendingDown className="h-4 w-4 text-red-500" />
+                                                    <span className="text-sm font-medium">Salidas</span>
+                                                </div>
+                                                <div className="mt-2 text-2xl font-bold text-red-600">
+                                                    {formatearMoneda(metricas.montoTransaccionesOrigen)}
+                                                </div>
+                                                <p className="text-muted-foreground text-xs">Como origen</p>
+                                            </CardContent>
+                                        </Card>
+                                        <Card>
+                                            <CardContent className="p-4">
+                                                <div className="flex items-center gap-2">
+                                                    <DollarSign className="h-4 w-4 text-blue-500" />
+                                                    <span className="text-sm font-medium">Saldo Neto</span>
+                                                </div>
+                                                <div
+                                                    className={`mt-2 text-2xl font-bold ${
+                                                        metricas.saldoNetoTransacciones >= 0 ? 'text-green-600' : 'text-red-600'
+                                                    }`}
+                                                >
+                                                    {formatearMoneda(metricas.saldoNetoTransacciones)}
+                                                </div>
+                                                <p className="text-muted-foreground text-xs">En transacciones</p>
+                                            </CardContent>
+                                        </Card>
+                                    </div>
                                 </TabsContent>
                             </Tabs>
                         </CardContent>

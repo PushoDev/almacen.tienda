@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Cliente;
+use App\Models\MovimientoFinanciero; // ✅ AGREGAR IMPORT
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
@@ -71,6 +72,27 @@ class ClienteController extends Controller
                 }
             ])->orderBy('fecha_compra', 'desc');
         }]);
+
+        // ✅ CARGAR LAS TRANSACCIONES FINANCIERAS DEL CLIENTE
+        $cliente->load([
+            'movimientosComoOrigen' => function ($query) {
+                $query->with([
+                    'tipoMovimiento',
+                    'cuentaOrigen',
+                    'cuentaDestino',
+                    'clienteDestino',
+                    'proveedorDestino'
+                ]);
+            },
+            'movimientosComoDestino' => function ($query) {
+                $query->with([
+                    'tipoMovimiento',
+                    'cuentaOrigen',
+                    'clienteOrigen',
+                    'cuentaDestino'
+                ]);
+            }
+        ]);
 
         return Inertia::render('Clientes/Show', [
             'cliente' => $cliente,

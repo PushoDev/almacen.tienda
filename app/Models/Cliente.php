@@ -59,4 +59,27 @@ class Cliente extends Model
     {
         return $this->hasMany(Venta::class);
     }
+
+    // Relación con movimientos financieros donde el cliente es origen
+    public function movimientosComoOrigen()
+    {
+        return $this->hasMany(MovimientoFinanciero::class, 'cliente_origen_id')
+            ->orderBy('fecha_operacion', 'desc');
+    }
+
+    // Relación con movimientos financieros donde el cliente es destino
+    public function movimientosComoDestino()
+    {
+        return $this->hasMany(MovimientoFinanciero::class, 'cliente_destino_id')
+            ->orderBy('fecha_operacion', 'desc');
+    }
+
+    // Relación combinada para todos los movimientos del cliente
+    public function movimientosFinancieros()
+    {
+        $comoOrigen = $this->movimientosComoOrigen;
+        $comoDestino = $this->movimientosComoDestino;
+
+        return $comoOrigen->merge($comoDestino)->sortByDesc('fecha_operacion');
+    }
 }
