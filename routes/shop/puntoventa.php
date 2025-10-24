@@ -5,16 +5,17 @@ use App\Http\Controllers\CompraController; // Asegúrate de importar el controla
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    // Rutas para Ventas (ya existentes)
     Route::get('/punto-venta', [VentaController::class, 'index'])->name('punto-venta.index');
     Route::get('/ventas/{id}/show', [VentaController::class, 'show'])->name('ventas.show');
     Route::get('/ventas/almacenes', [VentaController::class, 'getAlmacenes'])->name('ventas.getAlmacenes');
     Route::get('/ventas/almacenes/{id}/productos', [VentaController::class, 'getProductosPorAlmacen'])->name('ventas.getProductosPorAlmacen');
     Route::get('/ventas/clientes', [VentaController::class, 'getClientes'])->name('ventas.getClientes');
     Route::get('/ventas/cuentas', [VentaController::class, 'getCuentas'])->name('ventas.getCuentas');
-    Route::get('/ventas/tasausd', [VentaController::class, 'getTasaUSD'])->name('ventas.getTasaUSD');
-    Route::get('/ventas/tasamlc', [VentaController::class, 'getTasaMLC'])->name('ventas.getTasaMLC');
+    Route::get('/ventas/cuentas/filtradas', [VentaController::class, 'getCuentasFiltradas'])->name('ventas.getCuentasFiltradas');
+    Route::get('/ventas/monedas', [VentaController::class, 'getMonedas'])->name('ventas.getMonedas');
     Route::post('/ventas/procesar', [VentaController::class, 'procesarVenta'])->name('ventas.procesar');
+    Route::post('/ventas/validar-stock', [VentaController::class, 'validarStock'])->name('ventas.validarStock');
+
     // Estado de las Ventas
     Route::get('/ventas/listado', [VentaController::class, 'listadoVentas'])->name('ventas.listado');
     Route::post('/ventas/{venta}/aprobar', [VentaController::class, 'aprobarVenta'])->name('ventas.aprobar');

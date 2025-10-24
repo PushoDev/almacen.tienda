@@ -16,8 +16,12 @@ class Venta extends Model
         'total',
         'detalles_venta',
         'estado',
-        'tasa_usd_utilizada',
-        'tasa_mlc_utilizada',
+        'moneda_id', // NUEVO: Relación con moneda principal usada
+        'tasa_cambio_principal', // NUEVO: Tasa de cambio de la moneda principal
+    ];
+
+    protected $casts = [
+        'tasa_cambio_principal' => 'decimal:6',
     ];
 
     public function usuario()
@@ -43,5 +47,22 @@ class Venta extends Model
     public function pagos()
     {
         return $this->hasMany(PagoVenta::class);
+    }
+
+    // NUEVA: Relación con moneda
+    public function moneda()
+    {
+        return $this->belongsTo(Moneda::class);
+    }
+
+    // NUEVO: Scope para ventas activas
+    public function scopeCompletadas($query)
+    {
+        return $query->where('estado', 'completada');
+    }
+
+    public function scopePendientes($query)
+    {
+        return $query->where('estado', 'pendiente');
     }
 }

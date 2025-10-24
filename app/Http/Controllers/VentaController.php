@@ -11,8 +11,7 @@ use App\Models\HistorialStock;
 use App\Models\Almacen;
 use App\Models\Producto;
 use App\Models\Cliente;
-use App\Models\TasaCambio;
-use App\Models\TasaCambioMLC;
+use App\Models\Moneda;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -66,7 +65,6 @@ class VentaController extends Controller
                         ->select('users.id', 'producto_vendedors.precio_venta', 'producto_vendedors.venta_ganancia');
                 },
                 'almacenes' => function ($q) use ($id) {
-                    // Cargar solo el almacén solicitado para obtener su stock
                     $q->where('almacens.id', $id)
                         ->select('almacens.id', 'almacens.nombre_almacen', 'almacen_producto.cantidad');
                 }
@@ -82,10 +80,12 @@ class VentaController extends Controller
                     'marca_producto' => $producto->marca_producto,
                     'categoria_nombre' => $producto->categoria?->nombre_categoria ?? 'Sin categoría',
                     'precio_compra_producto' => $producto->precio_compra_producto,
-                    // CORRECCIÓN DE STOCK - Usar el stock disponible del almacén seleccionado.
                     'stock_disponible' => $almacen?->pivot->cantidad ?? 0,
                     'precio_venta' => $vendedor?->pivot->precio_venta ?? null,
                     'tiene_precio' => ($vendedor?->pivot->precio_venta ?? 0) > 0,
+                    'imagen_url' => $producto->imagen_url,
+                    'codigo_barras' => $producto->codigo_producto,
+                    'barcode_image_url' => $producto->barcode_image_url,
                 ];
             });
 
@@ -106,26 +106,100 @@ class VentaController extends Controller
      */
     public function getCuentas()
     {
-        $cuentas = Cuenta::select('id', 'nombre_cuenta', 'tipo_moneda')->get();
+        $cuentas = Cuenta::with('moneda')
+            ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta')
+            ->get()
+            ->map(function ($cuenta) {
+                return [
+                    'id' => $cuenta->id,
+                    'nombre_cuenta' => $cuenta->nombre_cuenta,
+                    'saldo_actual' => $cuenta->saldo_cuenta,
+                    'moneda' => $cuenta->moneda ? [
+                        'id' => $cuenta->moneda->id,
+                        'codigo' => $cuenta->moneda->codigo_moneda,
+                        'nombre' => $cuenta->moneda->nombre_moneda,
+                        'simbolo' => $cuenta->moneda->simbolo_moneda,
+                        'tasa_cambio' => $cuenta->moneda->tasa_cambio,
+                    ] : [
+                        'codigo' => $cuenta->tipo_moneda,
+                        'nombre' => $cuenta->tipo_moneda,
+                        'simbolo' => $cuenta->tipo_moneda,
+                    ]
+                ];
+            });
+
         return response()->json($cuentas);
     }
 
     /**
-     * Cargar datos de la Tasa de Cambio para USD.
+     * Cargar cuentas filtradas por moneda - MEJORADO
      */
-    public function getTasaUSD()
+    public function getCuentasFiltradas(Request $request)
     {
-        $tasaUSD = TasaCambio::select('id', 'tasa')->get();
-        return response()->json($tasaUSD);
+        $request->validate([
+            'moneda_id' => 'required|exists:monedas,id'
+        ]);
+
+        $moneda = Moneda::find($request->moneda_id);
+        if (!$moneda) {
+            return response()->json([]);
+        }
+
+        // MEJORADO: Buscar cuentas que coincidan EXACTAMENTE con la moneda seleccionada
+        $cuentas = Cuenta::with('moneda')
+            ->where(function ($query) use ($moneda) {
+                // Cuentas con moneda_id que coincide exactamente
+                $query->where('moneda_id', $moneda->id);
+            })
+            ->orWhere(function ($query) use ($moneda) {
+                // Cuentas legacy con tipo_moneda que coincide exactamente con el código
+                $query->whereNull('moneda_id')
+                    ->where('tipo_moneda', $moneda->codigo_moneda);
+            })
+            ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta')
+            ->get()
+            ->map(function ($cuenta) {
+                return [
+                    'id' => $cuenta->id,
+                    'nombre_cuenta' => $cuenta->nombre_cuenta,
+                    'saldo_actual' => $cuenta->saldo_cuenta,
+                    'moneda' => $cuenta->moneda ? [
+                        'id' => $cuenta->moneda->id,
+                        'codigo' => $cuenta->moneda->codigo_moneda,
+                        'nombre' => $cuenta->moneda->nombre_moneda,
+                        'simbolo' => $cuenta->moneda->simbolo_moneda,
+                    ] : [
+                        'codigo' => $cuenta->tipo_moneda,
+                        'nombre' => $cuenta->tipo_moneda,
+                        'simbolo' => $cuenta->tipo_moneda,
+                    ]
+                ];
+            });
+
+        return response()->json($cuentas);
     }
 
     /**
-     * Cargar datos de la tasa de MLC.
+     * Cargar todas las monedas activas - MEJORADO
      */
-    public function getTasaMLC()
+    public function getMonedas()
     {
-        $tasaMLC = TasaCambioMLC::select('id', 'tasa_mlc')->get();
-        return response()->json($tasaMLC);
+        $monedas = Moneda::where('estado', true)->get();
+
+        // MEJORADO: Asegurar que los IDs sean consistentes
+        $monedasFormateadas = $monedas->map(function ($moneda) {
+            return [
+                'id' => (string)$moneda->id, // Convertir a string para consistencia con frontend
+                'codigo_moneda' => $moneda->codigo_moneda,
+                'nombre_moneda' => $moneda->nombre_moneda,
+                'simbolo_moneda' => $moneda->simbolo_moneda,
+                'tasa_cambio' => (float)$moneda->tasa_cambio,
+                'principal' => (bool)$moneda->principal,
+                'estado' => (bool)$moneda->estado,
+            ];
+        });
+
+        return response()->json($monedasFormateadas);
     }
 
     // ========================================================================
@@ -133,7 +207,7 @@ class VentaController extends Controller
     // ========================================================================
 
     /**
-     * Muestra la vista principal para realizar ventas (Inertia/Vue component).
+     * Muestra la vista principal para realizar ventas - MEJORADO
      */
     public function index()
     {
@@ -142,19 +216,26 @@ class VentaController extends Controller
             return redirect()->route('login');
         }
 
-        // Obtener las últimas tasas de cambio
-        $tasaUSD = TasaCambio::latest()->first();
-        $tasaMLC = TasaCambioMLC::latest()->first();
+        $monedas = Moneda::where('estado', true)->get()
+            ->map(function ($moneda) {
+                return [
+                    'id' => (string)$moneda->id, // Convertir a string para consistencia
+                    'codigo_moneda' => $moneda->codigo_moneda,
+                    'nombre_moneda' => $moneda->nombre_moneda,
+                    'simbolo_moneda' => $moneda->simbolo_moneda,
+                    'tasa_cambio' => (float)$moneda->tasa_cambio,
+                    'principal' => (bool)$moneda->principal,
+                    'estado' => (bool)$moneda->estado,
+                ];
+            });
 
         return Inertia::render('Vendor/Index', [
             'meta' => [
                 'role_usuario' => $user->role,
-                // Si el rol es admin, carga todos los almacenes, sino, los que tiene asignados
                 'almacenes_usuario' => $user->role === 'admin'
-                    ? Almacen::select('id', 'nombre_almacen')->get()->map(fn($a) => ['id' => $a->id, 'nombre' => $a->nombre_almacen])
-                    : $user->almacenes->map(fn($a) => ['id' => $a->id, 'nombre' => $a->nombre_almacen]),
-                'tasa_usd' => $tasaUSD ? $tasaUSD->tasa : 1,
-                'tasa_mlc' => $tasaMLC ? $tasaMLC->tasa_mlc : 1,
+                    ? Almacen::select('id', 'nombre_almacen')->get()->map(fn($a) => ['id' => (string)$a->id, 'nombre' => $a->nombre_almacen])
+                    : $user->almacenes->map(fn($a) => ['id' => (string)$a->id, 'nombre' => $a->nombre_almacen]),
+                'monedas' => $monedas,
             ]
         ]);
     }
@@ -164,11 +245,16 @@ class VentaController extends Controller
      */
     public function show($id)
     {
-        // Cargar las relaciones necesarias (detalles, pagos, cliente, almacén, usuario)
-        $venta = Venta::with(['detalles.producto.categoria', 'pagos.cuenta', 'cliente', 'almacen', 'usuario'])
-            ->findOrFail($id);
+        $venta = Venta::with([
+            'detalles.producto.categoria',
+            'pagos.cuenta.moneda',
+            'pagos.moneda',
+            'cliente',
+            'almacen',
+            'usuario',
+            'moneda'
+        ])->findOrFail($id);
 
-        // Formatear los datos para la vista
         $ventaData = [
             'id' => $venta->id,
             'almacen' => [
@@ -190,11 +276,11 @@ class VentaController extends Controller
                     'cantidad' => $detalle->cantidad,
                     'precio_venta' => $detalle->precio_venta,
                     'subtotal' => $detalle->subtotal,
-                    'costo_unitario' => $detalle->costo_unitario, // Incluido por si se usa en la vista
+                    'costo_unitario' => $detalle->costo_unitario,
                 ];
             }),
             'total' => $venta->total,
-            'estado' => $venta->estado, // Estado de la venta
+            'estado' => $venta->estado,
             'fecha' => $venta->created_at->toISOString(),
             'usuario' => [
                 'id' => $venta->usuario->id,
@@ -205,24 +291,34 @@ class VentaController extends Controller
             'pagos' => $venta->pagos->map(function ($pago) {
                 return [
                     'metodo' => $pago->tipo_pago,
-                    'moneda' => $pago->tipo_moneda,
+                    'moneda' => $pago->moneda ? [
+                        'id' => $pago->moneda->id,
+                        'codigo' => $pago->moneda->codigo_moneda,
+                        'nombre' => $pago->moneda->nombre_moneda,
+                    ] : null,
                     'monto' => $pago->monto,
                     'via' => $pago->via_pago,
-                    'tasa_cambio' => $pago->tasa_cambio,
-                    'monto_usd' => $pago->monto_equivalente,
+                    'tasa_cambio' => $pago->tasa_cambio_aplicada,
+                    'monto_equivalente' => $pago->monto_equivalente,
                     'cuenta' => [
                         'id' => $pago->cuenta->id,
                         'nombre' => $pago->cuenta->nombre_cuenta,
-                        'moneda' => $pago->cuenta->tipo_moneda,
+                        'moneda' => $pago->cuenta->moneda ? [
+                            'id' => $pago->cuenta->moneda->id,
+                            'codigo' => $pago->cuenta->moneda->codigo_moneda,
+                            'nombre' => $pago->cuenta->moneda->nombre_moneda,
+                        ] : null,
                     ]
                 ];
             }),
-            // Los campos `total_pagado` y `restante` son cruciales para la visualización.
             'total_pagado' => $venta->pagos->sum('monto_equivalente'),
             'restante' => $venta->total - $venta->pagos->sum('monto_equivalente'),
-            // Agregar las tasas utilizadas en la venta
-            'tasa_usd_utilizada' => $venta->tasa_usd_utilizada,
-            'tasa_mlc_utilizada' => $venta->tasa_mlc_utilizada,
+            'moneda_principal' => $venta->moneda ? [
+                'id' => $venta->moneda->id,
+                'codigo' => $venta->moneda->codigo_moneda,
+                'nombre' => $venta->moneda->nombre_moneda,
+            ] : null,
+            'tasa_cambio_principal' => $venta->tasa_cambio_principal,
         ];
 
         return Inertia::render('Vendor/Show', [
@@ -235,12 +331,10 @@ class VentaController extends Controller
     // ========================================================================
 
     /**
-     * Procesa la venta: crea registros de venta y pago con estado 'pendiente'.
-     * Los procesos de stock y cuentas se hacen en 'aprobarVenta'.
+     * Procesa la venta con tasas de cambio editables por operación - MEJORADO
      */
     public function procesarVenta(Request $request)
     {
-        // Validar los datos recibidos
         $validatedData = $request->validate([
             'almacen_id' => 'required|exists:almacens,id',
             'cliente_id' => 'nullable|exists:clientes,id',
@@ -252,16 +346,15 @@ class VentaController extends Controller
             'total' => 'required|numeric|min:0',
             'pagos' => 'required|array|min:1',
             'pagos.*.metodo' => 'required|in:transferencia,efectivo',
-            'pagos.*.moneda' => 'required|in:USD,EUR,MLC,CUP',
+            'pagos.*.moneda_id' => 'required|exists:monedas,id',
             'pagos.*.monto' => 'required|numeric|min:0',
-            'pagos.*.via' => 'nullable|string',
-            'pagos.*.tasa_cambio' => 'required|numeric|min:0',
-            'pagos.*.monto_usd' => 'required|numeric|min:0',
+            'pagos.*.via' => 'nullable|string|required_if:pagos.*.metodo,transferencia',
+            'pagos.*.tasa_cambio' => 'required|numeric|min:0.0001',
+            'pagos.*.monto_equivalente' => 'required|numeric|min:0',
             'pagos.*.cuenta_id' => 'required|exists:cuentas,id',
-            'pagos.*.referencia' => 'nullable|string',
-            'tasas_temporales' => 'nullable|array',
-            'tasas_temporales.tasa_usd' => 'nullable|numeric|min:0',
-            'tasas_temporales.tasa_mlc' => 'nullable|numeric|min:0',
+            'pagos.*.referencia' => 'nullable|string|required_if:pagos.*.metodo,transferencia',
+            'moneda_principal_id' => 'required|exists:monedas,id',
+            'tasa_cambio_principal' => 'required|numeric|min:0.0001',
         ]);
 
         DB::beginTransaction();
@@ -269,11 +362,14 @@ class VentaController extends Controller
         try {
             $user = Auth::user();
             if (!$user) {
-                // Debería ser atrapado por un middleware, pero es un buen doble check.
-                throw new \Exception("Usuario no autenticado");
+                throw new \Exception('Usuario no autenticado');
             }
 
-            // **Validación de stock** antes de crear la venta (para prevenir errores del usuario)
+            if ($user->role !== 'admin' && !$user->almacenes->contains('id', $validatedData['almacen_id'])) {
+                throw new \Exception('No tienes acceso a este almacén');
+            }
+
+            // Validación de stock
             foreach ($validatedData['items'] as $item) {
                 $almacenProducto = AlmacenProducto::where('almacen_id', $validatedData['almacen_id'])
                     ->where('producto_id', $item['producto_id'])
@@ -281,25 +377,46 @@ class VentaController extends Controller
 
                 if (!$almacenProducto || $almacenProducto->cantidad < $item['cantidad']) {
                     $producto = Producto::find($item['producto_id']);
-                    // Mensaje claro para el usuario
-                    throw new \Exception("Stock insuficiente en el almacén para el producto: " . $producto->nombre_producto);
+                    throw new \Exception("Stock insuficiente para: {$producto->nombre_producto}. Disponible: " . ($almacenProducto->cantidad ?? 0));
                 }
             }
 
+            // MEJORADO: Validar que las cuentas coincidan con la moneda del pago
+            foreach ($validatedData['pagos'] as $index => $pago) {
+                $cuenta = Cuenta::with('moneda')->find($pago['cuenta_id']);
+                if (!$cuenta) {
+                    throw new \Exception('Cuenta no encontrada');
+                }
 
-            // Obtener tasas de cambio - usar las temporales si están disponibles, sino las de la BD
-            $tasaUSDaCUP = $validatedData['tasas_temporales']['tasa_usd'] ?? (TasaCambio::latest()->first()->tasa ?? 1);
-            $tasaMLCaUSD = $validatedData['tasas_temporales']['tasa_mlc'] ?? (TasaCambioMLC::latest()->first()->tasa_mlc ?? 1);
+                $monedaPago = Moneda::find($pago['moneda_id']);
+                if (!$monedaPago) {
+                    throw new \Exception('Moneda de pago no encontrada');
+                }
 
-            // Crear la venta con estado PENDIENTE
+                // Validación mejorada de compatibilidad de moneda
+                $monedaCuenta = $cuenta->moneda;
+                if ($monedaCuenta) {
+                    // Si la cuenta tiene moneda relacionada, comparar IDs
+                    if ($monedaCuenta->id != $pago['moneda_id']) {
+                        throw new \Exception("La cuenta seleccionada ({$cuenta->nombre_cuenta}) no coincide con la moneda del pago");
+                    }
+                } else {
+                    // Si la cuenta usa tipo_moneda (legacy), validar por código
+                    if ($cuenta->tipo_moneda != $monedaPago->codigo_moneda) {
+                        throw new \Exception("La cuenta seleccionada ({$cuenta->nombre_cuenta}) no coincide con la moneda del pago");
+                    }
+                }
+            }
+
+            // Crear la venta
             $venta = Venta::create([
                 'user_id' => $user->id,
                 'almacen_id' => $validatedData['almacen_id'],
                 'cliente_id' => $validatedData['cliente_id'],
                 'total' => $validatedData['total'],
-                'estado' => 'pendiente', // Estado inicial a pendiente
-                'tasa_usd_utilizada' => $tasaUSDaCUP,
-                'tasa_mlc_utilizada' => $tasaMLCaUSD,
+                'estado' => 'pendiente',
+                'moneda_id' => $validatedData['moneda_principal_id'],
+                'tasa_cambio_principal' => $validatedData['tasa_cambio_principal'],
             ]);
 
             // Crear detalles de venta
@@ -314,31 +431,25 @@ class VentaController extends Controller
                     'subtotal' => $item['subtotal'],
                     'costo_unitario' => $producto->precio_compra_producto,
                 ]);
-
-                // Se omite la actualización de stock y el registro en HistorialStock. Esto se hace en aprobarVenta.
             }
 
-            // Procesar pagos y registrarlos (sin afectar el saldo de cuentas aún)
+            // Procesar pagos con tasas editables
             foreach ($validatedData['pagos'] as $pago) {
-                // Crear pago de venta
                 PagoVenta::create([
                     'venta_id' => $venta->id,
                     'tipo_pago' => $pago['metodo'],
-                    'tipo_moneda' => $pago['moneda'],
+                    'moneda_id' => $pago['moneda_id'],
                     'cuenta_id' => $pago['cuenta_id'],
                     'via_pago' => $pago['via'] ?? null,
                     'monto' => $pago['monto'],
-                    'tasa_cambio' => $pago['tasa_cambio'],
-                    'monto_equivalente' => $pago['monto_usd'],
+                    'tasa_cambio_aplicada' => $pago['tasa_cambio'],
+                    'monto_equivalente' => $pago['monto_equivalente'],
                     'referencia' => $pago['referencia'] ?? null,
                 ]);
-
-                // Se omite la actualización de saldo de la cuenta. Esto se hace en aprobarVenta.
             }
 
             DB::commit();
 
-            // Redirigir a la vista de detalle de venta
             return response()->json([
                 'success' => true,
                 'message' => 'Venta creada correctamente. Pendiente de aprobación.',
@@ -346,24 +457,56 @@ class VentaController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+            \Log::error('Error al procesar venta: ' . $e->getMessage());
+            \Log::error('Datos de la venta: ', $validatedData);
 
-            // Retornar respuesta JSON de error
             return response()->json([
                 'success' => false,
-                'message' => 'Error al procesar la venta',
+                'message' => 'Error al procesar la venta: ' . $e->getMessage(),
                 'error' => $e->getMessage(),
-                // 'trace' => config('app.debug') ? $e->getTraceAsString() : null // Descomentar para debug
             ], 500);
         }
     }
 
+    /**
+     * Validar stock antes de procesar.
+     */
+    public function validarStock(Request $request)
+    {
+        $request->validate([
+            'almacen_id' => 'required|exists:almacens,id',
+            'items' => 'required|array|min:1',
+            'items.*.producto_id' => 'required|exists:productos,id',
+            'items.*.cantidad' => 'required|integer|min:1',
+        ]);
+
+        $errores = [];
+
+        foreach ($request->items as $index => $item) {
+            $almacenProducto = AlmacenProducto::where('almacen_id', $request->almacen_id)
+                ->where('producto_id', $item['producto_id'])
+                ->first();
+
+            if (!$almacenProducto) {
+                $producto = Producto::find($item['producto_id']);
+                $errores[] = "Producto {$producto->nombre_producto} no disponible en este almacén";
+            } elseif ($almacenProducto->cantidad < $item['cantidad']) {
+                $producto = Producto::find($item['producto_id']);
+                $errores[] = "Stock insuficiente para {$producto->nombre_producto}. Disponible: {$almacenProducto->cantidad}";
+            }
+        }
+
+        return response()->json([
+            'valido' => empty($errores),
+            'errores' => $errores
+        ]);
+    }
 
     /**
-     * Aprueba una venta pendiente: actualiza stock y saldos de cuentas, y cambia el estado.
+     * Aprueba una venta pendiente.
      */
     public function aprobarVenta(Venta $venta)
     {
-        // 1. Verificar si la venta es pendiente
         if ($venta->estado !== 'pendiente') {
             return response()->json(['error' => 'Solo se pueden aprobar ventas con estado "pendiente". Estado actual: ' . $venta->estado], 400);
         }
@@ -373,16 +516,12 @@ class VentaController extends Controller
         try {
             $user = Auth::user();
             if (!$user) {
-                throw new \Exception("Usuario no autenticado");
+                throw new \Exception('Usuario no autenticado');
             }
 
-            // ✅ CORRECCIÓN CRÍTICA: Cargar relaciones necesarias ANTES de usarlas
-            $venta->load(['detalles.producto', 'pagos.cuenta']);
+            $venta->load(['detalles.producto', 'pagos.cuenta.moneda', 'pagos.moneda', 'moneda']);
 
-            $tasaUSDaCUP = $venta->tasa_usd_utilizada;
-            $tasaMLCaUSD = $venta->tasa_mlc_utilizada;
-
-            // 2. ACTUALIZAR STOCK Y REGISTRAR EN HISTORIAL
+            // Actualizar stock y registrar en historial
             foreach ($venta->detalles as $detalle) {
                 $almacenProducto = AlmacenProducto::where('almacen_id', $venta->almacen_id)
                     ->where('producto_id', $detalle->producto_id)
@@ -392,13 +531,11 @@ class VentaController extends Controller
                     $cantidadAnterior = $almacenProducto->cantidad;
                     $nuevaCantidad = $cantidadAnterior - $detalle->cantidad;
 
-                    // Verificar stock suficiente
                     if ($nuevaCantidad < 0) {
                         $producto = $detalle->producto;
                         throw new \Exception("Stock insuficiente para: {$producto->nombre_producto}. Stock: {$cantidadAnterior}, Vendido: {$detalle->cantidad}");
                     }
 
-                    // Registrar en historial de stock
                     HistorialStock::create([
                         'producto_id' => $detalle->producto_id,
                         'almacen_id' => $venta->almacen_id,
@@ -411,32 +548,26 @@ class VentaController extends Controller
                         'user_id' => $user->id,
                     ]);
 
-                    // Actualizar stock
                     $almacenProducto->update(['cantidad' => $nuevaCantidad]);
                 } else {
                     throw new \Exception("Producto no encontrado en el almacén: {$detalle->producto_id}");
                 }
             }
 
-            // 3. PROCESAR PAGOS Y ACTUALIZAR CUENTAS
+            // Procesar pagos y actualizar cuentas
             foreach ($venta->pagos as $pago) {
-                $cuenta = $pago->cuenta; // ✅ Ya viene cargada por el load
-                $pagoArray = $pago->toArray();
-
+                $cuenta = $pago->cuenta;
                 if ($cuenta) {
-                    $montoIncremento = $this->calcularMontoIncremento($cuenta, $pagoArray, $tasaUSDaCUP, $tasaMLCaUSD);
+                    $montoIncremento = $this->calcularMontoIncremento($cuenta, $pago, $venta);
                     $nuevoSaldo = $cuenta->saldo_cuenta + $montoIncremento;
-
                     $cuenta->update(['saldo_cuenta' => $nuevoSaldo]);
                 } else {
                     throw new \Exception("Cuenta no encontrada: {$pago->cuenta_id}");
                 }
             }
 
-            // 4. ACTUALIZAR EL ESTADO DE LA VENTA a 'completada'
-            $venta->update([
-                'estado' => 'completada',
-            ]);
+            // Actualizar estado de la venta
+            $venta->update(['estado' => 'completada']);
 
             DB::commit();
 
@@ -447,6 +578,7 @@ class VentaController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+            \Log::error('Error al aprobar venta: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Error al aprobar la venta: ' . $e->getMessage(),
@@ -455,27 +587,25 @@ class VentaController extends Controller
     }
 
     /**
-     * Anula una venta: revierte stock, saldos de cuenta (si estaba completada) y cambia el estado de la venta.
+     * Anula una venta.
      */
     public function anularVenta(Venta $venta)
     {
-        // 1. Verificar si la venta ya está cancelada
         if ($venta->estado === 'cancelada') {
             return response()->json(['error' => 'Esta venta ya fue cancelada previamente.'], 400);
         }
 
-        // 2. Iniciar Transacción para asegurar la atomicidad
         DB::beginTransaction();
 
         try {
             $user = Auth::user();
             if (!$user) {
-                throw new \Exception("Usuario no autenticado");
+                throw new \Exception('Usuario no autenticado');
             }
 
-            // **Solo se revierte stock y saldos si la venta ya estaba COMPLETADA.**
+            // Solo revertir si estaba completada
             if ($venta->estado === 'completada') {
-                // A. REVERTIR STOCK DE PRODUCTOS
+                // Revertir stock
                 foreach ($venta->detalles as $detalle) {
                     $almacenProducto = AlmacenProducto::where('almacen_id', $venta->almacen_id)
                         ->where('producto_id', $detalle->producto_id)
@@ -486,59 +616,41 @@ class VentaController extends Controller
                         $cantidadAnterior = $almacenProducto->cantidad;
                         $nuevaCantidad = $cantidadAnterior + $cantidadDevuelta;
 
-                        // 1. Actualizar el stock: sumar la cantidad vendida
                         $almacenProducto->update(['cantidad' => $nuevaCantidad]);
 
-                        // 2. Registrar la reversión en el historial de stock
                         HistorialStock::create([
                             'producto_id' => $detalle->producto_id,
                             'almacen_id' => $venta->almacen_id,
-                            'venta_id' => $venta->id, // Referencia a la venta cancelada
+                            'venta_id' => $venta->id,
                             'cantidad_anterior' => $cantidadAnterior,
                             'cantidad_nueva' => $nuevaCantidad,
-                            'diferencia' => $cantidadDevuelta, // Positivo (ingreso al stock)
+                            'diferencia' => $cantidadDevuelta,
                             'tipo' => 'anulacion_venta',
                             'observaciones' => 'Reversión por anulación de la Venta ID: ' . $venta->id,
                             'user_id' => $user->id,
                         ]);
                     } else {
-                        throw new \Exception("Error de stock: El producto " . $detalle->producto_id . " no se encontró en el almacén de la venta. Se requiere intervención manual.");
+                        throw new \Exception('Error de stock: El producto ' . $detalle->producto_id . ' no se encontró en el almacén.');
                     }
                 }
 
-                // B. REVERTIR PAGOS Y SALDOS DE CUENTAS
-                $tasaUSDaCUP = $venta->tasa_usd_utilizada;
-                $tasaMLCaUSD = $venta->tasa_mlc_utilizada;
-                $venta->load('pagos.cuenta'); // Asegurar la carga
-
+                // Revertir pagos y saldos
+                $venta->load(['pagos.cuenta.moneda', 'pagos.moneda', 'moneda']);
                 foreach ($venta->pagos as $pago) {
-                    $cuenta = Cuenta::find($pago->cuenta_id);
-
+                    $cuenta = $pago->cuenta;
                     if ($cuenta) {
-                        // Reconstruir el array de pago para usar el método de cálculo existente
-                        $pagoArray = $pago->toArray();
-
-                        // Usar el mismo cálculo para saber cuánto se agregó originalmente (el monto a deducir)
-                        $montoDeduccion = $this->calcularMontoIncremento($cuenta, $pagoArray, $tasaUSDaCUP, $tasaMLCaUSD);
-
-                        // Restar el monto
+                        $montoDeduccion = $this->calcularMontoIncremento($cuenta, $pago, $venta);
                         $nuevoSaldo = $cuenta->saldo_cuenta - $montoDeduccion;
-
-                        // Actualizar el saldo de la cuenta
                         $cuenta->update(['saldo_cuenta' => $nuevoSaldo]);
                     } else {
-                        throw new \Exception("Cuenta de pago no encontrada: " . $pago->cuenta_id . ". Se requiere intervención manual.");
+                        throw new \Exception('Cuenta de pago no encontrada: ' . $pago->cuenta_id);
                     }
                 }
             }
-            // Si estaba "pendiente", solo se cambia el estado, ya que no se había afectado stock ni saldos.
 
-            // C. ACTUALIZAR EL ESTADO DE LA VENTA
-            $venta->update([
-                'estado' => 'cancelada',
-            ]);
+            // Actualizar estado
+            $venta->update(['estado' => 'cancelada']);
 
-            // D. Commit de la transacción
             DB::commit();
 
             return response()->json([
@@ -548,7 +660,7 @@ class VentaController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
-            // Retornar respuesta JSON de error
+            \Log::error('Error al anular venta: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Error al anular la venta',
@@ -557,36 +669,34 @@ class VentaController extends Controller
         }
     }
 
-
     /**
-     * Actualizar tasas de cambio globales (Requiere permisos de administrador).
-     * Nota: Asegúrate de tener un middleware de autorización (ej. 'can:manage-tasas') aplicado a esta ruta.
+     * Actualizar tasas de cambio en monedas.
      */
     public function actualizarTasas(Request $request)
     {
         $request->validate([
-            'tasa_usd' => 'required|numeric|min:0', // Tasa CUP por USD
-            'tasa_mlc' => 'required|numeric|min:0', // Tasa USD por MLC
+            'monedas' => 'required|array',
+            'monedas.*.id' => 'required|exists:monedas,id',
+            'monedas.*.tasa_cambio' => 'required|numeric|min:0',
         ]);
 
         try {
-            // Actualizar/Crear tasa USD (CUP por USD)
-            $tasaUSD = TasaCambio::latest()->first();
-            $tasaUSD
-                ? $tasaUSD->update(['tasa' => $request->tasa_usd])
-                : TasaCambio::create(['tasa' => $request->tasa_usd]);
+            DB::beginTransaction();
 
-            // Actualizar/Crear tasa MLC (USD por MLC)
-            $tasaMLC = TasaCambioMLC::latest()->first();
-            $tasaMLC
-                ? $tasaMLC->update(['tasa_mlc' => $request->tasa_mlc])
-                : TasaCambioMLC::create(['tasa_mlc' => $request->tasa_mlc]);
+            foreach ($request->monedas as $monedaData) {
+                $moneda = Moneda::find($monedaData['id']);
+                $moneda->update(['tasa_cambio' => $monedaData['tasa_cambio']]);
+            }
+
+            DB::commit();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Tasas de cambio actualizadas correctamente 💹'
             ]);
         } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Error al actualizar tasas: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Error al actualizar las tasas de cambio',
@@ -600,84 +710,48 @@ class VentaController extends Controller
     // ========================================================================
 
     /**
-     * Calcula el monto a incrementar en la cuenta basado en su tipo de moneda.
-     * Utiliza las tasas fijadas en la Venta para asegurar la trazabilidad.
+     * Calcula el monto a incrementar usando el nuevo sistema de monedas.
      */
-    private function calcularMontoIncremento(Cuenta $cuenta, array $pago, float $tasaUSDaCUP, float $tasaMLCaUSD): float
+    private function calcularMontoIncremento(Cuenta $cuenta, PagoVenta $pago, Venta $venta): float
     {
-        // Si la cuenta tiene la misma moneda que el pago, usar el monto original
-        if ($cuenta->tipo_moneda === $pago['tipo_moneda']) {
-            return $pago['monto'];
+        if (!$cuenta->relationLoaded('moneda')) {
+            $cuenta->load('moneda');
+        }
+        if (!$pago->relationLoaded('moneda')) {
+            $pago->load('moneda');
         }
 
-        // Si la cuenta está en USD
-        if ($cuenta->tipo_moneda === 'USD') {
-            // Si el pago es en CUP, convertir a USD (CUP / TASA_CUP_A_USD)
-            if ($pago['tipo_moneda'] === 'CUP') {
-                return $pago['monto'] / $tasaUSDaCUP;
-            }
-            // Si el pago es en MLC, convertir a USD (MLC * TASA_MLC_A_USD)
-            if ($pago['tipo_moneda'] === 'MLC') {
-                return $pago['monto'] * $tasaMLCaUSD;
-            }
-            // Si el pago es en EUR o cualquier otro, usamos el monto_equivalente precalculado.
-            return $pago['monto_equivalente'];
+        $monedaCuenta = $cuenta->moneda;
+        $monedaPago = $pago->moneda;
+
+        if (!$monedaCuenta || !$monedaPago) {
+            throw new \Exception('Error en configuración de monedas para la conversión');
         }
 
-        // Si la cuenta está en CUP
-        if ($cuenta->tipo_moneda === 'CUP') {
-            // Si el pago es en USD, convertir a CUP (USD * TASA_CUP_A_USD)
-            if ($pago['tipo_moneda'] === 'USD') {
-                return $pago['monto'] * $tasaUSDaCUP;
-            }
-            // Si el pago es en MLC, convertir MLC->USD->CUP
-            if ($pago['tipo_moneda'] === 'MLC') {
-                $montoUSD = $pago['monto'] * $tasaMLCaUSD; // MLC a USD
-                return $montoUSD * $tasaUSDaCUP; // USD a CUP
-            }
-            // Si el pago es en EUR o cualquier otro (usamos el monto_usd y convertimos a CUP)
-            return $pago['monto_equivalente'] * $tasaUSDaCUP;
+        // Si la moneda de la cuenta es la misma que la del pago, no hay conversión
+        if ($monedaCuenta->id === $monedaPago->id) {
+            return $pago->monto;
         }
 
-        // Si la cuenta está en MLC
-        if ($cuenta->tipo_moneda === 'MLC') {
-            // Si el pago es en USD, convertir USD->MLC (USD / TASA_MLC_A_USD)
-            if ($pago['tipo_moneda'] === 'USD') {
-                return $pago['monto'] / $tasaMLCaUSD;
-            }
-            // Si el pago es en CUP, convertir CUP->USD->MLC
-            if ($pago['tipo_moneda'] === 'CUP') {
-                $montoUSD = $pago['monto'] / $tasaUSDaCUP; // CUP a USD
-                return $montoUSD / $tasaMLCaUSD; // USD a MLC
-            }
-            // Si el pago es en EUR o cualquier otro (usamos el monto_usd y convertimos a MLC)
-            return $pago['monto_equivalente'] / $tasaMLCaUSD;
+        // Obtener moneda principal de la venta
+        $monedaPrincipal = $venta->moneda;
+        $tasaPrincipal = $venta->tasa_cambio_principal;
+
+        if (!$monedaPrincipal) {
+            throw new \Exception('No se encontró moneda principal para la venta');
         }
 
-        // Si la cuenta está en EUR
-        if ($cuenta->tipo_moneda === 'EUR') {
-            // **IMPORTANTE**: Para la conversión a EUR, se necesita la tasa USD/EUR.
-            // ASUMO una tasa fija para el ejemplo (0.93 USD/EUR), pero DEBERÍA OBTENERSE de una tabla de tasas si es variable.
-            $tasaUSDaEUR = 0.93;
+        // Convertir el monto del pago a la moneda principal
+        $montoEnPrincipal = $pago->monto * ($monedaPago->tasa_cambio / $tasaPrincipal);
 
-            // Si el pago es en USD, convertir a EUR
-            if ($pago['tipo_moneda'] === 'USD') {
-                return $pago['monto'] * $tasaUSDaEUR;
-            }
-            // Para el resto de pagos, si ya tenemos el monto_usd, lo convertimos a EUR
-            return $pago['monto_equivalente'] * $tasaUSDaEUR;
-        }
+        // Convertir de la moneda principal a la moneda de la cuenta
+        $montoEnCuenta = $montoEnPrincipal * ($tasaPrincipal / $monedaCuenta->tasa_cambio);
 
-        // Para otras monedas no contempladas
-        throw new \Exception("Conversión de moneda no implementada para la cuenta: " . $cuenta->tipo_moneda);
+        return $montoEnCuenta;
     }
 
     /**
-     * Obtener Listado de las Ventas
-     */
-    /**
      * Obtener listado de ventas con filtros y paginación.
-     * Cada usuario ve solo sus ventas, excepto admin que ve todas.
      */
     public function listadoVentas(Request $request)
     {
@@ -687,7 +761,7 @@ class VentaController extends Controller
         }
 
         // Construir query base
-        $query = Venta::with(['cliente', 'almacen', 'usuario', 'pagos'])
+        $query = Venta::with(['cliente', 'almacen', 'usuario', 'pagos', 'moneda'])
             ->withCount('detalles');
 
         // Filtrar por usuario (excepto admin)
@@ -737,10 +811,15 @@ class VentaController extends Controller
                     'cantidad_items' => $venta->detalles_count,
                     'fecha' => $venta->created_at->format('d/m/Y H:i'),
                     'fecha_iso' => $venta->created_at->toISOString(),
+                    'moneda_principal' => $venta->moneda ? [
+                        'id' => $venta->moneda->id,
+                        'codigo' => $venta->moneda->codigo_moneda,
+                        'nombre' => $venta->moneda->nombre_moneda,
+                    ] : null,
                 ];
             });
 
-        // Obtener almacenes para filtros (solo los que el usuario puede ver)
+        // Obtener almacenes para filtros
         $almacenes = $user->role === 'admin'
             ? Almacen::select('id', 'nombre_almacen')->get()
             : $user->almacenes()->select('id', 'nombre_almacen')->get();
