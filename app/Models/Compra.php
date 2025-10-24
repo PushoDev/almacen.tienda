@@ -24,33 +24,53 @@ class Compra extends Model
         return $this->belongsTo(Proveedor::class);
     }
 
-    // Relación con cuenta
+    // Relación con cuenta (la cuenta principal de la compra)
     public function cuenta()
     {
         return $this->belongsTo(Cuenta::class);
     }
 
-    // Relación con cliente
+    // Relación con cliente (si aplica)
     public function cliente()
     {
         return $this->belongsTo(Cliente::class);
     }
 
-    public function cuentas()
-    {
-        return $this->belongsToMany(Cuenta::class, 'compra_pago')
-            ->withPivot('monto');
-    }
+    // ❌ ELIMINAR esta relación duplicada
+    // public function cuentas()
+    // {
+    //     return $this->belongsToMany(Cuenta::class, 'compra_pago')
+    //         ->withPivot('monto');
+    // }
 
     // Relación con productos
     public function productos()
     {
         return $this->belongsToMany(Producto::class, 'compra_producto')
-            ->withPivot('cantidad', 'precio');
+            ->withPivot('cantidad', 'precio', 'almacen_id'); // ✅ Agregar almacen_id si existe
     }
 
+    // Relación con todos los pagos de la compra
     public function pagos()
     {
         return $this->hasMany(CompraPago::class, 'compra_id');
+    }
+
+    // ✅ NUEVA: Relación con clientes que participaron en el pago
+    public function clientesPagadores()
+    {
+        return $this->belongsToMany(Cliente::class, 'compra_pago', 'compra_id', 'cliente_id')
+            ->wherePivot('tipo_pago', 'cliente')
+            ->withPivot('monto', 'tipo_pago')
+            ->withTimestamps();
+    }
+
+    // ✅ NUEVA: Relación con cuentas que participaron en el pago
+    public function cuentasPagadoras()
+    {
+        return $this->belongsToMany(Cuenta::class, 'compra_pago', 'compra_id', 'cuenta_id')
+            ->wherePivot('tipo_pago', 'cuenta')
+            ->withPivot('monto', 'tipo_pago')
+            ->withTimestamps();
     }
 }

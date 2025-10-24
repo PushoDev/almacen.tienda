@@ -7,6 +7,9 @@ use Illuminate\Database\Eloquent\Model;
 class CompraPago extends Model
 {
 
+    // Tabla en Singular
+    protected $table = 'compra_pago';
+
     protected $fillable = [
         'compra_id',
         'cuenta_id',

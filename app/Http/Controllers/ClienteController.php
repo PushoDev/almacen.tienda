@@ -38,7 +38,7 @@ class ClienteController extends Controller
         $validator = Validator::make($request->all(), [
             'nombre_cliente' => ['required', 'string', 'unique:clientes,nombre_cliente'],
             'tipo_cliente' => ['required', 'in:fisico,asociado'],
-            'deuda_pago_cliente' => ['nullable', 'numeric', 'between:-9999999,9999999.99'], // Permitir negativos
+            'deuda_pago_cliente' => ['nullable', 'numeric', 'between:-9999999,9999999.99'],
             'telefono_cliente' => ['required', 'string', 'unique:clientes,telefono_cliente'],
             'direccion_cliente' => ['nullable', 'string'],
             'ciudad_cliente' => ['nullable', 'string'],
@@ -59,6 +59,19 @@ class ClienteController extends Controller
      */
     public function show(Cliente $cliente)
     {
+        // ✅ CARGAR LAS COMPRAS DONDE ESTE CLIENTE PARTICIPÓ COMO PAGADOR
+        $cliente->load(['comprasComoPagador' => function ($query) {
+            $query->with([
+                'proveedor',
+                'productos' => function ($productQuery) {
+                    $productQuery->withPivot('cantidad', 'precio', 'almacen_id');
+                },
+                'pagos' => function ($pagoQuery) {
+                    $pagoQuery->with(['cuenta', 'cliente']);
+                }
+            ])->orderBy('fecha_compra', 'desc');
+        }]);
+
         return Inertia::render('Clientes/Show', [
             'cliente' => $cliente,
         ]);
@@ -83,7 +96,7 @@ class ClienteController extends Controller
         $validator = Validator::make($request->all(), [
             'nombre_cliente' => ['required', 'string', 'unique:clientes,nombre_cliente,' . $cliente->id],
             'tipo_cliente' => ['required', 'in:fisico,asociado'],
-            'deuda_pago_cliente' => ['nullable', 'numeric', 'between:-9999999,9999999.99'], // Permitir negativos
+            'deuda_pago_cliente' => ['nullable', 'numeric', 'between:-9999999,9999999.99'],
             'telefono_cliente' => ['required', 'string', 'unique:clientes,telefono_cliente,' . $cliente->id],
             'direccion_cliente' => ['nullable', 'string'],
             'ciudad_cliente' => ['nullable', 'string'],

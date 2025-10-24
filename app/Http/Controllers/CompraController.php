@@ -7,10 +7,11 @@ use App\Models\AlmacenProducto;
 use App\Models\Categoria;
 use App\Models\Cliente;
 use App\Models\Compra;
+use App\Models\CompraPago; // ✅ AGREGAR IMPORT DE COMPRAPAGO
 use App\Models\Cuenta;
 use App\Models\Producto;
 use App\Models\Proveedor;
-use App\Models\Moneda; // ✅ AGREGAR IMPORT DE MONEDA
+use App\Models\Moneda;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -74,7 +75,7 @@ class CompraController extends Controller
             ->whereHas('moneda', function ($query) {
                 $query->where('codigo_moneda', 'USD')->where('estado', true);
             })
-            ->with('moneda') // ✅ CARGAR RELACIÓN MONEDA
+            ->with('moneda')
             ->select('id', 'nombre_cuenta', 'saldo_cuenta', 'moneda_id')
             ->get();
 
@@ -88,7 +89,6 @@ class CompraController extends Controller
      */
     public function index()
     {
-        // ✅ OBTENER CUENTAS SOLO EN USD
         $cuentasUSD = Cuenta::whereIn('tipo_cuenta', ['permanentes', 'temporales'])
             ->whereHas('moneda', function ($query) {
                 $query->where('codigo_moneda', 'USD')->where('estado', true);
@@ -97,7 +97,7 @@ class CompraController extends Controller
             ->get();
 
         return Inertia::render('Comprar/Index', [
-            'cuentas' => $cuentasUSD, // ✅ USAR CUENTAS FILTRADAS
+            'cuentas' => $cuentasUSD,
             'almacenes' => Almacen::all(),
             'proveedores' => Proveedor::all(),
             'categorias' => Categoria::all(),
@@ -121,11 +121,9 @@ class CompraController extends Controller
             'productos' => 'required|array|min:1',
             'productos.*.almacen_id' => 'required|exists:almacens,id',
             'productos.*.producto' => 'required|string|max:255',
-            // Nuevos campos opcionales del producto
             'productos.*.marca' => 'nullable|string|max:255',
             'productos.*.modelo' => 'nullable|string|max:255',
             'productos.*.capacidad' => 'nullable|string|max:255',
-            // El campo 'codigo' ya no se valida como clave, el modelo lo genera
             'productos.*.categoria' => 'required|string|max:255',
             'productos.*.cantidad' => 'required|integer|min:1',
             'productos.*.precio' => 'required|numeric|min:0',
@@ -151,7 +149,7 @@ class CompraController extends Controller
                 'tipo_compra' => $validated['compra'],
             ];
 
-            // 2. Lógica de Pagos y Deuda (Mantenida)
+            // 2. Lógica de Pagos y Deuda
             if ($validated['compra'] === 'deuda_proveedor') {
                 $proveedor->decrement('saldo_proveedor', $total);
                 $compraData['cuenta_id'] = null;
@@ -169,11 +167,10 @@ class CompraController extends Controller
                     throw new \Exception("La suma de los pagos ({$sumaTotalPagos}) no coincide con el total de la compra ({$total}).");
                 }
 
-                // ✅ VALIDAR QUE LAS CUENTAS SEAN EN USD
+                // ✅ VALIDAR Y PROCESAR PAGOS CON CUENTAS
                 foreach ($pagos as $pago) {
                     $cuenta = Cuenta::with('moneda')->findOrFail($pago['cuenta_id']);
 
-                    // Verificar que la cuenta tenga moneda USD
                     if ($cuenta->moneda->codigo_moneda !== 'USD') {
                         throw new \Exception("La cuenta {$cuenta->nombre_cuenta} no es una cuenta en USD. Solo se permiten cuentas en USD para compras.");
                     }
@@ -184,7 +181,7 @@ class CompraController extends Controller
                     $cuenta->decrement('saldo_cuenta', $pago['monto']);
                 }
 
-                // Procesar pagos con clientes (deuda)
+                // ✅ PROCESAR PAGOS CON CLIENTES (deuda)
                 foreach ($pagosClientes as $pagoCliente) {
                     $cliente = Cliente::findOrFail($pagoCliente['cliente_id']);
                     $cliente->decrement('deuda_pago_cliente', $pagoCliente['monto']);
@@ -195,48 +192,70 @@ class CompraController extends Controller
 
             $compra = Compra::create($compraData);
 
+            // ✅ REGISTRAR TODOS LOS MÉTODOS DE PAGO EN COMPRA_PAGO
+            if ($validated['compra'] === 'deuda_proveedor') {
+                // Registrar pago como deuda con proveedor
+                CompraPago::create([
+                    'compra_id' => $compra->id,
+                    'cuenta_id' => null,
+                    'cliente_id' => null,
+                    'monto' => $total,
+                    'tipo_pago' => 'deuda_proveedor',
+                ]);
+            } else if ($validated['compra'] === 'pago_cash') {
+                // Registrar pagos con cuentas
+                foreach ($pagos as $pago) {
+                    CompraPago::create([
+                        'compra_id' => $compra->id,
+                        'cuenta_id' => $pago['cuenta_id'],
+                        'cliente_id' => null,
+                        'monto' => $pago['monto'],
+                        'tipo_pago' => 'cuenta',
+                    ]);
+                }
+
+                // Registrar pagos con clientes
+                foreach ($pagosClientes as $pagoCliente) {
+                    CompraPago::create([
+                        'compra_id' => $compra->id,
+                        'cuenta_id' => null,
+                        'cliente_id' => $pagoCliente['cliente_id'],
+                        'monto' => $pagoCliente['monto'],
+                        'tipo_pago' => 'cliente',
+                    ]);
+                }
+            }
+
             $productosConAlmacen = [];
             foreach ($validated['productos'] as $item) {
                 $categoria = Categoria::firstOrCreate(['nombre_categoria' => $item['categoria']]);
 
-                // ------------------------------------------------------------------------------------
-                // 3. CORRECCIÓN CLAVE: Buscar por atributos descriptivos (nombre, marca, etc.),
-                // no por el código de barras (que viene vacío del FE para forzar la autogeneración).
-                // ------------------------------------------------------------------------------------
                 $searchAttributes = [
                     'nombre_producto' => $item['producto'],
                     'categoria_id' => $categoria->id,
-                    // Usar null para los campos opcionales si no se proporcionan
                     'marca_producto' => $item['marca'] ?? null,
                     'modelo_producto' => $item['modelo'] ?? null,
                     'capacidad_producto' => $item['capacidad'] ?? null,
                 ];
 
-                // Buscar el producto por sus atributos.
                 $producto = Producto::where($searchAttributes)->first();
-
                 $isNew = !$producto;
 
                 if ($isNew) {
                     $producto = new Producto();
-                    // Al ser nuevo, inicializamos el código a null para que el método 'creating' lo autogenere.
                     $producto->codigo_producto = null;
                 }
-                // ------------------------------------------------------------------------------------
 
-                // 4. ACTUALIZAR LOS CAMPOS DEL PRODUCTO
                 $producto->fill([
                     'nombre_producto' => $item['producto'],
-                    'marca_producto' => $item['marca'] ?? null, // Usar null para mantener consistencia
-                    'modelo_producto' => $item['modelo'] ?? null, // Usar null para mantener consistencia
-                    'capacidad_producto' => $item['capacidad'] ?? null, // Usar null para mantener consistencia
+                    'marca_producto' => $item['marca'] ?? null,
+                    'modelo_producto' => $item['modelo'] ?? null,
+                    'capacidad_producto' => $item['capacidad'] ?? null,
                     'categoria_id' => $categoria->id,
                     'precio_compra_producto' => $item['precio'],
                     'imagen_producto' => $producto->imagen_producto ?? 'productos/producto-default.png',
                 ]);
-                $producto->save(); // ⬅️ Si es nuevo, aquí se activa la autogeneración del código de barras.
-
-                // 5. Lógica de Inventario (Mantenida)
+                $producto->save();
 
                 // Asociar producto a la compra
                 $compra->productos()->attach($producto->id, [
@@ -254,13 +273,13 @@ class CompraController extends Controller
                 $almacenProducto->cantidad = ($almacenProducto->cantidad ?? 0) + $item['cantidad'];
                 $almacenProducto->save();
 
-                // 6. Preparar datos para la vista
+                // Preparar datos para la vista
                 $productosConAlmacen[] = [
                     'nombre_producto' => $producto->nombre_producto,
                     'marca_producto' => $producto->marca_producto,
                     'modelo_producto' => $producto->modelo_producto,
                     'capacidad_producto' => $producto->capacidad_producto,
-                    'codigo_producto' => $producto->codigo_producto, // Usa el código final generado
+                    'codigo_producto' => $producto->codigo_producto,
                     'categoria' => $categoria->nombre_categoria,
                     'pivot' => [
                         'cantidad' => $item['cantidad'],
@@ -272,7 +291,9 @@ class CompraController extends Controller
 
             DB::commit();
 
-            // Renderizar la vista de la compra realizada
+            // ✅ CARGAR RELACIONES ADICIONALES PARA LA VISTA
+            $compra->load(['pagos.cuenta', 'pagos.cliente']);
+
             return Inertia::render('Comprar/Show', [
                 'compra' => $compra->load('proveedor'),
                 'productos' => $productosConAlmacen,
@@ -280,7 +301,6 @@ class CompraController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
-            // Mostrar un error claro al usuario
             return back()->withErrors(['error' => 'Error al procesar la compra: ' . $e->getMessage()]);
         }
     }

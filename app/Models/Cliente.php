@@ -9,7 +9,6 @@ class Cliente extends Model
 {
     use HasFactory;
 
-    // Atributos que pueden ser asignados masivamente
     protected $fillable = [
         'nombre_cliente',
         'tipo_cliente',
@@ -19,15 +18,12 @@ class Cliente extends Model
         'ciudad_cliente',
     ];
 
-    // Desactivar marcas de tiempo si no son necesarias (opcional)
     public $timestamps = true;
 
-    // Para forzar decimal
     protected $casts = [
         'deuda_pago_cliente' => 'decimal:2',
     ];
 
-    // Validar antes de guardar
     public function setDeudaPagoClienteAttribute($value)
     {
         if (!is_null($value) && (!is_numeric($value) || $value < -9999999 || $value > 9999999)) {
@@ -36,19 +32,29 @@ class Cliente extends Model
         $this->attributes['deuda_pago_cliente'] = $value;
     }
 
-    // Relación con compras donde el cliente participa en el pago
+    // ❌ CORREGIR: Cambiar 'compra_pagos' por 'compra_pago'
     public function comprasComoPagador()
     {
-        return $this->belongsToMany(Compra::class, 'compra_pagos')
-            ->withPivot('monto');
+        return $this->belongsToMany(Compra::class, 'compra_pago', 'cliente_id', 'compra_id')
+            ->wherePivot('tipo_pago', 'cliente')
+            ->withPivot('monto', 'tipo_pago')
+            ->withTimestamps();
     }
 
-    public function compras()
+    // ❌ ELIMINAR o COMENTAR: Esta relación no es correcta
+    // public function compras()
+    // {
+    //     return $this->hasMany(Compra::class);
+    // }
+
+    // ✅ NUEVA: Relación directa con los pagos de compra
+    public function pagosCompra()
     {
-        return $this->hasMany(Compra::class);
+        return $this->hasMany(CompraPago::class, 'cliente_id')
+            ->where('tipo_pago', 'cliente');
     }
 
-    // Relaciones (si las hay en el futuro)
+    // Relaciones con ventas
     public function ventas()
     {
         return $this->hasMany(Venta::class);
