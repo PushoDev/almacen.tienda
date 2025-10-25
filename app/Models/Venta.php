@@ -65,4 +65,9 @@ class Venta extends Model
     {
         return $query->where('estado', 'pendiente');
     }
+
+    public function destinatario()
+    {
+        return $this->hasOne(DestinatarioVenta::class);
+    }
 }

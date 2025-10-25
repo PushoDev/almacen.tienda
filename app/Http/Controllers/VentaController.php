@@ -12,6 +12,7 @@ use App\Models\Almacen;
 use App\Models\Producto;
 use App\Models\Cliente;
 use App\Models\Moneda;
+use App\Models\DestinatarioVenta;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -246,6 +247,7 @@ class VentaController extends Controller
     public function show($id)
     {
         $venta = Venta::with([
+            'destinatario', // NUEVA RELACIÓN
             'detalles.producto.categoria',
             'pagos.cuenta.moneda',
             'pagos.moneda',
@@ -264,6 +266,16 @@ class VentaController extends Controller
             'cliente' => $venta->cliente ? [
                 'id' => $venta->cliente->id,
                 'nombre' => $venta->cliente->nombre_cliente,
+            ] : null,
+            'destinatario' => $venta->destinatario ? [
+                'id' => $venta->destinatario->id,
+                'nombre' => $venta->destinatario->nombre,
+                'apellidos' => $venta->destinatario->apellidos,
+                'carnet_identidad' => $venta->destinatario->carnet_identidad,
+                'direccion_residencia' => $venta->destinatario->direccion_residencia,
+                'telefono_contacto' => $venta->destinatario->telefono_contacto,
+                'parentesco_cliente' => $venta->destinatario->parentesco_cliente,
+                'observaciones' => $venta->destinatario->observaciones,
             ] : null,
             'items' => $venta->detalles->map(function ($detalle) {
                 return [
@@ -507,8 +519,14 @@ class VentaController extends Controller
      */
     public function aprobarVenta(Venta $venta)
     {
+        // Validación de estado
         if ($venta->estado !== 'pendiente') {
             return response()->json(['error' => 'Solo se pueden aprobar ventas con estado "pendiente". Estado actual: ' . $venta->estado], 400);
+        }
+
+        // ✅ NUEVA VALIDACIÓN EXPLÍCITA: Verificar que exista destinatario
+        if (!$venta->destinatario) {
+            return response()->json(['error' => 'No se puede aprobar la venta sin registrar la información del destinatario.'], 400);
         }
 
         DB::beginTransaction();
@@ -519,7 +537,7 @@ class VentaController extends Controller
                 throw new \Exception('Usuario no autenticado');
             }
 
-            $venta->load(['detalles.producto', 'pagos.cuenta.moneda', 'pagos.moneda', 'moneda']);
+            $venta->load(['detalles.producto', 'pagos.cuenta.moneda', 'pagos.moneda', 'moneda', 'destinatario']);
 
             // Actualizar stock y registrar en historial
             foreach ($venta->detalles as $detalle) {
@@ -706,6 +724,52 @@ class VentaController extends Controller
     }
 
     // ========================================================================
+    // MÉTODOS DE DESTINATARIO
+    // ========================================================================
+
+    /**
+     * Guardar información del destinatario de la venta
+     */
+    public function guardarDestinatario(Request $request, Venta $venta)
+    {
+        $validated = $request->validate([
+            'nombre' => 'required|string|max:255',
+            'apellidos' => 'required|string|max:255',
+            'carnet_identidad' => 'required|string|max:20|unique:destinatarios_venta,carnet_identidad,' . $venta->id . ',venta_id',
+            'direccion_residencia' => 'required|string|max:500',
+            'telefono_contacto' => 'nullable|string|max:20',
+            'parentesco_cliente' => 'nullable|string|max:100',
+            'observaciones' => 'nullable|string|max:1000',
+        ]);
+
+        try {
+            DB::beginTransaction();
+
+            // Crear o actualizar destinatario
+            $destinatario = $venta->destinatario()->updateOrCreate(
+                ['venta_id' => $venta->id],
+                $validated
+            );
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Información del destinatario guardada correctamente',
+                'destinatario' => $destinatario
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Error al guardar destinatario: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al guardar la información del destinatario: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // ========================================================================
     // MÉTODOS PRIVADOS (HELPER)
     // ========================================================================
 
@@ -761,7 +825,7 @@ class VentaController extends Controller
         }
 
         // Construir query base
-        $query = Venta::with(['cliente', 'almacen', 'usuario', 'pagos', 'moneda'])
+        $query = Venta::with(['cliente', 'almacen', 'usuario', 'pagos', 'moneda', 'destinatario'])
             ->withCount('detalles');
 
         // Filtrar por usuario (excepto admin)
@@ -815,6 +879,13 @@ class VentaController extends Controller
                         'id' => $venta->moneda->id,
                         'codigo' => $venta->moneda->codigo_moneda,
                         'nombre' => $venta->moneda->nombre_moneda,
+                    ] : null,
+                    'destinatario' => $venta->destinatario ? [
+                        'id' => $venta->destinatario->id,
+                        'nombre' => $venta->destinatario->nombre,
+                        'apellidos' => $venta->destinatario->apellidos,
+                        'carnet_identidad' => $venta->destinatario->carnet_identidad,
+                        'telefono_contacto' => $venta->destinatario->telefono_contacto,
                     ] : null,
                 ];
             });

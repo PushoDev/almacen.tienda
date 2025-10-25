@@ -5,19 +5,43 @@ use App\Http\Controllers\CompraController; // Asegúrate de importar el controla
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'verified'])->group(function () {
+    // ========================================================================
+    // VISTAS PRINCIPALES
+    // ========================================================================
+
     Route::get('/punto-venta', [VentaController::class, 'index'])->name('punto-venta.index');
+    Route::get('/ventas/listado', [VentaController::class, 'listadoVentas'])->name('ventas.listado');
     Route::get('/ventas/{id}/show', [VentaController::class, 'show'])->name('ventas.show');
+
+    // ========================================================================
+    // DATOS PARA FORMULARIOS (APIs)
+    // ========================================================================
+
     Route::get('/ventas/almacenes', [VentaController::class, 'getAlmacenes'])->name('ventas.getAlmacenes');
     Route::get('/ventas/almacenes/{id}/productos', [VentaController::class, 'getProductosPorAlmacen'])->name('ventas.getProductosPorAlmacen');
     Route::get('/ventas/clientes', [VentaController::class, 'getClientes'])->name('ventas.getClientes');
     Route::get('/ventas/cuentas', [VentaController::class, 'getCuentas'])->name('ventas.getCuentas');
     Route::get('/ventas/cuentas/filtradas', [VentaController::class, 'getCuentasFiltradas'])->name('ventas.getCuentasFiltradas');
     Route::get('/ventas/monedas', [VentaController::class, 'getMonedas'])->name('ventas.getMonedas');
+
+    // ========================================================================
+    // PROCESAMIENTO DE VENTAS
+    // ========================================================================
+
     Route::post('/ventas/procesar', [VentaController::class, 'procesarVenta'])->name('ventas.procesar');
     Route::post('/ventas/validar-stock', [VentaController::class, 'validarStock'])->name('ventas.validarStock');
+    Route::post('/ventas/actualizar-tasas', [VentaController::class, 'actualizarTasas'])->name('ventas.actualizarTasas');
 
-    // Estado de las Ventas
-    Route::get('/ventas/listado', [VentaController::class, 'listadoVentas'])->name('ventas.listado');
+    // ========================================================================
+    // GESTIÓN DE DESTINATARIOS
+    // ========================================================================
+
+    Route::post('/ventas/{venta}/destinatario', [VentaController::class, 'guardarDestinatario'])->name('ventas.destinatario.store');
+
+    // ========================================================================
+    // ESTADO Y GESTIÓN DE VENTAS
+    // ========================================================================
+
     Route::post('/ventas/{venta}/aprobar', [VentaController::class, 'aprobarVenta'])->name('ventas.aprobar');
     Route::post('/ventas/{venta}/anular', [VentaController::class, 'anularVenta'])->name('ventas.anular');
 

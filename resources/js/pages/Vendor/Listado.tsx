@@ -28,6 +28,7 @@ import {
     Smartphone,
     Store,
     User,
+    Users,
     XCircle,
 } from 'lucide-react';
 import { FormEvent, useState } from 'react';
@@ -46,6 +47,14 @@ const breadcrumbs: BreadcrumbItem[] = [
         href: '#',
     },
 ];
+
+interface Destinatario {
+    id: number;
+    nombre: string;
+    apellidos: string;
+    carnet_identidad: string;
+    telefono_contacto: string | null;
+}
 
 interface Venta {
     id: number;
@@ -73,6 +82,7 @@ interface Venta {
         codigo: string;
         nombre: string;
     };
+    destinatario: Destinatario | null; // Nueva propiedad
 }
 
 interface Filters {
@@ -80,6 +90,7 @@ interface Filters {
     almacen_id?: string;
     fecha_desde?: string;
     fecha_hasta?: string;
+    search?: string;
 }
 
 interface Almacen {
@@ -122,11 +133,15 @@ export default function ListadoVentas() {
 
     const [localFilters, setLocalFilters] = useState<Filters>(filters || {});
     const [showFilters, setShowFilters] = useState(false);
-    const [searchTerm, setSearchTerm] = useState('');
+    const [searchTerm, setSearchTerm] = useState(filters.search || '');
 
     const handleFilter = (e: FormEvent) => {
         e.preventDefault();
-        router.get(route('ventas.listado'), localFilters as Record<string, string>, {
+        const filtersToApply = { ...localFilters };
+        if (searchTerm.trim()) {
+            filtersToApply.search = searchTerm.trim();
+        }
+        router.get(route('ventas.listado'), filtersToApply as Record<string, string>, {
             preserveState: true,
             preserveScroll: true,
         });
@@ -147,16 +162,14 @@ export default function ListadoVentas() {
 
     const handleSearch = (e: FormEvent) => {
         e.preventDefault();
+        const filtersToApply = { ...localFilters };
         if (searchTerm.trim()) {
-            router.get(
-                route('ventas.listado'),
-                { search: searchTerm.trim(), ...localFilters },
-                {
-                    preserveState: true,
-                    preserveScroll: true,
-                },
-            );
+            filtersToApply.search = searchTerm.trim();
         }
+        router.get(route('ventas.listado'), filtersToApply, {
+            preserveState: true,
+            preserveScroll: true,
+        });
     };
 
     const getEstadoBadge = (estado: string) => {
@@ -227,6 +240,32 @@ export default function ListadoVentas() {
         );
     };
 
+    const getDestinatarioBadge = (venta: Venta) => {
+        if (venta.estado === 'cancelada') {
+            return null;
+        }
+
+        if (venta.destinatario) {
+            return (
+                <Badge variant="outline" className="border-blue-200 bg-blue-50 text-xs text-blue-700">
+                    <Users className="mr-1 h-3 w-3" />
+                    Receptor
+                </Badge>
+            );
+        }
+
+        if (venta.estado === 'pendiente') {
+            return (
+                <Badge variant="outline" className="border-orange-200 bg-orange-50 text-xs text-orange-700">
+                    <Users className="mr-1 h-3 w-3" />
+                    Sin Receptor
+                </Badge>
+            );
+        }
+
+        return null;
+    };
+
     const formatMonto = (monto: number | string): string => {
         const numero = typeof monto === 'string' ? parseFloat(monto) : monto;
         return isNaN(numero)
@@ -257,7 +296,10 @@ export default function ListadoVentas() {
             venta.id.toString().includes(searchLower) ||
             (venta.cliente?.nombre.toLowerCase().includes(searchLower) ?? false) ||
             venta.almacen.nombre.toLowerCase().includes(searchLower) ||
-            venta.usuario.nombre.toLowerCase().includes(searchLower)
+            venta.usuario.nombre.toLowerCase().includes(searchLower) ||
+            (venta.destinatario?.nombre.toLowerCase().includes(searchLower) ?? false) ||
+            (venta.destinatario?.apellidos.toLowerCase().includes(searchLower) ?? false) ||
+            (venta.destinatario?.carnet_identidad.toLowerCase().includes(searchLower) ?? false)
         );
     });
 
@@ -325,11 +367,11 @@ export default function ListadoVentas() {
                         <CardContent className="p-4">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-gray-600">Canceladas</p>
-                                    <p className="text-2xl font-bold text-red-600">{ventas.data.filter((v) => v.estado === 'cancelada').length}</p>
+                                    <p className="text-sm font-medium text-gray-600">Con Receptor</p>
+                                    <p className="text-2xl font-bold text-blue-600">{ventas.data.filter((v) => v.destinatario !== null).length}</p>
                                 </div>
-                                <div className="rounded-full bg-red-100 p-3">
-                                    <XCircle className="h-6 w-6 text-red-600" />
+                                <div className="rounded-full bg-blue-100 p-3">
+                                    <Users className="h-6 w-6 text-blue-600" />
                                 </div>
                             </div>
                         </CardContent>
@@ -346,7 +388,7 @@ export default function ListadoVentas() {
                                     <div className="relative">
                                         <Search className="absolute top-3 left-3 h-4 w-4 text-gray-400" />
                                         <Input
-                                            placeholder="Buscar por ID, cliente, almacén..."
+                                            placeholder="Buscar por ID, cliente, almacén, receptor..."
                                             value={searchTerm}
                                             onChange={(e) => setSearchTerm(e.target.value)}
                                             className="pl-10"
@@ -379,6 +421,7 @@ export default function ListadoVentas() {
                                                             <SelectValue placeholder="Todos los estados" />
                                                         </SelectTrigger>
                                                         <SelectContent>
+                                                            <SelectItem value="">Todos los estados</SelectItem>
                                                             {estados_venta.map((estado) => (
                                                                 <SelectItem key={estado.value} value={estado.value}>
                                                                     {estado.label}
@@ -398,6 +441,7 @@ export default function ListadoVentas() {
                                                             <SelectValue placeholder="Todos los almacenes" />
                                                         </SelectTrigger>
                                                         <SelectContent>
+                                                            <SelectItem value="">Todos los almacenes</SelectItem>
                                                             {almacenes.map((almacen) => (
                                                                 <SelectItem key={almacen.id} value={almacen.id.toString()}>
                                                                     {almacen.nombre_almacen}
@@ -471,6 +515,7 @@ export default function ListadoVentas() {
                                             <SelectValue placeholder="Todos los estados" />
                                         </SelectTrigger>
                                         <SelectContent>
+                                            <SelectItem value="">Todos los estados</SelectItem>
                                             {estados_venta.map((estado) => (
                                                 <SelectItem key={estado.value} value={estado.value}>
                                                     {estado.label}
@@ -490,6 +535,7 @@ export default function ListadoVentas() {
                                             <SelectValue placeholder="Todos los almacenes" />
                                         </SelectTrigger>
                                         <SelectContent>
+                                            <SelectItem value="">Todos los almacenes</SelectItem>
                                             {almacenes.map((almacen) => (
                                                 <SelectItem key={almacen.id} value={almacen.id.toString()}>
                                                     {almacen.nombre_almacen}
@@ -558,8 +604,28 @@ export default function ListadoVentas() {
                                                     {venta.usuario.nombre}
                                                 </p>
                                             </div>
-                                            {getPagoBadge(venta)}
+                                            <div className="flex flex-col items-end gap-1">
+                                                {getPagoBadge(venta)}
+                                                {getDestinatarioBadge(venta)}
+                                            </div>
                                         </div>
+
+                                        {/* Información del destinatario */}
+                                        {venta.destinatario && (
+                                            <div className="mt-3 rounded-md bg-blue-50 p-2">
+                                                <div className="flex items-center gap-1 text-sm font-medium text-blue-700">
+                                                    <Users className="h-3 w-3" />
+                                                    Receptor:
+                                                </div>
+                                                <p className="text-sm text-blue-600">
+                                                    {venta.destinatario.nombre} {venta.destinatario.apellidos}
+                                                </p>
+                                                <p className="text-xs text-blue-500">CI: {venta.destinatario.carnet_identidad}</p>
+                                                {venta.destinatario.telefono_contacto && (
+                                                    <p className="text-xs text-blue-500">Tel: {venta.destinatario.telefono_contacto}</p>
+                                                )}
+                                            </div>
+                                        )}
 
                                         <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
                                             <div>
@@ -633,6 +699,7 @@ export default function ListadoVentas() {
                                             <TableHead>Venta</TableHead>
                                             <TableHead>Cliente</TableHead>
                                             <TableHead>Almacén</TableHead>
+                                            <TableHead>Receptor</TableHead>
                                             <TableHead>Items</TableHead>
                                             <TableHead>Total</TableHead>
                                             <TableHead>Estado / Pago</TableHead>
@@ -660,6 +727,25 @@ export default function ListadoVentas() {
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
+                                                    {venta.destinatario ? (
+                                                        <div className="space-y-1">
+                                                            <div className="text-sm font-medium">
+                                                                {venta.destinatario.nombre} {venta.destinatario.apellidos}
+                                                            </div>
+                                                            <div className="text-xs text-gray-500">CI: {venta.destinatario.carnet_identidad}</div>
+                                                            {venta.destinatario.telefono_contacto && (
+                                                                <div className="text-xs text-gray-500">
+                                                                    Tel: {venta.destinatario.telefono_contacto}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-sm text-gray-400 italic">
+                                                            {venta.estado === 'pendiente' ? 'Sin receptor' : 'No aplica'}
+                                                        </div>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell>
                                                     <div className="flex items-center gap-1">
                                                         <Package className="h-3 w-3" />
                                                         {venta.cantidad_items}
@@ -677,6 +763,7 @@ export default function ListadoVentas() {
                                                     <div className="flex flex-col gap-1">
                                                         {getEstadoBadge(venta.estado)}
                                                         {getPagoBadge(venta)}
+                                                        {getDestinatarioBadge(venta)}
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>

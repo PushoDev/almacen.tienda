@@ -12,7 +12,10 @@ import {
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
@@ -22,16 +25,21 @@ import {
     CheckCircle,
     CreditCard,
     DollarSign,
+    Edit,
     FileText,
+    IdCard,
+    MapPin,
     Package,
+    Phone,
     Printer,
     ShoppingBag,
     Store,
     User,
     UserCheck,
+    Users,
     XCircle,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 // Rutas breadcrumb
@@ -114,10 +122,23 @@ interface MonedaPrincipal {
     simbolo?: string;
 }
 
+// Nueva interfaz para el destinatario
+interface Destinatario {
+    id: number;
+    nombre: string;
+    apellidos: string;
+    carnet_identidad: string;
+    direccion_residencia: string;
+    telefono_contacto: string | null;
+    parentesco_cliente: string | null;
+    observaciones: string | null;
+}
+
 interface Venta {
     id: number;
     almacen: Almacen;
     cliente: Cliente | null;
+    destinatario: Destinatario | null;
     items: Item[];
     total: number;
     fecha: string;
@@ -140,7 +161,48 @@ export default function ResultadoCarrito({ venta }: Props) {
     // Estados para gestionar las acciones
     const [isCancelling, setIsCancelling] = useState(false);
     const [isApproving, setIsApproving] = useState(false);
+    const [isSavingDestinatario, setIsSavingDestinatario] = useState(false);
     const [currentVenta, setCurrentVenta] = useState<Venta>(venta);
+    const [isDestinatarioDialogOpen, setIsDestinatarioDialogOpen] = useState(false);
+    const [isEditingDestinatario, setIsEditingDestinatario] = useState(false);
+
+    // Estado para el formulario del destinatario
+    const [formDestinatario, setFormDestinatario] = useState({
+        nombre: '',
+        apellidos: '',
+        carnet_identidad: '',
+        direccion_residencia: '',
+        telefono_contacto: '',
+        parentesco_cliente: '',
+        observaciones: '',
+    });
+
+    // Cargar datos del destinatario existente cuando se abre el diálogo
+    useEffect(() => {
+        if (isDestinatarioDialogOpen && currentVenta.destinatario && isEditingDestinatario) {
+            console.log('📝 Cargando datos del destinatario existente para edición:', currentVenta.destinatario);
+            setFormDestinatario({
+                nombre: currentVenta.destinatario.nombre,
+                apellidos: currentVenta.destinatario.apellidos,
+                carnet_identidad: currentVenta.destinatario.carnet_identidad,
+                direccion_residencia: currentVenta.destinatario.direccion_residencia,
+                telefono_contacto: currentVenta.destinatario.telefono_contacto || '',
+                parentesco_cliente: currentVenta.destinatario.parentesco_cliente || '',
+                observaciones: currentVenta.destinatario.observaciones || '',
+            });
+        } else if (isDestinatarioDialogOpen && !isEditingDestinatario) {
+            // Limpiar formulario para nuevo destinatario
+            setFormDestinatario({
+                nombre: '',
+                apellidos: '',
+                carnet_identidad: '',
+                direccion_residencia: '',
+                telefono_contacto: '',
+                parentesco_cliente: '',
+                observaciones: '',
+            });
+        }
+    }, [isDestinatarioDialogOpen, currentVenta.destinatario, isEditingDestinatario]);
 
     // Formatear fechas
     const formatDate = (dateString: string) => {
@@ -173,6 +235,9 @@ export default function ResultadoCarrito({ venta }: Props) {
     const isVentaCompletada = currentVenta.estado === 'completada';
     const isVentaCancelada = currentVenta.estado === 'cancelada';
 
+    // Verificar si puede aprobar (requiere destinatario)
+    const puedeAprobar = isVentaPendiente && currentVenta.destinatario !== null;
+
     // Obtener color y texto del estado
     const getEstadoConfig = () => {
         switch (currentVenta.estado) {
@@ -189,12 +254,101 @@ export default function ResultadoCarrito({ venta }: Props) {
 
     const estadoConfig = getEstadoConfig();
 
-    // FUNCIÓN CORREGIDA: Manejar la aprobación de la venta
+    // FUNCIÓN CORREGIDA: Guardar información del destinatario
+    const handleGuardarDestinatario = async () => {
+        console.log('📦 Guardando destinatario:', formDestinatario);
+        console.log('🆔 ID de venta:', currentVenta.id);
+        console.log('✏️ Modo edición:', isEditingDestinatario);
+
+        setIsSavingDestinatario(true);
+
+        try {
+            // ✅ CORRECCIÓN: Usar la ruta correcta según Laravel
+            const url = route('ventas.destinatario.store', currentVenta.id);
+            console.log('🌐 URL de la petición:', url);
+
+            const response = await axios.post(url, formDestinatario);
+            console.log('✅ Respuesta del servidor:', response.data);
+
+            if (response.data.success) {
+                const message = isEditingDestinatario
+                    ? 'Información del receptor actualizada correctamente'
+                    : 'Información del receptor guardada correctamente';
+
+                toast.success(response.data.message || message);
+
+                // Actualizar el estado local con el nuevo destinatario
+                setCurrentVenta((prev) => ({
+                    ...prev,
+                    destinatario: response.data.destinatario,
+                }));
+
+                setIsDestinatarioDialogOpen(false);
+                setIsEditingDestinatario(false);
+
+                // Limpiar el formulario
+                setFormDestinatario({
+                    nombre: '',
+                    apellidos: '',
+                    carnet_identidad: '',
+                    direccion_residencia: '',
+                    telefono_contacto: '',
+                    parentesco_cliente: '',
+                    observaciones: '',
+                });
+
+                console.log('🎉 Destinatario guardado/actualizado exitosamente');
+            } else {
+                toast.error(response.data.message || 'Error al guardar la información');
+            }
+        } catch (error: any) {
+            console.error('💥 Error completo al guardar destinatario:', error);
+
+            if (error.response) {
+                console.error('📋 Detalles del error del servidor:', {
+                    status: error.response.status,
+                    data: error.response.data,
+                    headers: error.response.headers,
+                });
+
+                const errorMessage =
+                    error.response.data?.message || error.response.data?.error || `Error ${error.response.status}: ${error.response.statusText}`;
+                toast.error(errorMessage);
+            } else if (error.request) {
+                console.error('🌐 Error de conexión - No se recibió respuesta:', error.request);
+                toast.error('Error de conexión: No se pudo contactar al servidor');
+            } else {
+                console.error('⚙️ Error de configuración:', error.message);
+                toast.error('Error al configurar la petición');
+            }
+        } finally {
+            setIsSavingDestinatario(false);
+        }
+    };
+
+    // FUNCIÓN: Abrir diálogo para editar destinatario
+    const handleEditarDestinatario = () => {
+        console.log('✏️ Abriendo editor de destinatario');
+        setIsEditingDestinatario(true);
+        setIsDestinatarioDialogOpen(true);
+    };
+
+    // FUNCIÓN: Abrir diálogo para nuevo destinatario
+    const handleNuevoDestinatario = () => {
+        console.log('➕ Abriendo formulario para nuevo destinatario');
+        setIsEditingDestinatario(false);
+        setIsDestinatarioDialogOpen(true);
+    };
+
+    // FUNCIÓN: Manejar la aprobación de la venta
     const handleAprobarVenta = async () => {
         console.log('🔄 Iniciando aprobación de venta:', currentVenta.id);
         setIsApproving(true);
         try {
-            const response = await axios.post(route('ventas.aprobar', currentVenta.id));
+            const url = route('ventas.aprobar', currentVenta.id);
+            console.log('🌐 URL de aprobación:', url);
+
+            const response = await axios.post(url);
             console.log('✅ Respuesta del backend al aprobar:', response.data);
 
             if (response.data.success) {
@@ -205,6 +359,8 @@ export default function ResultadoCarrito({ venta }: Props) {
                     ...prev,
                     estado: 'completada',
                 }));
+
+                console.log('🎉 Venta aprobada exitosamente');
 
                 // Recargar la página para mostrar el nuevo estado
                 setTimeout(() => {
@@ -218,9 +374,9 @@ export default function ResultadoCarrito({ venta }: Props) {
             console.error('💥 Error completo al aprobar venta:', error);
 
             if (error.response) {
+                console.error('📋 Detalles del error del servidor:', error.response.data);
                 const errorMessage =
                     error.response.data?.message || error.response.data?.error || `Error ${error.response.status}: ${error.response.statusText}`;
-                console.error('📋 Detalles del error:', error.response.data);
                 toast.error(errorMessage);
             } else if (error.request) {
                 console.error('🌐 Error de conexión:', error.request);
@@ -239,7 +395,10 @@ export default function ResultadoCarrito({ venta }: Props) {
         console.log('🔄 Iniciando anulación de venta:', currentVenta.id);
         setIsCancelling(true);
         try {
-            const response = await axios.post(route('ventas.anular', currentVenta.id));
+            const url = route('ventas.anular', currentVenta.id);
+            console.log('🌐 URL de anulación:', url);
+
+            const response = await axios.post(url);
             console.log('✅ Respuesta del backend al anular:', response.data);
 
             if (response.data.success) {
@@ -251,6 +410,8 @@ export default function ResultadoCarrito({ venta }: Props) {
                     estado: 'cancelada',
                 }));
 
+                console.log('🗑️ Venta anulada exitosamente');
+
                 // Recargar la página para mostrar el nuevo estado
                 setTimeout(() => {
                     router.reload();
@@ -261,8 +422,18 @@ export default function ResultadoCarrito({ venta }: Props) {
             }
         } catch (error: any) {
             console.error('💥 Error completo al anular venta:', error);
-            const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Ocurrió un error al intentar anular la venta.';
-            toast.error(errorMessage);
+
+            if (error.response) {
+                console.error('📋 Detalles del error:', error.response.data);
+                const errorMessage = error.response.data?.message || error.response.data?.error || 'Ocurrió un error al intentar anular la venta.';
+                toast.error(errorMessage);
+            } else if (error.request) {
+                console.error('🌐 Error de conexión:', error.request);
+                toast.error('Error de conexión: No se pudo contactar al servidor');
+            } else {
+                console.error('⚙️ Error de configuración:', error.message);
+                toast.error('Error al configurar la petición');
+            }
         } finally {
             setIsCancelling(false);
         }
@@ -288,6 +459,9 @@ export default function ResultadoCarrito({ venta }: Props) {
 
     console.log('🎯 Moneda principal:', monedaPrincipal);
     console.log('📊 Pagos recibidos:', currentVenta.pagos);
+    console.log('👤 Destinatario actual:', currentVenta.destinatario);
+    console.log('🚦 Estado de la venta:', currentVenta.estado);
+    console.log('✅ Puede aprobar:', puedeAprobar);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -314,7 +488,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                 <Separator />
 
                 {/* Botones de acción */}
-                <div className="flex justify-end gap-2">
+                <div className="flex flex-wrap justify-end gap-2">
                     <Link
                         href="/punto-venta"
                         className="focus-visible:ring-ring border-input bg-background hover:bg-accent hover:text-accent-foreground inline-flex items-center justify-center rounded-md border px-4 py-2 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
@@ -328,6 +502,162 @@ export default function ResultadoCarrito({ venta }: Props) {
                     >
                         Ver Todas las Ventas
                     </Link>
+
+                    {/* Botón para agregar/editar destinatario (solo para ventas pendientes) */}
+                    {isVentaPendiente && (
+                        <>
+                            {!currentVenta.destinatario ? (
+                                <AlertDialog open={isDestinatarioDialogOpen} onOpenChange={setIsDestinatarioDialogOpen}>
+                                    <AlertDialogTrigger asChild>
+                                        <Button
+                                            variant="outline"
+                                            className="flex cursor-pointer items-center gap-2 border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                                            onClick={handleNuevoDestinatario}
+                                        >
+                                            <Users size={16} />
+                                            Agregar Receptor
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent className="max-w-2xl">
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle className="flex items-center gap-2 text-blue-600">
+                                                <Users size={20} />
+                                                Información del Receptor
+                                            </AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                Complete los datos de la persona que recibirá el producto en casa.
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+
+                                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                            <div className="space-y-2">
+                                                <Label htmlFor="nombre">Nombre *</Label>
+                                                <Input
+                                                    id="nombre"
+                                                    value={formDestinatario.nombre}
+                                                    onChange={(e) => setFormDestinatario((prev) => ({ ...prev, nombre: e.target.value }))}
+                                                    placeholder="Ingrese el nombre"
+                                                />
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label htmlFor="apellidos">Apellidos *</Label>
+                                                <Input
+                                                    id="apellidos"
+                                                    value={formDestinatario.apellidos}
+                                                    onChange={(e) => setFormDestinatario((prev) => ({ ...prev, apellidos: e.target.value }))}
+                                                    placeholder="Ingrese los apellidos"
+                                                />
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label htmlFor="carnet_identidad">Carnet de Identidad *</Label>
+                                                <Input
+                                                    id="carnet_identidad"
+                                                    value={formDestinatario.carnet_identidad}
+                                                    onChange={(e) => setFormDestinatario((prev) => ({ ...prev, carnet_identidad: e.target.value }))}
+                                                    placeholder="Número de carnet"
+                                                />
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label htmlFor="telefono_contacto">Teléfono Contacto</Label>
+                                                <Input
+                                                    id="telefono_contacto"
+                                                    value={formDestinatario.telefono_contacto}
+                                                    onChange={(e) => setFormDestinatario((prev) => ({ ...prev, telefono_contacto: e.target.value }))}
+                                                    placeholder="Número de teléfono"
+                                                />
+                                            </div>
+
+                                            <div className="space-y-2 md:col-span-2">
+                                                <Label htmlFor="direccion_residencia">Dirección de Residencia *</Label>
+                                                <Textarea
+                                                    id="direccion_residencia"
+                                                    value={formDestinatario.direccion_residencia}
+                                                    onChange={(e) =>
+                                                        setFormDestinatario((prev) => ({ ...prev, direccion_residencia: e.target.value }))
+                                                    }
+                                                    placeholder="Dirección completa donde se entregará el producto"
+                                                    rows={3}
+                                                />
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label htmlFor="parentesco_cliente">Parentesco con Cliente</Label>
+                                                <Input
+                                                    id="parentesco_cliente"
+                                                    value={formDestinatario.parentesco_cliente}
+                                                    onChange={(e) => setFormDestinatario((prev) => ({ ...prev, parentesco_cliente: e.target.value }))}
+                                                    placeholder="Ej: Familiar, Amigo, etc."
+                                                />
+                                            </div>
+
+                                            <div className="space-y-2 md:col-span-2">
+                                                <Label htmlFor="observaciones">Observaciones</Label>
+                                                <Textarea
+                                                    id="observaciones"
+                                                    value={formDestinatario.observaciones}
+                                                    onChange={(e) => setFormDestinatario((prev) => ({ ...prev, observaciones: e.target.value }))}
+                                                    placeholder="Observaciones adicionales"
+                                                    rows={2}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel
+                                                disabled={isSavingDestinatario}
+                                                onClick={() => {
+                                                    setIsEditingDestinatario(false);
+                                                    setFormDestinatario({
+                                                        nombre: '',
+                                                        apellidos: '',
+                                                        carnet_identidad: '',
+                                                        direccion_residencia: '',
+                                                        telefono_contacto: '',
+                                                        parentesco_cliente: '',
+                                                        observaciones: '',
+                                                    });
+                                                }}
+                                            >
+                                                Cancelar
+                                            </AlertDialogCancel>
+                                            <AlertDialogAction
+                                                onClick={handleGuardarDestinatario}
+                                                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                                                disabled={
+                                                    isSavingDestinatario ||
+                                                    !formDestinatario.nombre ||
+                                                    !formDestinatario.apellidos ||
+                                                    !formDestinatario.carnet_identidad ||
+                                                    !formDestinatario.direccion_residencia
+                                                }
+                                            >
+                                                {isSavingDestinatario ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                                                        Guardando...
+                                                    </div>
+                                                ) : (
+                                                    'Guardar Receptor'
+                                                )}
+                                            </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            ) : (
+                                <Button
+                                    variant="outline"
+                                    className="flex cursor-pointer items-center gap-2 border-green-300 bg-green-50 text-green-700 hover:bg-green-100"
+                                    onClick={handleEditarDestinatario}
+                                >
+                                    <Edit size={16} />
+                                    Editar Receptor
+                                </Button>
+                            )}
+                        </>
+                    )}
 
                     <Button variant="outline" className="hover:bg-chart-5 flex cursor-pointer items-center gap-2">
                         <FileText size={16} />
@@ -360,17 +690,17 @@ export default function ResultadoCarrito({ venta }: Props) {
                         </AlertDialogContent>
                     </AlertDialog>
 
-                    {/* Botón de Aprobar Venta (solo para ventas pendientes) */}
+                    {/* Botón de Aprobar Venta (solo para ventas pendientes con destinatario) */}
                     {isVentaPendiente && (
                         <AlertDialog>
                             <AlertDialogTrigger asChild>
                                 <Button
                                     variant="default"
                                     className="flex cursor-pointer items-center gap-2 bg-green-600 text-white hover:bg-green-700"
-                                    disabled={isApproving}
+                                    disabled={isApproving || !puedeAprobar}
                                 >
                                     <CheckCircle size={16} />
-                                    {isApproving ? 'Aprobando...' : 'Aprobar Venta'}
+                                    {isApproving ? 'Aprobando...' : puedeAprobar ? 'Aprobar Venta' : 'Falta Receptor'}
                                 </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
@@ -456,6 +786,78 @@ export default function ResultadoCarrito({ venta }: Props) {
                         </AlertDialog>
                     )}
                 </div>
+
+                {/* Sección de Información del Destinatario */}
+                {currentVenta.destinatario && (
+                    <div className="rounded-lg border border-green-200 p-6 shadow-sm">
+                        <div className="mb-4 flex items-center justify-between">
+                            <h3 className="flex items-center gap-2 text-lg font-semibold text-green-800">
+                                <Users className="h-5 w-5" />✅ Receptor Registrado
+                            </h3>
+                            {isVentaPendiente && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex items-center gap-2 border-green-300 text-green-700 hover:bg-green-100"
+                                    onClick={handleEditarDestinatario}
+                                >
+                                    <Edit size={14} />
+                                    Editar
+                                </Button>
+                            )}
+                        </div>
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                            <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                    <User className="h-4 w-4 text-green-600" />
+                                    <span className="text-sm font-medium text-green-700">Nombre Completo:</span>
+                                </div>
+                                <p className="text-sm">
+                                    {currentVenta.destinatario.nombre} {currentVenta.destinatario.apellidos}
+                                </p>
+                            </div>
+
+                            <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                    <IdCard className="h-4 w-4 text-green-600" />
+                                    <span className="text-sm font-medium text-green-700">Carnet de Identidad:</span>
+                                </div>
+                                <p className="text-sm">{currentVenta.destinatario.carnet_identidad}</p>
+                            </div>
+
+                            <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                    <Phone className="h-4 w-4 text-green-600" />
+                                    <span className="text-sm font-medium text-green-700">Teléfono Contacto:</span>
+                                </div>
+                                <p className="text-sm">{currentVenta.destinatario.telefono_contacto || 'No especificado'}</p>
+                            </div>
+
+                            <div className="space-y-1 md:col-span-2">
+                                <div className="flex items-center gap-2">
+                                    <MapPin className="h-4 w-4 text-green-600" />
+                                    <span className="text-sm font-medium text-green-700">Dirección de Residencia:</span>
+                                </div>
+                                <p className="text-sm">{currentVenta.destinatario.direccion_residencia}</p>
+                            </div>
+
+                            <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                    <Users className="h-4 w-4 text-green-600" />
+                                    <span className="text-sm font-medium text-green-700">Parentesco:</span>
+                                </div>
+                                <p className="text-sm">{currentVenta.destinatario.parentesco_cliente || 'No especificado'}</p>
+                            </div>
+
+                            {currentVenta.destinatario.observaciones && (
+                                <div className="space-y-1 md:col-span-3">
+                                    <span className="text-sm font-medium text-green-700">Observaciones:</span>
+                                    <p className="text-sm">{currentVenta.destinatario.observaciones}</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 {/* Información general de la venta */}
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -673,6 +1075,16 @@ export default function ResultadoCarrito({ venta }: Props) {
                             <div className="mt-4 rounded-md bg-yellow-50 p-3">
                                 <p className="text-sm text-yellow-800">
                                     <strong>Venta Pendiente:</strong> Esta venta requiere aprobación para afectar stock y cuentas.
+                                    {!currentVenta.destinatario && (
+                                        <span className="mt-1 block font-semibold">
+                                            ❌ Para aprobar, primero debe registrar la información del receptor.
+                                        </span>
+                                    )}
+                                    {currentVenta.destinatario && (
+                                        <span className="mt-1 block font-semibold text-green-600">
+                                            ✅ Receptor registrado. Ya puede aprobar la venta.
+                                        </span>
+                                    )}
                                 </p>
                             </div>
                         )}
