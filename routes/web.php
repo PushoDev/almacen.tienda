@@ -10,6 +10,16 @@ Route::get('/', function () {
     return Inertia::render('Ecommerce/Index');
 })->name('Inicio');
 
+// Productos
+Route::get('/productos', function () {
+    return Inertia::render('Ecommerce/Index');
+})->name('productos');
+
+// Carrito
+Route::get('/carrito', function () {
+    return Inertia::render('Ecommerce/Index');
+})->name('Carrito');
+
 
 // Sistema de Logistica
 Route::get('/sistema', function () {
