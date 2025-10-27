@@ -5,9 +5,18 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\AdminController;
 
+// Comercio Electronico
 Route::get('/', function () {
+    return Inertia::render('Ecommerce/Index');
+})->name('Inicio');
+
+
+// Sistema de Logistica
+Route::get('/sistema', function () {
     return Inertia::render('auth/login');
 })->name('home');
+
+
 
 Route::middleware(['auth', 'verified'])->group(function () {
 
