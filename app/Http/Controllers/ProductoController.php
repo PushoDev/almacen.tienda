@@ -49,20 +49,18 @@ class ProductoController extends Controller
             $query->where('categoria_id', $request->categoria_id);
         }
 
-        // Filtro por stock bajo
-        if ($request->has('stock_bajo') && $request->stock_bajo) {
-            $query->having('cantidad_total', '<', 3);
-        }
-
         // Ordenamiento
         $sortField = $request->get('sort_field', 'nombre_producto');
         $sortDirection = $request->get('sort_direction', 'asc');
 
-        if (in_array($sortField, ['nombre_producto', 'marca_producto', 'codigo_producto', 'precio_compra_producto', 'cantidad_total'])) {
+        if (in_array($sortField, ['nombre_producto', 'marca_producto', 'codigo_producto', 'precio_compra_producto'])) {
             $query->orderBy($sortField, $sortDirection);
         }
 
         $productos = $query->get()->map(function ($producto) {
+            // ✅ FORZAR recarga de relaciones para datos ACTUALIZADOS
+            $producto->load('almacenes');
+
             return [
                 'id' => $producto->id,
                 'nombre_producto' => $producto->nombre_producto,
@@ -73,17 +71,17 @@ class ProductoController extends Controller
                 'categoria' => $producto->categoria?->nombre_categoria,
                 'categoria_id' => $producto->categoria_id,
                 'precio_compra_producto' => (float) $producto->precio_compra_producto,
-                'cantidad_total' => $producto->cantidad_total,
+                'cantidad_total' => $producto->cantidad_total, // ✅ Accessor del modelo (ya actualizado)
                 'imagen_url' => $producto->imagen_url,
                 'barcode_image_url' => $producto->barcode_image_url,
                 'precio_venta' => $producto->vendedores->first()->pivot->precio_venta ?? null,
-                'stock_bajo' => $producto->stock_bajo,
+                'stock_bajo' => $producto->stock_bajo, // ✅ Accessor del modelo (ya actualizado)
                 'created_at' => $producto->created_at?->toISOString(),
                 'updated_at' => $producto->updated_at?->toISOString(),
             ];
         });
 
-        // Aplicar paginación manual para los campos calculados
+        // ✅ CORRECCIÓN: Filtrar stock bajo usando el accessor del modelo (ya actualizado)
         if ($request->has('stock_bajo') && $request->stock_bajo) {
             $productos = $productos->filter(fn($producto) => $producto['stock_bajo']);
         }
@@ -114,6 +112,7 @@ class ProductoController extends Controller
     {
         $user = Auth::user();
 
+        // ✅ FORZAR recarga de relaciones para datos ACTUALIZADOS
         $producto->load(['categoria', 'almacenes', 'vendedores' => function ($query) use ($user) {
             $query->where('users.id', $user->id)
                 ->select('users.id', 'producto_vendedors.precio_venta', 'producto_vendedors.venta_ganancia');
@@ -133,12 +132,12 @@ class ProductoController extends Controller
                 'categoria' => $producto->categoria?->nombre_categoria,
                 'categoria_id' => $producto->categoria_id,
                 'precio_compra_producto' => (float) $producto->precio_compra_producto,
-                'cantidad_total' => $producto->cantidad_total,
+                'cantidad_total' => $producto->cantidad_total, // ✅ Accessor del modelo (ya actualizado)
                 'imagen_url' => $producto->imagen_url,
                 'barcode_image_url' => $producto->barcode_image_url,
                 'precio_venta' => $precioVenta,
                 'ganancia' => $ganancia,
-                'stock_bajo' => $producto->stock_bajo,
+                'stock_bajo' => $producto->stock_bajo, // ✅ Accessor del modelo (ya actualizado)
                 'almacenes' => $producto->almacenes->map(fn($almacen) => [
                     'id' => $almacen->id,
                     'nombre_almacen' => $almacen->nombre_almacen,
@@ -160,6 +159,7 @@ class ProductoController extends Controller
      */
     public function edit(Producto $producto)
     {
+        // ✅ FORZAR recarga de relaciones
         $producto->load(['almacenes', 'categoria']);
 
         return Inertia::render('Productos/Edit', [
@@ -284,6 +284,9 @@ class ProductoController extends Controller
         }
 
         $productos = $query->limit(10)->get()->map(function ($producto) {
+            // ✅ FORZAR recarga para datos actualizados
+            $producto->load('almacenes');
+
             return [
                 'id' => $producto->id,
                 'nombre' => $producto->nombre_producto,
@@ -342,6 +345,9 @@ class ProductoController extends Controller
                 'message' => 'Producto no encontrado'
             ], 404);
         }
+
+        // ✅ FORZAR recarga para datos actualizados
+        $producto->load('almacenes');
 
         return response()->json([
             'success' => true,

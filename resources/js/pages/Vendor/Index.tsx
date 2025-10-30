@@ -130,8 +130,8 @@ const paymentVias: PaymentVia[] = [
 ];
 
 export default function PuntoVentaOficial({
-                                              meta,
-                                          }: {
+    meta,
+}: {
     meta: {
         role_usuario: string;
         almacenes_usuario: {
@@ -318,6 +318,7 @@ export default function PuntoVentaOficial({
             (producto) =>
                 (producto.nombre_producto?.toLowerCase().includes(termino) ||
                     producto.marca_producto?.toLowerCase().includes(termino) ||
+                    producto.codigo_barras?.toLowerCase().includes(termino) ||
                     producto.categoria_nombre?.toLowerCase().includes(termino)) ??
                 false,
         );
@@ -351,10 +352,10 @@ export default function PuntoVentaOficial({
                 carrito.map((item) =>
                     item.id === idItem
                         ? {
-                            ...item,
-                            cantidad: nuevaCantidad,
-                            subtotal: nuevaCantidad * item.precio_venta,
-                        }
+                              ...item,
+                              cantidad: nuevaCantidad,
+                              subtotal: nuevaCantidad * item.precio_venta,
+                          }
                         : item,
                 ),
             );
@@ -384,10 +385,10 @@ export default function PuntoVentaOficial({
             carrito.map((itemCarrito) =>
                 itemCarrito.id === id
                     ? {
-                        ...itemCarrito,
-                        cantidad: nuevaCantidad,
-                        subtotal: nuevaCantidad * itemCarrito.precio_venta,
-                    }
+                          ...itemCarrito,
+                          cantidad: nuevaCantidad,
+                          subtotal: nuevaCantidad * itemCarrito.precio_venta,
+                      }
                     : itemCarrito,
             ),
         );
@@ -399,10 +400,10 @@ export default function PuntoVentaOficial({
             carrito.map((item) =>
                 item.id === id
                     ? {
-                        ...item,
-                        precio_venta: nuevoPrecio,
-                        subtotal: item.cantidad * nuevoPrecio,
-                    }
+                          ...item,
+                          precio_venta: nuevoPrecio,
+                          subtotal: item.cantidad * nuevoPrecio,
+                      }
                     : item,
             ),
         );
@@ -974,12 +975,13 @@ export default function PuntoVentaOficial({
                                         <div className="mb-4 rounded-lg bg-blue-50 p-3 text-sm">
                                             <div className="flex items-start">
                                                 <div className="flex-shrink-0">
-                                                    <Info className="h-4 w-4 text-blue-400 mt-0.5" />
+                                                    <Info className="mt-0.5 h-4 w-4 text-blue-400" />
                                                 </div>
                                                 <div className="ml-2">
-                                                    <p className="text-blue-700 font-medium">Stock será reservado</p>
-                                                    <p className="text-blue-600 text-xs mt-1">
-                                                        Al procesar la venta, el stock será reservado inmediatamente y no estará disponible para otros usuarios.
+                                                    <p className="font-medium text-blue-700">Stock será reservado</p>
+                                                    <p className="mt-1 text-xs text-blue-600">
+                                                        Al procesar la venta, el stock será reservado inmediatamente y no estará disponible para otros
+                                                        usuarios.
                                                     </p>
                                                 </div>
                                             </div>
@@ -1118,8 +1120,8 @@ export default function PuntoVentaOficial({
                                                                                     cargandoCuentas
                                                                                         ? 'Cargando cuentas...'
                                                                                         : cuentasFiltradas.length === 0
-                                                                                            ? 'No hay cuentas disponibles'
-                                                                                            : 'Seleccione cuenta'
+                                                                                          ? 'No hay cuentas disponibles'
+                                                                                          : 'Seleccione cuenta'
                                                                                 }
                                                                             />
                                                                         </SelectTrigger>
