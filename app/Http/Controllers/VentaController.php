@@ -339,11 +339,12 @@ class VentaController extends Controller
     }
 
     // ========================================================================
-    // MÉTODOS DE PROCESAMIENTO
+    // MÉTODOS DE PROCESAMIENTO - ACTUALIZADOS CON DESCUENTO INMEDIATO
     // ========================================================================
 
     /**
      * Procesa la venta con tasas de cambio editables por operación - MEJORADO
+     * ✅ NUEVO: Descuenta stock inmediatamente al crear venta pendiente
      */
     public function procesarVenta(Request $request)
     {
@@ -381,7 +382,7 @@ class VentaController extends Controller
                 throw new \Exception('No tienes acceso a este almacén');
             }
 
-            // Validación de stock
+            // ✅ NUEVO: Validación y descuento inmediato de stock
             foreach ($validatedData['items'] as $item) {
                 $almacenProducto = AlmacenProducto::where('almacen_id', $validatedData['almacen_id'])
                     ->where('producto_id', $item['producto_id'])
@@ -391,6 +392,23 @@ class VentaController extends Controller
                     $producto = Producto::find($item['producto_id']);
                     throw new \Exception("Stock insuficiente para: {$producto->nombre_producto}. Disponible: " . ($almacenProducto->cantidad ?? 0));
                 }
+
+                // ✅ DESCONTAR STOCK INMEDIATAMENTE
+                $almacenProducto->cantidad -= $item['cantidad'];
+                $almacenProducto->save();
+
+                // Registrar en historial de stock
+                HistorialStock::create([
+                    'producto_id' => $item['producto_id'],
+                    'almacen_id' => $validatedData['almacen_id'],
+                    'venta_id' => null, // Aún no se crea la venta
+                    'cantidad_anterior' => $almacenProducto->cantidad + $item['cantidad'],
+                    'cantidad_nueva' => $almacenProducto->cantidad,
+                    'diferencia' => -$item['cantidad'],
+                    'tipo' => 'venta_pendiente',
+                    'observaciones' => 'Stock reservado por venta pendiente',
+                    'user_id' => $user->id,
+                ]);
             }
 
             // MEJORADO: Validar que las cuentas coincidan con la moneda del pago
@@ -431,6 +449,12 @@ class VentaController extends Controller
                 'tasa_cambio_principal' => $validatedData['tasa_cambio_principal'],
             ]);
 
+            // ✅ ACTUALIZAR historial de stock con el ID de venta
+            HistorialStock::where('user_id', $user->id)
+                ->where('tipo', 'venta_pendiente')
+                ->whereNull('venta_id')
+                ->update(['venta_id' => $venta->id]);
+
             // Crear detalles de venta
             foreach ($validatedData['items'] as $item) {
                 $producto = Producto::find($item['producto_id']);
@@ -464,7 +488,7 @@ class VentaController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Venta creada correctamente. Pendiente de aprobación.',
+                'message' => 'Venta creada correctamente. Stock reservado pendiente de aprobación.',
                 'redirect' => route('ventas.show', $venta->id)
             ]);
         } catch (\Exception $e) {
@@ -516,6 +540,7 @@ class VentaController extends Controller
 
     /**
      * Aprueba una venta pendiente.
+     * ✅ MODIFICADO: Ya no descuenta stock (porque ya se descontó al crear la venta)
      */
     public function aprobarVenta(Venta $venta)
     {
@@ -539,37 +564,15 @@ class VentaController extends Controller
 
             $venta->load(['detalles.producto', 'pagos.cuenta.moneda', 'pagos.moneda', 'moneda', 'destinatario']);
 
-            // Actualizar stock y registrar en historial
+            // ✅ MODIFICADO: Ya NO actualizar stock (porque ya se descontó al crear la venta)
+            // Solo actualizar el historial para reflejar la aprobación
             foreach ($venta->detalles as $detalle) {
-                $almacenProducto = AlmacenProducto::where('almacen_id', $venta->almacen_id)
+                HistorialStock::where('venta_id', $venta->id)
                     ->where('producto_id', $detalle->producto_id)
-                    ->first();
-
-                if ($almacenProducto) {
-                    $cantidadAnterior = $almacenProducto->cantidad;
-                    $nuevaCantidad = $cantidadAnterior - $detalle->cantidad;
-
-                    if ($nuevaCantidad < 0) {
-                        $producto = $detalle->producto;
-                        throw new \Exception("Stock insuficiente para: {$producto->nombre_producto}. Stock: {$cantidadAnterior}, Vendido: {$detalle->cantidad}");
-                    }
-
-                    HistorialStock::create([
-                        'producto_id' => $detalle->producto_id,
-                        'almacen_id' => $venta->almacen_id,
-                        'venta_id' => $venta->id,
-                        'cantidad_anterior' => $cantidadAnterior,
-                        'cantidad_nueva' => $nuevaCantidad,
-                        'diferencia' => -$detalle->cantidad,
-                        'tipo' => 'venta',
-                        'observaciones' => 'Venta aprobada y stock descontado',
-                        'user_id' => $user->id,
+                    ->update([
+                        'tipo' => 'venta_aprobada',
+                        'observaciones' => 'Venta aprobada - Stock confirmado'
                     ]);
-
-                    $almacenProducto->update(['cantidad' => $nuevaCantidad]);
-                } else {
-                    throw new \Exception("Producto no encontrado en el almacén: {$detalle->producto_id}");
-                }
             }
 
             // Procesar pagos y actualizar cuentas
@@ -591,7 +594,7 @@ class VentaController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Venta aprobada y completada correctamente. Stock y saldos actualizados.',
+                'message' => 'Venta aprobada y completada correctamente. Pagos procesados.',
                 'redirect' => route('ventas.show', $venta->id)
             ]);
         } catch (\Exception $e) {
@@ -606,6 +609,7 @@ class VentaController extends Controller
 
     /**
      * Anula una venta.
+     * ✅ MODIFICADO: Regresa el stock SI estaba en estado pendiente
      */
     public function anularVenta(Venta $venta)
     {
@@ -621,9 +625,8 @@ class VentaController extends Controller
                 throw new \Exception('Usuario no autenticado');
             }
 
-            // Solo revertir si estaba completada
-            if ($venta->estado === 'completada') {
-                // Revertir stock
+            // ✅ MODIFICADO: Revertir stock SI estaba pendiente
+            if ($venta->estado === 'pendiente') {
                 foreach ($venta->detalles as $detalle) {
                     $almacenProducto = AlmacenProducto::where('almacen_id', $venta->almacen_id)
                         ->where('producto_id', $detalle->producto_id)
@@ -643,15 +646,17 @@ class VentaController extends Controller
                             'cantidad_anterior' => $cantidadAnterior,
                             'cantidad_nueva' => $nuevaCantidad,
                             'diferencia' => $cantidadDevuelta,
-                            'tipo' => 'anulacion_venta',
-                            'observaciones' => 'Reversión por anulación de la Venta ID: ' . $venta->id,
+                            'tipo' => 'anulacion_venta_pendiente',
+                            'observaciones' => 'Stock regresado por anulación de venta pendiente ID: ' . $venta->id,
                             'user_id' => $user->id,
                         ]);
                     } else {
                         throw new \Exception('Error de stock: El producto ' . $detalle->producto_id . ' no se encontró en el almacén.');
                     }
                 }
-
+            }
+            // Si estaba completada, revertir pagos (comportamiento anterior)
+            elseif ($venta->estado === 'completada') {
                 // Revertir pagos y saldos
                 $venta->load(['pagos.cuenta.moneda', 'pagos.moneda', 'moneda']);
                 foreach ($venta->pagos as $pago) {
@@ -664,6 +669,33 @@ class VentaController extends Controller
                         throw new \Exception('Cuenta de pago no encontrada: ' . $pago->cuenta_id);
                     }
                 }
+
+                // También regresar stock para ventas completadas
+                foreach ($venta->detalles as $detalle) {
+                    $almacenProducto = AlmacenProducto::where('almacen_id', $venta->almacen_id)
+                        ->where('producto_id', $detalle->producto_id)
+                        ->first();
+
+                    if ($almacenProducto) {
+                        $cantidadDevuelta = $detalle->cantidad;
+                        $cantidadAnterior = $almacenProducto->cantidad;
+                        $nuevaCantidad = $cantidadAnterior + $cantidadDevuelta;
+
+                        $almacenProducto->update(['cantidad' => $nuevaCantidad]);
+
+                        HistorialStock::create([
+                            'producto_id' => $detalle->producto_id,
+                            'almacen_id' => $venta->almacen_id,
+                            'venta_id' => $venta->id,
+                            'cantidad_anterior' => $cantidadAnterior,
+                            'cantidad_nueva' => $nuevaCantidad,
+                            'diferencia' => $cantidadDevuelta,
+                            'tipo' => 'anulacion_venta_completada',
+                            'observaciones' => 'Stock regresado por anulación de venta completada ID: ' . $venta->id,
+                            'user_id' => $user->id,
+                        ]);
+                    }
+                }
             }
 
             // Actualizar estado
@@ -673,7 +705,8 @@ class VentaController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Venta ID ' . $venta->id . ' anulada correctamente. ' . ($venta->estado === 'completada' ? 'Stock y saldos revertidos.' : 'Estado actualizado.'),
+                'message' => 'Venta ID ' . $venta->id . ' anulada correctamente. ' .
+                    ($venta->estado === 'pendiente' ? 'Stock regresado.' : ($venta->estado === 'completada' ? 'Stock y saldos revertidos.' : 'Estado actualizado.')),
                 'redirect' => route('ventas.show', $venta->id)
             ]);
         } catch (\Exception $e) {

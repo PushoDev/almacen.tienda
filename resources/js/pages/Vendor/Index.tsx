@@ -22,7 +22,7 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
-import { Barcode, BoxesIcon, Eye, Minus, PackagePlus, Plus, Search, ShoppingBag, ShoppingCart, Trash2, X } from 'lucide-react';
+import { Barcode, BoxesIcon, Eye, Info, Minus, PackagePlus, Plus, Search, ShoppingBag, ShoppingCart, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -130,8 +130,8 @@ const paymentVias: PaymentVia[] = [
 ];
 
 export default function PuntoVentaOficial({
-    meta,
-}: {
+                                              meta,
+                                          }: {
     meta: {
         role_usuario: string;
         almacenes_usuario: {
@@ -351,10 +351,10 @@ export default function PuntoVentaOficial({
                 carrito.map((item) =>
                     item.id === idItem
                         ? {
-                              ...item,
-                              cantidad: nuevaCantidad,
-                              subtotal: nuevaCantidad * item.precio_venta,
-                          }
+                            ...item,
+                            cantidad: nuevaCantidad,
+                            subtotal: nuevaCantidad * item.precio_venta,
+                        }
                         : item,
                 ),
             );
@@ -384,10 +384,10 @@ export default function PuntoVentaOficial({
             carrito.map((itemCarrito) =>
                 itemCarrito.id === id
                     ? {
-                          ...itemCarrito,
-                          cantidad: nuevaCantidad,
-                          subtotal: nuevaCantidad * itemCarrito.precio_venta,
-                      }
+                        ...itemCarrito,
+                        cantidad: nuevaCantidad,
+                        subtotal: nuevaCantidad * itemCarrito.precio_venta,
+                    }
                     : itemCarrito,
             ),
         );
@@ -399,10 +399,10 @@ export default function PuntoVentaOficial({
             carrito.map((item) =>
                 item.id === id
                     ? {
-                          ...item,
-                          precio_venta: nuevoPrecio,
-                          subtotal: item.cantidad * nuevoPrecio,
-                      }
+                        ...item,
+                        precio_venta: nuevoPrecio,
+                        subtotal: item.cantidad * nuevoPrecio,
+                    }
                     : item,
             ),
         );
@@ -439,7 +439,6 @@ export default function PuntoVentaOficial({
     const totalPaid = useMemo(() => payments.reduce((sum, payment) => sum + payment.amountInUsd, 0), [payments]);
     const remainingInUsd = calcularTotal - totalPaid;
 
-    // ✅ CORRECCIÓN: Función convertToUsd corregida - DIVIDIR en lugar de multiplicar
     const convertToUsd = (amount: number, currencyId: string): number => {
         const currency = currencies.find((c) => c.id === currencyId);
         if (!currency) {
@@ -447,8 +446,6 @@ export default function PuntoVentaOficial({
             return 0;
         }
         console.log(`Convirtiendo ${amount} ${currency.symbol} a USD. Tasa: ${currency.exchangeRate}`);
-
-        // ✅ CORRECCIÓN: DIVIDIR en lugar de multiplicar
         return amount / currency.exchangeRate;
     };
 
@@ -456,12 +453,11 @@ export default function PuntoVentaOficial({
         console.log('Intentando agregar pago:', currentPayment);
         console.log('Cuentas filtradas disponibles:', cuentasFiltradas);
 
-        // ✅ CORRECCIÓN: Validación actualizada con campo referencia
         if (
             !currentPayment.method ||
             !currentPayment.moneda_id ||
             (currentPayment.method === 'transferencia' && !currentPayment.via) ||
-            (currentPayment.method === 'transferencia' && !currentPayment.referencia) || // ✅ NUEVA VALIDACIÓN
+            (currentPayment.method === 'transferencia' && !currentPayment.referencia) ||
             !currentPayment.amount ||
             parseFloat(currentPayment.amount) <= 0 ||
             !currentPayment.cuenta_id
@@ -509,7 +505,7 @@ export default function PuntoVentaOficial({
             exchangeRate: exchangeRate,
             amountInUsd: amountInUsd,
             cuenta_id: currentPayment.cuenta_id,
-            referencia: currentPayment.method === 'transferencia' ? currentPayment.referencia : undefined, // ✅ INCLUIR REFERENCIA
+            referencia: currentPayment.method === 'transferencia' ? currentPayment.referencia : undefined,
             moneda_info: {
                 codigo: selectedCurrency.code,
                 nombre: selectedCurrency.name,
@@ -520,7 +516,6 @@ export default function PuntoVentaOficial({
         console.log('Nuevo pago agregado:', newPayment);
         setPayments([...payments, newPayment]);
 
-        // ✅ CORRECCIÓN: Resetear todos los campos incluyendo referencia
         setCurrentPayment({
             method: '',
             moneda_id: '',
@@ -594,7 +589,7 @@ export default function PuntoVentaOficial({
                 tasa_cambio: p.exchangeRate,
                 monto_equivalente: p.amountInUsd,
                 cuenta_id: p.cuenta_id,
-                referencia: p.referencia, // ✅ INCLUIR REFERENCIA EN EL ENVÍO
+                referencia: p.referencia,
             })),
             moneda_principal_id: monedaPrincipal?.id,
             tasa_cambio_principal: tasaCambioPrincipal,
@@ -608,7 +603,8 @@ export default function PuntoVentaOficial({
             console.log('Respuesta del servidor:', response.data);
 
             if (response.data.success) {
-                toast.success('Venta procesada correctamente. Pendiente de aprobación.');
+                // ✅ ACTUALIZADO: Mensaje que refleja el nuevo comportamiento
+                toast.success('✅ Venta creada correctamente. Stock reservado pendiente de aprobación.');
                 setCarrito([]);
                 setPayments([]);
                 setAlmacenSeleccionado('');
@@ -974,6 +970,21 @@ export default function PuntoVentaOficial({
 
                                 {carrito.length > 0 && (
                                     <div className="border-t p-6">
+                                        {/* ✅ NUEVO: Mensaje informativo sobre stock reservado */}
+                                        <div className="mb-4 rounded-lg bg-blue-50 p-3 text-sm">
+                                            <div className="flex items-start">
+                                                <div className="flex-shrink-0">
+                                                    <Info className="h-4 w-4 text-blue-400 mt-0.5" />
+                                                </div>
+                                                <div className="ml-2">
+                                                    <p className="text-blue-700 font-medium">Stock será reservado</p>
+                                                    <p className="text-blue-600 text-xs mt-1">
+                                                        Al procesar la venta, el stock será reservado inmediatamente y no estará disponible para otros usuarios.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+
                                         <div className="space-y-3">
                                             <div className="flex items-center justify-between">
                                                 <span className="font-medium">Total:</span>
@@ -1107,8 +1118,8 @@ export default function PuntoVentaOficial({
                                                                                     cargandoCuentas
                                                                                         ? 'Cargando cuentas...'
                                                                                         : cuentasFiltradas.length === 0
-                                                                                          ? 'No hay cuentas disponibles'
-                                                                                          : 'Seleccione cuenta'
+                                                                                            ? 'No hay cuentas disponibles'
+                                                                                            : 'Seleccione cuenta'
                                                                                 }
                                                                             />
                                                                         </SelectTrigger>
@@ -1155,7 +1166,6 @@ export default function PuntoVentaOficial({
                                                                 )}
                                                             </div>
 
-                                                            {/* ✅ CORRECCIÓN: Campo de referencia para transferencias */}
                                                             {currentPayment.method === 'transferencia' && (
                                                                 <div className="space-y-2">
                                                                     <Label>Referencia / Número de Operación</Label>
@@ -1207,7 +1217,7 @@ export default function PuntoVentaOficial({
                                                                             !currentPayment.moneda_id ||
                                                                             (currentPayment.method === 'transferencia' && !currentPayment.via) ||
                                                                             (currentPayment.method === 'transferencia' &&
-                                                                                !currentPayment.referencia) || // ✅ VALIDACIÓN ACTUALIZADA
+                                                                                !currentPayment.referencia) ||
                                                                             !currentPayment.amount ||
                                                                             parseFloat(currentPayment.amount) <= 0 ||
                                                                             !currentPayment.cuenta_id
