@@ -36,64 +36,54 @@ import { toast } from 'sonner';
 // =================================================================
 export interface ProductoComprarProps {
     id: number;
-    almacen_id: number; // Ahora es number en el array principal
+    almacen_id: number;
     producto: string;
-    marca?: string; // Nuevo
-    modelo?: string; // Nuevo
-    capacidad?: string; // Nuevo
+    marca?: string;
+    modelo?: string;
+    capacidad?: string;
     categoria: string;
-    codigo: string; // Se mantiene, pero se autogenera en el backend si está vacío
+    codigo: string;
     cantidad: number;
     precio: number;
 }
 // =================================================================
 
 // =================================================================
-// ⚡ FUNCIÓN DE GENERACIÓN DE CÓDIGO EN FRONTEND (Réplica de Laravel)
+// ⚡ FUNCIÓN DE GENERACIÓN DE CÓDIGO EN FRONTEND
 // =================================================================
 const generarCodigoLocal = (producto: string, marca: string, modelo: string, capacidad: string): string => {
-    // 1. Limpiar y truncar (max 3 chars)
     const cleanAndTruncate = (value: string | undefined): string => {
         if (!value) return '';
-        const cleaned = value.toUpperCase().replace(/[^A-Z0-9]/g, ''); // Permite números en Marca/Modelo/Capacidad
+        const cleaned = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
         return cleaned.substring(0, 3);
     };
 
-    // Nombre solo toma letras para ser consistente con el modelo
     const nombre = cleanAndTruncate(producto).replace(/[^A-Z]/g, '');
     const marcaClean = cleanAndTruncate(marca);
     const modeloClean = cleanAndTruncate(modelo);
-
-    // 2. Limpiar capacidad (solo números)
     const capacidadNumeros = (capacidad || '').replace(/[^0-9]/g, '');
 
-    // 3. Rellenar con 'X'
     const nombrePadded = nombre.padEnd(3, 'X');
     const marcaPadded = marcaClean.padEnd(3, 'X');
     const modeloPadded = modeloClean.padEnd(3, 'X');
 
-    // 4. Formar la parte fija
     let parteFija = nombrePadded + marcaPadded + modeloPadded + capacidadNumeros;
 
-    // 5. Truncar a 14 si es muy larga
     if (parteFija.length > 14) {
         parteFija = parteFija.substring(0, 14);
     }
 
-    // 6. Rellenar con dígitos aleatorios para llegar a 14
     let codigo = parteFija;
     const longitudRestante = 14 - codigo.length;
 
     if (longitudRestante > 0) {
         let randomDigits = '';
         for (let i = 0; i < longitudRestante; i++) {
-            // Generar un dígito aleatorio (0-9)
             randomDigits += Math.floor(Math.random() * 10).toString();
         }
         codigo += randomDigits;
     }
 
-    // Asegurar que sean exactamente 14
     return codigo.substring(0, 14);
 };
 // =================================================================
@@ -156,20 +146,14 @@ export default function ComprarPage() {
     const [searchProveedor, setSearchProveedor] = useState('');
     const [searchCategoria, setSearchCategoria] = useState('');
 
-    // =================================================================
-    // 💥 CORRECCIÓN AQUÍ: Forzar 'codigo' a cadena vacía para el backend
-    // =================================================================
     useEffect(() => {
-        // Prepara los datos para el backend, asegurando que el código esté vacío
-        // para que el modelo de Laravel lo autogenere si es un producto nuevo.
         const productosParaBackend = productos.map((p) => ({
             ...p,
             almacen_id: parseInt(p.almacen_id as any),
-            codigo: '', // <-- Se envía vacío para que Laravel genere el código de barras
+            codigo: '',
         }));
         setData('productos', productosParaBackend as ProductoComprarProps[]);
     }, [productos]);
-    // =================================================================
 
     useEffect(() => {
         const cargarDatos = async () => {
@@ -200,20 +184,13 @@ export default function ComprarPage() {
         cargarDatos();
     }, []);
 
-    // =================================================================
-    // 🚀 CAMBIO CLAVE: Conversión a mayúsculas para todos los campos de texto
-    // =================================================================
     const handleTempInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
         setTempFormData((prev) => ({
             ...prev,
-            [name]:
-                name === 'cantidad' || name === 'precio'
-                    ? parseFloat(value) || 0 // Campos numéricos se mantienen como números
-                    : value.toUpperCase(), // Todos los demás campos de texto se convierten a mayúsculas
+            [name]: name === 'cantidad' || name === 'precio' ? parseFloat(value) || 0 : value.toUpperCase(),
         }));
     };
-    // =================================================================
 
     const handleTempSelectChange = (name: string, value: string) => {
         setTempFormData((prev) => ({
@@ -230,7 +207,7 @@ export default function ComprarPage() {
             modelo: '',
             capacidad: '',
             categoria: '',
-            codigo: '', // Restablecer el código
+            codigo: '',
             cantidad: 0,
             precio: 0,
         });
@@ -242,7 +219,6 @@ export default function ComprarPage() {
             return;
         }
 
-        // ⚡ Generar código localmente para VISUALIZACIÓN en la tabla
         const nuevoCodigo = generarCodigoLocal(
             tempFormData.producto,
             tempFormData.marca || '',
@@ -258,7 +234,7 @@ export default function ComprarPage() {
             modelo: tempFormData.modelo,
             capacidad: tempFormData.capacidad,
             categoria: tempFormData.categoria,
-            codigo: nuevoCodigo, // <-- Se utiliza el código generado (solo para visualización local)
+            codigo: nuevoCodigo,
             cantidad: tempFormData.cantidad,
             precio: tempFormData.precio,
         };
@@ -280,7 +256,6 @@ export default function ComprarPage() {
     const editarProducto = (id: number) => {
         const productoParaEditar = productos.find((p) => p.id === id);
         if (productoParaEditar) {
-            // Cargar todos los campos, incluido 'codigo', para preservarlo durante la edición
             setTempFormData({
                 almacen_id: productoParaEditar.almacen_id.toString(),
                 producto: productoParaEditar.producto,
@@ -288,7 +263,7 @@ export default function ComprarPage() {
                 modelo: productoParaEditar.modelo || '',
                 capacidad: productoParaEditar.capacidad || '',
                 categoria: productoParaEditar.categoria,
-                codigo: productoParaEditar.codigo, // <-- Preservar el código existente/simulado
+                codigo: productoParaEditar.codigo,
                 cantidad: productoParaEditar.cantidad,
                 precio: productoParaEditar.precio,
             });
@@ -320,7 +295,7 @@ export default function ComprarPage() {
                           modelo: tempFormData.modelo,
                           capacidad: tempFormData.capacidad,
                           categoria: tempFormData.categoria,
-                          codigo: tempFormData.codigo, // <-- Se mantiene el código preservado
+                          codigo: tempFormData.codigo,
                           cantidad: tempFormData.cantidad,
                           precio: tempFormData.precio,
                       } as ProductoComprarProps)
@@ -357,7 +332,6 @@ export default function ComprarPage() {
         post(route('comprar.store'), {
             preserveScroll: true,
             onSuccess: () => {
-                // Al tener éxito, el backend ya generó y guardó los códigos
                 setProductos([]);
                 resetTempForm();
                 toast.success('Compra realizada exitosamente!', {
@@ -403,7 +377,7 @@ export default function ComprarPage() {
 
                 <Separator className="col-span-4" />
 
-                {/* Sección de Datos Generales de la Compra (Mantenida) */}
+                {/* Sección de Datos Generales de la Compra */}
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-sidebar-accent text-center">Nuevos Productos</CardTitle>
@@ -495,7 +469,7 @@ export default function ComprarPage() {
                     </CardContent>
                 </Card>
 
-                {/* Sección de Ingreso de Producto (ACTUALIZADA LA ESTRUCTURA) */}
+                {/* Sección de Ingreso de Producto */}
                 <Card>
                     <CardHeader>
                         <CardDescription className="text-center dark:text-emerald-400">Ingrese Datos del Producto a Comprar</CardDescription>
@@ -503,7 +477,6 @@ export default function ComprarPage() {
                     <CardContent>
                         <div className="grid grid-cols-4 gap-4">
                             {/* Fila 1 */}
-                            {/* 1. Almacén Destino (Individual) */}
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="almacen_id">Almacén Destino *</Label>
                                 <Select
@@ -524,7 +497,6 @@ export default function ComprarPage() {
                                 </Select>
                             </div>
 
-                            {/* 2. Nombre del Producto */}
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="nombre_producto">Nombre del Producto *</Label>
                                 <Input
@@ -536,20 +508,17 @@ export default function ComprarPage() {
                                 />
                             </div>
 
-                            {/* 3. Marca del Producto (NUEVO) */}
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="marca_producto">Marca</Label>
                                 <Input type="text" name="marca" placeholder="Marca" value={tempFormData.marca} onChange={handleTempInputChange} />
                             </div>
 
-                            {/* 4. Modelo del Producto (NUEVO) */}
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="modelo_producto">Modelo</Label>
                                 <Input type="text" name="modelo" placeholder="Modelo" value={tempFormData.modelo} onChange={handleTempInputChange} />
                             </div>
 
                             {/* Fila 2 */}
-                            {/* 5. Capacidad del Producto (NUEVO) */}
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="capacidad_producto">Capacidad/Tamaño</Label>
                                 <Input
@@ -561,7 +530,6 @@ export default function ComprarPage() {
                                 />
                             </div>
 
-                            {/* 6. Categoría del Producto (Movida) */}
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="categorias">Categoría *</Label>
                                 <Select
@@ -608,7 +576,6 @@ export default function ComprarPage() {
                                 {errors.categorias && <InputError message={errors.categorias} />}
                             </div>
 
-                            {/* 7. Precio de Compra (Movido) */}
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="precio_producto">Precio *</Label>
                                 <Input
@@ -621,7 +588,6 @@ export default function ComprarPage() {
                                 {errors['productos.0.precio'] && <InputError message={errors['productos.0.precio']} />}
                             </div>
 
-                            {/* 8. Cantidad de Productos (Movida) */}
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="cantidad_producto">Cantidad *</Label>
                                 <Input
@@ -635,7 +601,7 @@ export default function ComprarPage() {
                             </div>
                         </div>
 
-                        {/* Botón Agregar (Fuera del grid principal para mejor control) */}
+                        {/* Botón Agregar */}
                         <div className="mt-6 flex justify-end">
                             <Button variant="secondary" className="cursor-pointer hover:animate-pulse hover:bg-blue-400" onClick={agregarProducto}>
                                 <PlusIcon />
@@ -645,7 +611,7 @@ export default function ComprarPage() {
                     </CardContent>
                 </Card>
 
-                {/* Sección de la Tabla de Productos (Mantenida) */}
+                {/* Sección de la Tabla de Productos CON DIÁLOGO MEJORADO */}
                 <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
                     <Table>
                         <TableCaption className="text-sidebar-accent">Lista de los Productos a Comprar</TableCaption>
@@ -657,7 +623,7 @@ export default function ComprarPage() {
                                 <TableHead>Capacidad</TableHead>
                                 <TableHead>Almacén</TableHead>
                                 <TableHead>Categoria</TableHead>
-                                <TableHead>Código</TableHead> {/* Se muestra en la tabla */}
+                                <TableHead>Código</TableHead>
                                 <TableHead>Cant.</TableHead>
                                 <TableHead>Precio</TableHead>
                                 <TableHead>Importe</TableHead>
@@ -673,11 +639,12 @@ export default function ComprarPage() {
                                     <TableCell>{p.capacidad || 'N/A'}</TableCell>
                                     <TableCell>{almacens.find((a) => a.id === p.almacen_id)?.nombre_almacen || 'Desconocido'}</TableCell>
                                     <TableCell>{p.categoria}</TableCell>
-                                    <TableCell>{p.codigo || 'ERROR'}</TableCell> {/* Muestra el código generado localmente */}
+                                    <TableCell>{p.codigo || 'ERROR'}</TableCell>
                                     <TableCell>{p.cantidad}</TableCell>
                                     <TableCell>${p.precio.toFixed(2)}</TableCell>
                                     <TableCell>${(p.cantidad * p.precio).toFixed(2)}</TableCell>
                                     <TableCell className="text-right">
+                                        {/* DIÁLOGO MEJORADO - LISTO PARA USAR */}
                                         <AlertDialog open={isDialogOpen && editingProductId === p.id} onOpenChange={setIsDialogOpen}>
                                             <AlertDialogTrigger asChild>
                                                 <Button
@@ -688,192 +655,278 @@ export default function ComprarPage() {
                                                     <Edit2 />
                                                 </Button>
                                             </AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                    <AlertDialogTitle>Editar Producto</AlertDialogTitle>
-                                                    <AlertDialogDescription>
-                                                        Modifica los datos del producto y guarda los cambios.
+                                            <AlertDialogContent className="h-[85vh] w-[95vw] max-w-4xl overflow-y-auto">
+                                                <AlertDialogHeader className="border-b pb-4">
+                                                    <AlertDialogTitle className="flex items-center gap-2 text-2xl font-bold text-gray-800 dark:text-white">
+                                                        <Edit2 className="h-5 w-5" />
+                                                        Editar Producto
+                                                    </AlertDialogTitle>
+                                                    <AlertDialogDescription className="text-base text-gray-600 dark:text-gray-300">
+                                                        Modifica los datos del producto y guarda los cambios. Los campos marcados con * son
+                                                        obligatorios.
                                                     </AlertDialogDescription>
                                                 </AlertDialogHeader>
 
-                                                <div className="grid gap-4 py-4">
-                                                    {/* Fila 1 */}
-                                                    <div className="grid grid-cols-4 items-center gap-4">
-                                                        <Label htmlFor="edit-almacen" className="text-right">
-                                                            Almacén *
-                                                        </Label>
-                                                        <Select
-                                                            name="almacen_id"
-                                                            value={tempFormData.almacen_id}
-                                                            onValueChange={(value) => handleTempSelectChange('almacen_id', value)}
-                                                        >
-                                                            <SelectTrigger className="col-span-3">
-                                                                <SelectValue placeholder="Seleccione Almacén" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {almacens.map((almacen) => (
-                                                                    <SelectItem key={almacen.id} value={almacen.id.toString()}>
-                                                                        {almacen.nombre_almacen}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-
-                                                    <div className="grid grid-cols-4 items-center gap-4">
-                                                        <Label htmlFor="edit-producto" className="text-right">
-                                                            Nombre *
-                                                        </Label>
-                                                        <Input
-                                                            id="edit-producto"
-                                                            name="producto"
-                                                            value={tempFormData.producto}
-                                                            onChange={handleTempInputChange}
-                                                            className="col-span-3"
-                                                        />
-                                                    </div>
-
-                                                    {/* NUEVOS CAMPOS */}
-                                                    <div className="grid grid-cols-4 items-center gap-4">
-                                                        <Label htmlFor="edit-marca" className="text-right">
-                                                            Marca
-                                                        </Label>
-                                                        <Input
-                                                            id="edit-marca"
-                                                            name="marca"
-                                                            value={tempFormData.marca}
-                                                            onChange={handleTempInputChange}
-                                                            className="col-span-3"
-                                                        />
-                                                    </div>
-
-                                                    <div className="grid grid-cols-4 items-center gap-4">
-                                                        <Label htmlFor="edit-modelo" className="text-right">
-                                                            Modelo
-                                                        </Label>
-                                                        <Input
-                                                            id="edit-modelo"
-                                                            name="modelo"
-                                                            value={tempFormData.modelo}
-                                                            onChange={handleTempInputChange}
-                                                            className="col-span-3"
-                                                        />
-                                                    </div>
-
-                                                    <div className="grid grid-cols-4 items-center gap-4">
-                                                        <Label htmlFor="edit-capacidad" className="text-right">
-                                                            Capacidad
-                                                        </Label>
-                                                        <Input
-                                                            id="edit-capacidad"
-                                                            name="capacidad"
-                                                            value={tempFormData.capacidad}
-                                                            onChange={handleTempInputChange}
-                                                            className="col-span-3"
-                                                        />
-                                                    </div>
-                                                    {/* FIN NUEVOS CAMPOS */}
-
-                                                    <div className="grid grid-cols-4 items-center gap-4">
-                                                        <Label htmlFor="edit-codigo" className="text-right">
-                                                            Código
-                                                        </Label>
-                                                        <Input
-                                                            id="edit-codigo"
-                                                            name="codigo"
-                                                            value={tempFormData.codigo || 'Generando...'}
-                                                            className="col-span-3 bg-gray-100 dark:bg-gray-700"
-                                                            disabled
-                                                        />
-                                                    </div>
-
-                                                    {/* Fila 2 */}
-                                                    <div className="grid grid-cols-4 items-center gap-4">
-                                                        <Label htmlFor="edit-categoria" className="text-right">
-                                                            Categoría *
-                                                        </Label>
-                                                        <Select
-                                                            value={tempFormData.categoria}
-                                                            onValueChange={(value) => handleTempSelectChange('categoria', value)}
-                                                        >
-                                                            <SelectTrigger className="col-span-3">
-                                                                <SelectValue placeholder="Seleccione o cree una categoría" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <input
-                                                                    type="text"
-                                                                    className="mb-2 w-full rounded border border-gray-300 p-2"
-                                                                    placeholder="Buscar o crear categoría..."
-                                                                    value={searchCategoria}
-                                                                    onChange={(e) => setSearchCategoria(e.target.value.toUpperCase())}
-                                                                    onKeyDown={(e) => {
-                                                                        if (e.key === 'Enter') {
-                                                                            e.preventDefault();
-                                                                            const trimmed = searchCategoria.trim();
-                                                                            if (trimmed) {
-                                                                                handleTempSelectChange('categoria', trimmed);
-                                                                                setSearchCategoria('');
-                                                                            }
-                                                                        }
-                                                                    }}
-                                                                />
-                                                                {filteredCategorias.length > 0 ? (
-                                                                    filteredCategorias.map((cat) => (
-                                                                        <SelectItem key={cat.id} value={cat.nombre_categoria}>
-                                                                            {cat.nombre_categoria}
+                                                <div className="grid grid-cols-2 gap-6 py-6">
+                                                    {/* Columna Izquierda */}
+                                                    <div className="space-y-6">
+                                                        {/* Almacén */}
+                                                        <div className="space-y-3">
+                                                            <Label
+                                                                htmlFor="edit-almacen"
+                                                                className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                                                            >
+                                                                Almacén Destino *
+                                                            </Label>
+                                                            <Select
+                                                                name="almacen_id"
+                                                                value={tempFormData.almacen_id}
+                                                                onValueChange={(value) => handleTempSelectChange('almacen_id', value)}
+                                                            >
+                                                                <SelectTrigger className="w-full border-2 border-gray-200 focus:border-blue-500 dark:border-gray-600">
+                                                                    <SelectValue placeholder="Seleccione Almacén" />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {almacens.map((almacen) => (
+                                                                        <SelectItem key={almacen.id} value={almacen.id.toString()}>
+                                                                            {almacen.nombre_almacen}
                                                                         </SelectItem>
-                                                                    ))
-                                                                ) : searchCategoria.trim() ? (
-                                                                    <SelectItem value={searchCategoria.trim()}>
-                                                                        ➕ Crear: <strong>{searchCategoria.trim()}</strong>
-                                                                    </SelectItem>
-                                                                ) : (
-                                                                    <SelectItem disabled>Sin categorías</SelectItem>
-                                                                )}
-                                                            </SelectContent>
-                                                        </Select>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+
+                                                        {/* Nombre del Producto */}
+                                                        <div className="space-y-3">
+                                                            <Label
+                                                                htmlFor="edit-producto"
+                                                                className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                                                            >
+                                                                Nombre del Producto *
+                                                            </Label>
+                                                            <Input
+                                                                id="edit-producto"
+                                                                name="producto"
+                                                                value={tempFormData.producto}
+                                                                onChange={handleTempInputChange}
+                                                                className="border-2 border-gray-200 focus:border-blue-500 dark:border-gray-600"
+                                                                placeholder="Ingrese el nombre del producto"
+                                                            />
+                                                        </div>
+
+                                                        {/* Marca y Modelo */}
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            <div className="space-y-3">
+                                                                <Label
+                                                                    htmlFor="edit-marca"
+                                                                    className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                                                                >
+                                                                    Marca
+                                                                </Label>
+                                                                <Input
+                                                                    id="edit-marca"
+                                                                    name="marca"
+                                                                    value={tempFormData.marca}
+                                                                    onChange={handleTempInputChange}
+                                                                    className="border-2 border-gray-200 focus:border-blue-500 dark:border-gray-600"
+                                                                    placeholder="Marca"
+                                                                />
+                                                            </div>
+                                                            <div className="space-y-3">
+                                                                <Label
+                                                                    htmlFor="edit-modelo"
+                                                                    className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                                                                >
+                                                                    Modelo
+                                                                </Label>
+                                                                <Input
+                                                                    id="edit-modelo"
+                                                                    name="modelo"
+                                                                    value={tempFormData.modelo}
+                                                                    onChange={handleTempInputChange}
+                                                                    className="border-2 border-gray-200 focus:border-blue-500 dark:border-gray-600"
+                                                                    placeholder="Modelo"
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Capacidad */}
+                                                        <div className="space-y-3">
+                                                            <Label
+                                                                htmlFor="edit-capacidad"
+                                                                className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                                                            >
+                                                                Capacidad/Tamaño
+                                                            </Label>
+                                                            <Input
+                                                                id="edit-capacidad"
+                                                                name="capacidad"
+                                                                value={tempFormData.capacidad}
+                                                                onChange={handleTempInputChange}
+                                                                className="border-2 border-gray-200 focus:border-blue-500 dark:border-gray-600"
+                                                                placeholder="Ej: 1TB, 16GB, 15.6''"
+                                                            />
+                                                        </div>
                                                     </div>
 
-                                                    {/* Fila 3 */}
-                                                    <div className="grid grid-cols-4 items-center gap-4">
-                                                        <Label htmlFor="edit-precio" className="text-right">
-                                                            Precio *
-                                                        </Label>
-                                                        <Input
-                                                            id="edit-precio"
-                                                            type="number"
-                                                            step="0.01"
-                                                            name="precio"
-                                                            value={tempFormData.precio || ''}
-                                                            onChange={handleTempInputChange}
-                                                            className="col-span-3"
-                                                        />
-                                                    </div>
+                                                    {/* Columna Derecha */}
+                                                    <div className="space-y-6">
+                                                        {/* Código */}
+                                                        <div className="space-y-3">
+                                                            <Label
+                                                                htmlFor="edit-codigo"
+                                                                className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                                                            >
+                                                                Código de Barras
+                                                            </Label>
+                                                            <Input
+                                                                id="edit-codigo"
+                                                                name="codigo"
+                                                                value={tempFormData.codigo || 'Generando automáticamente...'}
+                                                                className="cursor-not-allowed border-2 border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-600 dark:bg-gray-700"
+                                                                disabled
+                                                            />
+                                                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                                El código se genera automáticamente basado en los datos del producto
+                                                            </p>
+                                                        </div>
 
-                                                    <div className="grid grid-cols-4 items-center gap-4">
-                                                        <Label htmlFor="edit-cantidad" className="text-right">
-                                                            Cantidad *
-                                                        </Label>
-                                                        <Input
-                                                            id="edit-cantidad"
-                                                            type="number"
-                                                            name="cantidad"
-                                                            value={tempFormData.cantidad || ''}
-                                                            onChange={handleTempInputChange}
-                                                            className="col-span-3"
-                                                        />
+                                                        {/* Categoría */}
+                                                        <div className="space-y-3">
+                                                            <Label
+                                                                htmlFor="edit-categoria"
+                                                                className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                                                            >
+                                                                Categoría *
+                                                            </Label>
+                                                            <Select
+                                                                value={tempFormData.categoria}
+                                                                onValueChange={(value) => handleTempSelectChange('categoria', value)}
+                                                            >
+                                                                <SelectTrigger className="w-full border-2 border-gray-200 focus:border-blue-500 dark:border-gray-600">
+                                                                    <SelectValue placeholder="Seleccione o cree una categoría" />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    <input
+                                                                        type="text"
+                                                                        className="mb-2 w-full rounded border border-gray-300 p-2 text-sm"
+                                                                        placeholder="Buscar o crear categoría..."
+                                                                        value={searchCategoria}
+                                                                        onChange={(e) => setSearchCategoria(e.target.value.toUpperCase())}
+                                                                        onKeyDown={(e) => {
+                                                                            if (e.key === 'Enter') {
+                                                                                e.preventDefault();
+                                                                                const trimmed = searchCategoria.trim();
+                                                                                if (trimmed) {
+                                                                                    handleTempSelectChange('categoria', trimmed);
+                                                                                    setSearchCategoria('');
+                                                                                }
+                                                                            }
+                                                                        }}
+                                                                    />
+                                                                    {filteredCategorias.length > 0 ? (
+                                                                        filteredCategorias.map((cat) => (
+                                                                            <SelectItem key={cat.id} value={cat.nombre_categoria}>
+                                                                                {cat.nombre_categoria}
+                                                                            </SelectItem>
+                                                                        ))
+                                                                    ) : searchCategoria.trim() ? (
+                                                                        <SelectItem value={searchCategoria.trim()}>
+                                                                            <div className="flex items-center gap-2">
+                                                                                <PlusIcon className="h-4 w-4" />
+                                                                                Crear: <strong>{searchCategoria.trim()}</strong>
+                                                                            </div>
+                                                                        </SelectItem>
+                                                                    ) : (
+                                                                        <SelectItem disabled>Sin categorías disponibles</SelectItem>
+                                                                    )}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+
+                                                        {/* Precio y Cantidad */}
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            <div className="space-y-3">
+                                                                <Label
+                                                                    htmlFor="edit-precio"
+                                                                    className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                                                                >
+                                                                    Precio Unitario *
+                                                                </Label>
+                                                                <div className="relative">
+                                                                    <span className="absolute top-1/2 left-3 -translate-y-1/2 transform text-gray-500">
+                                                                        $
+                                                                    </span>
+                                                                    <Input
+                                                                        id="edit-precio"
+                                                                        type="number"
+                                                                        step="0.01"
+                                                                        name="precio"
+                                                                        value={tempFormData.precio || ''}
+                                                                        onChange={handleTempInputChange}
+                                                                        className="border-2 border-gray-200 pl-8 focus:border-blue-500 dark:border-gray-600"
+                                                                        placeholder="0.00"
+                                                                        min="0"
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            <div className="space-y-3">
+                                                                <Label
+                                                                    htmlFor="edit-cantidad"
+                                                                    className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                                                                >
+                                                                    Cantidad *
+                                                                </Label>
+                                                                <Input
+                                                                    id="edit-cantidad"
+                                                                    type="number"
+                                                                    name="cantidad"
+                                                                    value={tempFormData.cantidad || ''}
+                                                                    onChange={handleTempInputChange}
+                                                                    className="border-2 border-gray-200 focus:border-blue-500 dark:border-gray-600"
+                                                                    placeholder="0"
+                                                                    min="1"
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Resumen del Producto */}
+                                                        <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+                                                            <h4 className="mb-2 font-semibold text-blue-800 dark:text-blue-300">
+                                                                Resumen del Producto
+                                                            </h4>
+                                                            <div className="grid grid-cols-2 gap-2 text-sm">
+                                                                <span className="text-gray-600 dark:text-gray-400">Subtotal:</span>
+                                                                <span className="font-medium text-gray-800 dark:text-white">
+                                                                    ${((tempFormData.cantidad || 0) * (tempFormData.precio || 0)).toFixed(2)}
+                                                                </span>
+                                                                <span className="text-gray-600 dark:text-gray-400">Unidades:</span>
+                                                                <span className="font-medium text-gray-800 dark:text-white">
+                                                                    {tempFormData.cantidad || 0}
+                                                                </span>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
 
-                                                <AlertDialogFooter>
-                                                    <AlertDialogCancel onClick={() => setIsDialogOpen(false)}>Cancelar</AlertDialogCancel>
-                                                    <Button className="cursor-pointer" onClick={handleActualizarProducto}>
+                                                <AlertDialogFooter className="border-t pt-4">
+                                                    <AlertDialogCancel
+                                                        className="border-2 border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+                                                        onClick={() => setIsDialogOpen(false)}
+                                                    >
+                                                        Cancelar
+                                                    </AlertDialogCancel>
+                                                    <Button
+                                                        className="cursor-pointer bg-blue-600 text-white shadow-lg transition-all duration-200 hover:bg-blue-700"
+                                                        onClick={handleActualizarProducto}
+                                                    >
                                                         <HardDriveUpload className="mr-2 h-4 w-4" />
-                                                        Actualizar
+                                                        Actualizar Producto
                                                     </Button>
                                                 </AlertDialogFooter>
                                             </AlertDialogContent>
                                         </AlertDialog>
+
                                         <Button
                                             variant="link"
                                             onClick={() => eliminarProducto(p.id)}
@@ -899,7 +952,7 @@ export default function ComprarPage() {
                     </Table>
                 </div>
 
-                {/* Sección del Modal de Compra (Mantenida) */}
+                {/* Sección del Modal de Compra */}
                 <div className="flex justify-center gap-4 p-4">
                     <AlertDialog>
                         <AlertDialogTrigger asChild>

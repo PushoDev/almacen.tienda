@@ -173,6 +173,14 @@ export default function PuntoVentaOficial({
     const [cuentasFiltradas, setCuentasFiltradas] = useState<Cuenta[]>([]);
     const [cargandoCuentas, setCargandoCuentas] = useState<boolean>(false);
 
+    // 🆕 NUEVO: Estado para el cálculo en tiempo real
+    const [conversionCalculada, setConversionCalculada] = useState<{
+        montoOriginal: number;
+        montoUSD: number;
+        tasaCambio: number;
+        monedaSimbolo: string;
+    } | null>(null);
+
     const currencies = useMemo(() => {
         console.log('Monedas disponibles:', monedas);
         return monedas.map((moneda) => ({
@@ -197,6 +205,26 @@ export default function PuntoVentaOficial({
             }
         }
     }, [meta.monedas]);
+
+    // 🆕 NUEVO: Efecto para calcular la conversión en tiempo real
+    useEffect(() => {
+        if (currentPayment.amount && currentPayment.moneda_id && parseFloat(currentPayment.amount) > 0) {
+            const monto = parseFloat(currentPayment.amount);
+            const selectedCurrency = currencies.find((c) => c.id === currentPayment.moneda_id);
+
+            if (selectedCurrency) {
+                const montoUSD = monto / selectedCurrency.exchangeRate;
+                setConversionCalculada({
+                    montoOriginal: monto,
+                    montoUSD: montoUSD,
+                    tasaCambio: selectedCurrency.exchangeRate,
+                    monedaSimbolo: selectedCurrency.symbol,
+                });
+            }
+        } else {
+            setConversionCalculada(null);
+        }
+    }, [currentPayment.amount, currentPayment.moneda_id, currencies]);
 
     const cargarAlmacenes = async () => {
         try {
@@ -526,6 +554,7 @@ export default function PuntoVentaOficial({
             referencia: '',
         });
         setCuentasFiltradas([]);
+        setConversionCalculada(null); // 🆕 Limpiar cálculo al agregar pago
 
         toast.success('Pago agregado correctamente');
     };
@@ -604,7 +633,6 @@ export default function PuntoVentaOficial({
             console.log('Respuesta del servidor:', response.data);
 
             if (response.data.success) {
-                // ✅ ACTUALIZADO: Mensaje que refleja el nuevo comportamiento
                 toast.success('✅ Venta creada correctamente. Stock reservado pendiente de aprobación.');
                 setCarrito([]);
                 setPayments([]);
@@ -971,7 +999,7 @@ export default function PuntoVentaOficial({
 
                                 {carrito.length > 0 && (
                                     <div className="border-t p-6">
-                                        {/* ✅ NUEVO: Mensaje informativo sobre stock reservado */}
+                                        {/* Mensaje informativo sobre stock reservado */}
                                         <div className="mb-4 rounded-lg bg-blue-50 p-3 text-sm">
                                             <div className="flex items-start">
                                                 <div className="flex-shrink-0">
@@ -1196,59 +1224,59 @@ export default function PuntoVentaOficial({
                                                                 </div>
                                                             )}
 
-                                                            <div className="grid gap-4 md:grid-cols-4">
-                                                                <div className="space-y-2 md:col-span-3">
-                                                                    <Label>Monto</Label>
-                                                                    <Input
-                                                                        type="number"
-                                                                        min="0"
-                                                                        step="0.01"
-                                                                        value={currentPayment.amount}
-                                                                        onChange={(e) => {
-                                                                            console.log('Monto cambiado:', e.target.value);
-                                                                            setCurrentPayment({ ...currentPayment, amount: e.target.value });
-                                                                        }}
-                                                                        placeholder="0.00"
-                                                                    />
-                                                                </div>
-                                                                <div className="flex items-end">
-                                                                    <Button
-                                                                        onClick={handleAddPayment}
-                                                                        disabled={
-                                                                            !currentPayment.method ||
-                                                                            !currentPayment.moneda_id ||
-                                                                            (currentPayment.method === 'transferencia' && !currentPayment.via) ||
-                                                                            (currentPayment.method === 'transferencia' &&
-                                                                                !currentPayment.referencia) ||
-                                                                            !currentPayment.amount ||
-                                                                            parseFloat(currentPayment.amount) <= 0 ||
-                                                                            !currentPayment.cuenta_id
-                                                                        }
-                                                                        className="w-full"
-                                                                    >
-                                                                        Agregar
-                                                                    </Button>
+                                                            <div className="space-y-2">
+                                                                <Label>Monto a Pagar</Label>
+                                                                <div className="grid gap-4 md:grid-cols-4">
+                                                                    <div className="space-y-2 md:col-span-3">
+                                                                        <Input
+                                                                            type="number"
+                                                                            min="0"
+                                                                            step="0.01"
+                                                                            value={currentPayment.amount}
+                                                                            onChange={(e) => {
+                                                                                console.log('Monto cambiado:', e.target.value);
+                                                                                setCurrentPayment({ ...currentPayment, amount: e.target.value });
+                                                                            }}
+                                                                            placeholder="0.00"
+                                                                            className="text-lg font-medium"
+                                                                        />
+
+                                                                        {/* 🆕 NUEVO: Cálculo en tiempo real debajo del input */}
+                                                                        {conversionCalculada && (
+                                                                            <div className="rounded-lg bg-green-50 p-2 text-center">
+                                                                                <p className="text-sm font-medium text-green-700">
+                                                                                    {conversionCalculada.montoOriginal.toFixed(2)}{' '}
+                                                                                    {conversionCalculada.monedaSimbolo} ={' '}
+                                                                                    <span className="font-bold">
+                                                                                        {conversionCalculada.montoUSD.toFixed(2)} USD
+                                                                                    </span>
+                                                                                </p>
+                                                                                <p className="mt-1 text-xs text-green-600">
+                                                                                    Tasa aplicada: {conversionCalculada.tasaCambio}
+                                                                                </p>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="flex items-end">
+                                                                        <Button
+                                                                            onClick={handleAddPayment}
+                                                                            disabled={
+                                                                                !currentPayment.method ||
+                                                                                !currentPayment.moneda_id ||
+                                                                                (currentPayment.method === 'transferencia' && !currentPayment.via) ||
+                                                                                (currentPayment.method === 'transferencia' &&
+                                                                                    !currentPayment.referencia) ||
+                                                                                !currentPayment.amount ||
+                                                                                parseFloat(currentPayment.amount) <= 0 ||
+                                                                                !currentPayment.cuenta_id
+                                                                            }
+                                                                            className="w-full"
+                                                                        >
+                                                                            Agregar
+                                                                        </Button>
+                                                                    </div>
                                                                 </div>
                                                             </div>
-
-                                                            {currentPayment.amount &&
-                                                                currentPayment.moneda_id &&
-                                                                parseFloat(currentPayment.amount) > 0 &&
-                                                                selectedCurrencyInfo && (
-                                                                    <div className="rounded-lg bg-green-50 p-3 text-sm">
-                                                                        <p className="text-center text-green-700">
-                                                                            {parseFloat(currentPayment.amount).toFixed(2)}{' '}
-                                                                            {selectedCurrencyInfo.symbol} ={' '}
-                                                                            <span className="font-semibold">
-                                                                                {convertToUsd(
-                                                                                    parseFloat(currentPayment.amount),
-                                                                                    currentPayment.moneda_id,
-                                                                                ).toFixed(2)}
-                                                                            </span>{' '}
-                                                                            USD
-                                                                        </p>
-                                                                    </div>
-                                                                )}
                                                         </div>
                                                     </div>
 
