@@ -27,7 +27,24 @@ import { AlmacenProps, CategoriasProps, ClienteProps, CuentaNegocioProps, Provee
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { format } from 'date-fns';
-import { BadgeMinus, BookCheck, CalendarIcon, Edit2, HardDriveUpload, PlusIcon, ShoppingBasket, Trash2Icon } from 'lucide-react';
+import {
+    BookCheck,
+    CalendarIcon,
+    CheckCircle,
+    CreditCard,
+    DollarSign,
+    Edit2,
+    HardDriveUpload,
+    Loader2,
+    PlusCircle,
+    PlusIcon,
+    ShoppingBasket,
+    ShoppingCart,
+    Trash2Icon,
+    Users,
+    Wallet,
+    X,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -356,7 +373,7 @@ export default function ComprarPage() {
 
             {loading && (
                 <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black">
-                    <div className="rounded-lg bg-white p-4 shadow-lg">
+                    <div className="bg-sidebar-accent rounded-lg p-4 shadow-lg">
                         <p>Cargando datos...</p>
                     </div>
                 </div>
@@ -387,21 +404,23 @@ export default function ComprarPage() {
                     </CardHeader>
                     <CardContent>
                         <form onSubmit={(e) => e.preventDefault()}>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                                 {/* Fecha de la Compra */}
-                                <div className="grid w-full max-w-sm items-center gap-1.5">
-                                    <Label htmlFor="fechaCompra">Fecha de la Compra</Label>
+                                <div className="space-y-2">
+                                    <Label htmlFor="fechaCompra" className="text-sm font-medium">
+                                        Fecha de la Compra
+                                    </Label>
                                     <Popover>
                                         <PopoverTrigger asChild>
                                             <Button
                                                 variant={'outline'}
-                                                className={cn('w-full justify-start text-left font-normal', !date && 'text-muted-foreground')}
+                                                className={cn('h-11 w-full justify-start text-left font-normal', !date && 'text-muted-foreground')}
                                             >
-                                                <CalendarIcon />
+                                                <CalendarIcon className="mr-2 h-4 w-4" />
                                                 {date ? format(date, 'PPP') : <span>Seleccione Fecha</span>}
                                             </Button>
                                         </PopoverTrigger>
-                                        <PopoverContent className="mt-2 w-auto p-0" align="start">
+                                        <PopoverContent className="w-auto p-0" align="start">
                                             <Calendar mode="single" selected={date} onSelect={setDate} initialFocus />
                                         </PopoverContent>
                                     </Popover>
@@ -409,8 +428,10 @@ export default function ComprarPage() {
                                 </div>
 
                                 {/* Proveedor */}
-                                <div className="grid w-full max-w-sm items-center gap-1.5">
-                                    <Label htmlFor="proveedor">Proveedor</Label>
+                                <div className="space-y-2">
+                                    <Label htmlFor="proveedor" className="text-sm font-medium">
+                                        Proveedor
+                                    </Label>
                                     <Select
                                         name="proveedor"
                                         value={data.proveedor}
@@ -419,47 +440,49 @@ export default function ComprarPage() {
                                             setSearchProveedor('');
                                         }}
                                     >
-                                        <SelectTrigger className="mt-2 w-full">
+                                        <SelectTrigger className="h-11 w-full">
                                             <SelectValue placeholder="Seleccione Proveedor" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <input
-                                                type="text"
-                                                className="mb-2 w-full rounded border border-gray-300 p-2"
-                                                placeholder="Buscar o crear proveedor..."
-                                                value={searchProveedor}
-                                                onChange={(e) => setSearchProveedor(e.target.value.toUpperCase())}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') {
-                                                        e.preventDefault();
-                                                        const trimmed = searchProveedor.trim();
-                                                        if (trimmed && !filteredProvedors.some((p) => p.nombre_proveedor === trimmed)) {
-                                                            setData('proveedor', trimmed);
-                                                            setSearchProveedor('');
+                                            <div className="p-2">
+                                                <input
+                                                    type="text"
+                                                    className="w-full rounded border border-gray-300 p-2 text-sm"
+                                                    placeholder="Buscar o crear proveedor..."
+                                                    value={searchProveedor}
+                                                    onChange={(e) => setSearchProveedor(e.target.value.toUpperCase())}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            const trimmed = searchProveedor.trim();
+                                                            if (trimmed && !filteredProvedors.some((p) => p.nombre_proveedor === trimmed)) {
+                                                                setData('proveedor', trimmed);
+                                                                setSearchProveedor('');
+                                                            }
                                                         }
-                                                    }
-                                                }}
-                                            />
-                                            {filteredProvedors.length > 0 ? (
-                                                filteredProvedors.map((proveedor) => (
-                                                    <SelectItem
-                                                        key={proveedor.id}
-                                                        value={proveedor.nombre_proveedor}
-                                                        onSelect={() => {
-                                                            setData('proveedor', proveedor.nombre_proveedor);
-                                                            setSearchProveedor('');
-                                                        }}
-                                                    >
-                                                        {proveedor.nombre_proveedor}
+                                                    }}
+                                                />
+                                            </div>
+                                            <div className="max-h-60 overflow-y-auto">
+                                                {filteredProvedors.length > 0 ? (
+                                                    filteredProvedors.map((proveedor) => (
+                                                        <SelectItem key={proveedor.id} value={proveedor.nombre_proveedor}>
+                                                            {proveedor.nombre_proveedor}
+                                                        </SelectItem>
+                                                    ))
+                                                ) : searchProveedor.trim() ? (
+                                                    <SelectItem value={searchProveedor.trim()}>
+                                                        <div className="flex items-center">
+                                                            <PlusCircle className="mr-2 h-4 w-4" />
+                                                            Crear: {searchProveedor.trim()}
+                                                        </div>
                                                     </SelectItem>
-                                                ))
-                                            ) : searchProveedor.trim() ? (
-                                                <SelectItem value={searchProveedor.trim()}>
-                                                    ➕ Crear nuevo proveedor: <strong>{searchProveedor.trim()}</strong>
-                                                </SelectItem>
-                                            ) : (
-                                                <SelectItem disabled>No hay proveedores disponibles</SelectItem>
-                                            )}
+                                                ) : (
+                                                    <div className="text-muted-foreground px-2 py-4 text-center text-sm">
+                                                        No hay proveedores disponibles
+                                                    </div>
+                                                )}
+                                            </div>
                                         </SelectContent>
                                     </Select>
                                     {errors.proveedor && <InputError message={errors.proveedor} />}
@@ -956,29 +979,55 @@ export default function ComprarPage() {
                 <div className="flex justify-center gap-4 p-4">
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
-                            <Button variant="outline" className="cursor-pointer bg-green-600 text-white hover:bg-green-700">
+                            <Button
+                                variant="outline"
+                                className="cursor-pointer rounded-lg bg-green-600 px-6 py-2 font-semibold text-white transition-colors duration-200 hover:bg-green-700 hover:text-white"
+                            >
+                                <ShoppingCart className="mr-2 h-5 w-5" />
                                 Realizar Compra
                             </Button>
                         </AlertDialogTrigger>
-                        <AlertDialogContent className="max-h-[90vh] overflow-y-auto">
-                            <AlertDialogHeader>
-                                <AlertDialogTitle>Tipo de Compra</AlertDialogTitle>
-                                <AlertDialogDescription>Seleccione si desea pagar ahora o comprar y pagar luego</AlertDialogDescription>
+                        <AlertDialogContent className="max-h-[95vh] max-w-4xl overflow-y-auto rounded-2xl">
+                            <AlertDialogHeader className="border-b pb-4">
+                                <AlertDialogTitle className="text-center text-2xl font-bold text-green-700">Tipo de Compra</AlertDialogTitle>
+                                <AlertDialogDescription className="mt-2 text-center text-lg text-gray-600">
+                                    Seleccione si desea pagar ahora o comprar y pagar luego
+                                </AlertDialogDescription>
                             </AlertDialogHeader>
-                            <div className="flex flex-col gap-4 pt-4">
-                                <div className="grid w-full items-center gap-1.5">
-                                    <Label htmlFor="tipo_compra">Tipo de Compra</Label>
+
+                            <div className="flex flex-col gap-6 py-6">
+                                {/* Tipo de Compra */}
+                                <div className="space-y-3">
+                                    <Label htmlFor="tipo_compra" className="text-lg font-semibold text-gray-700">
+                                        Tipo de Compra *
+                                    </Label>
                                     <Select
                                         name="compra"
                                         value={data.compra}
                                         onValueChange={(value) => setData('compra', value as 'deuda_proveedor' | 'pago_cash')}
                                     >
-                                        <SelectTrigger className="border-sidebar-accent w-full border-4 border-double">
+                                        <SelectTrigger className="h-12 w-full border-2 border-green-300 text-base transition-all duration-200 focus:border-green-500 focus:ring-2 focus:ring-green-200">
                                             <SelectValue placeholder="Seleccione tipo de compra" />
                                         </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="deuda_proveedor">Generar Deuda a Proveedor</SelectItem>
-                                            <SelectItem value="pago_cash">Pagar Ahora</SelectItem>
+                                        <SelectContent className="text-base">
+                                            <SelectItem value="deuda_proveedor" className="py-3 text-base">
+                                                <div className="flex items-center">
+                                                    <CreditCard className="mr-3 h-5 w-5 text-orange-500" />
+                                                    <div>
+                                                        <div className="font-medium">Generar Deuda a Proveedor</div>
+                                                        <div className="text-sm text-gray-500">Pagar más tarde</div>
+                                                    </div>
+                                                </div>
+                                            </SelectItem>
+                                            <SelectItem value="pago_cash" className="py-3 text-base">
+                                                <div className="flex items-center">
+                                                    <DollarSign className="mr-3 h-5 w-5 text-green-500" />
+                                                    <div>
+                                                        <div className="font-medium">Pagar Ahora</div>
+                                                        <div className="text-sm text-gray-500">Pago inmediato</div>
+                                                    </div>
+                                                </div>
+                                            </SelectItem>
                                         </SelectContent>
                                     </Select>
                                     {errors.compra && <InputError message={errors.compra} />}
@@ -986,10 +1035,17 @@ export default function ComprarPage() {
 
                                 {data.compra === 'pago_cash' && (
                                     <>
-                                        <Separator />
-                                        <div className="space-y-4">
+                                        <Separator className="my-4" />
+
+                                        {/* Sección de Pagos con Clientes */}
+                                        <div className="space-y-4 rounded-xl border border-blue-200 p-6">
                                             <div className="space-y-3">
-                                                <Label htmlFor="clientes">Seleccione Clientes (Opcional)</Label>
+                                                <div className="flex items-center gap-2">
+                                                    <Users className="h-5 w-5 text-blue-600" />
+                                                    <Label htmlFor="clientes" className="text-lg font-semibold text-gray-700">
+                                                        Pagos con Clientes (Opcional)
+                                                    </Label>
+                                                </div>
                                                 <Select
                                                     name="clientes"
                                                     value={data.pagos_clientes.map((p) => p.cliente_id.toString())}
@@ -1009,28 +1065,37 @@ export default function ComprarPage() {
                                                     }}
                                                     multiple
                                                 >
-                                                    <SelectTrigger className="mt-2 w-full border-zinc-500">
-                                                        <SelectValue placeholder="Seleccione Clientes" />
+                                                    <SelectTrigger className="h-12 w-full border-2 border-blue-300 text-base">
+                                                        <SelectValue placeholder="Seleccione clientes para pago..." />
                                                     </SelectTrigger>
-                                                    <SelectContent>
+                                                    <SelectContent className="max-h-60">
                                                         {clientes.map((cliente) => (
-                                                            <SelectItem key={cliente.id} value={cliente.id.toString()}>
-                                                                {cliente.nombre_cliente}
+                                                            <SelectItem key={cliente.id} value={cliente.id.toString()} className="py-3 text-base">
+                                                                <div className="flex items-center justify-between">
+                                                                    <span>{cliente.nombre_cliente}</span>
+                                                                    <span className="text-sm text-gray-500">
+                                                                        Deuda: ${cliente.deuda_pago_cliente}
+                                                                    </span>
+                                                                </div>
                                                             </SelectItem>
                                                         ))}
                                                     </SelectContent>
                                                 </Select>
-                                                {errors.clientes && <InputError message={errors.clientes} />}
+
                                                 {data.pagos_clientes.length > 0 && (
-                                                    <div className="flex flex-col gap-3 border-zinc-500">
+                                                    <div className="mt-4 space-y-3">
+                                                        <h4 className="font-semibold text-gray-700">Montos a cobrar:</h4>
                                                         {data.pagos_clientes.map((pago) => (
-                                                            <div key={pago.cliente_id} className="flex items-center gap-3">
+                                                            <div
+                                                                key={pago.cliente_id}
+                                                                className="flex items-center gap-3 rounded-lg border border-blue-100 p-3"
+                                                            >
                                                                 <div className="flex-1">
                                                                     <span className="block font-medium">
                                                                         {clientes.find((c) => c.id === pago.cliente_id)?.nombre_cliente}
                                                                     </span>
-                                                                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                                                                        Pendiente: ${' '}
+                                                                    <span className="text-sm text-gray-500">
+                                                                        Deuda pendiente: $
                                                                         {clientes.find((c) => c.id === pago.cliente_id)?.deuda_pago_cliente}
                                                                     </span>
                                                                 </div>
@@ -1048,11 +1113,13 @@ export default function ComprarPage() {
                                                                             );
                                                                             setData('pagos_clientes', updatedPagos);
                                                                         }}
+                                                                        className="h-10 text-base"
                                                                     />
                                                                 </div>
                                                                 <Button
                                                                     variant="destructive"
-                                                                    className="cursor-pointer"
+                                                                    size="sm"
+                                                                    className="h-10 cursor-pointer"
                                                                     onClick={() => {
                                                                         const updatedPagos = data.pagos_clientes.filter(
                                                                             (p) => p.cliente_id !== pago.cliente_id,
@@ -1060,7 +1127,7 @@ export default function ComprarPage() {
                                                                         setData('pagos_clientes', updatedPagos);
                                                                     }}
                                                                 >
-                                                                    <BadgeMinus />
+                                                                    <X className="h-4 w-4" />
                                                                     Quitar
                                                                 </Button>
                                                             </div>
@@ -1068,9 +1135,17 @@ export default function ComprarPage() {
                                                     </div>
                                                 )}
                                             </div>
+                                        </div>
 
+                                        {/* Sección de Pagos con Cuentas */}
+                                        <div className="space-y-4 rounded-xl border border-green-200 p-6">
                                             <div className="space-y-3">
-                                                <Label htmlFor="cuentas">Seleccione Cuentas (Opcional)</Label>
+                                                <div className="flex items-center gap-2">
+                                                    <Wallet className="h-5 w-5 text-green-600" />
+                                                    <Label htmlFor="cuentas" className="text-lg font-semibold text-gray-700">
+                                                        Pagos con Cuentas (Opcional)
+                                                    </Label>
+                                                </div>
                                                 <Select
                                                     name="cuentas"
                                                     value={data.pagos.map((p) => p.cuenta_id.toString())}
@@ -1090,27 +1165,36 @@ export default function ComprarPage() {
                                                     }}
                                                     multiple
                                                 >
-                                                    <SelectTrigger className="mt-2 w-full border-zinc-500">
-                                                        <SelectValue placeholder="Seleccione Cuentas" />
+                                                    <SelectTrigger className="h-12 w-full border-2 border-green-300 text-base">
+                                                        <SelectValue placeholder="Seleccione cuentas para pago..." />
                                                     </SelectTrigger>
-                                                    <SelectContent>
+                                                    <SelectContent className="max-h-60">
                                                         {cuentas.map((cuenta) => (
-                                                            <SelectItem key={cuenta.id} value={cuenta.id.toString()}>
-                                                                {cuenta.nombre_cuenta}
+                                                            <SelectItem key={cuenta.id} value={cuenta.id.toString()} className="py-3 text-base">
+                                                                <div className="flex items-center justify-between">
+                                                                    <span>{cuenta.nombre_cuenta}</span>
+                                                                    <span className="text-sm text-gray-500">Saldo: ${cuenta.saldo_cuenta}</span>
+                                                                </div>
                                                             </SelectItem>
                                                         ))}
                                                     </SelectContent>
                                                 </Select>
+
                                                 {data.pagos.length > 0 && (
-                                                    <div className="flex flex-col gap-3">
+                                                    <div className="mt-4 space-y-3">
+                                                        <h4 className="font-semibold text-gray-700">Montos a debitar:</h4>
                                                         {data.pagos.map((pago) => (
-                                                            <div key={pago.cuenta_id} className="flex items-center gap-3">
+                                                            <div
+                                                                key={pago.cuenta_id}
+                                                                className="flex items-center gap-3 rounded-lg border border-green-100 p-3"
+                                                            >
                                                                 <div className="flex-1">
-                                                                    <span className="block font-medium">
+                                                                    <span className="block font-medium text-gray-800">
                                                                         {cuentas.find((c) => c.id === pago.cuenta_id)?.nombre_cuenta}
                                                                     </span>
-                                                                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                                                                        Saldo: $ {cuentas.find((c) => c.id === pago.cuenta_id)?.saldo_cuenta}
+                                                                    <span className="text-sm text-gray-500">
+                                                                        Saldo disponible: $
+                                                                        {cuentas.find((c) => c.id === pago.cuenta_id)?.saldo_cuenta}
                                                                     </span>
                                                                 </div>
                                                                 <div className="flex-1">
@@ -1127,17 +1211,19 @@ export default function ComprarPage() {
                                                                             );
                                                                             setData('pagos', updatedPagos);
                                                                         }}
+                                                                        className="h-10 text-base"
                                                                     />
                                                                 </div>
                                                                 <Button
                                                                     variant="destructive"
-                                                                    className="cursor-pointer"
+                                                                    size="sm"
+                                                                    className="h-10 cursor-pointer"
                                                                     onClick={() => {
                                                                         const updatedPagos = data.pagos.filter((p) => p.cuenta_id !== pago.cuenta_id);
                                                                         setData('pagos', updatedPagos);
                                                                     }}
                                                                 >
-                                                                    <BadgeMinus />
+                                                                    <X className="h-4 w-4" />
                                                                     Quitar
                                                                 </Button>
                                                             </div>
@@ -1147,36 +1233,72 @@ export default function ComprarPage() {
                                             </div>
                                         </div>
 
-                                        <div className="mt-2 space-y-2">
-                                            <div className="text-right text-sm text-gray-600 dark:text-gray-400">
-                                                Total pagado con cuentas: $
-                                                {data.pagos?.reduce((acc, pago) => acc + pago.monto, 0).toFixed(2) || '0.00'}
-                                            </div>
-                                            <div className="text-right text-sm text-gray-600 dark:text-gray-400">
-                                                Total pagado con clientes: $
-                                                {data.pagos_clientes?.reduce((acc, pago) => acc + pago.monto, 0).toFixed(2) || '0.00'}
-                                            </div>
-                                            <div className="text-right text-sm font-medium">
-                                                Total pagado: $
-                                                {(
-                                                    data.pagos?.reduce((acc, pago) => acc + pago.monto, 0) +
-                                                    data.pagos_clientes?.reduce((acc, pago) => acc + pago.monto, 0)
-                                                ).toFixed(2) || '0.00'}{' '}
-                                                / ${parseFloat(calcularTotal()).toFixed(2)}
+                                        {/* Resumen de Pagos */}
+                                        <div className="rounded-xl border border-gray-200 p-6">
+                                            <h3 className="mb-4 text-lg font-semibold text-gray-700">Resumen de Pagos</h3>
+                                            <div className="space-y-2 text-base">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-gray-600">Total pagado con cuentas:</span>
+                                                    <span className="font-semibold text-blue-600">
+                                                        ${data.pagos?.reduce((acc, pago) => acc + pago.monto, 0).toFixed(2) || '0.00'}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-gray-600">Total pagado con clientes:</span>
+                                                    <span className="font-semibold text-green-600">
+                                                        ${data.pagos_clientes?.reduce((acc, pago) => acc + pago.monto, 0).toFixed(2) || '0.00'}
+                                                    </span>
+                                                </div>
+                                                <Separator className="my-2" />
+                                                <div className="flex items-center justify-between text-lg font-bold">
+                                                    <span className="text-gray-700">Total pagado:</span>
+                                                    <span
+                                                        className={
+                                                            (
+                                                                data.pagos?.reduce((acc, pago) => acc + pago.monto, 0) +
+                                                                data.pagos_clientes?.reduce((acc, pago) => acc + pago.monto, 0)
+                                                            ).toFixed(2) === parseFloat(calcularTotal()).toFixed(2)
+                                                                ? 'text-green-600'
+                                                                : 'text-orange-600'
+                                                        }
+                                                    >
+                                                        $
+                                                        {(
+                                                            data.pagos?.reduce((acc, pago) => acc + pago.monto, 0) +
+                                                            data.pagos_clientes?.reduce((acc, pago) => acc + pago.monto, 0)
+                                                        ).toFixed(2) || '0.00'}
+                                                        <span className="ml-2 text-base font-normal text-gray-500">
+                                                            / ${parseFloat(calcularTotal()).toFixed(2)}
+                                                        </span>
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
                                     </>
                                 )}
                             </div>
-                            <AlertDialogFooter>
-                                <AlertDialogCancel className="cursor-pointer">Cancelar</AlertDialogCancel>
+
+                            <AlertDialogFooter className="border-t pt-6">
+                                <AlertDialogCancel className="h-12 cursor-pointer border-2 border-gray-300 px-6 text-base font-medium hover:bg-gray-50">
+                                    Cancelar
+                                </AlertDialogCancel>
                                 <Button
                                     type="button"
                                     onClick={realizarCompra}
                                     disabled={processing}
-                                    className="cursor-pointer bg-green-600 text-white hover:bg-green-700"
+                                    className="h-12 cursor-pointer bg-green-600 px-8 text-base font-semibold text-white transition-colors duration-200 hover:bg-green-700 hover:text-white"
                                 >
-                                    {processing ? 'Registrando...' : 'Proceder Compra'}
+                                    {processing ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                            Registrando...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <CheckCircle className="mr-2 h-5 w-5" />
+                                            Proceder Compra
+                                        </>
+                                    )}
                                 </Button>
                             </AlertDialogFooter>
                         </AlertDialogContent>
