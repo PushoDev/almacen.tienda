@@ -26,6 +26,7 @@ import {
     MapPin,
     Package,
     Phone,
+    Receipt,
     ShoppingCart,
     Store,
     TrendingDown,
@@ -116,11 +117,82 @@ interface MovimientoFinanciero {
     estado: string;
 }
 
+// Definir tipos para las ventas del cliente
+interface VentaCliente {
+    id: number;
+    total: number;
+    estado: string;
+    created_at: string;
+    almacen: {
+        id: number;
+        nombre_almacen: string;
+    };
+    destinatario: {
+        id: number;
+        nombre: string;
+        apellidos: string;
+        carnet_identidad: string;
+        direccion_residencia: string;
+        telefono_contacto: string;
+        parentesco_cliente: string;
+        observaciones: string;
+    } | null;
+    detalles: Array<{
+        id: number;
+        cantidad: number;
+        precio_venta: number;
+        subtotal: number;
+        costo_unitario: number;
+        producto: {
+            id: number;
+            nombre_producto: string;
+            marca_producto: string;
+            categoria: {
+                nombre_categoria: string;
+            } | null;
+        };
+    }>;
+    pagos: Array<{
+        id: number;
+        tipo_pago: string;
+        monto: number;
+        monto_equivalente: number;
+        tasa_cambio_aplicada: number;
+        moneda: {
+            id: number;
+            codigo_moneda: string;
+            nombre_moneda: string;
+        } | null;
+        cuenta: {
+            id: number;
+            nombre_cuenta: string;
+            moneda: {
+                id: number;
+                codigo_moneda: string;
+                nombre_moneda: string;
+            } | null;
+        };
+    }>;
+    moneda: {
+        id: number;
+        codigo_moneda: string;
+        nombre_moneda: string;
+    } | null;
+    tasa_cambio_principal: number;
+    usuario: {
+        id: number;
+        name: string;
+        email: string;
+        role: string;
+    };
+}
+
 interface ShowClientePageProps {
     cliente: ClienteProps & {
         compras_como_pagador?: CompraCliente[];
         movimientos_como_origen?: MovimientoFinanciero[];
         movimientos_como_destino?: MovimientoFinanciero[];
+        ventas?: VentaCliente[];
     };
 }
 
@@ -308,9 +380,202 @@ const TablaTransacciones = ({
     );
 };
 
+// Componente para renderizar la tabla de ventas
+const TablaVentas = ({
+    ventas,
+    formatearMoneda,
+    formatearFecha,
+}: {
+    ventas: VentaCliente[];
+    formatearMoneda: (valor: number | null | undefined) => string;
+    formatearFecha: (fecha: string) => string;
+}) => {
+    const getEstadoColor = (estado: string) => {
+        switch (estado) {
+            case 'completada':
+                return 'bg-green-100 text-green-800 border-green-200';
+            case 'pendiente':
+                return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+            case 'cancelada':
+                return 'bg-red-100 text-red-800 border-red-200';
+            default:
+                return 'bg-gray-100 text-gray-800 border-gray-200';
+        }
+    };
+
+    const getEstadoIcon = (estado: string) => {
+        switch (estado) {
+            case 'completada':
+                return CheckCircle;
+            case 'pendiente':
+                return AlertCircle;
+            case 'cancelada':
+                return AlertCircle;
+            default:
+                return History;
+        }
+    };
+
+    return (
+        <ScrollArea className="h-[400px]">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>Venta ID</TableHead>
+                        <TableHead>Fecha</TableHead>
+                        <TableHead>Almacén</TableHead>
+                        <TableHead>Total</TableHead>
+                        <TableHead>Estado</TableHead>
+                        <TableHead>Productos</TableHead>
+                        <TableHead>Destinatario</TableHead>
+                        <TableHead>Detalles</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {ventas.length > 0 ? (
+                        ventas.map((venta) => {
+                            const EstadoIcon = getEstadoIcon(venta.estado);
+                            const estadoColor = getEstadoColor(venta.estado);
+
+                            return (
+                                <TableRow key={venta.id} className="hover:bg-muted/50">
+                                    <TableCell>
+                                        <Badge variant="outline">#{venta.id}</Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-1">
+                                            <Calendar size={12} className="text-muted-foreground" />
+                                            <span className="text-sm">{formatearFecha(venta.created_at)}</span>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <span className="text-sm font-medium">{venta.almacen.nombre_almacen}</span>
+                                    </TableCell>
+                                    <TableCell>
+                                        <span className="font-medium">{formatearMoneda(venta.total)}</span>
+                                        {venta.moneda && (
+                                            <Badge variant="outline" className="ml-1 text-xs">
+                                                {venta.moneda.codigo_moneda}
+                                            </Badge>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Badge variant="outline" className={`flex w-24 items-center gap-1 ${estadoColor}`}>
+                                            <EstadoIcon size={12} />
+                                            {venta.estado.charAt(0).toUpperCase() + venta.estado.slice(1)}
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                                    <Package size={14} />
+                                                    <span className="ml-1 text-xs">{venta.detalles.length}</span>
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                                <div className="space-y-1 text-xs">
+                                                    {venta.detalles.map((detalle) => (
+                                                        <div key={detalle.id} className="flex justify-between gap-2">
+                                                            <span>{detalle.producto.nombre_producto}</span>
+                                                            <span>
+                                                                {detalle.cantidad} x {formatearMoneda(detalle.precio_venta)}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </TableCell>
+                                    <TableCell>
+                                        {venta.destinatario ? (
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                                                        <User size={12} className="mr-1" />
+                                                        {venta.destinatario.nombre}
+                                                    </Badge>
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <div className="space-y-1 text-xs">
+                                                        <p>
+                                                            <strong>Nombre:</strong> {venta.destinatario.nombre} {venta.destinatario.apellidos}
+                                                        </p>
+                                                        <p>
+                                                            <strong>CI:</strong> {venta.destinatario.carnet_identidad}
+                                                        </p>
+                                                        <p>
+                                                            <strong>Teléfono:</strong> {venta.destinatario.telefono_contacto}
+                                                        </p>
+                                                        <p>
+                                                            <strong>Dirección:</strong> {venta.destinatario.direccion_residencia}
+                                                        </p>
+                                                    </div>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        ) : (
+                                            <Badge variant="outline" className="text-muted-foreground">
+                                                Sin destinatario
+                                            </Badge>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button variant="ghost" size="sm">
+                                                    <Eye size={14} />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                                <div className="space-y-1 text-xs">
+                                                    <p>
+                                                        <strong>Vendedor:</strong> {venta.usuario.name}
+                                                    </p>
+                                                    <p>
+                                                        <strong>Total:</strong> {formatearMoneda(venta.total)}
+                                                    </p>
+                                                    <p>
+                                                        <strong>Productos:</strong> {venta.detalles.length}
+                                                    </p>
+                                                    <p>
+                                                        <strong>Pagos:</strong> {venta.pagos.length}
+                                                    </p>
+                                                    {venta.moneda && (
+                                                        <p>
+                                                            <strong>Moneda:</strong> {venta.moneda.nombre_moneda}
+                                                        </p>
+                                                    )}
+                                                    <p>
+                                                        <strong>Tasa Cambio:</strong> {venta.tasa_cambio_principal}
+                                                    </p>
+                                                </div>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </TableCell>
+                                </TableRow>
+                            );
+                        })
+                    ) : (
+                        <TableRow>
+                            <TableCell colSpan={8} className="text-muted-foreground py-8 text-center">
+                                <div className="flex flex-col items-center gap-2">
+                                    <Receipt size={32} className="opacity-50" />
+                                    <p>No hay ventas registradas para este cliente</p>
+                                    <p className="text-sm">Las ventas donde este cliente sea el comprador aparecerán aquí</p>
+                                </div>
+                            </TableCell>
+                        </TableRow>
+                    )}
+                </TableBody>
+            </Table>
+        </ScrollArea>
+    );
+};
+
 export default function ShowClientePage({ cliente }: ShowClientePageProps) {
     const [activeTab, setActiveTab] = useState('resumen');
     const [activeTransaccionesTab, setActiveTransaccionesTab] = useState('todas');
+    const [activeVentasTab, setActiveVentasTab] = useState('todas');
 
     // ✅ CORREGIDO: Acepta number | null | undefined
     const formatearMoneda = (valor: number | null | undefined) => {
@@ -330,9 +595,10 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
         });
     };
 
-    // Calcular métricas basadas en las compras como pagador y transacciones
+    // Calcular métricas basadas en las compras como pagador, ventas y transacciones
     const metricas = useMemo(() => {
         const compras = cliente.compras_como_pagador || [];
+        const ventas = cliente.ventas || [];
         const movimientosOrigen = cliente.movimientos_como_origen || [];
         const movimientosDestino = cliente.movimientos_como_destino || [];
 
@@ -340,49 +606,62 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
         const montoTotalAportado = compras.reduce((sum, compra) => sum + Number(compra.pivot.monto), 0);
         const montoTotalCompras = compras.reduce((sum, compra) => sum + Number(compra.total_compra), 0);
 
+        // Calcular métricas de ventas
+        const totalVentas = ventas.length;
+        const montoTotalVentas = ventas.reduce((sum, venta) => sum + Number(venta.total), 0);
+        const ventasCompletadas = ventas.filter((v) => v.estado === 'completada').length;
+        const ventasPendientes = ventas.filter((v) => v.estado === 'pendiente').length;
+
         // Calcular métricas de transacciones
         const totalTransacciones = movimientosOrigen.length + movimientosDestino.length;
         const montoTransaccionesOrigen = movimientosOrigen.reduce((sum, mov) => sum + Number(mov.monto), 0);
         const montoTransaccionesDestino = movimientosDestino.reduce((sum, mov) => sum + Number(mov.monto), 0);
         const saldoNetoTransacciones = montoTransaccionesDestino - montoTransaccionesOrigen;
 
-        // ✅ CORREGIDO: Manejar null/undefined
-        const deudaActual = Number(cliente.deuda_pago_cliente) || 0;
+        // ✅ CORREGIDO: LÓGICA ACTUALIZADA - igual que Index.tsx
+        const saldoActual = Number(cliente.deuda_pago_cliente) || 0;
 
         return {
             totalCompras,
             montoTotalAportado,
             montoTotalCompras,
-            deudaActual,
+            saldoActual, // Cambiado de deudaActual a saldoActual para mayor claridad
             comprasConProveedor: Array.from(new Set(compras.map((c) => c.proveedor.nombre_proveedor))).length,
+            totalVentas,
+            montoTotalVentas,
+            ventasCompletadas,
+            ventasPendientes,
             totalTransacciones,
             montoTransaccionesOrigen,
             montoTransaccionesDestino,
             saldoNetoTransacciones,
         };
-    }, [cliente.compras_como_pagador, cliente.movimientos_como_origen, cliente.movimientos_como_destino, cliente.deuda_pago_cliente]);
+    }, [cliente.compras_como_pagador, cliente.ventas, cliente.movimientos_como_origen, cliente.movimientos_como_destino, cliente.deuda_pago_cliente]);
 
-    // ✅ CORREGIDO: Acepta number | null | undefined
-    const getEstadoFinanciero = (deuda: number | null | undefined) => {
-        if (deuda === null || deuda === undefined) {
+    // ✅ CORREGIDO: LÓGICA ACTUALIZADA - igual que Index.tsx
+    // > 0 = Fondo disponible (empresa tiene fondos con el cliente)
+    // < 0 = Deuda pendiente (empresa le debe al cliente)
+    const getEstadoFinanciero = (saldo: number | null | undefined) => {
+        if (saldo === null || saldo === undefined) {
             return { tipo: 'sin-info', color: 'gray', icon: History, texto: 'Sin información' };
         }
 
-        if (deuda > 0) {
+        // LÓGICA CORRECTA (igual que Index.tsx):
+        if (saldo > 0) {
             return {
-                tipo: 'deuda',
-                color: 'red',
-                icon: AlertCircle,
-                texto: 'Deuda pendiente',
-                descripcion: 'El cliente tiene deuda con la empresa',
-            };
-        } else if (deuda < 0) {
-            return {
-                tipo: 'fondo',
+                tipo: 'fondo', // ✅ CORRECTO
                 color: 'green',
                 icon: ArrowDownCircle,
                 texto: 'Fondo disponible',
-                descripcion: 'La empresa tiene fondo con el cliente',
+                descripcion: 'Tienes fondo disponible con el cliente',
+            };
+        } else if (saldo < 0) {
+            return {
+                tipo: 'deuda', // ✅ CORRECTO
+                color: 'red',
+                icon: AlertCircle,
+                texto: 'Deuda pendiente',
+                descripcion: 'Tienes deuda pendiente con el cliente',
             };
         } else {
             return {
@@ -390,12 +669,12 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                 color: 'gray',
                 icon: CheckCircle,
                 texto: 'Al día',
-                descripcion: 'Sin deudas ni fondos pendientes',
+                descripcion: 'Sin fondos ni deudas pendientes',
             };
         }
     };
 
-    // ✅ CORREGIDO: Pasar el valor correcto (puede ser null/undefined)
+    // ✅ CORREGIDO: Pasar el valor correcto con la lógica actualizada
     const estado = getEstadoFinanciero(cliente.deuda_pago_cliente);
     const EstadoIcon = estado.icon;
 
@@ -408,6 +687,24 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
             (a, b) => new Date(b.fecha_operacion).getTime() - new Date(a.fecha_operacion).getTime(),
         );
     }, [cliente.movimientos_como_origen, cliente.movimientos_como_destino]);
+
+    // Filtrar ventas según la pestaña activa
+    const getVentasFiltradas = () => {
+        const ventas = cliente.ventas || [];
+        switch (activeVentasTab) {
+            case 'completadas':
+                return ventas.filter((v) => v.estado === 'completada');
+            case 'pendientes':
+                return ventas.filter((v) => v.estado === 'pendiente');
+            case 'canceladas':
+                return ventas.filter((v) => v.estado === 'cancelada');
+            case 'todas':
+            default:
+                return ventas;
+        }
+    };
+
+    const ventasFiltradas = getVentasFiltradas();
 
     // Obtener movimientos filtrados según la pestaña activa
     const getMovimientosFiltrados = () => {
@@ -424,15 +721,6 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
 
     const movimientosFiltrados = getMovimientosFiltrados();
 
-    console.log('Cliente data:', cliente);
-    console.log('Compras como pagador:', cliente.compras_como_pagador);
-    console.log('Movimientos como origen:', cliente.movimientos_como_origen);
-    console.log('Movimientos como destino:', cliente.movimientos_como_destino);
-    console.log('Métricas calculadas:', metricas);
-    console.log('Active tab:', activeTab);
-    console.log('Active transacciones tab:', activeTransaccionesTab);
-    console.log('Movimientos filtrados:', movimientosFiltrados);
-
     return (
         <AppLayout breadcrumbs={breadcrumbs(cliente.nombre_cliente)}>
             <Head title={`Detalles: ${cliente.nombre_cliente}`} />
@@ -443,7 +731,7 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                         <div className="flex items-center justify-between">
                             <HeadingSmall
                                 title={`Cliente: ${cliente.nombre_cliente}`}
-                                description="Información detallada e historial de compras y transacciones financieras"
+                                description="Información detallada e historial de compras, ventas y transacciones financieras"
                             />
                             <div className="flex items-center gap-3">
                                 <Tooltip>
@@ -588,7 +876,7 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                                                           : 'text-gray-600'
                                                 }`}
                                             >
-                                                {/* ✅ CORREGIDO: Pasar valor que puede ser null/undefined */}
+                                                {/* ✅ CORREGIDO: Mostrar el valor real (puede ser positivo o negativo) */}
                                                 {formatearMoneda(cliente.deuda_pago_cliente)}
                                             </div>
                                             <p className="text-muted-foreground text-xs">{estado.texto}</p>
@@ -607,15 +895,15 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                                         </CardContent>
                                     </Card>
 
-                                    {/* Total Transacciones */}
+                                    {/* Total Ventas */}
                                     <Card>
                                         <CardContent className="p-4">
                                             <div className="flex items-center gap-2">
-                                                <ArrowRightLeft className="h-4 w-4 text-purple-500" />
-                                                <span className="text-sm font-medium">Transacciones</span>
+                                                <Receipt className="h-4 w-4 text-green-500" />
+                                                <span className="text-sm font-medium">Ventas Realizadas</span>
                                             </div>
-                                            <div className="mt-2 text-2xl font-bold text-purple-600">{metricas.totalTransacciones}</div>
-                                            <p className="text-muted-foreground text-xs">Financieras</p>
+                                            <div className="mt-2 text-2xl font-bold text-green-600">{metricas.totalVentas}</div>
+                                            <p className="text-muted-foreground text-xs">Como comprador</p>
                                         </CardContent>
                                     </Card>
 
@@ -630,6 +918,10 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                                                 <div className="flex justify-between text-xs">
                                                     <span>Monto Aportado:</span>
                                                     <span className="font-medium">{formatearMoneda(metricas.montoTotalAportado)}</span>
+                                                </div>
+                                                <div className="flex justify-between text-xs">
+                                                    <span>Total Ventas:</span>
+                                                    <span className="font-medium text-green-600">{formatearMoneda(metricas.montoTotalVentas)}</span>
                                                 </div>
                                                 <div className="flex justify-between text-xs">
                                                     <span>Trans. Entrada:</span>
@@ -651,6 +943,134 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                         </Card>
                     </div>
 
+                    {/* Historial de Ventas como Comprador */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <Receipt className="h-5 w-5" />
+                                Ventas como Comprador
+                            </CardTitle>
+                            <CardDescription>Historial de ventas donde este cliente ha sido el comprador</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <Tabs defaultValue="todas" onValueChange={setActiveVentasTab}>
+                                <TabsList className="grid w-full grid-cols-5">
+                                    <TabsTrigger value="todas">Todas</TabsTrigger>
+                                    <TabsTrigger value="completadas">Completadas</TabsTrigger>
+                                    <TabsTrigger value="pendientes">Pendientes</TabsTrigger>
+                                    <TabsTrigger value="canceladas">Canceladas</TabsTrigger>
+                                    <TabsTrigger value="resumen">Resumen</TabsTrigger>
+                                </TabsList>
+
+                                <TabsContent value="todas" className="space-y-4">
+                                    <TablaVentas ventas={ventasFiltradas} formatearMoneda={formatearMoneda} formatearFecha={formatearFecha} />
+                                    {ventasFiltradas.length > 0 && (
+                                        <div className="text-muted-foreground flex items-center justify-between text-sm">
+                                            <span>
+                                                Mostrando {ventasFiltradas.length} venta{ventasFiltradas.length !== 1 ? 's' : ''}
+                                            </span>
+                                            <span>
+                                                Total: {formatearMoneda(ventasFiltradas.reduce((sum, venta) => sum + Number(venta.total), 0))}
+                                            </span>
+                                        </div>
+                                    )}
+                                </TabsContent>
+
+                                <TabsContent value="completadas" className="space-y-4">
+                                    <TablaVentas ventas={ventasFiltradas} formatearMoneda={formatearMoneda} formatearFecha={formatearFecha} />
+                                    {ventasFiltradas.length > 0 && (
+                                        <div className="text-muted-foreground flex items-center justify-between text-sm">
+                                            <span>
+                                                Mostrando {ventasFiltradas.length} venta{ventasFiltradas.length !== 1 ? 's' : ''} completada
+                                                {ventasFiltradas.length !== 1 ? 's' : ''}
+                                            </span>
+                                            <span>
+                                                Total: {formatearMoneda(ventasFiltradas.reduce((sum, venta) => sum + Number(venta.total), 0))}
+                                            </span>
+                                        </div>
+                                    )}
+                                </TabsContent>
+
+                                <TabsContent value="pendientes" className="space-y-4">
+                                    <TablaVentas ventas={ventasFiltradas} formatearMoneda={formatearMoneda} formatearFecha={formatearFecha} />
+                                    {ventasFiltradas.length > 0 && (
+                                        <div className="text-muted-foreground flex items-center justify-between text-sm">
+                                            <span>
+                                                Mostrando {ventasFiltradas.length} venta{ventasFiltradas.length !== 1 ? 's' : ''} pendiente
+                                                {ventasFiltradas.length !== 1 ? 's' : ''}
+                                            </span>
+                                            <span>
+                                                Total: {formatearMoneda(ventasFiltradas.reduce((sum, venta) => sum + Number(venta.total), 0))}
+                                            </span>
+                                        </div>
+                                    )}
+                                </TabsContent>
+
+                                <TabsContent value="canceladas" className="space-y-4">
+                                    <TablaVentas ventas={ventasFiltradas} formatearMoneda={formatearMoneda} formatearFecha={formatearFecha} />
+                                    {ventasFiltradas.length > 0 && (
+                                        <div className="text-muted-foreground flex items-center justify-between text-sm">
+                                            <span>
+                                                Mostrando {ventasFiltradas.length} venta{ventasFiltradas.length !== 1 ? 's' : ''} cancelada
+                                                {ventasFiltradas.length !== 1 ? 's' : ''}
+                                            </span>
+                                            <span>
+                                                Total: {formatearMoneda(ventasFiltradas.reduce((sum, venta) => sum + Number(venta.total), 0))}
+                                            </span>
+                                        </div>
+                                    )}
+                                </TabsContent>
+
+                                <TabsContent value="resumen" className="space-y-4">
+                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                                        <Card>
+                                            <CardContent className="p-4">
+                                                <div className="flex items-center gap-2">
+                                                    <Receipt className="h-4 w-4 text-blue-500" />
+                                                    <span className="text-sm font-medium">Total Ventas</span>
+                                                </div>
+                                                <div className="mt-2 text-2xl font-bold text-blue-600">{metricas.totalVentas}</div>
+                                                <p className="text-muted-foreground text-xs">Todas las ventas</p>
+                                            </CardContent>
+                                        </Card>
+                                        <Card>
+                                            <CardContent className="p-4">
+                                                <div className="flex items-center gap-2">
+                                                    <CheckCircle className="h-4 w-4 text-green-500" />
+                                                    <span className="text-sm font-medium">Completadas</span>
+                                                </div>
+                                                <div className="mt-2 text-2xl font-bold text-green-600">{metricas.ventasCompletadas}</div>
+                                                <p className="text-muted-foreground text-xs">Ventas finalizadas</p>
+                                            </CardContent>
+                                        </Card>
+                                        <Card>
+                                            <CardContent className="p-4">
+                                                <div className="flex items-center gap-2">
+                                                    <AlertCircle className="h-4 w-4 text-yellow-500" />
+                                                    <span className="text-sm font-medium">Pendientes</span>
+                                                </div>
+                                                <div className="mt-2 text-2xl font-bold text-yellow-600">{metricas.ventasPendientes}</div>
+                                                <p className="text-muted-foreground text-xs">Por aprobar</p>
+                                            </CardContent>
+                                        </Card>
+                                        <Card>
+                                            <CardContent className="p-4">
+                                                <div className="flex items-center gap-2">
+                                                    <DollarSign className="h-4 w-4 text-purple-500" />
+                                                    <span className="text-sm font-medium">Monto Total</span>
+                                                </div>
+                                                <div className="mt-2 text-2xl font-bold text-purple-600">
+                                                    {formatearMoneda(metricas.montoTotalVentas)}
+                                                </div>
+                                                <p className="text-muted-foreground text-xs">En ventas</p>
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+                                </TabsContent>
+                            </Tabs>
+                        </CardContent>
+                    </Card>
+
                     {/* Historial de Compras como Pagador */}
                     <Card>
                         <CardHeader>
@@ -661,14 +1081,12 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                             <CardDescription>Historial de compras en las que este cliente ha sido utilizado como método de pago</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            {/* ✅ CORREGIDO: Tabs con estructura correcta - usando defaultValue en lugar de value */}
                             <Tabs defaultValue="resumen" onValueChange={setActiveTab}>
                                 <TabsList className="grid w-full grid-cols-2">
                                     <TabsTrigger value="resumen">Resumen General</TabsTrigger>
                                     <TabsTrigger value="detalles">Detalles de Compras</TabsTrigger>
                                 </TabsList>
 
-                                {/* ✅ CORREGIDO: TabsContent separados para cada pestaña */}
                                 <TabsContent value="resumen" className="space-y-4">
                                     <ScrollArea className="h-[400px]">
                                         <div className="space-y-4">
@@ -893,7 +1311,6 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                             <CardDescription>Historial de gastos, ingresos y transferencias donde el cliente ha participado</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            {/* ✅ CORREGIDO: Tabs con estructura correcta - usando defaultValue en lugar de value */}
                             <Tabs defaultValue="todas" onValueChange={setActiveTransaccionesTab}>
                                 <TabsList className="grid w-full grid-cols-4">
                                     <TabsTrigger value="todas">Todas</TabsTrigger>
@@ -902,7 +1319,6 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                                     <TabsTrigger value="resumen">Resumen</TabsTrigger>
                                 </TabsList>
 
-                                {/* ✅ CORREGIDO: TabsContent para cada pestaña */}
                                 <TabsContent value="todas" className="space-y-4">
                                     <TablaTransacciones
                                         movimientos={movimientosFiltrados}

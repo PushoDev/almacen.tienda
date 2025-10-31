@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Cliente;
-use App\Models\MovimientoFinanciero; // ✅ AGREGAR IMPORT
+use App\Models\MovimientoFinanciero;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
@@ -73,6 +73,19 @@ class ClienteController extends Controller
             ])->orderBy('fecha_compra', 'desc');
         }]);
 
+        // ✅ CARGAR LAS VENTAS DONDE ESTE CLIENTE ES EL COMPRADOR
+        $cliente->load(['ventas' => function ($query) {
+            $query->with([
+                'destinatario',
+                'detalles.producto.categoria',
+                'pagos.cuenta.moneda',
+                'pagos.moneda',
+                'almacen',
+                'usuario',
+                'moneda'
+            ])->orderBy('created_at', 'desc');
+        }]);
+
         // ✅ CARGAR LAS TRANSACCIONES FINANCIERAS DEL CLIENTE
         $cliente->load([
             'movimientosComoOrigen' => function ($query) {
@@ -82,7 +95,7 @@ class ClienteController extends Controller
                     'cuentaDestino',
                     'clienteDestino',
                     'proveedorDestino'
-                ]);
+                ])->orderBy('created_at', 'desc');
             },
             'movimientosComoDestino' => function ($query) {
                 $query->with([
@@ -90,7 +103,7 @@ class ClienteController extends Controller
                     'cuentaOrigen',
                     'clienteOrigen',
                     'cuentaDestino'
-                ]);
+                ])->orderBy('created_at', 'desc');
             }
         ]);
 
