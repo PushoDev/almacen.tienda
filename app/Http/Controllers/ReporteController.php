@@ -18,7 +18,7 @@ class ReporteController extends Controller
      */
     public function index()
     {
-        return Inertia::render('Reportes/Index');
+        return Inertia::render('Reportes/Index', []);
     }
 
     /**
