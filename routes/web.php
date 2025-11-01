@@ -31,21 +31,12 @@ Route::get('/sistema', function () {
 Route::middleware(['auth', 'verified'])->group(function () {
 
     /**
-     * Administrador
+     * Dashboard para todos los usuarios
      */
-    Route::middleware(['auth', 'verified'])->group(function () {
-        Route::get('dashboard', [AdminController::class, 'index'])->name('dashboard');
-        Route::post('dashboard/update-tasa', [AdminController::class, 'update'])->name('dashboard.update');
-        Route::post('dashboard/update-tasa-mlc', [AdminController::class, 'updateMLC'])->name('dashboard.update-mlc');
-        // Reporte Chatjs de Compra y Venta
-        Route::get('/dashboard/chart-data', [ReporteController::class, 'getComprasVentasData'])->name('dashboard.chart.data');
-    });
-    /**
-     * Vendedor
-     */
-    Route::get('vendedor', function () {
-        return Inertia::render('vendor');
-    })->name('vendedor');
+    Route::get('dashboard', [AdminController::class, 'index'])->name('dashboard');
+    Route::post('dashboard/update-tasa', [AdminController::class, 'update'])->name('dashboard.update');
+    Route::post('dashboard/update-tasa-mlc', [AdminController::class, 'updateMLC'])->name('dashboard.update-mlc');
+    Route::get('/dashboard/chart-data', [ReporteController::class, 'getComprasVentasData'])->name('dashboard.chart.data');
 
     /**
      * Rutas Principales
@@ -88,18 +79,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Movimientos
     require __DIR__ . '/acciones/movimientos.php';
 
-    /**
-     * Punto de Venta
-     */
-    require __DIR__ . '/vendor/vendedor.php';
-
-
-    /**
-     * Rutas de Errores
-     */
-    // 404
-
 });
+
 
 require __DIR__ . '/settings.php';
 require __DIR__ . '/auth.php';

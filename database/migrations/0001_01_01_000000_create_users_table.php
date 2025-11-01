@@ -16,7 +16,7 @@ return new class extends Migration
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->rememberToken();
-            $table->enum('role', ['admin', 'vendedor'])->default('vendedor'); // ✅ Nuevo campo de roles
+            $table->enum('role', ['admin', 'moderador', 'vendedor'])->default('vendedor'); // ✅ Nuevo campo de roles
             $table->timestamps();
         });
 

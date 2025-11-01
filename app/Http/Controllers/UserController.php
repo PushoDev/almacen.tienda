@@ -45,7 +45,7 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|min:8',
-            'role' => 'required|in:admin,vendedor',
+            'role' => 'required|in:admin,moderador,vendedor',
             'almacenes' => 'array|exists:almacens,id',
         ]);
 
@@ -103,7 +103,7 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email,' . $user->id,
             'password' => 'nullable|min:8',
-            'role' => 'required|in:admin,vendedor',
+            'role' => 'required|in:admin,moderador,vendedor',
             'almacenes' => 'array|exists:almacens,id',
         ]);
 

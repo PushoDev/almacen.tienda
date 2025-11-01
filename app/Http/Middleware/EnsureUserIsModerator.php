@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 
-class EnsureUserIsVendor
+class EnsureUserIsModerator
 {
     /**
      * Handle an incoming request.
@@ -16,10 +16,10 @@ class EnsureUserIsVendor
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if (Auth::check() && Auth::user()->role === 'vendedor') {
+        if (Auth::check() && Auth::user()->role === 'moderador') {
             return $next($request);
         }
 
-        return redirect()->route('dashboard');
+        return redirect()->route('vendedor');
     }
 }

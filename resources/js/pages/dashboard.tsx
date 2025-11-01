@@ -51,6 +51,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function Dashboard({
+    userRole,
     tasa,
     tasamlc,
     montoCUP,
@@ -59,6 +60,7 @@ export default function Dashboard({
     montoMLC,
     capital,
 }: {
+    userRole: 'admin' | 'moderador' | 'vendedor';
     tasa: { tasa_cambio: number };
     tasamlc: { tasa_mlc: number | string };
     montoCUP: number;
@@ -145,9 +147,33 @@ export default function Dashboard({
                     />
                 </div>
 
+                {/* User Role Badge */}
+                <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-semibold">Opciones Disponibles</h2>
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">Rol:</span>
+                        {userRole === 'admin' && (
+                            <span className="inline-block rounded-full bg-red-600 px-4 py-1 text-xs font-bold text-white">
+                                ADMINISTRADOR
+                            </span>
+                        )}
+                        {userRole === 'moderador' && (
+                            <span className="inline-block rounded-full bg-yellow-600 px-4 py-1 text-xs font-bold text-white">
+                                MODERADOR
+                            </span>
+                        )}
+                        {userRole === 'vendedor' && (
+                            <span className="inline-block rounded-full bg-blue-600 px-4 py-1 text-xs font-bold text-white">
+                                VENDEDOR
+                            </span>
+                        )}
+                    </div>
+                </div>
+
                 {/* Opciones */}
                 <div className="animate__animated animate__flipInX grid auto-rows-min gap-4 md:grid-cols-4">
-                    {/* Widget de Compra */}
+                    {/* Widget de Compra - Solo Admin y Moderador */}
+                    {(userRole === 'admin' || userRole === 'moderador') && (
                     <div>
                         <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-red-800 to-red-400">
                             <CursorProvider>
@@ -181,7 +207,9 @@ export default function Dashboard({
                             <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
                         </div>
                     </div>
-                    {/* Widget de Venta */}
+                    )}
+
+                    {/* Widget de Venta - Todos */}
                     <div>
                         <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-blue-800 to-blue-400">
                             <CursorProvider>
@@ -218,7 +246,9 @@ export default function Dashboard({
                             <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
                         </div>
                     </div>
-                    {/* Widget de Transacciones */}
+
+                    {/* Widget de Transacciones - Solo Admin */}
+                    {userRole === 'admin' && (
                     <div>
                         <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-green-800 to-green-400">
                             <CursorProvider>
@@ -255,7 +285,10 @@ export default function Dashboard({
                             <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
                         </div>
                     </div>
-                    {/* Widget de Remesas */}
+                    )}
+
+                    {/* Widget de Remesas - Solo Admin */}
+                    {userRole === 'admin' && (
                     <div>
                         <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-amber-800 to-amber-400">
                             {/* Ícono de fondo transparente */}
@@ -287,10 +320,15 @@ export default function Dashboard({
                             <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
                         </div>
                     </div>
+                    )}
                 </div>
 
                 <Separator />
-                {/* Tablas */}
+                
+                {/* Tablas - Solo Admin */}
+                {userRole === 'admin' && (
+                <div>
+                    <h3 className="mb-4 text-lg font-semibold">Información Financiera</h3>
                 <div className="grid grid-cols-2 grid-rows-1 gap-6">
                     <div>
                         <Table>
@@ -461,6 +499,8 @@ export default function Dashboard({
                         </Table>
                     </div>
                 </div>
+                </div>
+                )}
 
                 <Separator />
                 {/* Charts */}

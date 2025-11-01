@@ -38,17 +38,18 @@ class DatabaseSeeder extends Seeder
             'password' => Hash::make('angel2025'),
             'role' => 'admin',
         ]);
+        // Usuario Moderador
         User::factory()->create([
             'name' => 'Aylin',
             'email' => 'aylin2025@posglorietashop.com',
             'password' => Hash::make('aylin2025'),
-            'role' => 'admin',
+            'role' => 'moderador',
         ]);
         User::factory()->create([
             'name' => 'Aylen',
             'email' => 'aylen2025@posglorietashop.com',
             'password' => Hash::make('aylen2025'),
-            'role' => 'admin',
+            'role' => 'moderador',
         ]);
         // Usuarios Vendedores
         User::factory()->create([

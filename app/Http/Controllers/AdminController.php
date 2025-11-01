@@ -3,9 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\TasaCambio;
-use App\Models\TasaCambioMLC; // Asumimos que tienes este modelo
+use App\Models\TasaCambioMLC;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class AdminController extends Controller
@@ -23,9 +24,8 @@ class AdminController extends Controller
         $tasaMLC = TasaCambioMLC::latest()->first();
 
         return Inertia::render('dashboard', [
+            'userRole' => Auth::user()->role,
             'tasa' => [
-                // Usamos el valor por defecto 325.0 si la base de datos devuelve null.
-                // Esto simula tu lógica antigua que devolvía 325.0 si no había registro.
                 'tasa_cambio' => $tasa ?? 325.0,
             ],
             'tasamlc' => [
@@ -35,8 +35,6 @@ class AdminController extends Controller
             'montoUSD' => $this->getMontoUSD() ?? 0,
             'montoEUR' => $this->getMontoEUR() ?? 0,
             'montoMLC' => $this->getMontoMLC() ?? 0,
-
-            // Cálculo de capital: Se utiliza el valor de $tasa obtenido (USD a CUP)
             'capital' => ($this->getMontoCUP() / ($tasa ?? 325.0)) + $this->getMontoUSD() + $this->getMontoEUR() + ($this->getMontoMLC() / ($tasaMLC ? $tasaMLC->tasa_mlc : 1)),
         ]);
     }
