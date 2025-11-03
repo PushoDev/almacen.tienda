@@ -1,30 +1,14 @@
-import { CountingNumber } from '@/components/animated/counter-number';
 import HeadingSmall from '@/components/heading-small';
-import { Button } from '@/components/ui/button';
 import { CursorFollow, CursorProvider } from '@/components/ui/cursor';
-import {
-    Dialog,
-    DialogClose,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from '@/components/ui/sonner';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import { ComputerIcon, DiamondPercent, LucideBaggageClaim, LucideBoomBox, LucideClockArrowDown, MonitorCog, ShoppingBagIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
-
 import * as React from 'react';
 import { Area, AreaChart, CartesianGrid, XAxis } from 'recharts';
 
@@ -52,54 +36,9 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 export default function Dashboard({
     userRole,
-    tasa,
-    tasamlc,
-    montoCUP,
-    montoUSD,
-    montoEUR,
-    montoMLC,
-    capital,
 }: {
     userRole: 'admin' | 'moderador' | 'vendedor';
-    tasa: { tasa_cambio: number };
-    tasamlc: { tasa_mlc: number | string };
-    montoCUP: number;
-    montoUSD: number;
-    montoEUR: number;
-    montoMLC: number;
-    capital: number;
 }) {
-    const { data, setData, post, processing } = useForm({
-        tasa_cambio: tasa.tasa_cambio,
-    });
-
-    const {
-        data: dataMLC,
-        setData: setDataMLC,
-        post: postMLC,
-        processing: processingMLC,
-    } = useForm({
-        tasa_mlc: typeof tasamlc.tasa_mlc === 'string' ? parseFloat(tasamlc.tasa_mlc) || 1 : tasamlc.tasa_mlc,
-    });
-
-    const [dialogOpen, setDialogOpen] = useState(false);
-    const [dialogOpenMLC, setDialogOpenMLC] = useState(false);
-
-    const handleUpdate = () => {
-        post(route('dashboard.update'), {
-            onSuccess: () => {
-                setDialogOpen(false);
-            },
-        });
-    };
-
-    const handleUpdateMLC = () => {
-        postMLC(route('dashboard.update-mlc'), {
-            onSuccess: () => {
-                setDialogOpenMLC(false);
-            },
-        });
-    };
 
     const [timeRange, setTimeRange] = React.useState('90d');
     const [chartData, setChartData] = useState([]);
@@ -318,185 +257,6 @@ export default function Dashboard({
                 </div>
 
                 <Separator />
-                
-                {/* Tablas - Solo Admin */}
-                {userRole === 'admin' && (
-                <div>
-                    <h3 className="mb-4 text-lg font-semibold">Información Financiera</h3>
-                <div className="grid grid-cols-2 grid-rows-1 gap-6">
-                    <div>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="bg-sidebar text-white">DESCRIPCION</TableHead>
-                                    <TableHead className="bg-sidebar text-white">MONTO</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                <TableRow>
-                                    <TableCell>CAPITAL</TableCell>
-                                    <TableCell className="cursor-pointer">
-                                        <CountingNumber
-                                            decimalPlaces={2}
-                                            decimalSeparator=","
-                                            className="text-sidebar-accent"
-                                            inView
-                                            number={capital}
-                                        />
-                                    </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                    <TableCell>CUP CAJA</TableCell>
-                                    <TableCell className="cursor-pointer">
-                                        <CountingNumber decimalPlaces={2} decimalSeparator="," className="text-indigo-600" inView number={montoCUP} />
-                                    </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                    <TableCell>USD CAJA</TableCell>
-                                    <TableCell className="cursor-pointer">
-                                        <CountingNumber
-                                            decimalPlaces={2}
-                                            decimalSeparator=","
-                                            className="text-emerald-600"
-                                            inView
-                                            number={montoUSD}
-                                        />
-                                    </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                    <TableCell>EURO CAJA</TableCell>
-                                    <TableCell className="cursor-pointer">
-                                        <CountingNumber decimalPlaces={2} decimalSeparator="," className="text-amber-600" inView number={montoEUR} />
-                                    </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                    <TableCell>MLC CAJA</TableCell>
-                                    <TableCell className="cursor-pointer">
-                                        <CountingNumber decimalPlaces={2} decimalSeparator="," className="text-red-600" inView number={montoMLC} />
-                                    </TableCell>
-                                </TableRow>
-                            </TableBody>
-                        </Table>
-                    </div>
-                    <div>
-                        <Table>
-                            <TableBody>
-                                <TableRow>
-                                    <TableCell className="bg-sidebar text-white">TOTAL</TableCell>
-                                    <TableCell>$ 199559</TableCell>
-                                    <TableCell>$ 248 </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                    <TableCell>MES ANTERIOR</TableCell>
-                                    <TableCell>$ 190382</TableCell>
-                                    <TableCell>$ 9117</TableCell>
-                                </TableRow>
-                                <TableRow>
-                                    <TableCell>TOTAL USD ACTIVO</TableCell>
-                                    <TableCell colSpan={2} className="bg-emerald-600 text-center text-white">
-                                        $ 195193
-                                    </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                    <TableCell>FONDO CUP ACTIVO</TableCell>
-                                    <TableCell colSpan={2} className="bg-yellow-800 text-center text-white">
-                                        $ 1 440734
-                                    </TableCell>
-                                </TableRow>
-                                <TableRow>
-                                    <TableCell className="bg-emerald-800 text-white" colSpan={2}>
-                                        TASA CAMBIO PARA USD
-                                    </TableCell>
-                                    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                                        <DialogTrigger asChild>
-                                            <TableCell className="cursor-pointer border-2 border-emerald-800 text-center font-bold">
-                                                $ {tasa.tasa_cambio}
-                                            </TableCell>
-                                        </DialogTrigger>
-                                        <DialogContent className="sm:max-w-[425px]">
-                                            <DialogHeader>
-                                                <DialogTitle>Tasa Cambio</DialogTitle>
-                                                <DialogDescription>
-                                                    Actualizar valor de la Tasa de Cambio para monedas CUP - Moneda Nacional
-                                                </DialogDescription>
-                                            </DialogHeader>
-                                            <div className="grid gap-4">
-                                                <div className="grid gap-3">
-                                                    <Label htmlFor="tasaCambio">Valor Actual a Cambiar</Label>
-                                                    <Input
-                                                        id="tasaCambio"
-                                                        name="tasa_cambio"
-                                                        type="number"
-                                                        step="0.00000001"
-                                                        placeholder="$ 0.00"
-                                                        value={data.tasa_cambio || ''}
-                                                        onChange={(e) => setData('tasa_cambio', parseFloat(e.target.value) || 0)}
-                                                    />
-                                                </div>
-                                            </div>
-                                            <DialogFooter>
-                                                <DialogClose asChild>
-                                                    <Button className="cursor-pointer" variant="secondary">
-                                                        Cancelar
-                                                    </Button>
-                                                </DialogClose>
-                                                <Button className="cursor-pointer" type="button" disabled={processing} onClick={handleUpdate}>
-                                                    {processing ? 'Guardando...' : 'Actualizar'}
-                                                </Button>
-                                            </DialogFooter>
-                                        </DialogContent>
-                                    </Dialog>
-                                </TableRow>
-                                <TableRow>
-                                    <TableCell colSpan={2} className="bg-yellow-900 text-white">
-                                        TASA DE CAMBIO PARA MLC
-                                    </TableCell>
-                                    <Dialog open={dialogOpenMLC} onOpenChange={setDialogOpenMLC}>
-                                        <DialogTrigger asChild>
-                                            <TableCell className="cursor-pointer border-2 border-yellow-900 text-center font-bold">
-                                                $ {tasamlc.tasa_mlc}
-                                            </TableCell>
-                                        </DialogTrigger>
-                                        <DialogContent className="sm:max-w-[425px]">
-                                            <DialogHeader>
-                                                <DialogTitle>Tasa Cambio MLC</DialogTitle>
-                                                <DialogDescription>Actualizar valor de la Tasa de Cambio para MLC</DialogDescription>
-                                            </DialogHeader>
-                                            <div className="grid gap-4">
-                                                <div className="grid gap-3">
-                                                    <Label htmlFor="tasaMLC">Valor Actual a Cambiar</Label>
-                                                    <Input
-                                                        id="tasaMLC"
-                                                        name="tasa_mlc"
-                                                        type="number"
-                                                        step="0.00000001"
-                                                        placeholder="$ 0.00"
-                                                        value={dataMLC.tasa_mlc || ''}
-                                                        onChange={(e) => setDataMLC('tasa_mlc', parseFloat(e.target.value) || 0)}
-                                                    />
-                                                </div>
-                                            </div>
-                                            <DialogFooter>
-                                                <DialogClose asChild>
-                                                    <Button className="cursor-pointer" variant="secondary">
-                                                        Cancelar
-                                                    </Button>
-                                                </DialogClose>
-                                                <Button className="cursor-pointer" type="button" disabled={processingMLC} onClick={handleUpdateMLC}>
-                                                    {processingMLC ? 'Guardando...' : 'Actualizar'}
-                                                </Button>
-                                            </DialogFooter>
-                                        </DialogContent>
-                                    </Dialog>
-                                </TableRow>
-                            </TableBody>
-                        </Table>
-                    </div>
-                </div>
-                </div>
-                )}
-
-                <Separator />
                 {/* Charts */}
                 <div>
                     <Card>
@@ -588,10 +348,6 @@ export default function Dashboard({
                             )}
                         </CardContent>
                     </Card>
-                </div>
-                {/* Tablas */}
-                <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
-                    <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
                 </div>
                 <Toaster position="top-center" />
             </div>
