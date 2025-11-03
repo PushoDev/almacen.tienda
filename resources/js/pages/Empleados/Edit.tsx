@@ -26,7 +26,13 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function EditEmpleadoPage({ empleado, almacenes }: { empleado: User; almacenes: AlmacenProps[] }) {
+interface CuentaProps {
+    id: number;
+    nombre_cuenta: string;
+    tipo_moneda: string;
+}
+
+export default function EditEmpleadoPage({ empleado, almacenes, cuentas }: { empleado: User; almacenes: AlmacenProps[]; cuentas: CuentaProps[] }) {
     // Manejo del formulario con useForm
     const { data, setData, put, errors, processing } = useForm({
         name: empleado.name,
@@ -34,6 +40,7 @@ export default function EditEmpleadoPage({ empleado, almacenes }: { empleado: Us
         password: '',
         role: empleado.role || 'vendedor',
         almacenes: empleado.almacenes?.map((almacen) => almacen.id) || [],
+        cuentas: empleado.cuentas?.map((cuenta) => cuenta.id) || [],
     });
 
     // Función para enviar el formulario
@@ -153,6 +160,42 @@ export default function EditEmpleadoPage({ empleado, almacenes }: { empleado: Us
                                 <InputError message={errors.almacenes} />
                             </div>
                         </div>
+                    </div>
+
+                    {/* Sección de Cuentas */}
+                    <div className="border-t border-gray-200 pt-6">
+                        <h3 className="mb-4 text-lg font-semibold">Cuentas Monetarias Asignadas</h3>
+                        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                            {cuentas.length > 0 ? (
+                                cuentas.map((cuenta) => (
+                                    <div key={cuenta.id} className="flex items-center space-x-2 rounded-lg border border-gray-200 p-3">
+                                        <Checkbox
+                                            id={`cuenta-${cuenta.id}`}
+                                            checked={data.cuentas.includes(cuenta.id)}
+                                            onCheckedChange={(checked) => {
+                                                if (checked) {
+                                                    setData('cuentas', [...data.cuentas, cuenta.id]);
+                                                } else {
+                                                    setData(
+                                                        'cuentas',
+                                                        data.cuentas.filter((id) => id !== cuenta.id),
+                                                    );
+                                                }
+                                            }}
+                                        />
+                                        <Label htmlFor={`cuenta-${cuenta.id}`} className="flex-1 cursor-pointer">
+                                            <div>
+                                                <div className="font-medium">{cuenta.nombre_cuenta}</div>
+                                                <div className="text-sm text-gray-500">{cuenta.tipo_moneda}</div>
+                                            </div>
+                                        </Label>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="col-span-full text-center text-gray-500">No hay cuentas disponibles</div>
+                            )}
+                        </div>
+                        <InputError message={errors.cuentas} />
                     </div>
 
                     {/* Botón Enviar */}

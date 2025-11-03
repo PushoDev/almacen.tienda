@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Almacen;
+use App\Models\Cuenta;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -15,12 +16,14 @@ class UserController extends Controller
      */
     public function index()
     {
-        $empleados = User::with('almacenes')->get();
+        $empleados = User::with('almacenes', 'cuentas')->get();
         $almacenes = Almacen::all();
+        $cuentas = Cuenta::all();
 
         return Inertia::render('Empleados/Index', [
             'empleados' => $empleados,
             'almacenes' => $almacenes,
+            'cuentas' => $cuentas,
         ]);
     }
 
@@ -30,8 +33,10 @@ class UserController extends Controller
     public function create()
     {
         $almacenes = Almacen::all();
+        $cuentas = Cuenta::all();
         return Inertia::render('Empleados/Create', [
             'almacenes' => $almacenes,
+            'cuentas' => $cuentas,
         ]);
     }
 
@@ -47,6 +52,7 @@ class UserController extends Controller
             'password' => 'required|min:8',
             'role' => 'required|in:admin,moderador,vendedor',
             'almacenes' => 'array|exists:almacens,id',
+            'cuentas' => 'array|exists:cuentas,id',
         ]);
 
         // Creación del usuario
@@ -60,6 +66,11 @@ class UserController extends Controller
         // Asignar almacenes
         if (!empty($validated['almacenes'])) {
             $user->almacenes()->sync($validated['almacenes']);
+        }
+
+        // Asignar cuentas
+        if (!empty($validated['cuentas'])) {
+            $user->cuentas()->sync($validated['cuentas']);
         }
 
         return redirect()->route('empleados.index');
@@ -82,12 +93,14 @@ class UserController extends Controller
      */
     public function edit(string $id)
     {
-        $empleado = User::with('almacenes')->findOrFail($id);
+        $empleado = User::with('almacenes', 'cuentas')->findOrFail($id);
         $almacenes = Almacen::all();
+        $cuentas = Cuenta::all();
 
         return Inertia::render('Empleados/Edit', [
             'empleado' => $empleado,
             'almacenes' => $almacenes,
+            'cuentas' => $cuentas,
         ]);
     }
 
@@ -105,6 +118,7 @@ class UserController extends Controller
             'password' => 'nullable|min:8',
             'role' => 'required|in:admin,moderador,vendedor',
             'almacenes' => 'array|exists:almacens,id',
+            'cuentas' => 'array|exists:cuentas,id',
         ]);
 
         // Actualización del usuario
@@ -117,6 +131,9 @@ class UserController extends Controller
 
         // Actualizar almacenes
         $user->almacenes()->sync($validated['almacenes'] ?? []);
+
+        // Actualizar cuentas
+        $user->cuentas()->sync($validated['cuentas'] ?? []);
 
         return redirect()->route('empleados.index');
     }

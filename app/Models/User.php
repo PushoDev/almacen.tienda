@@ -71,4 +71,14 @@ class User extends Authenticatable
             ->using(ProductoVendedor::class)
             ->withPivot('precio_venta', 'venta_ganancia');
     }
+
+    /**
+     * Undocumented function
+     * ✅ Relación muchos a muchos con Cuentas
+     * @return void
+     */
+    public function cuentas()
+    {
+        return $this->belongsToMany(Cuenta::class, 'user_cuentas');
+    }
 }

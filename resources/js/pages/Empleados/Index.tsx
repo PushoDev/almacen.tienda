@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, User, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { BookUser, Edit2, FileText, Key, Mail, Sheet, Trash2, UserCircle, Warehouse } from 'lucide-react';
+import { BookUser, Edit2, FileText, Key, Mail, Sheet, Trash2, UserCircle, Warehouse, DollarSign } from 'lucide-react';
 import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -92,6 +92,7 @@ export default function PageEmpleado({ empleados }: { empleados: User[]; almacen
                                 <TableHead>Email</TableHead>
                                 <TableHead>Rol</TableHead>
                                 <TableHead>Almacén</TableHead>
+                                <TableHead>Cuentas</TableHead>
                                 <TableHead className="text-right">Acciones</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -153,6 +154,27 @@ export default function PageEmpleado({ empleados }: { empleados: User[]; almacen
                                             </div>
                                         </TableCell>
 
+                                        <TableCell>
+                                            <div className="flex items-start gap-2">
+                                                <DollarSign size={14} className="mt-1 shrink-0 text-gray-500" />
+                                                <div className="flex flex-wrap gap-1">
+                                                    {empleado.cuentas?.length > 0 ? (
+                                                        empleado.cuentas.map((cuenta) => (
+                                                            <span
+                                                                key={cuenta.id}
+                                                                className="max-w-[130px] truncate rounded-md bg-green-50 px-2 py-1 text-xs text-green-700"
+                                                                title={`${cuenta.nombre_cuenta} (${cuenta.tipo_moneda})`}
+                                                            >
+                                                                {cuenta.nombre_cuenta}
+                                                            </span>
+                                                        ))
+                                                    ) : (
+                                                        <span className="text-gray-400 italic">Sin cuentas</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </TableCell>
+
                                         <TableCell className="text-right">
                                             {/* Botón Editar */}
                                             <Link href={route('empleados.edit', { id: empleado.id })}>
@@ -198,7 +220,7 @@ export default function PageEmpleado({ empleados }: { empleados: User[]; almacen
                                 ))
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={5} className="text-center">
+                                    <TableCell colSpan={6} className="text-center">
                                         No hay empleados registrados
                                     </TableCell>
                                 </TableRow>
