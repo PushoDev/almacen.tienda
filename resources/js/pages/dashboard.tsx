@@ -172,8 +172,7 @@ export default function Dashboard({
 
                 {/* Opciones */}
                 <div className="animate__animated animate__flipInX grid auto-rows-min gap-4 md:grid-cols-4">
-                    {/* Widget de Compra - Solo Admin y Moderador */}
-                    {(userRole === 'admin' || userRole === 'moderador') && (
+                    {/* Widget de Compra - Todos */}
                     <div>
                         <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-red-800 to-red-400">
                             <CursorProvider>
@@ -207,7 +206,6 @@ export default function Dashboard({
                             <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
                         </div>
                     </div>
-                    )}
 
                     {/* Widget de Venta - Todos */}
                     <div>
@@ -247,8 +245,7 @@ export default function Dashboard({
                         </div>
                     </div>
 
-                    {/* Widget de Transacciones - Solo Admin */}
-                    {userRole === 'admin' && (
+                    {/* Widget de Transacciones - Todos */}
                     <div>
                         <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-green-800 to-green-400">
                             <CursorProvider>
@@ -285,10 +282,8 @@ export default function Dashboard({
                             <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
                         </div>
                     </div>
-                    )}
 
-                    {/* Widget de Remesas - Solo Admin */}
-                    {userRole === 'admin' && (
+                    {/* Widget de Remesas - Todos */}
                     <div>
                         <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-amber-800 to-amber-400">
                             {/* Ícono de fondo transparente */}
@@ -320,7 +315,6 @@ export default function Dashboard({
                             <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
                         </div>
                     </div>
-                    )}
                 </div>
 
                 <Separator />
