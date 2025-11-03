@@ -81,4 +81,14 @@ class User extends Authenticatable
     {
         return $this->belongsToMany(Cuenta::class, 'user_cuentas');
     }
+
+    public function isAdmin(): bool
+    {
+        return $this->role === 'admin';
+    }
+
+    public function isModerator(): bool
+    {
+        return $this->role === 'moderador';
+    }
 }

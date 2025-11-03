@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\CheckAlmacenPermission;
+use App\Http\Middleware\CheckCuentaPermission;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;
@@ -35,6 +36,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin' => EnsureUserIsAdmin::class,
             'moderator' => EnsureUserIsModerator::class,
             'vendor' => EnsureUserIsVendor::class,
+            'check.cuenta.permission' => CheckCuentaPermission::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
