@@ -44,6 +44,12 @@ class Cuenta extends Model
         return $this->belongsTo(Moneda::class);
     }
 
+    // Relación muchos a muchos con usuarios
+    public function users()
+    {
+        return $this->belongsToMany(User::class, 'user_cuentas');
+    }
+
     // Relación con compras (opcional) - MANTENIDA
     public function compras()
     {

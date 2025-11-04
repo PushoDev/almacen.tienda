@@ -103,13 +103,26 @@ class VentaController extends Controller
     }
 
     /**
-     * Cargar Todas las cuentas del Negocio.
+     * Cargar Cuentas accesibles para el usuario autenticado.
      */
     public function getCuentas()
     {
-        $cuentas = Cuenta::with('moneda')
-            ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta')
-            ->get()
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['error' => 'Usuario no autenticado'], 401);
+        }
+
+        // Filtrar cuentas: admins ven todas, vendedores solo las suyas
+        $query = Cuenta::with('moneda')
+            ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta');
+
+        if ($user->role !== 'admin') {
+            $query->whereHas('users', function ($q) use ($user) {
+                $q->where('user_id', $user->id);
+            });
+        }
+
+        $cuentas = $query->get()
             ->map(function ($cuenta) {
                 return [
                     'id' => $cuenta->id,
@@ -133,10 +146,15 @@ class VentaController extends Controller
     }
 
     /**
-     * Cargar cuentas filtradas por moneda - MEJORADO
+     * Cargar cuentas filtradas por moneda y accesibles para el usuario - MEJORADO
      */
     public function getCuentasFiltradas(Request $request)
     {
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['error' => 'Usuario no autenticado'], 401);
+        }
+
         $request->validate([
             'moneda_id' => 'required|exists:monedas,id'
         ]);
@@ -147,18 +165,29 @@ class VentaController extends Controller
         }
 
         // MEJORADO: Buscar cuentas que coincidan EXACTAMENTE con la moneda seleccionada
-        $cuentas = Cuenta::with('moneda')
-            ->where(function ($query) use ($moneda) {
+        // y filtrar por usuario si no es admin
+        $query = Cuenta::with('moneda')
+            ->where(function ($baseQuery) use ($moneda) {
                 // Cuentas con moneda_id que coincide exactamente
-                $query->where('moneda_id', $moneda->id);
+                $baseQuery->where(function ($query) use ($moneda) {
+                    $query->where('moneda_id', $moneda->id);
+                })
+                    ->orWhere(function ($query) use ($moneda) {
+                        // Cuentas legacy con tipo_moneda que coincide exactamente con el código
+                        $query->whereNull('moneda_id')
+                            ->where('tipo_moneda', $moneda->codigo_moneda);
+                    });
             })
-            ->orWhere(function ($query) use ($moneda) {
-                // Cuentas legacy con tipo_moneda que coincide exactamente con el código
-                $query->whereNull('moneda_id')
-                    ->where('tipo_moneda', $moneda->codigo_moneda);
-            })
-            ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta')
-            ->get()
+            ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta');
+
+        // Filtrar por usuario si no es admin
+        if ($user->role !== 'admin') {
+            $query->whereHas('users', function ($q) use ($user) {
+                $q->where('user_id', $user->id);
+            });
+        }
+
+        $cuentas = $query->get()
             ->map(function ($cuenta) {
                 return [
                     'id' => $cuenta->id,
@@ -230,12 +259,35 @@ class VentaController extends Controller
                 ];
             });
 
+        // Obtener cuentas accesibles del usuario
+        $cuentasQuery = Cuenta::with('moneda')
+            ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta');
+
+        if ($user->role !== 'admin') {
+            $cuentasQuery->whereHas('users', function ($q) use ($user) {
+                $q->where('user_id', $user->id);
+            });
+        }
+
+        $cuentas = $cuentasQuery->get()->map(function ($cuenta) {
+            return [
+                'id' => (string)$cuenta->id,
+                'nombre' => $cuenta->nombre_cuenta,
+                'saldo' => (float)$cuenta->saldo_cuenta,
+                'moneda' => $cuenta->moneda ? [
+                    'id' => (string)$cuenta->moneda->id,
+                    'codigo' => $cuenta->moneda->codigo_moneda,
+                ] : null
+            ];
+        });
+
         return Inertia::render('Vendor/Index', [
             'meta' => [
                 'role_usuario' => $user->role,
                 'almacenes_usuario' => $user->role === 'admin'
                     ? Almacen::select('id', 'nombre_almacen')->get()->map(fn($a) => ['id' => (string)$a->id, 'nombre' => $a->nombre_almacen])
                     : $user->almacenes->map(fn($a) => ['id' => (string)$a->id, 'nombre' => $a->nombre_almacen]),
+                'cuentas_usuario' => $cuentas,
                 'monedas' => $monedas,
             ]
         ]);
@@ -411,11 +463,16 @@ class VentaController extends Controller
                 ]);
             }
 
-            // MEJORADO: Validar que las cuentas coincidan con la moneda del pago
+            // MEJORADO: Validar que las cuentas coincidan con la moneda del pago y que pertenezcan al usuario
             foreach ($validatedData['pagos'] as $index => $pago) {
                 $cuenta = Cuenta::with('moneda')->find($pago['cuenta_id']);
                 if (!$cuenta) {
                     throw new \Exception('Cuenta no encontrada');
+                }
+
+                // ✅ NUEVO: Validar que el usuario tenga acceso a la cuenta
+                if ($user->role !== 'admin' && !$user->cuentas->contains('id', $cuenta->id)) {
+                    throw new \Exception('No tienes acceso a la cuenta seleccionada');
                 }
 
                 $monedaPago = Moneda::find($pago['moneda_id']);
@@ -562,6 +619,11 @@ class VentaController extends Controller
                 throw new \Exception('Usuario no autenticado');
             }
 
+            // ✅ NUEVO: Validar acceso al almacén
+            if ($user->role !== 'admin' && !$user->almacenes->contains('id', $venta->almacen_id)) {
+                throw new \Exception('No tienes acceso a este almacén');
+            }
+
             $venta->load(['detalles.producto', 'pagos.cuenta.moneda', 'pagos.moneda', 'moneda', 'destinatario']);
 
             // ✅ MODIFICADO: Ya NO actualizar stock (porque ya se descontó al crear la venta)
@@ -579,6 +641,11 @@ class VentaController extends Controller
             foreach ($venta->pagos as $pago) {
                 $cuenta = $pago->cuenta;
                 if ($cuenta) {
+                    // ✅ NUEVO: Validar que el usuario tenga acceso a la cuenta
+                    if ($user->role !== 'admin' && !$user->cuentas->contains('id', $cuenta->id)) {
+                        throw new \Exception('No tienes acceso a la cuenta de pago: ' . $cuenta->nombre_cuenta);
+                    }
+
                     $montoIncremento = $this->calcularMontoIncremento($cuenta, $pago, $venta);
                     $nuevoSaldo = $cuenta->saldo_cuenta + $montoIncremento;
                     $cuenta->update(['saldo_cuenta' => $nuevoSaldo]);
@@ -623,6 +690,21 @@ class VentaController extends Controller
             $user = Auth::user();
             if (!$user) {
                 throw new \Exception('Usuario no autenticado');
+            }
+
+            // ✅ NUEVO: Validar acceso al almacén
+            if ($user->role !== 'admin' && !$user->almacenes->contains('id', $venta->almacen_id)) {
+                throw new \Exception('No tienes acceso a este almacén');
+            }
+
+            // ✅ NUEVO: Validar acceso a las cuentas si la venta está completada
+            if ($venta->estado === 'completada') {
+                $venta->load('pagos.cuenta');
+                foreach ($venta->pagos as $pago) {
+                    if ($user->role !== 'admin' && !$user->cuentas->contains('id', $pago->cuenta_id)) {
+                        throw new \Exception('No tienes acceso a la cuenta de pago: ' . $pago->cuenta->nombre_cuenta);
+                    }
+                }
             }
 
             // ✅ MODIFICADO: Revertir stock SI estaba pendiente
