@@ -1,25 +1,31 @@
 <?php
 
 use App\Http\Controllers\ReporteController;
+use App\Http\Controllers\EcommerceController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\AdminController;
 
-// Comercio Electronico
-Route::get('/', function () {
-    return Inertia::render('Ecommerce/Index');
-})->name('Inicio');
+// ============================================
+// COMERCIO ELECTRONICO - Catálogo de Tiendas
+// ============================================
 
-// Productos
-Route::get('/productos', function () {
-    return Inertia::render('Ecommerce/Index');
-})->name('productos');
+// Página principal del ecommerce con selector de almacén
+Route::get('/', [EcommerceController::class, 'index'])->name('Inicio');
 
-// Carrito
-Route::get('/carrito', function () {
-    return Inertia::render('Ecommerce/Index');
-})->name('Carrito');
+// Productos (mismo ecommerce)
+Route::get('/productos', [EcommerceController::class, 'index'])->name('productos');
 
+// Carrito (mismo ecommerce)
+Route::get('/carrito', [EcommerceController::class, 'index'])->name('Carrito');
+
+// API Routes para Ecommerce (sin autenticación)
+Route::prefix('api/ecommerce')->group(function () {
+    Route::get('/puntos-venta', [EcommerceController::class, 'getPuntosVenta'])->name('api.ecommerce.puntos-venta');
+    Route::post('/almacen/select', [EcommerceController::class, 'setAlmacenSesion'])->name('api.ecommerce.select-almacen');
+    Route::get('/almacen/actual', [EcommerceController::class, 'getAlmacenSesion'])->name('api.ecommerce.almacen-actual');
+    Route::get('/almacen/productos', [EcommerceController::class, 'getProductosAlmacen'])->name('api.ecommerce.productos');
+});
 
 // Sistema de Logistica
 Route::get('/sistema', function () {
