@@ -1,1 +1,0 @@
-import{j as o}from"./app-C-ymWvg0.js";const t="/build/assets/logo-BJ2PxAIj.png";function n(){return o.jsx(o.Fragment,{children:o.jsx("img",{src:t,alt:"Logo",style:{width:"50px",height:"auto"}})})}export{n as A};

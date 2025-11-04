@@ -40,6 +40,8 @@ interface MonedaInfo {
     nombre_moneda: string;
     codigo_moneda: string;
     simbolo_moneda: string;
+    tasa_cambio: number;
+    principal: boolean;
 }
 
 // Extender la interfaz CuentaProps para incluir los nuevos campos
@@ -65,9 +67,34 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaConMoneda[] })
         });
     };
 
-    // Calcular el saldo total de todas las cuentas
+    // Encontrar la moneda principal
+    const monedaPrincipal = cuentas.find((c) => c.moneda?.principal)?.moneda;
+
+    // Convertir saldo a moneda principal
+    const convertirAMonedaPrincipal = (saldo: number, moneda: MonedaInfo | null): number => {
+        if (!moneda || !monedaPrincipal) return saldo;
+        if (moneda.principal) return saldo;
+        return saldo / (moneda.tasa_cambio || 1);
+    };
+
+    // Calcular el saldo total de todas las cuentas en moneda principal
     const calcularSaldoTotal = () => {
-        return cuentas.reduce((total, cuenta) => total + (cuenta.saldo_cuenta || 0), 0).toFixed(2);
+        return cuentas.reduce((total, cuenta) => total + convertirAMonedaPrincipal(cuenta.saldo_cuenta || 0, cuenta.moneda), 0).toFixed(2);
+    };
+
+    // Calcular saldo por moneda (para el tooltip)
+    const calcularSaldoPorMoneda = () => {
+        const saldoPorMoneda: { [key: string]: number } = {};
+
+        cuentas.forEach((cuenta) => {
+            const codigoMoneda = cuenta.moneda?.codigo_moneda || 'N/A';
+            if (!saldoPorMoneda[codigoMoneda]) {
+                saldoPorMoneda[codigoMoneda] = 0;
+            }
+            saldoPorMoneda[codigoMoneda] += cuenta.saldo_cuenta || 0;
+        });
+
+        return saldoPorMoneda;
     };
 
     // Filtros
@@ -142,8 +169,41 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaConMoneda[] })
                             <Wallet className="text-muted-foreground h-4 w-4" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold text-emerald-600">${calcularSaldoTotal()}</div>
-                            <p className="text-muted-foreground text-xs">Todas las monedas</p>
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <div className="cursor-help">
+                                            <div className="flex items-baseline gap-2">
+                                                <div className="text-2xl font-bold text-emerald-600">
+                                                    {monedaPrincipal?.simbolo_moneda || '$'}
+                                                    {calcularSaldoTotal()}
+                                                </div>
+                                                <Badge variant="secondary" className="text-xs">
+                                                    {monedaPrincipal?.codigo_moneda || 'N/A'}
+                                                </Badge>
+                                            </div>
+                                            <p className="text-muted-foreground mt-1 text-xs">En moneda principal • Hover para detalles</p>
+                                        </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="w-64">
+                                        <div className="space-y-2">
+                                            <p className="text-sm font-semibold">Desglose por Moneda:</p>
+                                            {Object.entries(calcularSaldoPorMoneda()).map(([codigo, saldo]) => {
+                                                const moneda = monedasUnicas.find((m) => m.codigo_moneda === codigo);
+                                                return (
+                                                    <div key={codigo} className="flex justify-between text-xs">
+                                                        <span className="text-muted-foreground">{codigo}:</span>
+                                                        <span className="font-mono font-semibold">
+                                                            {moneda?.simbolo_moneda || '$'}
+                                                            {saldo.toFixed(2)}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
                         </CardContent>
                     </Card>
 
@@ -393,8 +453,8 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaConMoneda[] })
                                                             <AlertDialogHeader>
                                                                 <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
                                                                 <AlertDialogDescription>
-                                                                    Esta acción eliminará permanentemente la cuenta "{cuenta.nombre_cuenta}". Esta acción
-                                                                    no se puede deshacer.
+                                                                    Esta acción eliminará permanentemente la cuenta "{cuenta.nombre_cuenta}". Esta
+                                                                    acción no se puede deshacer.
                                                                 </AlertDialogDescription>
                                                             </AlertDialogHeader>
                                                             <AlertDialogFooter>
