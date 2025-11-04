@@ -37,6 +37,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('dashboard/update-tasa', [AdminController::class, 'update'])->name('dashboard.update');
     Route::post('dashboard/update-tasa-mlc', [AdminController::class, 'updateMLC'])->name('dashboard.update-mlc');
     Route::get('/dashboard/chart-data', [ReporteController::class, 'getComprasVentasData'])->name('dashboard.chart.data');
+    Route::get('/dashboard/financial-states', [ReporteController::class, 'getFinancialStates'])->name('dashboard.financial.states');
+    Route::get('/dashboard/usuarios', [ReporteController::class, 'getUsuarios'])->name('dashboard.usuarios');
 
     /**
      * Rutas Principales
@@ -78,7 +80,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     require __DIR__ . '/acciones/reportes.php';
     // Movimientos
     require __DIR__ . '/acciones/movimientos.php';
-
 });
 
 

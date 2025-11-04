@@ -267,4 +267,109 @@ class ReporteController extends Controller
 
         return response()->json($formattedData);
     }
+
+    /**
+     * Obtiene los estados financieros (Cuentas) con información de Monedas y Usuarios
+     *
+     * @param \Illuminate\Http\Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getFinancialStates(Request $request)
+    {
+        $usuarioId = $request->query('user_id');
+        $currentUser = auth()->user();
+
+        // Si el usuario actual es vendedor, solo mostrar sus cuentas asignadas
+        if ($currentUser && $currentUser->role === 'vendedor') {
+            $usuarioId = $currentUser->id;
+        }
+
+        $query = DB::table('cuentas')
+            ->join('monedas', 'cuentas.moneda_id', '=', 'monedas.id')
+            ->leftJoin('user_cuentas', 'cuentas.id', '=', 'user_cuentas.cuenta_id')
+            ->leftJoin('users', 'user_cuentas.user_id', '=', 'users.id')
+            ->select(
+                'cuentas.id as cuenta_id',
+                'cuentas.nombre_cuenta',
+                'cuentas.tipo',
+                'cuentas.saldo_cuenta',
+                'cuentas.deuda',
+                'cuentas.tipo_cuenta',
+                'cuentas.estado as estado_cuenta',
+                'monedas.id as moneda_id',
+                'monedas.nombre_moneda',
+                'monedas.codigo_moneda',
+                'monedas.simbolo_moneda',
+                'monedas.tasa_cambio',
+                'monedas.commission',
+                'monedas.estado as estado_moneda',
+                'users.id as usuario_id',
+                'users.name as usuario_nombre',
+                'users.email as usuario_email',
+                'users.role'
+            )
+            ->orderBy('monedas.nombre_moneda')
+            ->orderBy('cuentas.nombre_cuenta');
+
+        if ($usuarioId) {
+            $query->where('users.id', $usuarioId);
+        }
+
+        $data = $query->get();
+
+        // Agrupar por cuenta para consolidar múltiples usuarios
+        $cuentas = [];
+        foreach ($data as $row) {
+            $cuentaKey = $row->cuenta_id;
+
+            if (!isset($cuentas[$cuentaKey])) {
+                $cuentas[$cuentaKey] = [
+                    'cuenta_id' => $row->cuenta_id,
+                    'nombre_cuenta' => $row->nombre_cuenta,
+                    'tipo' => $row->tipo,
+                    'saldo_cuenta' => (float) $row->saldo_cuenta,
+                    'deuda' => (float) $row->deuda,
+                    'tipo_cuenta' => $row->tipo_cuenta,
+                    'estado_cuenta' => $row->estado_cuenta,
+                    'moneda' => [
+                        'id' => $row->moneda_id,
+                        'nombre_moneda' => $row->nombre_moneda,
+                        'codigo_moneda' => $row->codigo_moneda,
+                        'simbolo_moneda' => $row->simbolo_moneda,
+                        'tasa_cambio' => (float) $row->tasa_cambio,
+                        'commission' => (float) $row->commission,
+                        'estado' => $row->estado_moneda,
+                    ],
+                    'usuarios' => []
+                ];
+            }
+
+            // Agregar usuario si existe
+            if ($row->usuario_id) {
+                $cuentas[$cuentaKey]['usuarios'][] = [
+                    'id' => $row->usuario_id,
+                    'name' => $row->usuario_nombre,
+                    'email' => $row->usuario_email,
+                    'role' => $row->role,
+                ];
+            }
+        }
+
+        return response()->json(array_values($cuentas));
+    }
+
+    /**
+     * Obtiene la lista de usuarios para el filtro del dashboard
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getUsuarios()
+    {
+        $usuarios = DB::table('users')
+            ->select('id', 'name', 'email', 'role')
+            ->orderBy('name')
+            ->get();
+
+        return response()->json($usuarios);
+    }
 }

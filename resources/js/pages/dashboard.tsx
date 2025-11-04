@@ -4,17 +4,28 @@ import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from '@/components/ui/sonner';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
-import { ComputerIcon, DiamondPercent, LucideBaggageClaim, LucideBoomBox, LucideClockArrowDown, MonitorCog, ShoppingBagIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import {
+    ComputerIcon,
+    DiamondPercent,
+    LucideBaggageClaim,
+    LucideBoomBox,
+    LucideClockArrowDown,
+    MonitorCog,
+    ShoppingBagIcon,
+    Users,
+} from 'lucide-react';
 import * as React from 'react';
+import { useEffect, useState } from 'react';
 import { Area, AreaChart, CartesianGrid, XAxis } from 'recharts';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartConfig, ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 const chartConfig = {
     compras: {
@@ -34,15 +45,43 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function Dashboard({
-    userRole,
-}: {
-    userRole: 'admin' | 'moderador' | 'vendedor';
-}) {
+interface Usuario {
+    id: number;
+    name: string;
+    email: string;
+    role: string;
+}
 
+interface Moneda {
+    id: number;
+    nombre_moneda: string;
+    codigo_moneda: string;
+    simbolo_moneda: string;
+    tasa_cambio: number;
+    commission: number;
+    estado: boolean;
+}
+
+interface EstadoFinanciero {
+    cuenta_id: number;
+    nombre_cuenta: string;
+    tipo: string;
+    saldo_cuenta: number;
+    deuda: number;
+    tipo_cuenta: string;
+    estado_cuenta: boolean;
+    moneda: Moneda;
+    usuarios: Usuario[];
+}
+
+export default function Dashboard({ userRole }: { userRole: 'admin' | 'moderador' | 'vendedor' }) {
     const [timeRange, setTimeRange] = React.useState('90d');
     const [chartData, setChartData] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+    const [usuarioSeleccionado, setUsuarioSeleccionado] = useState<string>('');
+    const [estadosFinancieros, setEstadosFinancieros] = useState<EstadoFinanciero[]>([]);
+    const [isLoadingFinancial, setIsLoadingFinancial] = useState(false);
 
     useEffect(() => {
         const fetchChartData = async () => {
@@ -60,6 +99,43 @@ export default function Dashboard({
 
         fetchChartData();
     }, [timeRange]);
+
+    // Cargar usuarios al montar el componente
+    useEffect(() => {
+        const fetchUsuarios = async () => {
+            try {
+                const response = await fetch(route('dashboard.usuarios'));
+                const data = await response.json();
+                setUsuarios(data);
+            } catch (error) {
+                console.error('Error fetching usuarios:', error);
+            }
+        };
+
+        fetchUsuarios();
+    }, []);
+
+    // Cargar estados financieros cuando cambia el usuario seleccionado
+    useEffect(() => {
+        const fetchFinancialStates = async () => {
+            setIsLoadingFinancial(true);
+            try {
+                const url =
+                    usuarioSeleccionado && usuarioSeleccionado !== 'all'
+                        ? route('dashboard.financial.states', { user_id: usuarioSeleccionado })
+                        : route('dashboard.financial.states');
+                const response = await fetch(url);
+                const data = await response.json();
+                setEstadosFinancieros(data);
+            } catch (error) {
+                console.error('Error fetching financial states:', error);
+            } finally {
+                setIsLoadingFinancial(false);
+            }
+        };
+
+        fetchFinancialStates();
+    }, [usuarioSeleccionado]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -92,19 +168,13 @@ export default function Dashboard({
                     <div className="flex items-center gap-2">
                         <span className="text-sm text-gray-600">Rol:</span>
                         {userRole === 'admin' && (
-                            <span className="inline-block rounded-full bg-red-600 px-4 py-1 text-xs font-bold text-white">
-                                ADMINISTRADOR
-                            </span>
+                            <span className="inline-block rounded-full bg-red-600 px-4 py-1 text-xs font-bold text-white">ADMINISTRADOR</span>
                         )}
                         {userRole === 'moderador' && (
-                            <span className="inline-block rounded-full bg-yellow-600 px-4 py-1 text-xs font-bold text-white">
-                                MODERADOR
-                            </span>
+                            <span className="inline-block rounded-full bg-yellow-600 px-4 py-1 text-xs font-bold text-white">MODERADOR</span>
                         )}
                         {userRole === 'vendedor' && (
-                            <span className="inline-block rounded-full bg-blue-600 px-4 py-1 text-xs font-bold text-white">
-                                VENDEDOR
-                            </span>
+                            <span className="inline-block rounded-full bg-blue-600 px-4 py-1 text-xs font-bold text-white">VENDEDOR</span>
                         )}
                     </div>
                 </div>
@@ -349,6 +419,143 @@ export default function Dashboard({
                         </CardContent>
                     </Card>
                 </div>
+
+                <Separator />
+
+                {/* Tabla de Estados Financieros */}
+                <div>
+                    <Card>
+                        <CardHeader className="flex items-center gap-2 space-y-0 border-b py-5 sm:flex-row">
+                            <div className="grid flex-1 gap-1 text-center sm:text-left">
+                                <CardTitle>Estados Financieros</CardTitle>
+                                <CardDescription>
+                                    {userRole === 'vendedor' ? 'Mis Cuentas Asignadas' : 'Cuentas por Moneda y Usuarios Asignados'}
+                                </CardDescription>
+                            </div>
+                            {userRole !== 'vendedor' && (
+                                <Select value={usuarioSeleccionado} onValueChange={setUsuarioSeleccionado}>
+                                    <SelectTrigger className="w-[220px] rounded-lg sm:ml-auto" aria-label="Filtrar por usuario">
+                                        <SelectValue placeholder="Todos los usuarios" />
+                                    </SelectTrigger>
+                                    <SelectContent className="rounded-xl">
+                                        <SelectItem value="all">Todos los usuarios</SelectItem>
+                                        {usuarios.map((usuario) => (
+                                            <SelectItem key={usuario.id} value={usuario.id.toString()}>
+                                                {usuario.name} ({usuario.role})
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
+                        </CardHeader>
+                        <CardContent className="pt-6">
+                            {isLoadingFinancial ? (
+                                <div className="flex h-[300px] items-center justify-center text-center">Cargando datos financieros...</div>
+                            ) : estadosFinancieros.length > 0 ? (
+                                <div className="overflow-x-auto">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Cuenta</TableHead>
+                                                <TableHead>Tipo</TableHead>
+                                                <TableHead>Moneda</TableHead>
+                                                <TableHead className="text-right">Saldo</TableHead>
+                                                <TableHead className="text-right">Deuda</TableHead>
+                                                <TableHead>Tipo Cuenta</TableHead>
+                                                <TableHead>Vendedores</TableHead>
+                                                <TableHead>Estado</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {estadosFinancieros.map((estado) => (
+                                                <TableRow key={estado.cuenta_id}>
+                                                    <TableCell className="font-medium">{estado.nombre_cuenta}</TableCell>
+                                                    <TableCell>{estado.tipo}</TableCell>
+                                                    <TableCell>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-lg font-semibold">{estado.moneda.simbolo_moneda}</span>
+                                                            <span className="text-sm text-gray-600">{estado.moneda.codigo_moneda}</span>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-semibold">
+                                                        {estado.saldo_cuenta.toLocaleString('es-DO', {
+                                                            minimumFractionDigits: 2,
+                                                            maximumFractionDigits: 2,
+                                                        })}
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        {estado.deuda > 0 && (
+                                                            <span className="font-semibold text-red-600">
+                                                                {estado.deuda.toLocaleString('es-DO', {
+                                                                    minimumFractionDigits: 2,
+                                                                    maximumFractionDigits: 2,
+                                                                })}
+                                                            </span>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <span
+                                                            className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${
+                                                                estado.tipo_cuenta === 'permanentes'
+                                                                    ? 'bg-blue-100 text-blue-800'
+                                                                    : estado.tipo_cuenta === 'temporales'
+                                                                      ? 'bg-green-100 text-green-800'
+                                                                      : 'bg-red-100 text-red-800'
+                                                            }`}
+                                                        >
+                                                            {estado.tipo_cuenta}
+                                                        </span>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {estado.usuarios.length > 0 ? (
+                                                            <TooltipProvider>
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                        <button className="inline-flex cursor-pointer items-center justify-center rounded-lg bg-blue-100 p-2 transition-colors hover:bg-blue-200">
+                                                                            <Users className="h-4 w-4 text-blue-600" />
+                                                                            <span className="ml-1 text-xs font-semibold text-blue-600">
+                                                                                {estado.usuarios.length}
+                                                                            </span>
+                                                                        </button>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent side="left" className="max-w-sm">
+                                                                        <div className="space-y-2">
+                                                                            <p className="font-semibold text-white">Vendedores asignados:</p>
+                                                                            {estado.usuarios.map((usuario) => (
+                                                                                <div key={usuario.id} className="text-sm text-white">
+                                                                                    <p className="font-medium">{usuario.name}</p>
+                                                                                    <p className="text-xs opacity-90">({usuario.role})</p>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    </TooltipContent>
+                                                                </Tooltip>
+                                                            </TooltipProvider>
+                                                        ) : (
+                                                            <span className="text-xs text-gray-400 italic">Sin usuario</span>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <span
+                                                            className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${
+                                                                estado.estado_cuenta ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                                                            }`}
+                                                        >
+                                                            {estado.estado_cuenta ? 'Activa' : 'Inactiva'}
+                                                        </span>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            ) : (
+                                <div className="flex h-[300px] items-center justify-center text-center">No hay cuentas disponibles para mostrar.</div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </div>
+
                 <Toaster position="top-center" />
             </div>
         </AppLayout>
