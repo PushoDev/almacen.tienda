@@ -11,7 +11,7 @@ import {
     ChartNoAxesCombinedIcon,
     Contact,
     FileText,
-    GitCommit, HandCoins,
+    HandCoins,
     Landmark,
     LayoutGrid,
     MessageSquare,
@@ -20,7 +20,7 @@ import {
     ShoppingBasket,
     ShoppingCart,
     StoreIcon,
-    Users
+    Users,
 } from 'lucide-react';
 import AppLogo from './app-logo';
 
@@ -35,19 +35,13 @@ const allNavItems: NavItem[] = [
         title: 'Opciones Generales',
         href: '/dashboard',
         icon: LayoutGrid,
-        roles: ['admin'],
-    },
-    {
-        title: 'Punto de Venta',
-        href: '/vendedor',
-        icon: LayoutGrid,
-        roles: ['vendedor'],
+        roles: ['admin', 'moderador', 'vendedor'],
     },
     {
         title: 'Logistica Total',
         href: '/logistica',
         icon: ChartNoAxesCombinedIcon,
-        roles: ['admin'],
+        roles: ['admin', 'moderador', 'vendedor'],
     },
     {
         title: 'Gestión de Monedas',
@@ -59,55 +53,55 @@ const allNavItems: NavItem[] = [
         title: 'Almacenes o Tiendas',
         href: '/almacenes',
         icon: StoreIcon,
-        roles: ['admin', 'vendedor'],
+        roles: ['admin', 'moderador', 'vendedor'],
     },
     {
         title: 'Movimientos',
         href: '/movimientos',
         icon: Repeat,
-        roles: ['admin', 'vendedor'],
+        roles: ['admin', 'moderador', 'vendedor'],
     },
     {
         title: 'Categorias',
         href: '/categorias',
         icon: StoreIcon,
-        roles: ['admin'],
+        roles: ['admin', 'moderador'],
     },
     {
         title: 'Productos',
         href: '/productos',
         icon: Package,
-        roles: ['admin', 'vendedor'],
+        roles: ['admin', 'moderador', 'vendedor'],
     },
     {
         title: 'Inventario Disponible',
         href: '/disponibles',
         icon: ShoppingBasket,
-        roles: ['admin', 'vendedor'],
+        roles: ['admin', 'moderador', 'vendedor'],
     },
     {
         title: 'Proveedores',
         href: '/proveedores',
         icon: ShoppingCart,
-        roles: ['admin'],
+        roles: ['admin', 'moderador'],
     },
     {
         title: 'Cuentas',
         href: '/cuentas',
         icon: Landmark,
-        roles: ['admin', 'vendedor'],
+        roles: ['admin', 'moderador', 'vendedor'],
     },
     {
         title: 'Clientes',
         href: '/clientes',
         icon: Users,
-        roles: ['admin', 'vendedor'],
+        roles: ['admin', 'moderador', 'vendedor'],
     },
     {
         title: 'Reportes',
         href: '/reportes',
         icon: FileText,
-        roles: ['admin', 'vendedor'],
+        roles: ['admin', 'moderador', 'vendedor'],
     },
     {
         title: 'Empleados',
@@ -119,7 +113,7 @@ const allNavItems: NavItem[] = [
         title: 'Seguimientos',
         href: '#',
         icon: Cctv,
-        roles: ['admin'],
+        roles: ['admin', 'moderador', 'vendedor'],
     },
 ];
 
@@ -128,19 +122,13 @@ const footerNavItems: NavItem[] = [
         title: 'Chat.POS',
         href: '#',
         icon: MessageSquare,
-        roles: ['vendedor'],
-    },
-    {
-        title: 'Repositorio',
-        href: 'https://github.com/laravel/react-starter-kit',
-        icon: GitCommit,
-        roles: ['vendedor'],
+        roles: ['admin', 'moderador', 'vendedor'],
     },
     {
         title: 'Documentación',
         href: 'https://documentacion-glorietapos.vercel.app/',
         icon: BookOpen,
-        roles: ['vendedor'],
+        roles: ['admin', 'moderador', 'vendedor'],
     },
 ];
 

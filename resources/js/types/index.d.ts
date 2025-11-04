@@ -23,7 +23,7 @@ export interface NavItem {
     href: string;
     icon?: LucideIcon | null;
     isActive?: boolean;
-    roles: Array<'admin' | 'vendedor'>;
+    roles: Array<'admin' | 'moderador' | 'vendedor'>;
 }
 
 export interface SharedData {
@@ -40,7 +40,7 @@ export interface User {
     name: string;
     email: string;
     avatar?: string;
-    role: 'admin' | 'vendedor';
+    role: 'admin' | 'moderador' | 'vendedor';
     email_verified_at: string | null;
     created_at: string;
     updated_at: string;
