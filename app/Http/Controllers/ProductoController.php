@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 use App\Exports\ProductoExport;
 use App\Imports\ProductoImport;
 use Maatwebsite\Excel\Facades\Excel;
@@ -366,88 +367,118 @@ class ProductoController extends Controller
     }
 
     /**
-     * Exportar productos a Excel
+     * Exportar productos a Excel filtrando por almacén
      */
     public function export(Request $request)
     {
-        $almacenId = $request->get('almacen_id', 1);
+        try {
+            $almacenId = $request->get('almacen_id', 1);
 
-        $almacen = Almacen::find($almacenId);
-        if (!$almacen) {
-            return redirect()->back()->withErrors(['error' => 'El almacén especificado no existe.']);
+            // Validar que el almacén existe
+            $almacen = Almacen::find($almacenId);
+            if (!$almacen) {
+                return redirect()->back()->withErrors(['error' => 'El almacén especificado no existe.']);
+            }
+
+            // Validar que el almacén tiene productos
+            $productosCount = Producto::whereHas('almacenes', function ($query) use ($almacenId) {
+                $query->where('almacen_id', $almacenId);
+            })->count();
+
+            if ($productosCount === 0) {
+                return redirect()->back()->withErrors(['error' => 'Este almacén no tiene productos para exportar.']);
+            }
+
+            // Generar nombre del archivo
+            $nombreArchivo = 'productos-' . Str::slug($almacen->nombre_almacen) . '-' . date('Y-m-d-His') . '.xlsx';
+
+            return Excel::download(
+                new ProductoExport($almacenId),
+                $nombreArchivo
+            );
+        } catch (\Exception $e) {
+            Log::error('Error al exportar productos: ' . $e->getMessage());
+            return redirect()->back()->withErrors(['error' => 'Error al exportar: ' . $e->getMessage()]);
         }
-
-        return Excel::download(
-            new ProductoExport($almacenId),
-            'productos-almacen-' . $almacen->nombre_almacen . '-' . date('Y-m-d') . '.xlsx'
-        );
     }
 
     /**
-     * Importar productos desde Excel
+     * Importar productos desde Excel a un almacén específico
      */
     public function import(Request $request)
     {
-        // Validación básica
-        if (!$request->hasFile('file')) {
-            return redirect()->back()->withErrors(['error' => 'No se seleccionó ningún archivo.']);
-        }
+        // Validación de archivo
+        $request->validate([
+            'file' => 'required|file|mimes:xlsx,xls|max:5120',
+            'almacen_id' => 'required|integer|exists:almacens,id'
+        ], [
+            'file.required' => 'Debes seleccionar un archivo para importar',
+            'file.file' => 'El archivo debe ser un archivo válido',
+            'file.mimes' => 'El archivo debe ser de tipo Excel (.xlsx o .xls)',
+            'file.max' => 'El archivo no debe superar 5MB',
+            'almacen_id.required' => 'Debes seleccionar un almacén',
+            'almacen_id.exists' => 'El almacén seleccionado no existe',
+        ]);
 
-        $file = $request->file('file');
-
-        // Validar tipo de archivo
-        $allowedTypes = ['xlsx', 'xls'];
-        $extension = $file->getClientOriginalExtension();
-
-        if (!in_array($extension, $allowedTypes)) {
-            return redirect()->back()->withErrors(['error' => 'El archivo debe ser de tipo Excel (.xlsx o .xls).']);
-        }
-
-        $almacenId = $request->get('almacen_id', 1);
-
+        DB::beginTransaction();
         try {
+            $file = $request->file('file');
+            $almacenId = $request->get('almacen_id');
+
+            // Validar que el almacén existe
+            $almacen = Almacen::find($almacenId);
+            if (!$almacen) {
+                throw new \Exception('El almacén especificado no existe.');
+            }
+
+            // Crear la instancia del importador
             $import = new ProductoImport($almacenId);
             Excel::import($import, $file);
 
+            DB::commit();
+
+            // Obtener estadísticas
+            $stats = $import->getEstadisticas();
+
+            $mensaje = "✓ Importación completada correctamente.\n";
+            $mensaje .= "• Productos creados: {$stats['productos_creados']}\n";
+            $mensaje .= "• Productos actualizados: {$stats['productos_actualizados']}\n";
+            $mensaje .= "• Total procesado: {$stats['filas_procesadas']}\n";
+            if ($stats['filas_omitidas'] > 0) {
+                $mensaje .= "⚠ Filas omitidas: {$stats['filas_omitidas']}";
+            }
+
+            Log::info("Importación exitosa en almacén {$almacen->nombre_almacen}", $stats);
+
             return redirect()
                 ->route('productos.index')
-                ->with('success', 'Productos importados correctamente. Los códigos de barras se generaron automáticamente.');
+                ->with('success', $mensaje);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return redirect()->back()
+                ->withErrors($e->errors())
+                ->withInput();
         } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error al importar productos: ' . $e->getMessage(), [
+                'almacen_id' => $request->get('almacen_id'),
+                'archivo' => $request->file('file')?->getClientOriginalName(),
+            ]);
+
             return redirect()
                 ->back()
-                ->withErrors(['error' => 'Error al importar: ' . $e->getMessage()]);
+                ->withErrors(['error' => 'Error al importar productos: ' . $e->getMessage()])
+                ->withInput();
         }
     }
 
     /**
-     * Importar a un almacén específico
+     * Importar a un almacén específico (ruta alternativa)
      */
     public function importToAlmacen(Request $request, $almacenId)
     {
-        if (!$request->hasFile('file')) {
-            return redirect()->back()->withErrors(['error' => 'No se seleccionó ningún archivo.']);
-        }
-
-        $file = $request->file('file');
-        $extension = $file->getClientOriginalExtension();
-
-        if (!in_array($extension, ['xlsx', 'xls'])) {
-            return redirect()->back()->withErrors(['error' => 'El archivo debe ser de tipo Excel (.xlsx o .xls).']);
-        }
-
-        if (!Almacen::find($almacenId)) {
-            return redirect()->back()->withErrors(['error' => 'El almacén especificado no existe.']);
-        }
-
-        try {
-            $import = new ProductoImport($almacenId);
-            Excel::import($import, $file);
-
-            return redirect()
-                ->route('productos.index')
-                ->with('success', "Productos importados al almacén {$almacenId} correctamente. Los códigos de barras se generaron automáticamente.");
-        } catch (\Exception $e) {
-            return redirect()->back()->withErrors(['error' => 'Error al importar: ' . $e->getMessage()]);
-        }
+        // Redirigir a import con el almacén en el request
+        $request->merge(['almacen_id' => $almacenId]);
+        return $this->import($request);
     }
 }

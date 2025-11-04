@@ -63,16 +63,38 @@ interface ImportModalProps {
 // Modal para importar productos
 function ImportModal({ isOpen, onClose, onImport, almacenes }: ImportModalProps) {
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
-    const [almacenId, setAlmacenId] = useState<number>(1);
+    const [almacenId, setAlmacenId] = useState<number>(almacenes[0]?.id || 1);
     const [isDragging, setIsDragging] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
+    const [fileSize, setFileSize] = useState<string>('0 KB');
+
+    const formatFileSize = (bytes: number): string => {
+        if (bytes === 0) return '0 KB';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+    };
 
     const handleFileSelect = (file: File) => {
-        if (file.type.includes('excel') || file.type.includes('spreadsheet') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-            setSelectedFile(file);
-        } else {
-            toast.error('Por favor, selecciona un archivo Excel válido (.xlsx o .xls)');
+        // Validar extensión
+        const validExtensions = ['xlsx', 'xls'];
+        const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
+
+        if (!validExtensions.includes(fileExtension)) {
+            toast.error('❌ Formato inválido. Solo se aceptan archivos .xlsx o .xls');
+            return;
         }
+
+        // Validar tamaño (máximo 5MB)
+        const maxSize = 5 * 1024 * 1024;
+        if (file.size > maxSize) {
+            toast.error('❌ El archivo es demasiado grande. Máximo 5MB');
+            return;
+        }
+
+        setSelectedFile(file);
+        setFileSize(formatFileSize(file.size));
     };
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -94,106 +116,170 @@ function ImportModal({ isOpen, onClose, onImport, almacenes }: ImportModalProps)
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
         if (!selectedFile) {
-            toast.error('Por favor, selecciona un archivo');
+            toast.error('Por favor, selecciona un archivo para continuar');
+            return;
+        }
+
+        if (!almacenId) {
+            toast.error('Por favor, selecciona un almacén de destino');
             return;
         }
 
         setIsImporting(true);
         try {
             await onImport(selectedFile, almacenId);
+            setSelectedFile(null);
+            setFileSize('0 KB');
+        } catch (error) {
+            console.error('Error en importación:', error);
         } finally {
             setIsImporting(false);
         }
     };
 
+    const handleClose = () => {
+        if (!isImporting) {
+            setSelectedFile(null);
+            setFileSize('0 KB');
+            onClose();
+        }
+    };
+
     if (!isOpen) return null;
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="w-full max-w-md rounded-lg bg-white p-6 dark:bg-gray-800">
-                <h2 className="mb-4 text-lg font-semibold">Importar Productos desde Excel</h2>
+    const selectedAlmacen = almacenes.find((a) => a.id === almacenId);
 
-                <form onSubmit={handleSubmit} className="space-y-4">
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="w-full max-w-2xl rounded-lg bg-white p-8 shadow-lg dark:bg-gray-800">
+                {/* Encabezado */}
+                <div className="mb-6">
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Importar Productos desde Excel</h2>
+                    <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                        Carga un archivo Excel con los productos a importar. Se pueden crear nuevos productos o actualizar los existentes.
+                    </p>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-6">
                     {/* Selector de almacén */}
-                    <div>
-                        <label className="mb-2 block text-sm font-medium">Almacén de destino</label>
+                    <div className="space-y-2">
+                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">📦 Almacén de destino</label>
                         <select
                             value={almacenId}
                             onChange={(e) => setAlmacenId(Number(e.target.value))}
-                            className="w-full rounded-md border p-2"
+                            className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-900 transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                             disabled={isImporting}
                         >
                             {almacenes.map((almacen) => (
-                                <option key={almacen.id} value={almacen.id} className="bg-background">
+                                <option key={almacen.id} value={almacen.id}>
                                     {almacen.nombre_almacen}
                                 </option>
                             ))}
                         </select>
+                        {selectedAlmacen && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                Los productos se asignarán a: <strong>{selectedAlmacen.nombre_almacen}</strong>
+                            </p>
+                        )}
                     </div>
 
                     {/* Área de arrastrar y soltar */}
-                    <div
-                        className={`cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition-colors ${
-                            isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
-                        } ${isImporting ? 'opacity-50' : ''}`}
-                        onDragOver={handleDragOver}
-                        onDragLeave={handleDragLeave}
-                        onDrop={handleDrop}
-                        onClick={() => !isImporting && document.getElementById('file-input')?.click()}
-                    >
-                        <CloudUpload className="mx-auto mb-2" size={24} />
-                        <p className="text-sm text-gray-600">
-                            {selectedFile
-                                ? `Archivo seleccionado: ${selectedFile.name}`
-                                : 'Arrastra un archivo Excel aquí o haz clic para seleccionar'}
-                        </p>
-                        <input
-                            id="file-input"
-                            type="file"
-                            accept=".xlsx,.xls"
-                            className="hidden"
-                            onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) handleFileSelect(file);
-                            }}
-                            disabled={isImporting}
-                        />
+                    <div className="space-y-2">
+                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">📄 Archivo Excel</label>
+                        <div
+                            className={`cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-all ${
+                                isDragging
+                                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                                    : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700/30'
+                            } ${isImporting ? 'pointer-events-none opacity-50' : ''}`}
+                            onDragOver={handleDragOver}
+                            onDragLeave={handleDragLeave}
+                            onDrop={handleDrop}
+                            onClick={() => !isImporting && document.getElementById('file-input')?.click()}
+                        >
+                            {selectedFile ? (
+                                <div className="space-y-2">
+                                    <CloudUpload className="mx-auto text-green-500" size={32} />
+                                    <p className="font-semibold text-gray-900 dark:text-white">✓ {selectedFile.name}</p>
+                                    <p className="text-xs text-gray-600 dark:text-gray-400">{fileSize}</p>
+                                    <p className="text-xs text-blue-600 dark:text-blue-400">Haz clic o arrastra para cambiar el archivo</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    <CloudUpload className="mx-auto text-gray-400" size={32} />
+                                    <p className="text-gray-900 dark:text-white">
+                                        <span className="font-semibold">Arrastra tu archivo aquí</span> o haz clic para seleccionar
+                                    </p>
+                                    <p className="text-xs text-gray-600 dark:text-gray-400">Formatos soportados: .xlsx, .xls | Tamaño máximo: 5MB</p>
+                                </div>
+                            )}
+                            <input
+                                id="file-input"
+                                type="file"
+                                accept=".xlsx,.xls"
+                                className="hidden"
+                                onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) handleFileSelect(file);
+                                }}
+                                disabled={isImporting}
+                            />
+                        </div>
                     </div>
 
                     {/* Información del formato requerido */}
-                    <div className="border-sidebar-accent rounded border p-3 text-sm">
-                        <p className="mb-1 font-medium">Formato requerido:</p>
-                        <ul className="list-inside list-disc space-y-1">
-                            <li>
-                                <strong>Columnas obligatorias:</strong> nombre_producto, categoria, precio_compra, cantidad
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+                        <p className="mb-3 font-semibold text-blue-900 dark:text-blue-300">📋 Formato del archivo requerido:</p>
+                        <ul className="space-y-2 text-sm text-blue-800 dark:text-blue-200">
+                            <li className="flex items-start gap-2">
+                                <span className="font-bold">•</span>
+                                <span>
+                                    <strong>Columnas obligatorias:</strong> nombre_producto, categoria, precio_compra, cantidad
+                                </span>
                             </li>
-                            <li>
-                                <strong>Columnas opcionales:</strong> marca, modelo, capacidad
+                            <li className="flex items-start gap-2">
+                                <span className="font-bold">•</span>
+                                <span>
+                                    <strong>Columnas opcionales:</strong> marca, modelo, capacidad
+                                </span>
                             </li>
-                            <li>
-                                <strong>Nota:</strong> El código de barras se genera automáticamente
+                            <li className="flex items-start gap-2">
+                                <span className="font-bold">•</span>
+                                <span>
+                                    <strong>Comportamiento:</strong> Los códigos de barras se generan automáticamente. Si el producto existe, se
+                                    actualiza la categoría, precio y cantidad en el almacén.
+                                </span>
                             </li>
-                            <li>Formato: .xlsx o .xls</li>
-                            <li>Tamaño máximo: 2MB</li>
+                            <li className="flex items-start gap-2">
+                                <span className="font-bold">•</span>
+                                <span>
+                                    <strong>Ejemplo de fila:</strong> Laptop Dell | Electrónicos | 1500.00 | 10 | Dell | XPS 13 | 512GB
+                                </span>
+                            </li>
                         </ul>
                     </div>
 
                     {/* Botones */}
-                    <div className="flex justify-end gap-2">
-                        <Button type="button" variant="outline" className="cursor-pointer" onClick={onClose} disabled={isImporting}>
+                    <div className="flex justify-end gap-3 pt-4">
+                        <Button type="button" variant="outline" className="cursor-pointer" onClick={handleClose} disabled={isImporting}>
                             Cancelar
                         </Button>
-                        <Button type="submit" disabled={!selectedFile || isImporting} className="cursor-pointer bg-green-600 hover:bg-green-700">
+                        <Button
+                            type="submit"
+                            disabled={!selectedFile || isImporting}
+                            className="cursor-pointer gap-2 bg-green-600 hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
                             {isImporting ? (
                                 <>
-                                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
                                     Importando...
                                 </>
                             ) : (
                                 <>
-                                    <Upload size={16} className="mr-2" />
-                                    Importar
+                                    <Upload size={16} />
+                                    Importar Productos
                                 </>
                             )}
                         </Button>
@@ -273,22 +359,45 @@ export default function ProductosPage({
 
     // Exportar a Excel
     const handleExport = () => {
-        const url = route('productos.export', { almacen_id: almacenExportId });
-        const link = document.createElement('a');
-        link.href = url;
+        if (!almacenExportId) {
+            toast.error('❌ Por favor, selecciona un almacén para exportar');
+            return;
+        }
 
-        const almacenSeleccionado = almacenes.find((a) => a.id === almacenExportId);
-        const nombreAlmacen = almacenSeleccionado ? almacenSeleccionado.nombre_almacen : almacenExportId.toString();
-        const fecha = new Date().toISOString().split('T')[0];
+        try {
+            const url = route('productos.export', { almacen_id: almacenExportId });
 
-        link.download = `productos-almacen-${nombreAlmacen}-${fecha}.xlsx`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        toast.success('Exportación iniciada. El archivo incluye el stock total de productos.');
+            // Crear un elemento temporal para descargar
+            const link = document.createElement('a');
+            link.href = url;
+
+            const almacenSeleccionado = almacenes.find((a) => a.id === almacenExportId);
+            const nombreAlmacen = almacenSeleccionado
+                ? almacenSeleccionado.nombre_almacen.replace(/\s+/g, '-').toLowerCase()
+                : `almacen-${almacenExportId}`;
+            const fecha = new Date().toISOString().split('T')[0];
+            const hora = new Date().toTimeString().split(' ')[0].replace(/:/g, '-');
+
+            link.download = `productos-${nombreAlmacen}-${fecha}-${hora}.xlsx`;
+            document.body.appendChild(link);
+
+            // Mostrar notificación mientras se descarga
+            toast.loading('⏳ Preparando exportación...', { duration: 2000 });
+
+            link.click();
+
+            document.body.removeChild(link);
+
+            toast.success('✓ Exportación completada', {
+                description: `Se exportaron los productos del almacén ${almacenSeleccionado?.nombre_almacen || 'seleccionado'}`,
+            });
+        } catch (error) {
+            console.error('Error en exportación:', error);
+            toast.error('❌ Error al exportar productos');
+        }
     };
 
-    // Importar desde Excel - VERSIÓN SIMPLIFICADA
+    // Importar desde Excel - VERSIÓN PROFESIONAL
     const handleImport = async (file: File, almacenId: number) => {
         const formData = new FormData();
         formData.append('file', file);
@@ -297,13 +406,39 @@ export default function ProductosPage({
         try {
             await router.post(route('productos.import'), formData, {
                 forceFormData: true,
-            });
+                onSuccess: (page) => {
+                    // La respuesta exitosa vendrá del servidor
+                    toast.success('✓ ¡Importación completada exitosamente!', {
+                        description: 'Los productos han sido importados al almacén seleccionado.',
+                    });
+                    setShowImportModal(false);
+                    // Recargamos la página para ver los productos actualizados
+                    setTimeout(() => {
+                        router.reload();
+                    }, 1000);
+                },
+                onError: (errors: any) => {
+                    console.error('Errores de importación:', errors);
 
-            toast.success('Productos importados correctamente. Los códigos de barras se generaron automáticamente.');
-            setShowImportModal(false);
+                    let errorMessage = 'Ocurrió un error al importar los productos';
+
+                    if (errors.error) {
+                        errorMessage = errors.error;
+                    } else if (errors.file) {
+                        errorMessage = Array.isArray(errors.file) ? errors.file[0] : errors.file;
+                    } else if (errors.almacen_id) {
+                        errorMessage = Array.isArray(errors.almacen_id) ? errors.almacen_id[0] : errors.almacen_id;
+                    }
+
+                    toast.error('❌ Error en la importación', {
+                        description: errorMessage,
+                    });
+                },
+            });
         } catch (error: any) {
+            console.error('Error desconocido:', error);
             const errorMessage = error?.message || 'Error desconocido al importar';
-            toast.error('Error al importar: ' + errorMessage);
+            toast.error('❌ Error al procesar la importación: ' + errorMessage);
         }
     };
 
