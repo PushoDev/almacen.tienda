@@ -135,11 +135,24 @@ Refrigeradora Samsung    | Samsung| RS25J500D| 500L      | REFRIGERACION  | 1200
 - Se asigna al almacén con la cantidad especificada
 - Se crea la categoría si no existe
 
-**Producto Existente:**
+**Producto Existente (Mismo nombre, marca y modelo):**
 - Se busca por: nombre, marca y modelo
 - Se actualiza: categoría y precio de compra
-- Se actualiza/crea relación con el almacén
+- **La cantidad se INCREMENTA** (suma a la cantidad existente)
 - Conserva el código de barras existente
+
+**Ejemplo de Incremento de Cantidad:**
+```
+Primer Importador:
+  - Importa: Laptop Dell XPS = 10 unidades en Almacén A
+  - Resultado: 10 unidades en Almacén A
+
+Segundo Importador (mismo producto, mismo almacén):
+  - Importa: Laptop Dell XPS = 5 unidades en Almacén A
+  - Resultado: 15 unidades totales en Almacén A (10 + 5)
+```
+
+**Nota:** La cantidad se incrementa en el almacén especificado. Si importas el mismo producto en diferente almacén, la cantidad es independiente.
 
 ### Categorías
 

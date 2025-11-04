@@ -112,15 +112,37 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
             }
 
             // Asignar/actualizar producto en el almacén con cantidad
-            AlmacenProducto::updateOrCreate(
-                [
+            // IMPORTANTE: INCREMENTAR cantidad si ya existe, no reemplazar
+            $almacenProducto = AlmacenProducto::where('almacen_id', $this->almacenId)
+                ->where('producto_id', $producto->id)
+                ->first();
+
+            if ($almacenProducto) {
+                // Producto ya existe en el almacén: INCREMENTAR cantidad
+                $cantidadAnterior = $almacenProducto->cantidad;
+                $almacenProducto->increment('cantidad', $cantidad);
+                Log::info("📦 Cantidad incrementada en almacén", [
+                    'producto_id' => $producto->id,
+                    'cantidad_anterior' => $cantidadAnterior,
+                    'cantidad_agregada' => $cantidad,
+                    'cantidad_total' => $cantidadAnterior + $cantidad,
                     'almacen_id' => $this->almacenId,
-                    'producto_id' => $producto->id
-                ],
-                [
+                    'producto' => $nombreProducto,
+                ]);
+            } else {
+                // Producto nuevo en el almacén: CREAR con cantidad inicial
+                AlmacenProducto::create([
+                    'almacen_id' => $this->almacenId,
+                    'producto_id' => $producto->id,
                     'cantidad' => $cantidad
-                ]
-            );
+                ]);
+                Log::info("📦 Producto asignado al almacén", [
+                    'producto_id' => $producto->id,
+                    'cantidad' => $cantidad,
+                    'almacen_id' => $this->almacenId,
+                    'producto' => $nombreProducto,
+                ]);
+            }
 
             // NO devolver nada - ya procesamos todo manualmente
             return null;

@@ -284,6 +284,47 @@ Tiempo estimado:
 ✅ Ahora: Validación completa (tipo, tamaño)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🆕 ACTUALIZACIÓN - LÓGICA DE CANTIDAD (Enero 2025)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❌ Antes: Al importar un producto existente, REEMPLAZABA la cantidad
+✅ Ahora: Al importar un producto existente, INCREMENTA la cantidad
+
+CAMBIO IMPORTANTE EN EL COMPORTAMIENTO:
+
+Ejemplo Práctico:
+┌─────────────────────────────────────────────────────────┐
+│ Primer Importador (Usuario A):                          │
+│  → Importa: Laptop Dell XPS = 10 unidades              │
+│  → Almacén A: 10 unidades                              │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│ Segundo Importador (Usuario B):                         │
+│  → Importa: Laptop Dell XPS = 5 unidades               │
+│  → ANTES (❌): Almacén A: 5 unidades (REEMPLAZÓ)        │
+│  → AHORA (✅): Almacén A: 15 unidades (SUMÓ 10+5)       │
+└─────────────────────────────────────────────────────────┘
+
+RAZÓN DEL CAMBIO:
+- Es más seguro para inventario
+- Evita perder datos accidentalmente
+- Simula mejor el flujo real de almacén
+- Soporta múltiples usuarios importando simultáneamente
+- Permite auditoría de entradas
+
+ARCHIVOS MODIFICADOS:
+✓ app/Imports/ProductoImport.php
+  - Eliminado WithBatchInserts (causaba conflictos)
+  - Cambio: updateOrCreate() → increment()
+  - Nuevo: Logs detallados de incrementos
+
+✓ docs/IMPORT_EXPORT_PRODUCTOS.md
+  - Documentación del nuevo comportamiento
+  - Ejemplo práctico del incremento
+  - Notas sobre almacenes independientes
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧪 TESTING RECOMENDADO
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
