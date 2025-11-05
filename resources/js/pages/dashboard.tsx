@@ -11,11 +11,13 @@ import { Head, Link } from '@inertiajs/react';
 import {
     ComputerIcon,
     DiamondPercent,
+    DollarSign,
     LucideBaggageClaim,
     LucideBoomBox,
     LucideClockArrowDown,
     MonitorCog,
     ShoppingBagIcon,
+    TrendingUp,
     Users,
 } from 'lucide-react';
 import * as React from 'react';
@@ -82,6 +84,8 @@ export default function Dashboard({ userRole }: { userRole: 'admin' | 'moderador
     const [usuarioSeleccionado, setUsuarioSeleccionado] = useState<string>('');
     const [estadosFinancieros, setEstadosFinancieros] = useState<EstadoFinanciero[]>([]);
     const [isLoadingFinancial, setIsLoadingFinancial] = useState(false);
+    const [monedas, setMonedas] = useState<Moneda[]>([]);
+    const [isLoadingMonedas, setIsLoadingMonedas] = useState(true);
 
     useEffect(() => {
         const fetchChartData = async () => {
@@ -113,6 +117,24 @@ export default function Dashboard({ userRole }: { userRole: 'admin' | 'moderador
         };
 
         fetchUsuarios();
+    }, []);
+
+    // Cargar monedas al montar el componente
+    useEffect(() => {
+        const fetchMonedas = async () => {
+            setIsLoadingMonedas(true);
+            try {
+                const response = await fetch(route('dashboard.monedas'));
+                const data = await response.json();
+                setMonedas(data);
+            } catch (error) {
+                console.error('Error fetching monedas:', error);
+            } finally {
+                setIsLoadingMonedas(false);
+            }
+        };
+
+        fetchMonedas();
     }, []);
 
     // Cargar estados financieros cuando cambia el usuario seleccionado
@@ -324,6 +346,87 @@ export default function Dashboard({ userRole }: { userRole: 'admin' | 'moderador
                             <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
                         </div>
                     </div>
+                </div>
+
+                {/* Sección de Monedas - Información de Tasas de Cambio */}
+                <div className="animate__animated animate__fadeIn">
+                    <Card>
+                        <CardHeader className="flex items-center gap-2 space-y-0 border-b py-5 sm:flex-row">
+                            <div className="grid flex-1 gap-1 text-center sm:text-left">
+                                <div className="flex items-center gap-2">
+                                    <DollarSign className="h-5 w-5 text-green-600" />
+                                    <CardTitle>Información de Monedas</CardTitle>
+                                </div>
+                                <CardDescription>Tasas de cambio y comisiones disponibles en el sistema</CardDescription>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="pt-6">
+                            {isLoadingMonedas ? (
+                                <div className="flex h-[300px] items-center justify-center text-center">Cargando datos de monedas...</div>
+                            ) : monedas.length > 0 ? (
+                                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                    {monedas.map((moneda) => (
+                                        <div
+                                            key={moneda.id}
+                                            className={`rounded-lg border p-4 transition-all hover:shadow-md ${
+                                                moneda.principal
+                                                    ? 'border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-950'
+                                                    : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
+                                            }`}
+                                        >
+                                            {/* Header con símbolo y código */}
+                                            <div className="mb-3 flex items-start justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900">
+                                                        <span className="text-xl font-bold text-blue-600 dark:text-blue-300">
+                                                            {moneda.simbolo_moneda}
+                                                        </span>
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="font-semibold text-gray-900 dark:text-white">{moneda.nombre_moneda}</h3>
+                                                        <p className="text-sm text-gray-500 dark:text-gray-400">{moneda.codigo_moneda}</p>
+                                                    </div>
+                                                </div>
+                                                {moneda.principal && (
+                                                    <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-1 text-xs font-semibold text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                                                        <TrendingUp className="h-3 w-3" />
+                                                        Principal
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {/* Información de tasas */}
+                                            <div className="space-y-2 border-t pt-3 dark:border-gray-700">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-sm text-gray-600 dark:text-gray-400">Tasa de Cambio:</span>
+                                                    <span className="font-semibold text-gray-900 dark:text-white">
+                                                        {moneda.tasa_cambio.toLocaleString('es-ES', {
+                                                            minimumFractionDigits: 2,
+                                                            maximumFractionDigits: 6,
+                                                        })}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-sm text-gray-600 dark:text-gray-400">Comisión:</span>
+                                                    <span className="font-semibold text-orange-600 dark:text-orange-400">
+                                                        {moneda.commission.toLocaleString('es-ES', {
+                                                            minimumFractionDigits: 2,
+                                                            maximumFractionDigits: 4,
+                                                        })}
+                                                        %
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="flex h-[300px] items-center justify-center text-center">
+                                    No hay monedas disponibles en el sistema.
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
                 </div>
 
                 <Separator />

@@ -372,4 +372,33 @@ class ReporteController extends Controller
 
         return response()->json($usuarios);
     }
+
+    /**
+     * Obtiene todas las monedas activas con sus tasas de cambio
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getMonedas()
+    {
+        $monedas = DB::table('monedas')
+            ->select('id', 'nombre_moneda', 'codigo_moneda', 'simbolo_moneda', 'tasa_cambio', 'commission', 'estado', 'principal')
+            ->where('estado', true)
+            ->orderBy('principal', 'desc')
+            ->orderBy('nombre_moneda')
+            ->get()
+            ->map(function ($moneda) {
+                return [
+                    'id' => $moneda->id,
+                    'nombre_moneda' => $moneda->nombre_moneda,
+                    'codigo_moneda' => $moneda->codigo_moneda,
+                    'simbolo_moneda' => $moneda->simbolo_moneda,
+                    'tasa_cambio' => (float) $moneda->tasa_cambio,
+                    'commission' => (float) $moneda->commission,
+                    'estado' => (bool) $moneda->estado,
+                    'principal' => (bool) $moneda->principal,
+                ];
+            });
+
+        return response()->json($monedas);
+    }
 }
