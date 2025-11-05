@@ -62,6 +62,7 @@ interface Moneda {
     tasa_cambio: number;
     commission: number;
     estado: boolean;
+    principal: boolean;
 }
 
 interface EstadoFinanciero {
