@@ -45,6 +45,11 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
         try {
             $this->estadisticas['filas_procesadas']++;
 
+            // Limpiar espacios en blanco de todos los datos
+            $row = array_map(function ($value) {
+                return is_string($value) ? trim($value) : $value;
+            }, $row);
+
             // Validar que tengamos los datos mínimos
             if (empty($row['nombre_producto']) || empty($row['categoria'])) {
                 Log::warning('Fila omitida - datos mínimos faltantes', $row);
@@ -53,7 +58,7 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
             }
 
             // Buscar o crear categoría
-            $categoriaNombre = trim($row['categoria']);
+            $categoriaNombre = $row['categoria'];
             if (isset($this->categorias[$categoriaNombre])) {
                 $categoriaId = $this->categorias[$categoriaNombre];
             } else {
@@ -67,11 +72,11 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
                 Log::info("Categoría creada: {$categoriaNombre}");
             }
 
-            // Preparar datos del producto
-            $nombreProducto = trim($row['nombre_producto']);
-            $marca = isset($row['marca']) ? trim($row['marca']) : null;
-            $modelo = isset($row['modelo']) ? trim($row['modelo']) : null;
-            $capacidad = isset($row['capacidad']) ? trim($row['capacidad']) : null;
+            // Preparar datos del producto (ya están limpios)
+            $nombreProducto = $row['nombre_producto'];
+            $marca = isset($row['marca']) && !empty($row['marca']) ? $row['marca'] : null;
+            $modelo = isset($row['modelo']) && !empty($row['modelo']) ? $row['modelo'] : null;
+            $capacidad = isset($row['capacidad']) && !empty($row['capacidad']) ? $row['capacidad'] : null;
             $precio = floatval($row['precio_compra'] ?? 0);
             $cantidad = intval($row['cantidad'] ?? 0);
 
@@ -165,7 +170,7 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
             'nombre_producto' => 'required|string|max:255',
             'categoria' => 'required|string|max:255',
             'precio_compra' => 'required|numeric|min:0',
-            'cantidad' => 'required|integer|min:0',
+            'cantidad' => 'required|integer',
             'marca' => 'sometimes|nullable|string|max:255',
             'modelo' => 'sometimes|nullable|string|max:255',
             'capacidad' => 'sometimes|nullable|string|max:255',
