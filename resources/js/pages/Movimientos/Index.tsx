@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, BreadcrumbItem, Movimiento, ProductoPorAlmacenDetalleRef } from '@/types';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { AlertCircle, CarFront, CheckCircle2, Clock, Eye, Package, Send, TrendingUp, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { toast, Toaster } from 'sonner';
@@ -100,10 +100,12 @@ export default function MovimientosPage({
     movimientos,
     almacenes,
     estados,
+    userAlmacenesIds,
 }: {
     movimientos: MovimientoPaginado;
     almacenes: AlmacenProps[];
     estados: Record<string, string>;
+    userAlmacenesIds: number[];
 }) {
     const [productosEmisor, setProductosEmisor] = useState<ProductoConStock[]>([]);
     const [almacenOrigenId, setAlmacenOrigenId] = useState<string>('');
@@ -124,6 +126,18 @@ export default function MovimientosPage({
         transportista: '',
         observaciones: '',
     });
+
+    const { props } = usePage();
+    const usuario = props.auth?.user as any;
+    const isVendedor = usuario?.role === 'vendedor';
+
+    const almacenesOrigen = isVendedor && userAlmacenesIds.length > 0
+        ? almacenes.filter(a => userAlmacenesIds.includes(a.id))
+        : almacenes;
+
+    const almacenesDestino = almacenOrigenId
+        ? almacenes.filter(a => a.id !== parseInt(almacenOrigenId))
+        : almacenes;
 
     const handleAlmacenOrigenChange = (value: string) => {
         console.log('[Movimientos] Cambiando almacén origen a:', value);
@@ -378,7 +392,7 @@ export default function MovimientosPage({
                                             <SelectValue placeholder="Selecciona el almacén origen..." />
                                         </SelectTrigger>
                                         <SelectContent position="popper">
-                                            {almacenes.map((almacen) => (
+                                            {almacenesOrigen.map((almacen) => (
                                                 <SelectItem key={almacen.id} value={almacen.id.toString()}>
                                                     {almacen.nombre_almacen}
                                                 </SelectItem>
@@ -395,13 +409,11 @@ export default function MovimientosPage({
                                             <SelectValue placeholder="Selecciona el almacén destino..." />
                                         </SelectTrigger>
                                         <SelectContent position="popper">
-                                            {almacenes
-                                                .filter((alm) => (almacenOrigenId ? alm.id.toString() !== almacenOrigenId : true))
-                                                .map((almacen) => (
-                                                    <SelectItem key={almacen.id} value={almacen.id.toString()}>
-                                                        {almacen.nombre_almacen}
-                                                    </SelectItem>
-                                                ))}
+                                            {almacenesDestino.map((almacen) => (
+                                                <SelectItem key={almacen.id} value={almacen.id.toString()}>
+                                                    {almacen.nombre_almacen}
+                                                </SelectItem>
+                                            ))}
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -602,17 +614,25 @@ export default function MovimientosPage({
                                     Mostrando {movimientos.from} a {movimientos.to} de {movimientos.total} resultados
                                 </div>
                                 <div className="flex space-x-2">
-                                    {movimientos.links.map((link, index: number) => (
-                                        <Button
-                                            key={index}
-                                            variant={link.active ? 'default' : 'outline'}
-                                            size="sm"
-                                            disabled={!link.url}
-                                            onClick={() => router.get(link.url || '#')}
-                                        >
-                                            {link.label.replace('&laquo;', '«').replace('&raquo;', '»')}
-                                        </Button>
-                                    ))}
+                                    {movimientos.links.map((link, index: number) => {
+                                        let displayLabel = link.label
+                                            .replace('&laquo;', '«')
+                                            .replace('&raquo;', '»')
+                                            .replace('pagination.previous', '«')
+                                            .replace('pagination.next', '»');
+                                        
+                                        return (
+                                            <Button
+                                                key={index}
+                                                variant={link.active ? 'default' : 'outline'}
+                                                size="sm"
+                                                disabled={!link.url}
+                                                onClick={() => router.get(link.url || '#')}
+                                            >
+                                                {displayLabel}
+                                            </Button>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}

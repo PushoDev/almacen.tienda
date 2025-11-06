@@ -37,8 +37,12 @@ class MovimientosController extends Controller
             ->orderBy('created_at', 'desc')
             ->paginate(10);
 
+        $user = Auth::user();
+        $userAlmacenesIds = $user->role === 'admin' ? [] : $user->almacenes()->pluck('id')->toArray();
+
         return Inertia::render('Movimientos/Index', [
-            'almacenes' => $this->getPermittedAlmacenes(),
+            'almacenes' => Almacen::select('id', 'nombre_almacen', 'tipo_almacen')->get(),
+            'userAlmacenesIds' => $userAlmacenesIds,
             'movimientos' => $movimientos,
             'estados' => [
                 'pendiente_confirmacion' => 'Pendiente Confirmación',
@@ -113,12 +117,6 @@ class MovimientosController extends Controller
             if (!$almacenesPermitidosIds->contains($request->almacen_origen_id)) {
                 throw ValidationException::withMessages([
                     'almacen_origen_id' => 'No tienes permisos sobre este almacén de origen'
-                ]);
-            }
-
-            if (!$almacenesPermitidosIds->contains($request->almacen_destino_id)) {
-                throw ValidationException::withMessages([
-                    'almacen_destino_id' => 'No tienes permisos sobre este almacén de destino'
                 ]);
             }
         }
