@@ -35,4 +35,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/movimientos/{movimiento}/seguimiento', [MovimientosController::class, 'seguimiento'])
         ->name('movimientos.seguimiento');
+
+    Route::get('/movimientos/reportes/discrepancias', [MovimientosController::class, 'reporteDiscrepancias'])
+        ->name('movimientos.reportes.discrepancias');
 });

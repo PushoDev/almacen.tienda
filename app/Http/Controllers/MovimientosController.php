@@ -41,8 +41,7 @@ class MovimientosController extends Controller
             'almacenes' => $this->getPermittedAlmacenes(),
             'movimientos' => $movimientos,
             'estados' => [
-                'pendiente' => 'Pendiente',
-                'aprobado' => 'Aprobado',
+                'pendiente_confirmacion' => 'Pendiente Confirmación',
                 'en_transito' => 'En Tránsito',
                 'recibido_parcial' => 'Recibido Parcial',
                 'recibido_completo' => 'Recibido Completo',
@@ -68,15 +67,17 @@ class MovimientosController extends Controller
             }
         }
 
-        // Obtener productos con cantidad disponible
         $productos = $almacen->productos()
-            ->select('productos.id', 'productos.nombre_producto', 'almacen_producto.cantidad')
+            ->select('productos.id', 'productos.nombre_producto', 'almacen_producto.cantidad', 'almacen_producto.cantidad_en_transito')
             ->get()
             ->map(function ($producto) {
+                $disponible = $producto->pivot->cantidad - $producto->pivot->cantidad_en_transito;
                 return [
                     'id' => $producto->id,
                     'nombre' => $producto->nombre_producto,
-                    'stock_actual' => $producto->pivot->cantidad,
+                    'stock_total' => $producto->pivot->cantidad,
+                    'stock_en_transito' => $producto->pivot->cantidad_en_transito,
+                    'stock_disponible' => max(0, $disponible),
                 ];
             });
 
@@ -99,7 +100,6 @@ class MovimientosController extends Controller
         $user = Auth::user();
         $almacenesPermitidosIds = $this->getPermittedAlmacenes()->pluck('id');
 
-        // Validación básica
         $request->validate([
             'almacen_origen_id' => ['required', 'exists:almacens,id'],
             'almacen_destino_id' => ['required', 'exists:almacens,id', 'different:almacen_origen_id'],
@@ -109,7 +109,6 @@ class MovimientosController extends Controller
             'observaciones' => ['nullable', 'string', 'max:500'],
         ]);
 
-        // Validación adicional de permisos
         if ($user->role !== 'admin') {
             if (!$almacenesPermitidosIds->contains($request->almacen_origen_id)) {
                 throw ValidationException::withMessages([
@@ -127,17 +126,31 @@ class MovimientosController extends Controller
         DB::beginTransaction();
 
         try {
-            // Crear el movimiento
+            foreach ($request->productos as $producto) {
+                $stock = AlmacenProducto::where([
+                    'almacen_id' => $request->almacen_origen_id,
+                    'producto_id' => $producto['id']
+                ])->first();
+
+                $disponible = ($stock ? $stock->cantidad - $stock->cantidad_en_transito : 0);
+
+                if (!$stock || $disponible < $producto['cantidad']) {
+                    throw new \Exception(
+                        "Stock insuficiente para el producto ID: {$producto['id']}. " .
+                        "Disponible: {$disponible}, Solicitado: {$producto['cantidad']}"
+                    );
+                }
+            }
+
             $movimiento = Movimiento::create([
                 'almacen_origen_id' => $request->almacen_origen_id,
                 'almacen_destino_id' => $request->almacen_destino_id,
                 'user_id' => $user->id,
                 'tipo_movimiento' => 'traslado',
-                'estado' => 'pendiente',
+                'estado' => 'pendiente_confirmacion',
                 'observaciones' => $request->observaciones,
             ]);
 
-            // Agregar detalles del movimiento
             foreach ($request->productos as $producto) {
                 MovimientoDetalle::create([
                     'movimiento_id' => $movimiento->id,
@@ -147,18 +160,17 @@ class MovimientosController extends Controller
                 ]);
             }
 
-            // Registrar seguimiento inicial
             MovimientoSeguimiento::create([
                 'movimiento_id' => $movimiento->id,
-                'estado' => 'pendiente',
-                'observaciones' => 'Solicitud de movimiento creada',
+                'estado' => 'pendiente_confirmacion',
+                'observaciones' => 'Movimiento creado. Pendiente de confirmación de envío.',
                 'user_id' => $user->id,
             ]);
 
             DB::commit();
 
             return redirect()->route('movimientos.index')
-                ->with('success', 'Solicitud de movimiento creada exitosamente. Esperando aprobación.');
+                ->with('success', 'Movimiento creado exitosamente. Haz clic en enviar cuando esté listo para despachar.');
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error("Error al crear movimiento - Usuario: {$user->id} - Error: {$e->getMessage()}");
@@ -167,84 +179,10 @@ class MovimientosController extends Controller
         }
     }
 
-    /**
-     * Aprueba un movimiento
-     */
-    public function aprobar(Movimiento $movimiento)
-    {
-        $user = Auth::user();
 
-        // Verificar permisos
-        if ($user->role !== 'admin') {
-            $almacenesPermitidosIds = $user->almacenes->pluck('id');
-            if (!$almacenesPermitidosIds->contains($movimiento->almacen_origen_id)) {
-                abort(403, 'No tienes permisos para aprobar movimientos de este almacén');
-            }
-        }
-
-        DB::beginTransaction();
-
-        try {
-            // Verificar que el movimiento esté pendiente
-            if ($movimiento->estado !== 'pendiente') {
-                throw new \Exception('Solo se pueden aprobar movimientos en estado pendiente.');
-            }
-
-            // Verificar stock para cada producto
-            foreach ($movimiento->detalles as $detalle) {
-                $stock = AlmacenProducto::where([
-                    'almacen_id' => $movimiento->almacen_origen_id,
-                    'producto_id' => $detalle->producto_id
-                ])->first();
-
-                if (!$stock || $stock->cantidad < $detalle->cantidad_solicitada) {
-                    throw new \Exception(
-                        "Stock insuficiente para el producto: {$detalle->producto->nombre_producto}. " .
-                            "Disponible: " . ($stock->cantidad ?? 0) . ", Solicitado: {$detalle->cantidad_solicitada}"
-                    );
-                }
-            }
-
-            // Reservar stock (restar del almacén origen)
-            foreach ($movimiento->detalles as $detalle) {
-                AlmacenProducto::where([
-                    'almacen_id' => $movimiento->almacen_origen_id,
-                    'producto_id' => $detalle->producto_id
-                ])->decrement('cantidad', $detalle->cantidad_solicitada);
-
-                // Marcar como despachado
-                $detalle->update(['cantidad_despachada' => $detalle->cantidad_solicitada]);
-            }
-
-            // Actualizar movimiento
-            $movimiento->update([
-                'estado' => 'aprobado',
-                'usuario_aprobacion_id' => $user->id,
-                'fecha_aprobacion' => now(),
-            ]);
-
-            // Registrar seguimiento
-            MovimientoSeguimiento::create([
-                'movimiento_id' => $movimiento->id,
-                'estado' => 'aprobado',
-                'observaciones' => 'Movimiento aprobado. Stock reservado.',
-                'user_id' => $user->id,
-            ]);
-
-            DB::commit();
-
-            return redirect()->route('movimientos.index')
-                ->with('success', 'Movimiento aprobado exitosamente.');
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error("Error al aprobar movimiento - Usuario: {$user->id} - Error: {$e->getMessage()}");
-
-            return back()->withErrors(['general' => 'Error: ' . $e->getMessage()]);
-        }
-    }
 
     /**
-     * Marca un movimiento como enviado/en tránsito
+     * Marca un movimiento como enviado/en tránsito - Aquí se reserva el stock
      */
     public function enviar(Movimiento $movimiento, Request $request)
     {
@@ -255,7 +193,6 @@ class MovimientosController extends Controller
             'transportista' => 'nullable|string|max:255',
         ]);
 
-        // Verificar permisos
         if ($user->role !== 'admin') {
             $almacenesPermitidosIds = $user->almacenes->pluck('id');
             if (!$almacenesPermitidosIds->contains($movimiento->almacen_origen_id)) {
@@ -266,12 +203,33 @@ class MovimientosController extends Controller
         DB::beginTransaction();
 
         try {
-            // Verificar que el movimiento esté aprobado
-            if ($movimiento->estado !== 'aprobado') {
-                throw new \Exception('Solo se pueden enviar movimientos en estado aprobado.');
+            if ($movimiento->estado !== 'pendiente_confirmacion') {
+                throw new \Exception('Solo se pueden enviar movimientos en estado pendiente de confirmación.');
             }
 
-            // Actualizar movimiento
+            foreach ($movimiento->detalles as $detalle) {
+                $stock = AlmacenProducto::where([
+                    'almacen_id' => $movimiento->almacen_origen_id,
+                    'producto_id' => $detalle->producto_id
+                ])->first();
+
+                $disponible = ($stock ? $stock->cantidad - $stock->cantidad_en_transito : 0);
+
+                if (!$stock || $disponible < $detalle->cantidad_solicitada) {
+                    throw new \Exception(
+                        "Stock insuficiente para el producto ID: {$detalle->producto_id}. " .
+                        "Disponible: {$disponible}, Solicitado: {$detalle->cantidad_solicitada}"
+                    );
+                }
+
+                AlmacenProducto::where([
+                    'almacen_id' => $movimiento->almacen_origen_id,
+                    'producto_id' => $detalle->producto_id
+                ])->increment('cantidad_en_transito', $detalle->cantidad_solicitada);
+
+                $detalle->update(['cantidad_despachada' => $detalle->cantidad_solicitada]);
+            }
+
             $movimiento->update([
                 'estado' => 'en_transito',
                 'guia_transporte' => $request->guia_transporte,
@@ -279,11 +237,10 @@ class MovimientosController extends Controller
                 'fecha_envio' => now(),
             ]);
 
-            // Registrar seguimiento
             MovimientoSeguimiento::create([
                 'movimiento_id' => $movimiento->id,
                 'estado' => 'en_transito',
-                'observaciones' => 'Movimiento en tránsito' .
+                'observaciones' => 'Movimiento despachado' .
                     ($request->guia_transporte ? ". Guía: {$request->guia_transporte}" : ""),
                 'user_id' => $user->id,
             ]);
@@ -291,7 +248,7 @@ class MovimientosController extends Controller
             DB::commit();
 
             return redirect()->route('movimientos.index')
-                ->with('success', 'Movimiento marcado como en tránsito.');
+                ->with('success', 'Movimiento despachado y en tránsito.');
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error("Error al enviar movimiento - Usuario: {$user->id} - Error: {$e->getMessage()}");
@@ -331,21 +288,17 @@ class MovimientosController extends Controller
 
             $totalRecibido = 0;
             $totalSolicitado = 0;
+            $totalDiferencias = 0;
 
-            // Actualizar cantidades recibidas
             foreach ($request->productos as $producto) {
                 $detalle = $movimiento->detalles->where('producto_id', $producto['id'])->first();
                 if ($detalle) {
                     $cantidadRecibida = $producto['cantidad_recibida'];
 
-                    // Validar que no se reciba más de lo despachado
-                    if ($cantidadRecibida > $detalle->cantidad_despachada) {
-                        throw new \Exception("La cantidad recibida no puede ser mayor a la cantidad despachada para el producto ID: {$producto['id']}");
-                    }
-
                     $detalle->update(['cantidad_recibida' => $cantidadRecibida]);
 
-                    // Sumar al almacén destino
+                    $diferencia = $detalle->cantidad_despachada - $cantidadRecibida;
+
                     if ($cantidadRecibida > 0) {
                         AlmacenProducto::updateOrCreate(
                             [
@@ -354,6 +307,26 @@ class MovimientosController extends Controller
                             ],
                             ['cantidad' => DB::raw("cantidad + $cantidadRecibida")]
                         );
+                    }
+
+                    AlmacenProducto::where([
+                        'almacen_id' => $movimiento->almacen_origen_id,
+                        'producto_id' => $detalle->producto_id
+                    ])->decrement('cantidad_en_transito', $detalle->cantidad_despachada);
+
+                    if ($diferencia > 0) {
+                        AlmacenProducto::where([
+                            'almacen_id' => $movimiento->almacen_origen_id,
+                            'producto_id' => $detalle->producto_id
+                        ])->increment('cantidad', $diferencia);
+                        $totalDiferencias += $diferencia;
+                    } elseif ($diferencia < 0) {
+                        $diferenciaNegativa = abs($diferencia);
+                        AlmacenProducto::where([
+                            'almacen_id' => $movimiento->almacen_origen_id,
+                            'producto_id' => $detalle->producto_id
+                        ])->decrement('cantidad', $diferenciaNegativa);
+                        $totalDiferencias -= $diferenciaNegativa;
                     }
 
                     $totalRecibido += $cantidadRecibida;
@@ -370,11 +343,15 @@ class MovimientosController extends Controller
                 'fecha_recepcion' => now(),
             ]);
 
-            // Registrar seguimiento
+            $observacion = "Movimiento recibido. Cantidad: $totalRecibido/$totalSolicitado";
+            if ($totalDiferencias > 0) {
+                $observacion .= " (Diferencia: $totalDiferencias unidades no recibidas)";
+            }
+
             MovimientoSeguimiento::create([
                 'movimiento_id' => $movimiento->id,
                 'estado' => $nuevoEstado,
-                'observaciones' => "Movimiento recibido. Cantidad: $totalRecibido/$totalSolicitado",
+                'observaciones' => $observacion,
                 'user_id' => $user->id,
             ]);
 
@@ -401,7 +378,6 @@ class MovimientosController extends Controller
             'observaciones' => 'required|string|max:500',
         ]);
 
-        // Verificar permisos
         if ($user->role !== 'admin') {
             $almacenesPermitidosIds = $user->almacenes->pluck('id');
             if (!$almacenesPermitidosIds->contains($movimiento->almacen_origen_id)) {
@@ -412,25 +388,28 @@ class MovimientosController extends Controller
         DB::beginTransaction();
 
         try {
-            // Verificar que el movimiento esté pendiente
-            if ($movimiento->estado !== 'pendiente') {
-                throw new \Exception('Solo se pueden rechazar movimientos en estado pendiente.');
+            if (!in_array($movimiento->estado, ['pendiente_confirmacion', 'en_transito'])) {
+                throw new \Exception('Solo se pueden rechazar movimientos pendientes o en tránsito.');
             }
 
-            // Si estaba aprobado, devolver el stock al almacén origen
-            if ($movimiento->estado === 'aprobado') {
+            if ($movimiento->estado === 'en_transito') {
                 foreach ($movimiento->detalles as $detalle) {
-                    AlmacenProducto::where([
-                        'almacen_id' => $movimiento->almacen_origen_id,
-                        'producto_id' => $detalle->producto_id
-                    ])->increment('cantidad', $detalle->cantidad_despachada);
+                    if ($detalle->cantidad_despachada > 0) {
+                        AlmacenProducto::where([
+                            'almacen_id' => $movimiento->almacen_origen_id,
+                            'producto_id' => $detalle->producto_id
+                        ])->decrement('cantidad_en_transito', $detalle->cantidad_despachada);
+
+                        AlmacenProducto::where([
+                            'almacen_id' => $movimiento->almacen_origen_id,
+                            'producto_id' => $detalle->producto_id
+                        ])->increment('cantidad', $detalle->cantidad_despachada);
+                    }
                 }
             }
 
-            // Actualizar movimiento
             $movimiento->update(['estado' => 'rechazado']);
 
-            // Registrar seguimiento
             MovimientoSeguimiento::create([
                 'movimiento_id' => $movimiento->id,
                 'estado' => 'rechazado',
@@ -441,7 +420,7 @@ class MovimientosController extends Controller
             DB::commit();
 
             return redirect()->route('movimientos.index')
-                ->with('success', 'Movimiento rechazado.');
+                ->with('success', 'Movimiento rechazado. Stock liberado.');
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error("Error al rechazar movimiento - Usuario: {$user->id} - Error: {$e->getMessage()}");
@@ -461,5 +440,44 @@ class MovimientosController extends Controller
             ->get();
 
         return response()->json($seguimientos);
+    }
+
+    /**
+     * Reporte de discrepancias - Accesible para todos los roles
+     */
+    public function reporteDiscrepancias()
+    {
+        $discrepancias = Movimiento::with(['almacenOrigen', 'almacenDestino', 'usuario', 'detalles.producto'])
+            ->whereIn('estado', ['recibido_parcial', 'rechazado'])
+            ->orderBy('created_at', 'desc')
+            ->paginate(15);
+
+        $detallesDiscrepancia = [];
+
+        foreach ($discrepancias->items() as $movimiento) {
+            foreach ($movimiento->detalles as $detalle) {
+                $diferencia = $detalle->cantidad_despachada - ($detalle->cantidad_recibida ?? 0);
+                if ($diferencia != 0) {
+                    $detallesDiscrepancia[] = [
+                        'movimiento_id' => $movimiento->id,
+                        'movimiento_estado' => $movimiento->estado,
+                        'fecha_movimiento' => $movimiento->created_at,
+                        'almacen_origen' => $movimiento->almacenOrigen->nombre_almacen,
+                        'almacen_destino' => $movimiento->almacenDestino->nombre_almacen,
+                        'usuario' => $movimiento->usuario->name,
+                        'producto' => $detalle->producto->nombre_producto,
+                        'cantidad_despachada' => $detalle->cantidad_despachada,
+                        'cantidad_recibida' => $detalle->cantidad_recibida ?? 0,
+                        'diferencia' => $diferencia,
+                    ];
+                }
+            }
+        }
+
+        return Inertia::render('Movimientos/Discrepancias', [
+            'discrepancias' => $detallesDiscrepancia,
+            'total' => count($detallesDiscrepancia),
+            'movimientosPage' => $discrepancias,
+        ]);
     }
 }

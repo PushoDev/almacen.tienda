@@ -1,12 +1,22 @@
 import HeadingSmall from '@/components/heading-small';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, BreadcrumbItem, Movimiento, ProductoPorAlmacenDetalleRef } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { CarFront, CheckCircle, Eye, Package, Truck, XCircle } from 'lucide-react';
+import { AlertCircle, CarFront, CheckCircle2, Clock, Eye, Package, Send, TrendingUp, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { toast, Toaster } from 'sonner';
 
@@ -21,9 +31,47 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
+interface MovimientoDetalle {
+    id: number;
+    movimiento_id: number;
+    producto_id: number;
+    cantidad_solicitada: number;
+    cantidad_despachada: number;
+    cantidad_recibida: number;
+    costo_unitario?: number;
+    observaciones?: string;
+    created_at: string;
+    updated_at: string;
+    producto?: {
+        nombre_producto: string;
+        [key: string]: unknown;
+    };
+}
+
+interface MovimientoSeguimiento {
+    id: number;
+    movimiento_id: number;
+    estado: string;
+    observaciones?: string;
+    user_id: number;
+    ubicacion?: string;
+    evidencia?: string;
+    created_at: string;
+    updated_at: string;
+    usuario?: {
+        name: string;
+    };
+}
+
+interface ProductoConStock extends ProductoPorAlmacenDetalleRef {
+    stock_total: number;
+    stock_en_transito: number;
+    stock_disponible: number;
+}
+
 interface MovimientoWithDetails extends Movimiento {
-    detalles: any[];
-    seguimientos: any[];
+    detalles: MovimientoDetalle[];
+    seguimientos: MovimientoSeguimiento[];
     almacen_origen: AlmacenProps;
     almacen_destino: AlmacenProps;
     usuario: {
@@ -31,50 +79,81 @@ interface MovimientoWithDetails extends Movimiento {
     };
 }
 
+interface MovimientoPaginado {
+    data: MovimientoWithDetails[];
+    from: number;
+    to: number;
+    total: number;
+    links: Array<{
+        url?: string;
+        label: string;
+        active: boolean;
+    }>;
+}
+
+interface ErrorResponse {
+    general?: string;
+    [key: string]: string | undefined;
+}
+
 export default function MovimientosPage({
-    movimientos: initialMovimientos,
-    almacenes: initialAlmacenes,
+    movimientos,
+    almacenes,
     estados,
 }: {
-    movimientos: any;
+    movimientos: MovimientoPaginado;
     almacenes: AlmacenProps[];
     estados: Record<string, string>;
 }) {
-    const [almacenes, setAlmacenes] = useState<AlmacenProps[]>(initialAlmacenes || []);
-    const [productosEmisor, setProductosEmisor] = useState<ProductoPorAlmacenDetalleRef[]>([]);
+    const [productosEmisor, setProductosEmisor] = useState<ProductoConStock[]>([]);
     const [almacenOrigenId, setAlmacenOrigenId] = useState<string>('');
     const [almacenDestinoId, setAlmacenDestinoId] = useState<string>('');
     const [loading, setLoading] = useState(false);
-    const [movimientos, setMovimientos] = useState<any>(initialMovimientos);
     const [selectedMovimiento, setSelectedMovimiento] = useState<MovimientoWithDetails | null>(null);
-    const [showSeguimiento, setShowSeguimiento] = useState(false);
-    const [showRecibirModal, setShowRecibirModal] = useState(false);
     const [productosRecibidos, setProductosRecibidos] = useState<{ [key: string]: number }>({});
 
-    // Cargar productos del almacén origen
+    const [showDialogs, setShowDialogs] = useState({
+        seguimiento: false,
+        recibir: false,
+        enviar: false,
+        rechazar: false,
+    });
+
+    const [dialogData, setDialogData] = useState({
+        guia: '',
+        transportista: '',
+        observaciones: '',
+    });
+
     const handleAlmacenOrigenChange = (value: string) => {
+        console.log('[Movimientos] Cambiando almacén origen a:', value);
         setAlmacenOrigenId(value);
         const almacenId = parseInt(value);
 
         fetch(`/movimientos/almacenes/${almacenId}/productos`)
-            .then((res) => res.json())
+            .then((res) => {
+                if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                return res.json();
+            })
             .then((data) => {
+                console.log('[Movimientos] Productos cargados:', data);
                 setProductosEmisor(data);
             })
             .catch((err) => {
-                console.error('Error al cargar productos del almacén:', err);
+                console.error('[Movimientos] Error al cargar productos:', err);
                 toast.error('Error al cargar productos del almacén');
             });
     };
 
-    // Manejar el envío del formulario
     const handleSubmit = () => {
+        console.log('[Movimientos] Iniciando creación de movimiento');
+
         if (!almacenOrigenId || !almacenDestinoId) {
+            console.warn('[Movimientos] Faltan almacenes origen o destino');
             toast.warning('Debes seleccionar un almacén origen y un almacén destino.');
             return;
         }
 
-        // Recopilar cantidades de productos
         const productosTrasladados = productosEmisor
             .map((producto) => {
                 const input = document.getElementById(`cantidad-${producto.id}`) as HTMLInputElement;
@@ -91,7 +170,10 @@ export default function MovimientosPage({
             })
             .filter((item) => item !== null);
 
+        console.log('[Movimientos] Productos a trasladar:', productosTrasladados);
+
         if (productosTrasladados.length === 0) {
+            console.warn('[Movimientos] No hay productos para trasladar');
             toast.warning('Debes especificar al menos una cantidad a trasladar.');
             return;
         }
@@ -106,16 +188,18 @@ export default function MovimientosPage({
                 productos: productosTrasladados,
             },
             {
-                onSuccess: (page) => {
-                    toast.success('Solicitud de movimiento creada exitosamente.');
+                onSuccess: () => {
+                    console.log('[Movimientos] Movimiento creado exitosamente');
+                    toast.success('Movimiento creado exitosamente. Listo para enviar.');
                     setProductosEmisor([]);
                     setAlmacenOrigenId('');
                     setAlmacenDestinoId('');
-                    // Recargar la lista de movimientos
                     router.reload({ only: ['movimientos'] });
                 },
-                onError: (errors) => {
-                    toast.error('Error al crear la solicitud de movimiento.');
+                onError: (errors: ErrorResponse) => {
+                    console.error('[Movimientos] Error al crear movimiento:', errors);
+                    const errorMsg = errors?.general || 'Error al crear el movimiento';
+                    toast.error(errorMsg);
                 },
                 onFinish: () => {
                     setLoading(false);
@@ -124,64 +208,62 @@ export default function MovimientosPage({
         );
     };
 
-    // Acciones sobre movimientos
-    const handleAprobar = (movimiento: Movimiento) => {
-        router.post(
-            `/movimientos/${movimiento.id}/aprobar`,
-            {},
-            {
-                onSuccess: () => {
-                    toast.success('Movimiento aprobado exitosamente.');
-                    router.reload({ only: ['movimientos'] });
-                },
-                onError: () => {
-                    toast.error('Error al aprobar el movimiento.');
-                },
-            },
-        );
+    const handleEnviarClick = (movimiento: MovimientoWithDetails) => {
+        console.log('[Movimientos] Abriendo diálogo de envío para movimiento:', movimiento.id);
+        setSelectedMovimiento(movimiento);
+        setDialogData({ guia: '', transportista: '', observaciones: '' });
+        setShowDialogs({ ...showDialogs, enviar: true });
     };
 
-    const handleEnviar = (movimiento: Movimiento) => {
-        const guia = prompt('Número de guía de transporte (opcional):');
-        const transportista = prompt('Transportista (opcional):');
+    const handleEnviarConfirm = () => {
+        if (!selectedMovimiento) return;
+
+        console.log('[Movimientos] Enviando movimiento:', selectedMovimiento.id);
 
         router.post(
-            `/movimientos/${movimiento.id}/enviar`,
+            `/movimientos/${selectedMovimiento.id}/enviar`,
             {
-                guia_transporte: guia,
-                transportista: transportista,
+                guia_transporte: dialogData.guia,
+                transportista: dialogData.transportista,
             },
             {
                 onSuccess: () => {
-                    toast.success('Movimiento marcado como en tránsito.');
+                    console.log('[Movimientos] Movimiento enviado exitosamente');
+                    toast.success('Movimiento despachado y en tránsito.');
+                    setShowDialogs({ ...showDialogs, enviar: false });
                     router.reload({ only: ['movimientos'] });
                 },
-                onError: () => {
+                onError: (errors: ErrorResponse) => {
+                    console.error('[Movimientos] Error al enviar:', errors);
                     toast.error('Error al enviar el movimiento.');
                 },
             },
         );
     };
 
-    const handleRecibir = (movimiento: Movimiento) => {
-        setSelectedMovimiento(movimiento as MovimientoWithDetails);
-        setShowRecibirModal(true);
+    const handleRecibirClick = (movimiento: MovimientoWithDetails) => {
+        console.log('[Movimientos] Abriendo diálogo de recepción para movimiento:', movimiento.id);
+        setSelectedMovimiento(movimiento);
 
-        // Inicializar cantidades recibidas
         const initialCantidades: { [key: string]: number } = {};
-        movimiento.detalles.forEach((detalle: any) => {
+        movimiento.detalles.forEach((detalle) => {
             initialCantidades[detalle.producto_id] = detalle.cantidad_despachada;
         });
         setProductosRecibidos(initialCantidades);
+        setShowDialogs({ ...showDialogs, recibir: true });
     };
 
-    const confirmarRecepcion = () => {
+    const handleRecibirConfirm = () => {
         if (!selectedMovimiento) return;
 
-        const productos = selectedMovimiento.detalles.map((detalle: any) => ({
+        console.log('[Movimientos] Confirmando recepción para movimiento:', selectedMovimiento.id);
+
+        const productos = selectedMovimiento.detalles.map((detalle) => ({
             id: detalle.producto_id,
             cantidad_recibida: productosRecibidos[detalle.producto_id] || 0,
         }));
+
+        console.log('[Movimientos] Productos recibidos:', productos);
 
         router.post(
             `/movimientos/${selectedMovimiento.id}/recibir`,
@@ -190,47 +272,68 @@ export default function MovimientosPage({
             },
             {
                 onSuccess: () => {
+                    console.log('[Movimientos] Recepción confirmada exitosamente');
                     toast.success('Movimiento recibido exitosamente.');
-                    setShowRecibirModal(false);
+                    setShowDialogs({ ...showDialogs, recibir: false });
                     router.reload({ only: ['movimientos'] });
                 },
-                onError: () => {
+                onError: (errors: ErrorResponse) => {
+                    console.error('[Movimientos] Error al recibir:', errors);
                     toast.error('Error al recibir el movimiento.');
                 },
             },
         );
     };
 
-    const handleRechazar = (movimiento: Movimiento) => {
-        const observaciones = prompt('Motivo del rechazo:');
-        if (observaciones) {
-            router.post(
-                `/movimientos/${movimiento.id}/rechazar`,
-                {
-                    observaciones,
-                },
-                {
-                    onSuccess: () => {
-                        toast.success('Movimiento rechazado.');
-                        router.reload({ only: ['movimientos'] });
-                    },
-                    onError: () => {
-                        toast.error('Error al rechazar el movimiento.');
-                    },
-                },
-            );
-        }
+    const handleRechazarClick = (movimiento: MovimientoWithDetails) => {
+        console.log('[Movimientos] Abriendo diálogo de rechazo para movimiento:', movimiento.id);
+        setSelectedMovimiento(movimiento);
+        setDialogData({ ...dialogData, observaciones: '' });
+        setShowDialogs({ ...showDialogs, rechazar: true });
     };
 
-    const verSeguimiento = (movimiento: Movimiento) => {
-        setSelectedMovimiento(movimiento as MovimientoWithDetails);
-        setShowSeguimiento(true);
+    const handleRechazarConfirm = () => {
+        if (!selectedMovimiento || !dialogData.observaciones) return;
 
-        // Cargar seguimiento
+        console.log('[Movimientos] Rechazando movimiento:', selectedMovimiento.id);
+
+        router.post(
+            `/movimientos/${selectedMovimiento.id}/rechazar`,
+            {
+                observaciones: dialogData.observaciones,
+            },
+            {
+                onSuccess: () => {
+                    console.log('[Movimientos] Movimiento rechazado exitosamente');
+                    toast.success('Movimiento rechazado. Stock liberado.');
+                    setShowDialogs({ ...showDialogs, rechazar: false });
+                    router.reload({ only: ['movimientos'] });
+                },
+                onError: (errors: ErrorResponse) => {
+                    console.error('[Movimientos] Error al rechazar:', errors);
+                    toast.error('Error al rechazar el movimiento.');
+                },
+            },
+        );
+    };
+
+    const handleVerSeguimiento = (movimiento: MovimientoWithDetails) => {
+        console.log('[Movimientos] Cargando seguimiento para movimiento:', movimiento.id);
+        setSelectedMovimiento(movimiento);
+        setShowDialogs({ ...showDialogs, seguimiento: true });
+
         fetch(`/movimientos/${movimiento.id}/seguimiento`)
-            .then((res) => res.json())
+            .then((res) => {
+                if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                return res.json();
+            })
             .then((data) => {
-                setSelectedMovimiento({ ...movimiento, seguimientos: data } as MovimientoWithDetails);
+                console.log('[Movimientos] Seguimiento cargado:', data);
+                setSelectedMovimiento((prev) => (prev ? { ...prev, seguimientos: data } : null));
+            })
+            .catch((err) => {
+                console.error('[Movimientos] Error al cargar seguimiento:', err);
+                toast.error('Error al cargar el seguimiento');
             });
     };
 
@@ -246,7 +349,7 @@ export default function MovimientosPage({
             <Head title="Movimientos" />
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
-                <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                <div className="relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     <HeadingSmall
                         title="Sistema de Movimientos Logísticos"
                         description="Gestión profesional de traslados entre almacenes con control de estados y aprobaciones."
@@ -262,7 +365,7 @@ export default function MovimientosPage({
                 <Card>
                     <CardHeader>
                         <CardTitle>Nuevo Movimiento</CardTitle>
-                        <CardDescription>Solicitud de traslado entre almacenes (requiere aprobación)</CardDescription>
+                        <CardDescription>Crea un movimiento entre almacenes. El stock se reservará al enviar.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <form>
@@ -307,38 +410,55 @@ export default function MovimientosPage({
 
                         {/* Tabla de Productos */}
                         {productosEmisor.length > 0 && (
-                            <div className="mt-6">
-                                <h3 className="text-lg font-medium">Productos Disponibles</h3>
-                                <div className="mt-2 overflow-x-auto">
-                                    <table className="min-w-full divide-y">
-                                        <thead className="bg-primary text-white">
+                            <div className="mt-6 space-y-3">
+                                <h3 className="flex items-center gap-2 text-lg font-semibold">
+                                    <Package className="h-5 w-5" /> Productos Disponibles
+                                </h3>
+                                <div className="overflow-x-auto rounded-lg border">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
                                             <tr>
-                                                <th className="px-6 py-3 text-left text-xs font-medium uppercase">Producto</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium uppercase">Stock Disponible</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium uppercase">Cantidad a Trasladar</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium uppercase">Observaciones</th>
+                                                <th className="px-6 py-3 text-left font-semibold">Producto</th>
+                                                <th className="px-6 py-3 text-left font-semibold">Stock Total</th>
+                                                <th className="px-6 py-3 text-left font-semibold">En Tránsito</th>
+                                                <th className="px-6 py-3 text-left font-semibold">Disponible</th>
+                                                <th className="px-6 py-3 text-left font-semibold">Cantidad a Trasladar</th>
+                                                <th className="px-6 py-3 text-left font-semibold">Observaciones</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y">
                                             {productosEmisor.map((producto) => (
-                                                <tr key={producto.id}>
-                                                    <td className="px-6 py-4 whitespace-nowrap">{producto.nombre}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap">{producto.stock_actual}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <input
+                                                <tr key={producto.id} className="transition-colors">
+                                                    <td className="px-6 py-4 font-medium">{producto.nombre}</td>
+                                                    <td className="px-6 py-4">{producto.stock_total}</td>
+                                                    <td className="px-6 py-4">
+                                                        <span className="inline-flex items-center gap-1 font-medium text-orange-600">
+                                                            <Clock className="h-4 w-4" />
+                                                            {producto.stock_en_transito}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <span className="inline-flex items-center gap-1 font-semibold text-green-600">
+                                                            <CheckCircle2 className="h-4 w-4" />
+                                                            {producto.stock_disponible}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <Input
                                                             id={`cantidad-${producto.id}`}
                                                             type="number"
                                                             min="0"
-                                                            max={producto.stock_actual}
-                                                            className="border-sidebar-accent block w-full rounded-md border-1 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                                            max={producto.stock_disponible}
+                                                            placeholder="0"
+                                                            className="w-24"
                                                         />
                                                     </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <input
+                                                    <td className="px-6 py-4">
+                                                        <Input
                                                             id={`observaciones-${producto.id}`}
                                                             type="text"
-                                                            placeholder=" Observaciones opcionales"
-                                                            className="border-primary block w-full rounded-md border-1 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                                            placeholder="Opcional"
+                                                            className="w-32"
                                                         />
                                                     </td>
                                                 </tr>
@@ -363,85 +483,111 @@ export default function MovimientosPage({
                 <Card>
                     <CardHeader>
                         <CardTitle>Historial de Movimientos</CardTitle>
-                        <CardDescription>Gestiona las solicitudes de movimiento y su seguimiento</CardDescription>
+                        <CardDescription>Gestiona y monitorea el flujo de tus movimientos logísticos</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y">
-                                <thead className="bg-primary text-white">
+                        <div className="overflow-x-auto rounded-lg border">
+                            <table className="w-full text-sm">
+                                <thead className="sticky top-0 bg-gradient-to-r from-slate-700 to-slate-800 text-white">
                                     <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase">Producto</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase">Origen</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase">Destino</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase">Cantidad</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase">Estado</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase">Solicitado por</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase">Acciones</th>
+                                        <th className="px-6 py-3 text-left font-semibold">#Productos</th>
+                                        <th className="px-6 py-3 text-left font-semibold">Origen → Destino</th>
+                                        <th className="px-6 py-3 text-left font-semibold">Cantidad</th>
+                                        <th className="px-6 py-3 text-left font-semibold">Estado</th>
+                                        <th className="px-6 py-3 text-left font-semibold">Solicitado por</th>
+                                        <th className="px-6 py-3 text-left font-semibold">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
                                     {movimientos.data.map((movimiento: MovimientoWithDetails) => (
-                                        <tr key={movimiento.id}>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                {movimiento.detalles && movimiento.detalles.length > 0 ? (
-                                                    <span>{movimiento.detalles.length} producto(s)</span>
-                                                ) : (
-                                                    <span>Sin productos</span>
-                                                )}
+                                        <tr key={movimiento.id} className="transition-colors">
+                                            <td className="px-6 py-4">
+                                                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
+                                                    {movimiento.detalles?.length || 0}
+                                                </span>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">{movimiento.almacen_origen?.nombre_almacen}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap">{movimiento.almacen_destino?.nombre_almacen}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                {movimiento.detalles &&
-                                                    movimiento.detalles.reduce(
-                                                        (total: number, detalle: any) => total + detalle.cantidad_solicitada,
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-medium">{movimiento.almacen_origen?.nombre_almacen}</span>
+                                                    <TrendingUp className="h-4 w-4 rotate-90" />
+                                                    <span className="font-medium">{movimiento.almacen_destino?.nombre_almacen}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className="font-semibold">
+                                                    {movimiento.detalles?.reduce(
+                                                        (total: number, detalle) => total + detalle.cantidad_solicitada,
                                                         0,
-                                                    )}
+                                                    )}{' '}
+                                                    unidades
+                                                </span>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
+                                            <td className="px-6 py-4">
                                                 <span
-                                                    className={`rounded-full px-2 py-1 text-xs font-medium ${
-                                                        movimiento.estado === 'pendiente'
+                                                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${
+                                                        movimiento.estado === 'pendiente_confirmacion'
                                                             ? 'bg-yellow-100 text-yellow-800'
-                                                            : movimiento.estado === 'aprobado'
-                                                              ? 'bg-blue-100 text-blue-800'
-                                                              : movimiento.estado === 'en_transito'
-                                                                ? 'bg-orange-100 text-orange-800'
-                                                                : movimiento.estado === 'recibido_completo'
-                                                                  ? 'bg-green-100 text-green-800'
-                                                                  : movimiento.estado === 'recibido_parcial'
-                                                                    ? 'bg-teal-100 text-teal-800'
-                                                                    : 'bg-red-100 text-red-800'
+                                                            : movimiento.estado === 'en_transito'
+                                                              ? 'bg-orange-100 text-orange-800'
+                                                              : movimiento.estado === 'recibido_completo'
+                                                                ? 'bg-green-100 text-green-800'
+                                                                : movimiento.estado === 'recibido_parcial'
+                                                                  ? 'bg-cyan-100 text-cyan-800'
+                                                                  : 'bg-red-100 text-red-800'
                                                     }`}
                                                 >
+                                                    {movimiento.estado === 'pendiente_confirmacion' && <Clock className="h-3.5 w-3.5" />}
+                                                    {movimiento.estado === 'en_transito' && <Send className="h-3.5 w-3.5" />}
+                                                    {movimiento.estado === 'recibido_completo' && <CheckCircle2 className="h-3.5 w-3.5" />}
+                                                    {movimiento.estado === 'recibido_parcial' && <AlertCircle className="h-3.5 w-3.5" />}
+                                                    {movimiento.estado === 'rechazado' && <XCircle className="h-3.5 w-3.5" />}
                                                     {estados[movimiento.estado]}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">{movimiento.usuario?.name}</td>
-                                            <td className="flex space-x-2 px-6 py-4 whitespace-nowrap">
-                                                <Button variant="outline" size="sm" onClick={() => verSeguimiento(movimiento)}>
-                                                    <Eye className="h-4 w-4" />
-                                                </Button>
-                                                {movimiento.estado === 'pendiente' && (
-                                                    <>
-                                                        <Button size="sm" onClick={() => handleAprobar(movimiento)}>
-                                                            <CheckCircle className="mr-1 h-4 w-4" /> Aprobar
-                                                        </Button>
-                                                        <Button variant="destructive" size="sm" onClick={() => handleRechazar(movimiento)}>
-                                                            <XCircle className="mr-1 h-4 w-4" /> Rechazar
-                                                        </Button>
-                                                    </>
-                                                )}
-                                                {movimiento.estado === 'aprobado' && (
-                                                    <Button size="sm" onClick={() => handleEnviar(movimiento)}>
-                                                        <Truck className="mr-1 h-4 w-4" /> Enviar
+                                            <td className="px-6 py-4">{movimiento.usuario?.name}</td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-2">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => handleVerSeguimiento(movimiento)}
+                                                        title="Ver seguimiento"
+                                                    >
+                                                        <Eye className="h-4 w-4" />
                                                     </Button>
-                                                )}
-                                                {movimiento.estado === 'en_transito' && (
-                                                    <Button size="sm" onClick={() => handleRecibir(movimiento)}>
-                                                        <Package className="mr-1 h-4 w-4" /> Recibir
-                                                    </Button>
-                                                )}
+
+                                                    {movimiento.estado === 'pendiente_confirmacion' && (
+                                                        <>
+                                                            <Button
+                                                                size="sm"
+                                                                onClick={() => handleEnviarClick(movimiento)}
+                                                                title="Despachar movimiento"
+                                                                className="gap-1"
+                                                            >
+                                                                <Send className="h-3.5 w-3.5" /> Enviar
+                                                            </Button>
+                                                            <Button
+                                                                variant="destructive"
+                                                                size="sm"
+                                                                onClick={() => handleRechazarClick(movimiento)}
+                                                                title="Rechazar movimiento"
+                                                            >
+                                                                <XCircle className="h-3.5 w-3.5" />
+                                                            </Button>
+                                                        </>
+                                                    )}
+
+                                                    {movimiento.estado === 'en_transito' && (
+                                                        <Button
+                                                            size="sm"
+                                                            className="gap-1"
+                                                            onClick={() => handleRecibirClick(movimiento)}
+                                                            title="Registrar recepción"
+                                                        >
+                                                            <Package className="h-3.5 w-3.5" /> Recibir
+                                                        </Button>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -452,11 +598,11 @@ export default function MovimientosPage({
                         {/* Paginación */}
                         {movimientos.links && (
                             <div className="mt-4 flex items-center justify-between">
-                                <div className="text-sm text-gray-700">
+                                <div className="text-sm">
                                     Mostrando {movimientos.from} a {movimientos.to} de {movimientos.total} resultados
                                 </div>
                                 <div className="flex space-x-2">
-                                    {movimientos.links.map((link: any, index: number) => (
+                                    {movimientos.links.map((link, index: number) => (
                                         <Button
                                             key={index}
                                             variant={link.active ? 'default' : 'outline'}
@@ -473,104 +619,173 @@ export default function MovimientosPage({
                     </CardContent>
                 </Card>
 
-                {/* Modal de Seguimiento */}
-                {showSeguimiento && selectedMovimiento && (
-                    <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black p-4">
-                        <div className="max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white shadow-xl">
-                            <div className="p-6">
-                                <h3 className="mb-4 text-lg font-medium">Seguimiento del Movimiento #{selectedMovimiento.id}</h3>
+                {/* AlertDialog - Ver Seguimiento */}
+                <AlertDialog open={showDialogs.seguimiento} onOpenChange={(open) => setShowDialogs({ ...showDialogs, seguimiento: open })}>
+                    <AlertDialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="text-xl">Seguimiento del Movimiento #{selectedMovimiento?.id}</AlertDialogTitle>
+                        </AlertDialogHeader>
 
-                                <div className="space-y-4">
-                                    {selectedMovimiento.seguimientos?.map((seguimiento, index) => (
-                                        <div key={seguimiento.id} className="relative border-l-2 border-gray-200 pl-4">
-                                            <div className="absolute top-2 -left-1.5 h-3 w-3 rounded-full bg-gray-200"></div>
-                                            <div className="ml-4">
-                                                <div className="flex justify-between">
-                                                    <span
-                                                        className={`text-sm font-medium ${
-                                                            seguimiento.estado === 'pendiente'
-                                                                ? 'text-yellow-600'
-                                                                : seguimiento.estado === 'aprobado'
-                                                                  ? 'text-blue-600'
-                                                                  : seguimiento.estado === 'en_transito'
-                                                                    ? 'text-orange-600'
-                                                                    : seguimiento.estado === 'recibido_completo'
-                                                                      ? 'text-green-600'
-                                                                      : seguimiento.estado === 'recibido_parcial'
-                                                                        ? 'text-teal-600'
-                                                                        : 'text-red-600'
-                                                        }`}
-                                                    >
-                                                        {estados[seguimiento.estado]}
-                                                    </span>
-                                                    <span className="text-xs text-gray-500">{new Date(seguimiento.created_at).toLocaleString()}</span>
-                                                </div>
-                                                <p className="text-sm text-gray-600">{seguimiento.observaciones}</p>
-                                                <p className="text-xs text-gray-500">Por: {seguimiento.usuario?.name}</p>
-                                            </div>
+                        <div className="space-y-3 py-4">
+                            {selectedMovimiento?.seguimientos && selectedMovimiento.seguimientos.length > 0 ? (
+                                selectedMovimiento.seguimientos.map((seguimiento) => (
+                                    <div key={seguimiento.id} className="relative border-l-4 border-blue-300 pb-3 pl-4">
+                                        <div className="mb-2 flex items-start justify-between">
+                                            <span
+                                                className={`rounded-full px-2 py-1 text-sm font-semibold ${
+                                                    seguimiento.estado === 'pendiente_confirmacion'
+                                                        ? 'bg-yellow-100 text-yellow-800'
+                                                        : seguimiento.estado === 'en_transito'
+                                                          ? 'bg-orange-100 text-orange-800'
+                                                          : seguimiento.estado === 'recibido_completo'
+                                                            ? 'bg-green-100 text-green-800'
+                                                            : seguimiento.estado === 'recibido_parcial'
+                                                              ? 'bg-cyan-100 text-cyan-800'
+                                                              : 'bg-red-100 text-red-800'
+                                                }`}
+                                            >
+                                                {estados[seguimiento.estado]}
+                                            </span>
+                                            <span className="text-xs text-gray-500">{new Date(seguimiento.created_at).toLocaleString('es-ES')}</span>
                                         </div>
+                                        <p className="text-sm font-medium text-gray-700">{seguimiento.observaciones}</p>
+                                        <p className="mt-1 text-xs text-gray-500">Por: {seguimiento.usuario?.name}</p>
+                                    </div>
+                                ))
+                            ) : (
+                                <p className="text-center text-gray-500">No hay registros de seguimiento</p>
+                            )}
+                        </div>
+
+                        <div className="flex justify-end gap-2">
+                            <AlertDialogCancel>Cerrar</AlertDialogCancel>
+                        </div>
+                    </AlertDialogContent>
+                </AlertDialog>
+
+                {/* AlertDialog - Enviar Movimiento */}
+                <AlertDialog open={showDialogs.enviar} onOpenChange={(open) => setShowDialogs({ ...showDialogs, enviar: open })}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Despachar Movimiento</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Confirma el despacho del movimiento #{selectedMovimiento?.id}. El stock se reservará en el almacén origen.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+
+                        <div className="space-y-3 py-4">
+                            <div>
+                                <Label htmlFor="guia">Guía de Transporte (Opcional)</Label>
+                                <Input
+                                    id="guia"
+                                    placeholder="Ej: GT-2025-001"
+                                    value={dialogData.guia}
+                                    onChange={(e) => setDialogData({ ...dialogData, guia: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <Label htmlFor="transportista">Transportista (Opcional)</Label>
+                                <Input
+                                    id="transportista"
+                                    placeholder="Nombre del transportista"
+                                    value={dialogData.transportista}
+                                    onChange={(e) => setDialogData({ ...dialogData, transportista: e.target.value })}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2">
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleEnviarConfirm} className="bg-blue-600 hover:bg-blue-700">
+                                Confirmar Envío
+                            </AlertDialogAction>
+                        </div>
+                    </AlertDialogContent>
+                </AlertDialog>
+
+                {/* AlertDialog - Recibir Movimiento */}
+                <AlertDialog open={showDialogs.recibir} onOpenChange={(open) => setShowDialogs({ ...showDialogs, recibir: open })}>
+                    <AlertDialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Registrar Recepción - Movimiento #{selectedMovimiento?.id}</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Confirma las cantidades recibidas por cada producto. Las diferencias se registrarán.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+
+                        <div className="overflow-x-auto py-4">
+                            <table className="w-full border-collapse text-sm">
+                                <thead className="bg-sidebar-accent">
+                                    <tr>
+                                        <th className="px-4 py-2 text-left font-semibold">Producto</th>
+                                        <th className="px-4 py-2 text-center font-semibold">Despachado</th>
+                                        <th className="px-4 py-2 text-center font-semibold">Recibido</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                    {selectedMovimiento?.detalles.map((detalle) => (
+                                        <tr key={detalle.id} className="hover:bg-sidebar-accent">
+                                            <td className="px-4 py-3">{detalle.producto?.nombre_producto}</td>
+                                            <td className="px-4 py-3 text-center font-semibold">{detalle.cantidad_despachada}</td>
+                                            <td className="px-4 py-3">
+                                                <Input
+                                                    type="number"
+                                                    min="0"
+                                                    max={detalle.cantidad_despachada}
+                                                    value={productosRecibidos[detalle.producto_id] || 0}
+                                                    onChange={(e) => handleCantidadRecibidaChange(detalle.producto_id, parseInt(e.target.value) || 0)}
+                                                    className="max-w-24"
+                                                />
+                                            </td>
+                                        </tr>
                                     ))}
-                                </div>
-
-                                <div className="mt-6 flex justify-end">
-                                    <Button onClick={() => setShowSeguimiento(false)}>Cerrar</Button>
-                                </div>
-                            </div>
+                                </tbody>
+                            </table>
                         </div>
-                    </div>
-                )}
 
-                {/* Modal de Recepción */}
-                {showRecibirModal && selectedMovimiento && (
-                    <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black p-4">
-                        <div className="max-h-[80vh] w-full max-w-4xl overflow-y-auto rounded-lg bg-white shadow-xl">
-                            <div className="p-6">
-                                <h3 className="mb-4 text-lg font-medium">Registrar Recepción - Movimiento #{selectedMovimiento.id}</h3>
-
-                                <div className="mt-4 overflow-x-auto">
-                                    <table className="min-w-full divide-y divide-gray-200">
-                                        <thead className="bg-gray-50">
-                                            <tr>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                                    Cantidad Despachada
-                                                </th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cantidad Recibida</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-200 bg-white">
-                                            {selectedMovimiento.detalles.map((detalle: any) => (
-                                                <tr key={detalle.id}>
-                                                    <td className="px-6 py-4 whitespace-nowrap">{detalle.producto?.nombre_producto}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap">{detalle.cantidad_despachada}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <input
-                                                            type="number"
-                                                            min="0"
-                                                            max={detalle.cantidad_despachada}
-                                                            value={productosRecibidos[detalle.producto_id] || 0}
-                                                            onChange={(e) =>
-                                                                handleCantidadRecibidaChange(detalle.producto_id, parseInt(e.target.value))
-                                                            }
-                                                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                                        />
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-
-                                <div className="mt-6 flex justify-end space-x-2">
-                                    <Button variant="outline" className="cursor-pointer" onClick={() => setShowRecibirModal(false)}>
-                                        Cancelar
-                                    </Button>
-                                    <Button onClick={confirmarRecepcion}>Confirmar Recepción</Button>
-                                </div>
-                            </div>
+                        <div className="flex justify-end gap-2">
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleRecibirConfirm} className="bg-green-600 hover:bg-green-700">
+                                Confirmar Recepción
+                            </AlertDialogAction>
                         </div>
-                    </div>
-                )}
+                    </AlertDialogContent>
+                </AlertDialog>
+
+                {/* AlertDialog - Rechazar Movimiento */}
+                <AlertDialog open={showDialogs.rechazar} onOpenChange={(open) => setShowDialogs({ ...showDialogs, rechazar: open })}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Rechazar Movimiento</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Ingresa el motivo del rechazo. El stock será liberado si el movimiento estaba en tránsito.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+
+                        <div className="py-4">
+                            <Label htmlFor="observaciones">Motivo del Rechazo</Label>
+                            <textarea
+                                id="observaciones"
+                                placeholder="Especifica el motivo del rechazo..."
+                                value={dialogData.observaciones}
+                                onChange={(e) => setDialogData({ ...dialogData, observaciones: e.target.value })}
+                                className="mt-2 w-full rounded-md border border-gray-300 p-2 focus:border-transparent focus:ring-2 focus:ring-red-500"
+                                rows={3}
+                            />
+                        </div>
+
+                        <div className="flex justify-end gap-2">
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={handleRechazarConfirm}
+                                disabled={!dialogData.observaciones}
+                                className="bg-red-600 hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                Rechazar
+                            </AlertDialogAction>
+                        </div>
+                    </AlertDialogContent>
+                </AlertDialog>
             </div>
             <Toaster position="top-center" />
         </AppLayout>
