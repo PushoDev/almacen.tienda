@@ -320,10 +320,16 @@ class MovimientosController extends Controller
                         $totalDiferencias += $diferencia;
                     } elseif ($diferencia < 0) {
                         $diferenciaNegativa = abs($diferencia);
-                        AlmacenProducto::where([
+                        // Validar que no se reduzca la cantidad por debajo de 0
+                        $almacenProducto = AlmacenProducto::where([
                             'almacen_id' => $movimiento->almacen_origen_id,
                             'producto_id' => $detalle->producto_id
-                        ])->decrement('cantidad', $diferenciaNegativa);
+                        ])->first();
+
+                        if ($almacenProducto) {
+                            $nuevaCantidad = max(0, $almacenProducto->cantidad - $diferenciaNegativa);
+                            $almacenProducto->update(['cantidad' => $nuevaCantidad]);
+                        }
                         $totalDiferencias -= $diferenciaNegativa;
                     }
 
@@ -398,10 +404,15 @@ class MovimientosController extends Controller
                             'producto_id' => $detalle->producto_id
                         ])->decrement('cantidad_en_transito', $detalle->cantidad_despachada);
 
-                        AlmacenProducto::where([
+                        $almacenProducto = AlmacenProducto::where([
                             'almacen_id' => $movimiento->almacen_origen_id,
                             'producto_id' => $detalle->producto_id
-                        ])->increment('cantidad', $detalle->cantidad_despachada);
+                        ])->first();
+
+                        if ($almacenProducto) {
+                            $nuevaCantidad = max(0, $almacenProducto->cantidad + $detalle->cantidad_despachada);
+                            $almacenProducto->update(['cantidad' => $nuevaCantidad]);
+                        }
                     }
                 }
             }

@@ -434,28 +434,41 @@ class VentaController extends Controller
                 throw new \Exception('No tienes acceso a este almacén');
             }
 
-            // ✅ NUEVO: Validación y descuento inmediato de stock
+            // ✅ NUEVO: Validación y descuento inmediato de stock - MEJORADO PARA EVITAR CANTIDADES NEGATIVAS
             foreach ($validatedData['items'] as $item) {
                 $almacenProducto = AlmacenProducto::where('almacen_id', $validatedData['almacen_id'])
                     ->where('producto_id', $item['producto_id'])
                     ->first();
 
-                if (!$almacenProducto || $almacenProducto->cantidad < $item['cantidad']) {
+                if (!$almacenProducto) {
                     $producto = Producto::find($item['producto_id']);
-                    throw new \Exception("Stock insuficiente para: {$producto->nombre_producto}. Disponible: " . ($almacenProducto->cantidad ?? 0));
+                    throw new \Exception("El producto {$producto->nombre_producto} no existe en este almacén.");
                 }
 
-                // ✅ DESCONTAR STOCK INMEDIATAMENTE
-                $almacenProducto->cantidad -= $item['cantidad'];
-                $almacenProducto->save();
+                // Verificar si hay suficiente stock disponible
+                $cantidadDisponible = $almacenProducto->cantidad;
+                if ($cantidadDisponible < $item['cantidad']) {
+                    $producto = Producto::find($item['producto_id']);
+                    throw new \Exception("Stock insuficiente para: {$producto->nombre_producto}. Disponible: {$cantidadDisponible}, Solicitado: {$item['cantidad']}");
+                }
+
+                // Calcular nueva cantidad asegurando que no sea negativa
+                $nuevaCantidad = $cantidadDisponible - $item['cantidad'];
+                if ($nuevaCantidad < 0) {
+                    $nuevaCantidad = 0; // En caso de cálculo erróneo, asegurar cantidad mínima de 0
+                }
+
+                // ✅ DESCONTAR STOCK INMEDIATAMENTE - VALIDAR QUE NO SEA NEGATIVO
+                $cantidadAnterior = $almacenProducto->cantidad;
+                $almacenProducto->update(['cantidad' => $nuevaCantidad]);
 
                 // Registrar en historial de stock
                 HistorialStock::create([
                     'producto_id' => $item['producto_id'],
                     'almacen_id' => $validatedData['almacen_id'],
                     'venta_id' => null, // Aún no se crea la venta
-                    'cantidad_anterior' => $almacenProducto->cantidad + $item['cantidad'],
-                    'cantidad_nueva' => $almacenProducto->cantidad,
+                    'cantidad_anterior' => $cantidadAnterior,
+                    'cantidad_nueva' => $nuevaCantidad,
                     'diferencia' => -$item['cantidad'],
                     'tipo' => 'venta_pendiente',
                     'observaciones' => 'Stock reservado por venta pendiente',
@@ -585,7 +598,11 @@ class VentaController extends Controller
                 $errores[] = "Producto {$producto->nombre_producto} no disponible en este almacén";
             } elseif ($almacenProducto->cantidad < $item['cantidad']) {
                 $producto = Producto::find($item['producto_id']);
-                $errores[] = "Stock insuficiente para {$producto->nombre_producto}. Disponible: {$almacenProducto->cantidad}";
+                $errores[] = "Stock insuficiente para {$producto->nombre_producto}. Disponible: {$almacenProducto->cantidad}, Solicitado: {$item['cantidad']}";
+            } elseif ($almacenProducto->cantidad - $item['cantidad'] < 0) {
+                // Verificar que la operación no resulte en cantidad negativa
+                $producto = Producto::find($item['producto_id']);
+                $errores[] = "La operación resultaría en cantidad negativa para {$producto->nombre_producto}. Verifique las cantidades.";
             }
         }
 

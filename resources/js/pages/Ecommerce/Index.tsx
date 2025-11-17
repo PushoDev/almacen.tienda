@@ -1,5 +1,5 @@
-import StoreHeader from '@/Components/Ecommerce/StoreHeader';
-import StoreSelector from '@/Components/Ecommerce/StoreSelector';
+import StoreHeader from '@/components/Ecommerce/StoreHeader';
+import StoreSelector from '@/components/Ecommerce/StoreSelector';
 import { type SharedData } from '@/types';
 import { Head, usePage } from '@inertiajs/react';
 import { Package, ShoppingCart } from 'lucide-react';

@@ -270,7 +270,9 @@ class CompraController extends Controller
                     'producto_id' => $producto->id
                 ]);
 
-                $almacenProducto->cantidad = ($almacenProducto->cantidad ?? 0) + $item['cantidad'];
+                // Asegurar que la cantidad no sea negativa (aunque en compras normalmente aumenta)
+                $nuevaCantidad = max(0, ($almacenProducto->cantidad ?? 0) + $item['cantidad']);
+                $almacenProducto->cantidad = $nuevaCantidad;
                 $almacenProducto->save();
 
                 // Preparar datos para la vista

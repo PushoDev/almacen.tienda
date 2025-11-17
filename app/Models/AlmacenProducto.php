@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Log;
 
 class AlmacenProducto extends Model
 {
@@ -13,6 +14,23 @@ class AlmacenProducto extends Model
         'producto_id',
         'cantidad',
     ];
+
+    // Boot method to add model events
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Adding model events to prevent negative quantities
+        static::saving(function ($model) {
+            if ($model->cantidad < 0) {
+                Log::warning("Intento de guardar cantidad negativa para producto {$model->producto_id} en almacén {$model->almacen_id}", [
+                    'cantidad' => $model->cantidad,
+                    'user' => auth()->id() ?? 'system'
+                ]);
+                $model->cantidad = 0;
+            }
+        });
+    }
 
     // 🔹 Relación con almacén
     public function almacen()
