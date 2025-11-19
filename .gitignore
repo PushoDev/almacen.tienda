@@ -21,3 +21,6 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+Qwen.md
+docker-compose.yml
+tareas_pendientes_mañana.md

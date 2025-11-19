@@ -298,8 +298,16 @@ interface ProductosPageProps {
     sort?: ProductosSort;
 }
 
+const defaultPaginator = {
+    data: [],
+    links: [],
+    total: 0,
+    from: 0,
+    to: 0,
+};
+
 export default function ProductosPage({
-    productos,
+    productos = defaultPaginator,
     almacenes = [],
     categorias = [],
     filters = {},
@@ -417,18 +425,11 @@ export default function ProductosPage({
                         router.reload();
                     }, 1000);
                 },
-                onError: (errors: any) => {
+                onError: (errors: Record<string, string>) => {
                     console.error('Errores de importación:', errors);
 
-                    let errorMessage = 'Ocurrió un error al importar los productos';
-
-                    if (errors.error) {
-                        errorMessage = errors.error;
-                    } else if (errors.file) {
-                        errorMessage = Array.isArray(errors.file) ? errors.file[0] : errors.file;
-                    } else if (errors.almacen_id) {
-                        errorMessage = Array.isArray(errors.almacen_id) ? errors.almacen_id[0] : errors.almacen_id;
-                    }
+                    const errorMessage =
+                        errors.error || errors.file || errors.almacen_id || 'Ocurrió un error al importar los productos.';
 
                     toast.error('❌ Error en la importación', {
                         description: errorMessage,
@@ -467,7 +468,7 @@ export default function ProductosPage({
 
     // Aplicar filtros
     const aplicarFiltros = useCallback(() => {
-        const params: ProductosFilters & { sort_field?: string; sort_direction?: string } = {};
+        const params: Record<string, string | boolean> = {};
         if (searchTerm) params.search = searchTerm;
         if (selectedCategoria) params.categoria_id = selectedCategoria;
         if (soloStockBajo) params.stock_bajo = true;
@@ -500,7 +501,7 @@ export default function ProductosPage({
     // Navegación de páginas
     const navigateToPage = (url: string | null) => {
         if (url) {
-            router.get(url, {}, { preserveState: true });
+            router.get(url, {}, { preserveState: true, preserveScroll: true });
         }
     };
 

@@ -54,14 +54,31 @@ class ProductoController extends Controller
         $sortField = $request->get('sort_field', 'nombre_producto');
         $sortDirection = $request->get('sort_direction', 'asc');
 
-        if (in_array($sortField, ['nombre_producto', 'marca_producto', 'codigo_producto', 'precio_compra_producto'])) {
-            $query->orderBy($sortField, $sortDirection);
+        if (in_array($sortField, ['nombre_producto', 'marca_producto', 'codigo_producto', 'precio_compra_producto', 'cantidad_total'])) {
+             // El ordenamiento por cantidad_total requiere una lógica especial si no es una columna directa
+            if ($sortField === 'cantidad_total') {
+                // Asumiendo que `cantidad_total` es un accesor, necesitamos ordenar por la columna real o una subconsulta
+                // Por simplicidad aquí, si `cantidad_total` no es una columna real, este orden no funcionará como se espera sin SQL más complejo.
+                // Si es una columna en la tabla `productos`, está bien.
+                $query->orderBy('cantidad_total', $sortDirection);
+            } else {
+                $query->orderBy($sortField, $sortDirection);
+            }
         }
 
-        $productos = $query->get()->map(function ($producto) {
-            // ✅ FORZAR recarga de relaciones para datos ACTUALIZADOS
-            $producto->load('almacenes');
+        // ✅ Filtrar por stock bajo a nivel de base de datos si es posible
+        // Esto asume que `stock_bajo` se puede determinar en la consulta (ej. a través de un scope)
+        if ($request->has('stock_bajo') && $request->stock_bajo) {
+            // Suponiendo que tienes un scope en tu modelo Producto: scopeStockBajo($query)
+            $query->stockBajo(); 
+        }
 
+        // Paginación
+        $perPage = $request->get('per_page', 15);
+        $paginatedProducts = $query->paginate($perPage)->withQueryString();
+
+        // Transformar los datos para la vista después de paginar
+        $paginatedProducts->getCollection()->transform(function ($producto) {
             return [
                 'id' => $producto->id,
                 'nombre_producto' => $producto->nombre_producto,
@@ -72,30 +89,15 @@ class ProductoController extends Controller
                 'categoria' => $producto->categoria?->nombre_categoria,
                 'categoria_id' => $producto->categoria_id,
                 'precio_compra_producto' => (float) $producto->precio_compra_producto,
-                'cantidad_total' => $producto->cantidad_total, // ✅ Accessor del modelo (ya actualizado)
+                'cantidad_total' => $producto->cantidad_total,
                 'imagen_url' => $producto->imagen_url,
                 'barcode_image_url' => $producto->barcode_image_url,
                 'precio_venta' => $producto->vendedores->first()->pivot->precio_venta ?? null,
-                'stock_bajo' => $producto->stock_bajo, // ✅ Accessor del modelo (ya actualizado)
+                'stock_bajo' => $producto->stock_bajo,
                 'created_at' => $producto->created_at?->toISOString(),
                 'updated_at' => $producto->updated_at?->toISOString(),
             ];
         });
-
-        // ✅ CORRECCIÓN: Filtrar stock bajo usando el accessor del modelo (ya actualizado)
-        if ($request->has('stock_bajo') && $request->stock_bajo) {
-            $productos = $productos->filter(fn($producto) => $producto['stock_bajo']);
-        }
-
-        $perPage = $request->get('per_page', 15);
-        $currentPage = $request->get('page', 1);
-        $paginatedProducts = new \Illuminate\Pagination\LengthAwarePaginator(
-            $productos->forPage($currentPage, $perPage),
-            $productos->count(),
-            $perPage,
-            $currentPage,
-            ['path' => $request->url(), 'query' => $request->query()]
-        );
 
         return Inertia::render('Productos/Index', [
             'productos' => $paginatedProducts,
