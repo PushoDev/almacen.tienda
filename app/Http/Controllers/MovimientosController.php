@@ -298,14 +298,25 @@ class MovimientosController extends Controller
                     $diferencia = $detalle->cantidad_despachada - $cantidadRecibida;
 
                     if ($cantidadRecibida > 0) {
-                        AlmacenProducto::updateOrCreate(
+                        // Obtener el valor actual de cantidad para evitar problemas con expresiones
+                        $almacenProductoDestino = AlmacenProducto::firstOrCreate(
                             [
                                 'almacen_id' => $movimiento->almacen_destino_id,
                                 'producto_id' => $producto['id']
                             ],
-                            ['cantidad' => DB::raw("cantidad + $cantidadRecibida")]
+                            ['cantidad' => 0]
                         );
+
+                        $nuevaCantidad = $almacenProductoDestino->cantidad + $cantidadRecibida;
+                        $almacenProductoDestino->update(['cantidad' => $nuevaCantidad]);
                     }
+
+                    // Al enviar, se incrementó cantidad_en_transito pero se mantuvo cantidad
+                    // Ahora, para completar el movimiento, debemos reducir la cantidad original en el origen
+                    AlmacenProducto::where([
+                        'almacen_id' => $movimiento->almacen_origen_id,
+                        'producto_id' => $detalle->producto_id
+                    ])->decrement('cantidad', $detalle->cantidad_despachada);
 
                     AlmacenProducto::where([
                         'almacen_id' => $movimiento->almacen_origen_id,
@@ -313,12 +324,15 @@ class MovimientosController extends Controller
                     ])->decrement('cantidad_en_transito', $detalle->cantidad_despachada);
 
                     if ($diferencia > 0) {
+                        // Si se reciben menos unidades de las despachadas, las diferencias se mantienen en el almacén de origen
+                        // Incrementamos el stock del emisor con las unidades no recibidas
                         AlmacenProducto::where([
                             'almacen_id' => $movimiento->almacen_origen_id,
                             'producto_id' => $detalle->producto_id
                         ])->increment('cantidad', $diferencia);
                         $totalDiferencias += $diferencia;
                     } elseif ($diferencia < 0) {
+                        // Si se reciben más unidades de las despachadas, se ajusta el stock del emisor
                         $diferenciaNegativa = abs($diferencia);
                         AlmacenProducto::where([
                             'almacen_id' => $movimiento->almacen_origen_id,
