@@ -35,8 +35,7 @@ Actualmente, el sistema de movimientos logísticos no controla adecuadamente las
   - El receptor recibe las 11 unidades (porque físicamente están presentes)
   - Se ajusta el stock del emisor: 20 - 11 = 9 unidades
   - Resultado: 9 unidades en emisor + 11 unidades en receptor = 20 unidades totales
-  - Sistema registra discrepancia crítica y alerta de auditoría
-  - Se inicia investigación inmediata: ¿Hubo error en el envío? ¿Se enviaron más unidades de las registradas?
+  - Sistema registra discrepancia y se incluye en el reporte para supervisión
 
 ## Solución Requerida
 

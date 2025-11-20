@@ -298,13 +298,17 @@ class MovimientosController extends Controller
                     $diferencia = $detalle->cantidad_despachada - $cantidadRecibida;
 
                     if ($cantidadRecibida > 0) {
-                        AlmacenProducto::updateOrCreate(
+                        // Obtener el valor actual de cantidad para evitar problemas con expresiones
+                        $almacenProductoDestino = AlmacenProducto::firstOrCreate(
                             [
                                 'almacen_id' => $movimiento->almacen_destino_id,
                                 'producto_id' => $producto['id']
                             ],
-                            ['cantidad' => DB::raw("cantidad + $cantidadRecibida")]
+                            ['cantidad' => 0]
                         );
+
+                        $nuevaCantidad = $almacenProductoDestino->cantidad + $cantidadRecibida;
+                        $almacenProductoDestino->update(['cantidad' => $nuevaCantidad]);
                     }
 
                     AlmacenProducto::where([
