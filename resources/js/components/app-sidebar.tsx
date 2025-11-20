@@ -38,10 +38,10 @@ const allNavItems: NavItem[] = [
         roles: ['admin', 'moderador', 'vendedor'],
     },
     {
-        title: 'Logistica Total',
+        title: 'Logistica del Negocio',
         href: '/logistica',
         icon: ChartNoAxesCombinedIcon,
-        roles: ['admin', 'moderador', 'vendedor'],
+        roles: ['admin'],
     },
     {
         title: 'Gestión de Monedas',
@@ -113,7 +113,7 @@ const allNavItems: NavItem[] = [
         title: 'Seguimientos',
         href: '#',
         icon: Cctv,
-        roles: ['admin', 'moderador', 'vendedor'],
+        roles: ['admin'],
     },
 ];
 
@@ -138,7 +138,7 @@ export function AppSidebar() {
     const mainNavItems = allNavItems.filter((item) => item.roles.includes(role));
 
     return (
-        <Sidebar collapsible="icon" variant="floating">
+        <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
                 <SidebarMenu>
                     <SidebarMenuItem>
