@@ -53,7 +53,13 @@ const allNavItems: NavItem[] = [
         title: 'Almacenes o Tiendas',
         href: '/almacenes',
         icon: StoreIcon,
-        roles: ['admin', 'moderador', 'vendedor'],
+        roles: ['admin', 'moderador'],
+    },
+    {
+        title: 'Mis Puntos de Ventas',
+        href: '/almacenes',
+        icon: StoreIcon,
+        roles: ['vendedor'],
     },
     {
         title: 'Movimientos',
@@ -77,7 +83,13 @@ const allNavItems: NavItem[] = [
         title: 'Inventario Disponible',
         href: '/disponibles',
         icon: ShoppingBasket,
-        roles: ['admin', 'moderador', 'vendedor'],
+        roles: ['admin', 'moderador'],
+    },
+    {
+        title: 'Mi Inventario',
+        href: '/disponibles',
+        icon: ShoppingBasket,
+        roles: ['vendedor'],
     },
     {
         title: 'Proveedores',
