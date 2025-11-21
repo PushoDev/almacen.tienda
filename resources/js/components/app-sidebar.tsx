@@ -32,16 +32,16 @@ interface PageProps extends InertiaPageProps {
 
 const allNavItems: NavItem[] = [
     {
-        title: 'Opciones Generales',
+        title: 'Caja Principal',
         href: '/dashboard',
         icon: LayoutGrid,
         roles: ['admin', 'moderador', 'vendedor'],
     },
     {
-        title: 'Logistica Total',
+        title: 'Logistica General',
         href: '/logistica',
         icon: ChartNoAxesCombinedIcon,
-        roles: ['admin', 'moderador', 'vendedor'],
+        roles: ['admin'],
     },
     {
         title: 'Gestión de Monedas',
@@ -53,7 +53,13 @@ const allNavItems: NavItem[] = [
         title: 'Almacenes o Tiendas',
         href: '/almacenes',
         icon: StoreIcon,
-        roles: ['admin', 'moderador', 'vendedor'],
+        roles: ['admin', 'moderador'],
+    },
+    {
+        title: 'Mis Puntos de Ventas',
+        href: '/almacenes',
+        icon: StoreIcon,
+        roles: ['vendedor'],
     },
     {
         title: 'Movimientos',
@@ -77,7 +83,13 @@ const allNavItems: NavItem[] = [
         title: 'Inventario Disponible',
         href: '/disponibles',
         icon: ShoppingBasket,
-        roles: ['admin', 'moderador', 'vendedor'],
+        roles: ['admin', 'moderador'],
+    },
+    {
+        title: 'Mi Inventario',
+        href: '/disponibles',
+        icon: ShoppingBasket,
+        roles: ['vendedor'],
     },
     {
         title: 'Proveedores',
@@ -113,7 +125,7 @@ const allNavItems: NavItem[] = [
         title: 'Seguimientos',
         href: '#',
         icon: Cctv,
-        roles: ['admin', 'moderador', 'vendedor'],
+        roles: ['admin'],
     },
 ];
 
@@ -138,7 +150,7 @@ export function AppSidebar() {
     const mainNavItems = allNavItems.filter((item) => item.roles.includes(role));
 
     return (
-        <Sidebar collapsible="icon" variant="floating">
+        <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
                 <SidebarMenu>
                     <SidebarMenuItem>

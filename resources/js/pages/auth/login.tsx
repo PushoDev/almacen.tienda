@@ -36,13 +36,13 @@ export default function Login({ status, canResetPassword }: LoginProps) {
     };
 
     return (
-        <AuthLayout title="Authentificar su Cuenta" description="Introduzca sus credenciales para acceder al sistema">
+        <AuthLayout title="🔑 Authentificar su Cuenta" description="Introduzca sus credenciales para acceder al sistema">
             <Head title="Log in - 🏪🛒" />
 
             <form className="animate__animated animate__fadeInUp flex flex-col gap-6" onSubmit={submit}>
                 <div className="grid gap-6">
                     <div className="grid gap-2">
-                        <Label htmlFor="email">Correo Electrónico</Label>
+                        <Label htmlFor="email">📧 Correo Electrónico</Label>
                         <Input
                             id="email"
                             type="email"
@@ -60,7 +60,7 @@ export default function Login({ status, canResetPassword }: LoginProps) {
 
                     <div className="grid gap-2">
                         <div className="flex items-center">
-                            <Label htmlFor="password">Contraseña</Label>
+                            <Label htmlFor="password">🔐 Contraseña</Label>
                             {canResetPassword && (
                                 <TextLink href={route('password.request')} className="ml-auto text-sm" tabIndex={5}>
                                     Has olvidado tu contraseña?
