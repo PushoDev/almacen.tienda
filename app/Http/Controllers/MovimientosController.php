@@ -135,7 +135,7 @@ class MovimientosController extends Controller
                 if (!$stock || $disponible < $producto['cantidad']) {
                     throw new \Exception(
                         "Stock insuficiente para el producto ID: {$producto['id']}. " .
-                        "Disponible: {$disponible}, Solicitado: {$producto['cantidad']}"
+                            "Disponible: {$disponible}, Solicitado: {$producto['cantidad']}"
                     );
                 }
             }
@@ -216,7 +216,7 @@ class MovimientosController extends Controller
                 if (!$stock || $disponible < $detalle->cantidad_solicitada) {
                     throw new \Exception(
                         "Stock insuficiente para el producto ID: {$detalle->producto_id}. " .
-                        "Disponible: {$disponible}, Solicitado: {$detalle->cantidad_solicitada}"
+                            "Disponible: {$disponible}, Solicitado: {$detalle->cantidad_solicitada}"
                     );
                 }
 
@@ -268,13 +268,14 @@ class MovimientosController extends Controller
             'productos.*.cantidad_recibida' => 'required|integer|min:0',
         ]);
 
-        // Verificar permisos
-        if ($user->role !== 'admin') {
-            $almacenesPermitidosIds = $user->almacenes->pluck('id');
-            if (!$almacenesPermitidosIds->contains($movimiento->almacen_destino_id)) {
-                abort(403, 'No tienes permisos para recibir movimientos en este almacén');
-            }
-        }
+        // Permitir recepción a todos los usuarios sin restricción de almacén
+        // La lógica de negocio se encarga del control de stock
+        // if ($user->role !== 'admin') {
+        //     $almacenesPermitidosIds = $user->almacenes->pluck('id');
+        //     if (!$almacenesPermitidosIds->contains($movimiento->almacen_destino_id)) {
+        //         abort(403, 'No tienes permisos para recibir movimientos en este almacén');
+        //     }
+        // }
 
         DB::beginTransaction();
 
