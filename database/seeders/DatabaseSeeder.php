@@ -76,13 +76,32 @@ class DatabaseSeeder extends Seeder
             ['codigo_moneda' => 'USD'],
             [
                 'nombre_moneda' => 'Dólar Estadounidense',
-                'simbolo_moneda' => '$',
+                'simbolo_moneda' => 'USD',
                 'tasa_cambio' => 1.0,
                 'commission' => 0,
                 'estado' => true,
                 'principal' => true,
             ]
         );
+        // Nueva Moneda
+        $monedas = [
+            [
+                'codigo_moneda' => 'CUP',
+                'nombre_moneda' => 'Peso Cubano MN',
+                'simbolo_moneda' => 'CUP',
+                'tasa_cambio' => 365.0,
+                'commission' => 0,
+                'estado' => true,
+                'principal' => false,
+            ]
+        ];
+
+        foreach ($monedas as $moneda) {
+            Moneda::firstOrCreate(
+                ['codigo_moneda' => $moneda['codigo_moneda']],
+                $moneda
+            );
+        }
         // ========== FIN MONEDA POR DEFECTO ==========
 
         // Crear el almacén predeterminado
@@ -143,7 +162,16 @@ class DatabaseSeeder extends Seeder
                 'provincia_almacen' => 'Camaguey',
                 'ciudad_almacen' => 'Florida',
                 'notas_almacen' => 'Punto de Venta en Florida',
-            ]
+            ],
+            [
+                'nombre_almacen' => 'TIENDA LA SALUO',
+                'tipo_almacen' => 'punto_venta',
+                'telefono_almacen' => '+53 53564121',
+                'correo_almacen' => 'tiendalasalud@glorietashop.com',
+                'provincia_almacen' => 'Mayabeque',
+                'ciudad_almacen' => 'Cotorro',
+                'notas_almacen' => 'Punto de venta en El Cotorro',
+            ],
         ];
 
         foreach ($almacenes as $almacen) {
@@ -152,17 +180,6 @@ class DatabaseSeeder extends Seeder
                 $almacen
             );
         }
-
-        // Tasa de Cambio Inicial
-        DB::table('tasa_cambios')->insert([
-            'tasa' => 325.0,
-            'fecha_actualizacion' => now(),
-        ]);
-        // Tasa de Cambio para MLC Temporales
-        DB::table('tasamlc_temp')->insert([
-            'tasa_mlc' => 1.50,
-            'fecha_actualizacion' => now(),
-        ]);
 
         // Insertar categorías
         DB::table('categorias')->insert([
@@ -176,6 +193,13 @@ class DatabaseSeeder extends Seeder
             [
                 'nombre_categoria' => 'REFRIGERACION',
                 'descripcion_categoria' => 'Refrigeración, Neveras',
+                'activar_categoria' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'nombre_categoria' => 'CELULARES',
+                'descripcion_categoria' => 'Celulares, Tablets, Memorias SD/USB, Laptop, etc',
                 'activar_categoria' => true,
                 'created_at' => now(),
                 'updated_at' => now(),
@@ -195,13 +219,6 @@ class DatabaseSeeder extends Seeder
                 'updated_at' => now(),
             ],
             [
-                'nombre_categoria' => 'ACCESORIOS',
-                'descripcion_categoria' => 'Mochilas, Adornos para el hogar',
-                'activar_categoria' => true,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
                 'nombre_categoria' => 'MISCELANEAS',
                 'descripcion_categoria' => 'Split, Plantas, Motores, Turbinas, etc',
                 'activar_categoria' => true,
@@ -209,12 +226,13 @@ class DatabaseSeeder extends Seeder
                 'updated_at' => now(),
             ],
             [
-                'nombre_categoria' => 'TELEFONOS/TABLETS',
-                'descripcion_categoria' => 'Celulares, Tablets, Memorias SD/USB, Laptop, etc',
+                'nombre_categoria' => 'ACCESORIOS',
+                'descripcion_categoria' => 'Mochilas, Adornos para el hogar',
                 'activar_categoria' => true,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
+
         ]);
 
         // Datos Movimientos financieros
@@ -259,7 +277,7 @@ class DatabaseSeeder extends Seeder
                 'nombre_cliente' => 'CLIENTE ASOCIADO MANZANILLO',
                 'tipo_cliente' => 'asociado',
                 'deuda_pago_cliente' => 0,
-                'telefono_cliente' => '+53 5 1111111',
+                'telefono_cliente' => '+53 55572430',
                 'direccion_cliente' => 'Dirección Manzanillo',
                 'ciudad_cliente' => 'Manzanillo',
                 'created_at' => now(),
@@ -269,7 +287,7 @@ class DatabaseSeeder extends Seeder
                 'nombre_cliente' => 'CLIENTE ASOCIADO QUIVICAN',
                 'tipo_cliente' => 'asociado',
                 'deuda_pago_cliente' => 0,
-                'telefono_cliente' => '+53 5 2222222',
+                'telefono_cliente' => '+53 52696901',
                 'direccion_cliente' => 'Dirección Quivicán',
                 'ciudad_cliente' => 'Quivicán',
                 'created_at' => now(),
@@ -279,12 +297,22 @@ class DatabaseSeeder extends Seeder
                 'nombre_cliente' => 'CLIENTE ASOCIADO FLORIDA',
                 'tipo_cliente' => 'asociado',
                 'deuda_pago_cliente' => 0,
-                'telefono_cliente' => '+53 5 3333333',
+                'telefono_cliente' => '+53 56142247',
                 'direccion_cliente' => 'Dirección Florida',
                 'ciudad_cliente' => 'Florida',
                 'created_at' => now(),
                 'updated_at' => now(),
-            ]
+            ],
+            [
+                'nombre_cliente' => 'CLIENTE ASOCIADO LA SALUD',
+                'tipo_cliente' => 'asociado',
+                'deuda_pago_cliente' => 0,
+                'telefono_cliente' => '+53 50331881',
+                'direccion_cliente' => 'Dirección Havana',
+                'ciudad_cliente' => 'Ciudad Habana',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
         ];
 
         foreach ($clientes as $cliente) {

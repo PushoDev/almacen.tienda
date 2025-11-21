@@ -32,13 +32,13 @@ interface PageProps extends InertiaPageProps {
 
 const allNavItems: NavItem[] = [
     {
-        title: 'Opciones Generales',
+        title: 'Caja Principal',
         href: '/dashboard',
         icon: LayoutGrid,
         roles: ['admin', 'moderador', 'vendedor'],
     },
     {
-        title: 'Logistica del Negocio',
+        title: 'Logistica General',
         href: '/logistica',
         icon: ChartNoAxesCombinedIcon,
         roles: ['admin'],
