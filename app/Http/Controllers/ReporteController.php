@@ -599,20 +599,20 @@ class ReporteController extends Controller
      */
     public function movimientosFinancieros(Request $request)
     {
-        $query = DB::table('movimiento_financieros')
-            ->leftJoin('cuentas as c_origen', 'movimiento_financieros.cuenta_origen_id', '=', 'c_origen.id')
-            ->leftJoin('cuentas as c_destino', 'movimiento_financieros.cuenta_destino_id', '=', 'c_destino.id')
-            ->leftJoin('clientes as cl_origen', 'movimiento_financieros.cliente_origen_id', '=', 'cl_origen.id')
-            ->leftJoin('clientes as cl_destino', 'movimiento_financieros.cliente_destino_id', '=', 'cl_destino.id')
-            ->leftJoin('proveedors as p_destino', 'movimiento_financieros.proveedor_destino_id', '=', 'p_destino.id')
-            ->join('tipo_movimiento_financieros', 'movimiento_financieros.tipo_movimiento_id', '=', 'tipo_movimiento_financieros.id')
+        $query = DB::table('movimientos_financieros')
+            ->leftJoin('cuentas as c_origen', 'movimientos_financieros.cuenta_origen_id', '=', 'c_origen.id')
+            ->leftJoin('cuentas as c_destino', 'movimientos_financieros.cuenta_destino_id', '=', 'c_destino.id')
+            ->leftJoin('clientes as cl_origen', 'movimientos_financieros.cliente_origen_id', '=', 'cl_origen.id')
+            ->leftJoin('clientes as cl_destino', 'movimientos_financieros.cliente_destino_id', '=', 'cl_destino.id')
+            ->leftJoin('proveedors as p_destino', 'movimientos_financieros.proveedor_destino_id', '=', 'p_destino.id')
+            ->join('tipos_movimiento_financiero', 'movimientos_financieros.tipo_movimiento_id', '=', 'tipos_movimiento_financiero.id')
             ->select(
-                'movimiento_financieros.id',
-                'tipo_movimiento_financieros.nombre as tipo_movimiento',
-                'movimiento_financieros.monto',
-                'movimiento_financieros.moneda',
-                'movimiento_financieros.descripcion',
-                'movimiento_financieros.fecha_operacion',
+                'movimientos_financieros.id',
+                'tipos_movimiento_financiero.nombre as tipo_movimiento',
+                'movimientos_financieros.monto',
+                'movimientos_financieros.moneda',
+                'movimientos_financieros.descripcion',
+                'movimientos_financieros.fecha_operacion',
                 DB::raw("COALESCE(c_origen.nombre_cuenta, cl_origen.nombre_cliente) as origen"),
                 DB::raw("COALESCE(c_destino.nombre_cuenta, cl_destino.nombre_cliente, p_destino.nombre_proveedor) as destino")
             );
@@ -633,7 +633,7 @@ class ReporteController extends Controller
 
         return Inertia::render('Reportes/Report/MovimientosFinancieros', [
             'movimientos' => $movimientos,
-            'tipos' => DB::table('tipo_movimiento_financieros')->get(),
+            'tipos' => DB::table('tipos_movimiento_financiero')->get(),
         ]);
     }
 }
