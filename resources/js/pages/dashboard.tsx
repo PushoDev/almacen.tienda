@@ -1,4 +1,5 @@
 import HeadingSmall from '@/components/heading-small';
+import { Badge } from '@/components/ui/badge';
 import { CursorFollow, CursorProvider } from '@/components/ui/cursor';
 import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
 import { ScrollProgress } from '@/components/ui/scroll';
@@ -65,6 +66,24 @@ interface Moneda {
     principal: boolean;
 }
 
+interface MontoPorMoneda {
+    descripcion: string;
+    simbolo: string;
+    monto: number;
+    tasa_cambio: number;
+}
+
+interface ComparacionMensual {
+    moneda: string;
+    nombre_moneda: string;
+    simbolo_moneda: string;
+    monto_actual: number;
+    monto_anterior: number;
+    diferencia: number;
+    porcentaje_cambio: number;
+    es_positivo: boolean;
+}
+
 interface EstadoFinanciero {
     cuenta_id: number;
     nombre_cuenta: string;
@@ -77,7 +96,7 @@ interface EstadoFinanciero {
     usuarios: Usuario[];
 }
 
-export default function Dashboard({ userRole }: { userRole: 'admin' | 'moderador' | 'vendedor' }) {
+export default function Dashboard({ userRole, montosPorMoneda, totalCapital, comparaciones }: { userRole: 'admin' | 'moderador' | 'vendedor', montosPorMoneda?: MontoPorMoneda[], totalCapital?: number, comparaciones?: ComparacionMensual[] }) {
     const [timeRange, setTimeRange] = React.useState('90d');
     const [chartData, setChartData] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -349,6 +368,153 @@ export default function Dashboard({ userRole }: { userRole: 'admin' | 'moderador
                     </div>
                 </div>
 
+                {/* Tablas de Montos y Comparaciones */}
+                <div className="animate__animated animate__fadeIn grid grid-cols-1 gap-4 md:grid-cols-2">
+                    {/* Tabla 1: Montos por Moneda */}
+                    <div>
+                        <Card className="border-sidebar-border dark:border-sidebar-border">
+                            <CardHeader className="border-b-sidebar-border dark:border-b-sidebar-border">
+                                <CardTitle className="flex items-center gap-2">
+                                    <DollarSign className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                                    Tabla 1: Mis Montos por Moneda
+                                </CardTitle>
+                                <CardDescription>
+                                    Montos asignados a tus cuentas por moneda
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow className="border-b-sidebar-border dark:border-b-sidebar-border hover:bg-transparent">
+                                            <TableHead className="text-gray-700 dark:text-gray-300">Moneda</TableHead>
+                                            <TableHead className="text-right text-gray-700 dark:text-gray-300">Monto</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {montosPorMoneda && montosPorMoneda.length > 0 ? (
+                                            montosPorMoneda.map((item, index) => (
+                                                <TableRow key={index} className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50 hover:bg-sidebar/10 dark:hover:bg-sidebar/20 transition-colors">
+                                                    <TableCell className="font-medium">
+                                                        <div className="flex items-center gap-3">
+                                                            <Badge variant="secondary" className="capitalize">
+                                                                {item.descripcion}
+                                                            </Badge>
+                                                            <span className="text-sm text-muted-foreground font-mono">
+                                                                {item.simbolo}
+                                                            </span>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-medium">
+                                                        {item.monto.toLocaleString('es-ES', {
+                                                            minimumFractionDigits: 2,
+                                                            maximumFractionDigits: 6,
+                                                        })} {item.simbolo}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50">
+                                                <TableCell colSpan={2} className="text-center text-gray-500 py-8 dark:text-gray-400">
+                                                    No tienes cuentas asignadas o no hay montos disponibles
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                                {totalCapital !== undefined && montosPorMoneda && montosPorMoneda.length > 0 && (
+                                    <div className="mt-4 flex justify-between border-t border-sidebar-border dark:border-sidebar-border pt-2 font-semibold">
+                                        <span>Total Capital (USD):</span>
+                                        <span>
+                                            {totalCapital.toLocaleString('es-ES', {
+                                                minimumFractionDigits: 2,
+                                                maximumFractionDigits: 2,
+                                            })} USD
+                                        </span>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* Tabla 2: Comparaciones Mensuales */}
+                    <div>
+                        <Card className="border-sidebar-border dark:border-sidebar-border">
+                            <CardHeader className="border-b-sidebar-border dark:border-b-sidebar-border">
+                                <CardTitle className="flex items-center gap-2">
+                                    <TrendingUp className="h-5 w-5 text-green-600 dark:text-green-400" />
+                                    Tabla 2: Comparación Mensual
+                                </CardTitle>
+                                <CardDescription>
+                                    Comparación entre el mes actual y el mes anterior
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow className="border-b-sidebar-border dark:border-b-sidebar-border hover:bg-transparent">
+                                            <TableHead className="text-gray-700 dark:text-gray-300">Moneda</TableHead>
+                                            <TableHead className="text-gray-700 dark:text-gray-300">Símbolo</TableHead>
+                                            <TableHead className="text-right text-gray-700 dark:text-gray-300">Mes Anterior</TableHead>
+                                            <TableHead className="text-right text-gray-700 dark:text-gray-300">Mes Actual</TableHead>
+                                            <TableHead className="text-right text-gray-700 dark:text-gray-300">Diferencia</TableHead>
+                                            <TableHead className="text-right text-gray-700 dark:text-gray-300">% Cambio</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {comparaciones && comparaciones.length > 0 ? (
+                                            comparaciones.map((comparacion, index) => (
+                                                <TableRow key={index} className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50 hover:bg-sidebar/10 dark:hover:bg-sidebar/20 transition-colors">
+                                                    <TableCell className="font-medium">
+                                                        {comparacion.moneda}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge variant="secondary">
+                                                            {comparacion.simbolo_moneda}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        {comparacion.monto_anterior.toLocaleString('es-ES', {
+                                                            minimumFractionDigits: 2,
+                                                            maximumFractionDigits: 6,
+                                                        })}
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        {comparacion.monto_actual.toLocaleString('es-ES', {
+                                                            minimumFractionDigits: 2,
+                                                            maximumFractionDigits: 6,
+                                                        })}
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <span className={comparacion.es_positivo ? 'text-green-600 dark:text-green-400 font-medium' : 'text-red-600 dark:text-red-400 font-medium'}>
+                                                            {comparacion.diferencia >= 0 ? '+' : ''}
+                                                            {comparacion.diferencia.toLocaleString('es-ES', {
+                                                                minimumFractionDigits: 2,
+                                                                maximumFractionDigits: 6,
+                                                            })}
+                                                        </span>
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <span className={comparacion.es_positivo ? 'text-green-600 dark:text-green-400 font-medium' : 'text-red-600 dark:text-red-400 font-medium'}>
+                                                            {comparacion.porcentaje_cambio >= 0 ? '+' : ''}
+                                                            {comparacion.porcentaje_cambio.toFixed(2)}%
+                                                        </span>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50">
+                                                <TableCell colSpan={6} className="text-center text-gray-500 py-8 dark:text-gray-400">
+                                                    No hay datos históricos disponibles para comparar
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </div>
+
                 {/* Sección de Monedas - Información de Tasas de Cambio */}
                 <div className="animate__animated animate__fadeIn">
                     <Card>
@@ -528,29 +694,34 @@ export default function Dashboard({ userRole }: { userRole: 'admin' | 'moderador
 
                 {/* Tabla de Estados Financieros */}
                 <div>
-                    <Card>
-                        <CardHeader className="flex items-center gap-2 space-y-0 border-b py-5 sm:flex-row">
-                            <div className="grid flex-1 gap-1 text-center sm:text-left">
-                                <CardTitle>Estados Financieros</CardTitle>
-                                <CardDescription>
-                                    {userRole === 'vendedor' ? 'Mis Cuentas Asignadas' : 'Cuentas por Moneda y Usuarios Asignados'}
-                                </CardDescription>
+                    <Card className="border-sidebar-border dark:border-sidebar-border">
+                        <CardHeader className="border-b-sidebar-border dark:border-b-sidebar-border">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <DollarSign className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                                        Estados Financieros
+                                    </CardTitle>
+                                    <CardDescription className="mt-1">
+                                        {userRole === 'vendedor' ? 'Mis Cuentas Asignadas' : 'Cuentas por Moneda y Usuarios Asignados'}
+                                    </CardDescription>
+                                </div>
+                                {userRole !== 'vendedor' && (
+                                    <Select value={usuarioSeleccionado} onValueChange={setUsuarioSeleccionado}>
+                                        <SelectTrigger className="w-[220px] rounded-lg" aria-label="Filtrar por usuario">
+                                            <SelectValue placeholder="Todos los usuarios" />
+                                        </SelectTrigger>
+                                        <SelectContent className="rounded-xl">
+                                            <SelectItem value="all">Todos los usuarios</SelectItem>
+                                            {usuarios.map((usuario) => (
+                                                <SelectItem key={usuario.id} value={usuario.id.toString()}>
+                                                    {usuario.name} ({usuario.role})
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                )}
                             </div>
-                            {userRole !== 'vendedor' && (
-                                <Select value={usuarioSeleccionado} onValueChange={setUsuarioSeleccionado}>
-                                    <SelectTrigger className="w-[220px] rounded-lg sm:ml-auto" aria-label="Filtrar por usuario">
-                                        <SelectValue placeholder="Todos los usuarios" />
-                                    </SelectTrigger>
-                                    <SelectContent className="rounded-xl">
-                                        <SelectItem value="all">Todos los usuarios</SelectItem>
-                                        {usuarios.map((usuario) => (
-                                            <SelectItem key={usuario.id} value={usuario.id.toString()}>
-                                                {usuario.name} ({usuario.role})
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            )}
                         </CardHeader>
                         <CardContent className="pt-6">
                             {isLoadingFinancial ? (
@@ -559,97 +730,111 @@ export default function Dashboard({ userRole }: { userRole: 'admin' | 'moderador
                                 <div className="overflow-x-auto">
                                     <Table>
                                         <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Cuenta</TableHead>
-                                                <TableHead>Tipo</TableHead>
-                                                <TableHead>Moneda</TableHead>
-                                                <TableHead className="text-right">Saldo</TableHead>
-                                                <TableHead className="text-right">Deuda</TableHead>
-                                                <TableHead>Tipo Cuenta</TableHead>
-                                                <TableHead>Vendedores</TableHead>
-                                                <TableHead>Estado</TableHead>
+                                            <TableRow className="border-b-sidebar-border dark:border-b-sidebar-border hover:bg-transparent">
+                                                <TableHead className="text-gray-700 dark:text-gray-300">Cuenta</TableHead>
+                                                <TableHead className="text-gray-700 dark:text-gray-300">Tipo</TableHead>
+                                                <TableHead className="text-gray-700 dark:text-gray-300">Moneda</TableHead>
+                                                <TableHead className="text-right text-gray-700 dark:text-gray-300">Saldo</TableHead>
+                                                <TableHead className="text-gray-700 dark:text-gray-300">Tipo Cuenta</TableHead>
+                                                <TableHead className="text-gray-700 dark:text-gray-300">Vendedores</TableHead>
+                                                <TableHead className="text-gray-700 dark:text-gray-300">Estado</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {estadosFinancieros.map((estado) => (
-                                                <TableRow key={estado.cuenta_id}>
-                                                    <TableCell className="font-medium">{estado.nombre_cuenta}</TableCell>
-                                                    <TableCell>{estado.tipo}</TableCell>
-                                                    <TableCell>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-lg font-semibold">{estado.moneda.simbolo_moneda}</span>
-                                                            <span className="text-sm text-gray-600">{estado.moneda.codigo_moneda}</span>
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell className="text-right font-semibold">
-                                                        {estado.saldo_cuenta.toLocaleString('es-DO', {
-                                                            minimumFractionDigits: 2,
-                                                            maximumFractionDigits: 2,
-                                                        })}
-                                                    </TableCell>
-                                                    <TableCell className="text-right">
-                                                        {estado.deuda > 0 && (
-                                                            <span className="font-semibold text-red-600">
-                                                                {estado.deuda.toLocaleString('es-DO', {
-                                                                    minimumFractionDigits: 2,
-                                                                    maximumFractionDigits: 2,
-                                                                })}
-                                                            </span>
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <span
-                                                            className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${
-                                                                estado.tipo_cuenta === 'permanentes'
-                                                                    ? 'bg-blue-100 text-blue-800'
-                                                                    : estado.tipo_cuenta === 'temporales'
-                                                                      ? 'bg-green-100 text-green-800'
-                                                                      : 'bg-red-100 text-red-800'
-                                                            }`}
-                                                        >
-                                                            {estado.tipo_cuenta}
-                                                        </span>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {estado.usuarios.length > 0 ? (
-                                                            <TooltipProvider>
-                                                                <Tooltip>
-                                                                    <TooltipTrigger asChild>
-                                                                        <button className="inline-flex cursor-pointer items-center justify-center rounded-lg bg-blue-100 p-2 transition-colors hover:bg-blue-200">
-                                                                            <Users className="h-4 w-4 text-blue-600" />
-                                                                            <span className="ml-1 text-xs font-semibold text-blue-600">
-                                                                                {estado.usuarios.length}
-                                                                            </span>
-                                                                        </button>
-                                                                    </TooltipTrigger>
-                                                                    <TooltipContent side="left" className="max-w-sm">
-                                                                        <div className="space-y-2">
-                                                                            <p className="font-semibold text-white">Vendedores asignados:</p>
-                                                                            {estado.usuarios.map((usuario) => (
-                                                                                <div key={usuario.id} className="text-sm text-white">
-                                                                                    <p className="font-medium">{usuario.name}</p>
-                                                                                    <p className="text-xs opacity-90">({usuario.role})</p>
-                                                                                </div>
-                                                                            ))}
-                                                                        </div>
-                                                                    </TooltipContent>
-                                                                </Tooltip>
-                                                            </TooltipProvider>
-                                                        ) : (
-                                                            <span className="text-xs text-gray-400 italic">Sin usuario</span>
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <span
-                                                            className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${
-                                                                estado.estado_cuenta ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                                                            }`}
-                                                        >
-                                                            {estado.estado_cuenta ? 'Activa' : 'Inactiva'}
-                                                        </span>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
+                                            {estadosFinancieros.map((estado) => {
+                                                // Determinar color basado en el nombre de la cuenta o el tipo
+                                                const getColorClass = () => {
+                                                    if (estado.nombre_cuenta.toLowerCase().includes('efectivo') || estado.nombre_cuenta.toLowerCase().includes('cash')) {
+                                                        return 'bg-amber-100 dark:bg-amber-900/50';
+                                                    } else if (estado.nombre_cuenta.toLowerCase().includes('banco')) {
+                                                        return 'bg-blue-100 dark:bg-blue-900/50';
+                                                    } else if (estado.nombre_cuenta.toLowerCase().includes('tarjeta') || estado.nombre_cuenta.toLowerCase().includes('card')) {
+                                                        return 'bg-green-100 dark:bg-green-900/50';
+                                                    } else if (estado.nombre_cuenta.toLowerCase().includes('digital') || estado.nombre_cuenta.toLowerCase().includes('paypal') || estado.nombre_cuenta.toLowerCase().includes('zelle')) {
+                                                        return 'bg-purple-100 dark:bg-purple-900/50';
+                                                    } else if (estado.tipo_cuenta === 'permanentes') {
+                                                        return 'bg-sky-100 dark:bg-sky-900/50';
+                                                    } else if (estado.tipo_cuenta === 'temporales') {
+                                                        return 'bg-emerald-100 dark:bg-emerald-900/50';
+                                                    } else {
+                                                        return 'bg-gray-100 dark:bg-gray-700';
+                                                    }
+                                                };
+
+                                                return (
+                                                    <TableRow key={estado.cuenta_id} className={`border-b-sidebar-border/50 dark:border-b-sidebar-border/50 hover:bg-sidebar/10 dark:hover:bg-sidebar/20 transition-colors ${getColorClass()}`}>
+                                                        <TableCell className="font-medium">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-semibold">{estado.nombre_cuenta}</span>
+                                                                <Badge variant="secondary" className="text-xs">
+                                                                    #{estado.cuenta_id}
+                                                                </Badge>
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <span className="text-sm capitalize">{estado.tipo}</span>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-mono font-bold">{estado.moneda.simbolo_moneda}</span>
+                                                                <span className="text-sm text-muted-foreground">{estado.moneda.codigo_moneda}</span>
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-medium">
+                                                            {estado.saldo_cuenta.toLocaleString('es-ES', {
+                                                                minimumFractionDigits: 2,
+                                                                maximumFractionDigits: 2,
+                                                            })}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Badge variant="outline" className={estado.tipo_cuenta === 'permanentes'
+                                                                ? 'border-blue-300 text-blue-800 dark:text-blue-300'
+                                                                : estado.tipo_cuenta === 'temporales'
+                                                                    ? 'border-green-300 text-green-800 dark:text-green-300'
+                                                                    : 'border-red-300 text-red-800 dark:text-red-300'}>
+                                                                {estado.tipo_cuenta}
+                                                            </Badge>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            {estado.usuarios.length > 0 ? (
+                                                                <TooltipProvider>
+                                                                    <Tooltip>
+                                                                        <TooltipTrigger asChild>
+                                                                            <button className="inline-flex cursor-pointer items-center justify-center rounded-lg bg-blue-100 p-1.5 transition-colors hover:bg-blue-200 dark:bg-blue-900/40 dark:hover:bg-blue-800">
+                                                                                <Users className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                                                                                <span className="ml-1 text-xs font-semibold text-blue-600 dark:text-blue-300">
+                                                                                    {estado.usuarios.length}
+                                                                                </span>
+                                                                            </button>
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent side="left" className="max-w-sm bg-gray-800 text-white">
+                                                                            <div className="space-y-1">
+                                                                                <p className="font-semibold">Vendedores asignados:</p>
+                                                                                {estado.usuarios.map((usuario) => (
+                                                                                    <div key={usuario.id} className="text-xs">
+                                                                                        <p className="font-medium">{usuario.name}</p>
+                                                                                        <p className="opacity-80">({usuario.role})</p>
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
+                                                                        </TooltipContent>
+                                                                    </Tooltip>
+                                                                </TooltipProvider>
+                                                            ) : (
+                                                                <span className="text-xs text-gray-400 italic">Ninguno</span>
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Badge variant={estado.estado_cuenta ? "default" : "secondary"}
+                                                                className={estado.estado_cuenta
+                                                                    ? 'bg-green-500/10 text-green-700 dark:text-green-300 border-green-500/30'
+                                                                    : 'bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/30'}>
+                                                                {estado.estado_cuenta ? 'Activa' : 'Inactiva'}
+                                                            </Badge>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
                                         </TableBody>
                                     </Table>
                                 </div>

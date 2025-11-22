@@ -7,18 +7,21 @@ import { ChartsReportePage } from '@/layouts/charts/ChartReportesGral';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import {
+    AreaChart,
+    Archive,
     Boxes,
     CalendarClock,
-    CalendarHeart,
-    CalendarRange,
+    DollarSign,
     FileBox,
-    HandCoins,
-    HeartHandshake,
+    History,
+    Landmark,
     LibraryBig,
-    LucideBaggageClaim,
-    ShoppingBagIcon,
+    AlertTriangle,
     ShoppingBasket,
+    TrendingUp,
+    Users,
 } from 'lucide-react';
+import React from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -31,20 +34,159 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
+interface ReportCardProps {
+    title: string;
+    description: string;
+    href: string;
+    icon: React.ElementType;
+    colors: string; // e.g., 'from-blue-800 to-blue-400'
+}
+
+const reportesComprasInventario: ReportCardProps[] = [
+    {
+        title: 'Productos Más Comprados',
+        description: 'Top 10 productos más adquiridos.',
+        href: route('reportes.productos_mas_comprados'),
+        icon: ShoppingBasket,
+        colors: 'from-indigo-800 to-indigo-400',
+    },
+    {
+        title: 'Compras por Período',
+        description: 'Historial de compras en un rango de fechas.',
+        href: route('reportes.compras_por_periodo'),
+        icon: CalendarClock,
+        colors: 'from-slate-800 to-slate-400',
+    },
+    {
+        title: 'Balance de Gastos Mensuales',
+        description: 'Total de gastos de compras por mes.',
+        href: route('reportes.balance_gastos_mensuales'),
+        icon: AreaChart,
+        colors: 'from-orange-800 to-orange-400',
+    },
+    {
+        title: 'Inventario por Almacén',
+        description: 'Resumen de unidades y tipos de producto por almacén.',
+        href: route('reportes.inventario_por_almacen'),
+        icon: Boxes,
+        colors: 'from-emerald-800 to-emerald-400',
+    },
+    {
+        title: 'Inventario Detallado',
+        description: 'Lista detallada del stock actual por almacén.',
+        href: route('reportes.inventario_detallado_por_almacen'),
+        icon: FileBox,
+        colors: 'from-sky-800 to-sky-400',
+    },
+    {
+        title: 'Alerta de Stock Bajo',
+        description: 'Productos con 5 o menos unidades restantes.',
+        href: route('reportes.reporte_stock_bajo'),
+        icon: AlertTriangle,
+        colors: 'from-red-800 to-red-400',
+    },
+    {
+        title: 'Valor del Inventario',
+        description: 'Valor total del stock a precio de costo.',
+        href: route('reportes.valor_inventario'),
+        icon: Archive,
+        colors: 'from-lime-800 to-lime-400',
+    },
+];
+
+const reportesVentasRentabilidad: ReportCardProps[] = [
+    {
+        title: 'Productos Más Vendidos',
+        description: 'Top 10 productos con más ventas.',
+        href: route('reportes.productos_mas_vendidos'),
+        icon: TrendingUp,
+        colors: 'from-cyan-800 to-cyan-400',
+    },
+    {
+        title: 'Ventas por Período',
+        description: 'Historial de ventas completadas.',
+        href: route('reportes.ventas_por_periodo'),
+        icon: CalendarClock,
+        colors: 'from-teal-800 to-teal-400',
+    },
+    {
+        title: 'Ventas por Vendedor',
+        description: 'Rendimiento y total vendido por vendedor.',
+        href: route('reportes.ventas_por_vendedor'),
+        icon: Users,
+        colors: 'from-fuchsia-800 to-fuchsia-400',
+    },
+    {
+        title: 'Reporte de Ganancias',
+        description: 'Análisis de rentabilidad por venta.',
+        href: route('reportes.reporte_ganancias'),
+        icon: DollarSign,
+        colors: 'from-green-800 to-green-400',
+    },
+];
+
+const reportesFinanzasOtros: ReportCardProps[] = [
+    {
+        title: 'Historial de Precios',
+        description: 'Registro de todos los cambios de precios de venta.',
+        href: route('reportes.historial_precios'),
+        icon: History,
+        colors: 'from-amber-800 to-amber-400',
+    },
+    {
+        title: 'Movimientos Financieros',
+        description: 'Historial de ingresos, gastos y transferencias.',
+        href: route('reportes.movimientos_financieros'),
+        icon: Landmark,
+        colors: 'from-gray-800 to-gray-500',
+    },
+];
+
+const ReportCard: React.FC<ReportCardProps> = ({ title, href, icon: Icon, colors }) => (
+    <div className={`border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br ${colors}`}>
+        <div className="absolute inset-0 flex items-center justify-center opacity-10">
+            <Icon className="h-48 w-48 text-white" />
+        </div>
+        <div className="relative z-10 h-full p-6">
+            <div className="absolute top-4 left-4">
+                <Icon className="h-8 w-8 animate-pulse text-white" />
+            </div>
+            <div className="flex h-full flex-col items-end justify-center space-y-2">
+                <span className="text-lg text-white text-right">{title}</span>
+            </div>
+            <Link href={href}>
+                <button className={`absolute right-4 bottom-4 ms-2 rounded-md px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer bg-black/20 hover:bg-white/90 hover:text-black`}>
+                    Ver más ...
+                </button>
+            </Link>
+        </div>
+        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
+    </div>
+);
+
+const ReportSection: React.FC<{ title: string; reports: ReportCardProps[] }> = ({ title, reports }) => (
+    <>
+        <div className="col-span-full">
+            <h2 className="text-xl font-semibold">{title}</h2>
+            <Separator className="mt-2" />
+        </div>
+        {reports.map((report) => (
+            <ReportCard key={report.href} {...report} />
+        ))}
+    </>
+);
+
 export default function ReportesPage() {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Reportes" />
             <ScrollProgress />
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
-                {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
-                    {/* Contenido principal */}
                     <HeadingSmall
                         title="Reporte General del Sistema"
                         description="Gestión del Negocio. Utilice las opciones requeridas para su funcionamiento"
                     />
-                    {/* Ícono semitransparente */}
                     <LibraryBig
                         size={70}
                         color="#d6d3d1"
@@ -53,200 +195,15 @@ export default function ReportesPage() {
                 </div>
                 <Separator className="col-span-4" />
 
-                {/* Ver Reportes */}
-                <div className="grid auto-rows-min gap-4 md:grid-cols-4">
-                    {/* Productos Mas Comprados */}
-                    <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-indigo-800 to-indigo-400">
-                        {/* Ícono de fondo transparente */}
-                        <div id="compra-producto" className="absolute inset-0 flex items-center justify-center opacity-10">
-                            <ShoppingBagIcon className="h-48 w-48 text-white" />
-                        </div>
-                        {/* Contenido principal */}
-                        <div className="relative z-10 h-full p-6">
-                            {/* Ícono en la esquina superior izquierda */}
-                            <div className="absolute top-4 left-4">
-                                <ShoppingBasket className="h-8 w-8 animate-pulse text-white" />
-                            </div>
-                            {/* Textos alineados a la derecha */}
-                            <div className="flex h-full flex-col items-end justify-center space-y-2">
-                                <span className="text-lg text-white">Productos Más Comprados</span>
-                            </div>
-                            {/* Link {route('comprar.index' */}
-
-                            <Link href={route('reportes.productos_mas_comprados')}>
-                                <button className="absolute right-4 bottom-4 ms-2 rounded-md bg-indigo-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-indigo-800">
-                                    Ver más ...
-                                </button>
-                            </Link>
-                        </div>
-                        {/* Patrón de fondo adicional */}
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                    {/* Compras por Período */}
-                    <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-slate-800 to-slate-400">
-                        {/* Ícono de fondo transparente */}
-                        <div id="compra-producto" className="absolute inset-0 flex items-center justify-center opacity-10">
-                            <LucideBaggageClaim className="h-48 w-48 text-white" />
-                        </div>
-                        {/* Contenido principal */}
-                        <div className="relative z-10 h-full p-6">
-                            {/* Ícono en la esquina superior izquierda */}
-                            <div className="absolute top-4 left-4">
-                                <CalendarClock className="h-8 w-8 animate-pulse text-white" />
-                            </div>
-                            {/* Textos alineados a la derecha */}
-                            <div className="flex h-full flex-col items-end justify-center space-y-2">
-                                <span className="text-lg text-white">Compras por Período</span>
-                            </div>
-
-                            <Link href={route('reportes.compras_por_periodo')}>
-                                <button className="absolute right-4 bottom-4 ms-2 rounded-md bg-slate-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-slate-800">
-                                    Ver más ...
-                                </button>
-                            </Link>
-                        </div>
-                        {/* Patrón de fondo adicional */}
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                    {/* Balance Mensual */}
-                    <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-orange-800 to-orange-400">
-                        {/* Ícono de fondo transparente */}
-                        <div id="compra-producto" className="absolute inset-0 flex items-center justify-center opacity-10">
-                            <CalendarHeart className="h-48 w-48 text-white" />
-                        </div>
-                        {/* Contenido principal */}
-                        <div className="relative z-10 h-full p-6">
-                            {/* Ícono en la esquina superior izquierda */}
-                            <div className="absolute top-4 left-4">
-                                <CalendarRange className="h-8 w-8 text-white" />
-                            </div>
-                            {/* Textos alineados a la derecha */}
-                            <div className="flex h-full flex-col items-end justify-center space-y-2">
-                                <span className="text-lg text-white">Balance Mensual</span>
-                            </div>
-
-                            <Link href={route('reportes.balance_gastos_mensuales')}>
-                                <button className="absolute right-4 bottom-4 ms-2 rounded-md bg-orange-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-orange-800">
-                                    Ver más ...
-                                </button>
-                            </Link>
-                        </div>
-                        {/* Patrón de fondo adicional */}
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                    {/* Compras por Proveedor */}
-                    <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-yellow-800 to-yellow-400">
-                        {/* Ícono de fondo transparente */}
-                        <div id="compra-producto" className="absolute inset-0 flex items-center justify-center opacity-10">
-                            <HandCoins className="h-48 w-48 text-white" />
-                        </div>
-                        {/* Contenido principal */}
-                        <div className="relative z-10 h-full p-6">
-                            {/* Ícono en la esquina superior izquierda */}
-                            <div className="absolute top-4 left-4">
-                                <HeartHandshake className="h-8 w-8 text-white" />
-                            </div>
-                            {/* Textos alineados a la derecha */}
-                            <div className="flex h-full flex-col items-end justify-center space-y-2">
-                                <span className="text-lg text-white">Compras por Proveedor</span>
-                            </div>
-
-                            <Link href={route('reportes.compras_por_proveedor')}>
-                                <button className="absolute right-4 bottom-4 ms-2 rounded-md bg-yellow-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-yellow-800">
-                                    Ver más ...
-                                </button>
-                            </Link>
-                        </div>
-                        {/* Patrón de fondo adicional */}
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                    {/* Cantidad de Productos por Almacén */}
-                    <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-emerald-800 to-emerald-400">
-                        {/* Ícono de fondo transparente */}
-                        <div id="compra-producto" className="absolute inset-0 flex items-center justify-center opacity-10">
-                            <Boxes className="h-48 w-48 text-white" />
-                        </div>
-                        {/* Contenido principal */}
-                        <div className="relative z-10 h-full p-6">
-                            {/* Ícono en la esquina superior izquierda */}
-                            <div className="absolute top-4 left-4">
-                                <Boxes className="h-8 w-8 text-white" />
-                            </div>
-                            {/* Textos alineados a la derecha */}
-                            <div className="flex h-full flex-col items-end justify-center space-y-2">
-                                <span className="text-lg text-white">Productos por Almacén</span>
-                            </div>
-
-                            <Link href={route('reportes.productos_por_almacen')}>
-                                <button className="absolute right-4 bottom-4 ms-2 rounded-md bg-emerald-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-emerald-800">
-                                    Ver más ...
-                                </button>
-                            </Link>
-                        </div>
-                        {/* Patrón de fondo adicional */}
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                    {/* Lista detallada de productos por almacén */}
-                    <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-sky-800 to-sky-400">
-                        {/* Ícono de fondo transparente */}
-                        <div id="compra-producto" className="absolute inset-0 flex items-center justify-center opacity-10">
-                            <FileBox className="h-48 w-48 text-white" />
-                        </div>
-                        {/* Contenido principal */}
-                        <div className="relative z-10 h-full p-6">
-                            {/* Ícono en la esquina superior izquierda */}
-                            <div className="absolute top-4 left-4">
-                                <FileBox className="h-8 w-8 text-white" />
-                            </div>
-                            {/* Textos alineados a la derecha */}
-                            <div className="flex h-full flex-col items-end justify-center space-y-2">
-                                <span className="text-lg text-white">Detalles por Almacén</span>
-                            </div>
-
-                            <Link href={route('reportes.productos_por_almacen_detalle')}>
-                                <button className="absolute right-4 bottom-4 ms-2 rounded-md bg-sky-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-sky-800">
-                                    Ver más ...
-                                </button>
-                            </Link>
-                        </div>
-                        {/* Patrón de fondo adicional */}
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                    {/* Par otros reportes, faltarian 6 entonces */}
-                    <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-sky-800 to-sky-400">
-                        {/* Ícono de fondo transparente */}
-                        <div id="compra-producto" className="absolute inset-0 flex items-center justify-center opacity-10">
-                            <FileBox className="h-48 w-48 text-white" />
-                        </div>
-                        {/* Contenido principal */}
-                        <div className="relative z-10 h-full p-6">
-                            {/* Ícono en la esquina superior izquierda */}
-                            <div className="absolute top-4 left-4">
-                                <FileBox className="h-8 w-8 text-white" />
-                            </div>
-                            {/* Textos alineados a la derecha */}
-                            <div className="flex h-full flex-col items-end justify-center space-y-2">
-                                <span className="text-lg text-white">Ver historial de precios</span>
-                            </div>
-
-                            <Link href="#">
-                                <button className="absolute right-4 bottom-4 ms-2 rounded-md bg-sky-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-sky-800">
-                                    Ver más ...
-                                </button>
-                            </Link>
-                        </div>
-                        {/* Patrón de fondo adicional */}
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
+                <div className="grid auto-rows-min gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    <ReportSection title="Compras e Inventario" reports={reportesComprasInventario} />
+                    <ReportSection title="Ventas y Rentabilidad" reports={reportesVentasRentabilidad} />
+                    <ReportSection title="Finanzas y Otros" reports={reportesFinanzasOtros} />
                 </div>
 
-                {/* Charts Reportes */}
                 <Separator className="col-span-4" />
                 <div>
                     <ChartsReportePage />
-                </div>
-                <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
-                    <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
                 </div>
             </div>
         </AppLayout>

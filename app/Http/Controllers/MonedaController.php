@@ -260,4 +260,5 @@ class MonedaController extends Controller
                 ->with('error', 'Error al establecer moneda principal: ' . $e->getMessage());
         }
     }
+
 }
