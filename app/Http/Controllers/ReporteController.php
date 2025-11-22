@@ -133,52 +133,51 @@ class ReporteController extends Controller
     }
 
     /**
-     * Productos por Almacen
+     * Reporte de inventario actual por Almacén.
+     * Muestra cantidades totales y productos únicos por almacén.
      */
-    public function productosPorAlmacen()
+    public function inventarioPorAlmacen()
     {
-        $almacenes = DB::table('compra_producto')
-            ->join('compras', 'compra_producto.compra_id', '=', 'compras.id')
-            ->join('almacens', 'compras.almacen_id', '=', 'almacens.id')
-            ->join('productos', 'compra_producto.producto_id', '=', 'productos.id')
+        $almacenes = DB::table('almacen_producto')
+            ->join('almacens', 'almacen_producto.almacen_id', '=', 'almacens.id')
             ->select(
                 'almacens.id as almacen_id',
                 'almacens.nombre_almacen',
-                DB::raw('SUM(compra_producto.cantidad) as total_productos'),
-                DB::raw('COUNT(DISTINCT productos.id) as productos_unicos')
+                DB::raw('SUM(almacen_producto.cantidad) as total_productos'),
+                DB::raw('COUNT(almacen_producto.producto_id) as productos_unicos')
             )
             ->groupBy('almacens.id', 'almacens.nombre_almacen')
             ->orderByDesc('total_productos')
             ->get();
 
-        return Inertia::render('Reportes/Report/ProductosPorAlmacen', [
+        return Inertia::render('Reportes/Report/InventarioPorAlmacen', [
             'almacenes' => $almacenes,
         ]);
     }
 
     /**
-     * Detalles de los Prloductos por Almacen
+     * Reporte detallado del inventario actual por Almacén.
+     * Muestra cada producto y su cantidad por almacén.
      */
-    public function productosPorAlmacenDetalle()
+    public function inventarioDetalladoPorAlmacen()
     {
-        $datos = DB::table('compra_producto')
-            ->join('compras', 'compra_producto.compra_id', '=', 'compras.id')
-            ->join('almacens', 'compras.almacen_id', '=', 'almacens.id')
-            ->join('productos', 'compra_producto.producto_id', '=', 'productos.id')
+        $datos = DB::table('almacen_producto')
+            ->join('almacens', 'almacen_producto.almacen_id', '=', 'almacens.id')
+            ->join('productos', 'almacen_producto.producto_id', '=', 'productos.id')
             ->select(
                 'almacens.id as almacen_id',
                 'almacens.nombre_almacen',
                 'productos.id as producto_id',
                 'productos.nombre_producto',
-                DB::raw('SUM(compra_producto.cantidad) as cantidad_total')
+                'almacen_producto.cantidad as cantidad_total'
             )
-            ->groupBy('almacens.id', 'almacens.nombre_almacen', 'productos.id', 'productos.nombre_producto')
-            ->orderBy('almacens.id')
+            ->where('almacen_producto.cantidad', '>', 0) // Solo mostrar productos con stock
+            ->orderBy('almacens.nombre_almacen')
             ->orderBy('productos.nombre_producto')
             ->get();
 
         return Inertia::render(
-            'Reportes/Report/ProductosPorAlmacenDetalle',
+            'Reportes/Report/InventarioDetalladoPorAlmacen',
             [
                 'datos' => $datos,
             ]
@@ -400,5 +399,241 @@ class ReporteController extends Controller
             });
 
         return response()->json($monedas);
+    }
+
+    // ========================================================================
+    // NUEVOS REPORTES AÑADIDOS
+    // ========================================================================
+
+    /**
+     * Obtener los productos más vendidos.
+     */
+    public function productosMasVendidos()
+    {
+        $productos = DB::table('venta_detalles')
+            ->join('productos', 'venta_detalles.producto_id', '=', 'productos.id')
+            ->select(
+                'productos.nombre_producto',
+                DB::raw('SUM(venta_detalles.cantidad) as total_vendido'),
+                DB::raw('COUNT(venta_detalles.venta_id) as veces_vendido')
+            )
+            ->groupBy('productos.id', 'productos.nombre_producto')
+            ->orderByDesc('total_vendido')
+            ->take(10)
+            ->get();
+
+        return Inertia::render('Reportes/Report/ProductosMasVendidos', [
+            'productos' => $productos,
+        ]);
+    }
+
+    /**
+     * Reporte de Ventas por Período.
+     */
+    public function ventasPorPeriodo(Request $request)
+    {
+        $request->validate([
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+            'user_id' => 'nullable|exists:users,id',
+        ]);
+
+        $query = Venta::with(['usuario', 'cliente', 'almacen'])
+            ->where('estado', 'completada'); // Solo ventas completadas
+
+        if ($request->filled('start_date')) {
+            $query->whereDate('created_at', '>=', $request->start_date);
+        }
+
+        if ($request->filled('end_date')) {
+            $query->whereDate('created_at', '<=', $request->end_date);
+        }
+
+        if ($request->filled('user_id')) {
+            $query->where('user_id', $request->user_id);
+        }
+
+        $ventas = $query->orderByDesc('created_at')->get();
+
+        return Inertia::render('Reportes/Report/VentasPorPeriodo', [
+            'ventas' => $ventas,
+            'usuarios' => DB::table('users')->select('id', 'name')->get(),
+        ]);
+    }
+
+    /**
+     * Reporte de Ventas por Vendedor.
+     */
+    public function ventasPorVendedor()
+    {
+        $ventas = DB::table('ventas')
+            ->join('users', 'ventas.user_id', '=', 'users.id')
+            ->select(
+                'users.name as vendedor',
+                DB::raw('COUNT(ventas.id) as total_ventas'),
+                DB::raw('SUM(ventas.total) as monto_total_vendido')
+            )
+            ->where('ventas.estado', 'completada')
+            ->groupBy('users.id', 'users.name')
+            ->orderByDesc('monto_total_vendido')
+            ->get();
+
+        return Inertia::render('Reportes/Report/VentasPorVendedor', [
+            'ventas' => $ventas,
+        ]);
+    }
+
+    /**
+     * Reporte de Ganancias.
+     */
+    public function reporteGanancias(Request $request)
+    {
+        $query = Venta::with(['detalles.producto', 'usuario'])
+            ->where('estado', 'completada');
+
+        if ($request->filled('start_date')) {
+            $query->whereDate('created_at', '>=', $request->start_date);
+        }
+
+        if ($request->filled('end_date')) {
+            $query->whereDate('created_at', '<=', $request->end_date);
+        }
+
+        $ventas = $query->orderByDesc('created_at')->get()->map(function ($venta) {
+            $ganancia_total = 0;
+            foreach ($venta->detalles as $detalle) {
+                $ganancia_total += ($detalle->precio_venta - $detalle->costo_unitario) * $detalle->cantidad;
+            }
+            return [
+                'id' => $venta->id,
+                'fecha' => $venta->created_at->format('Y-m-d H:i'),
+                'vendedor' => $venta->usuario->name,
+                'total_venta' => $venta->total,
+                'ganancia_total' => $ganancia_total,
+            ];
+        });
+
+        return Inertia::render('Reportes/Report/ReporteGanancias', [
+            'ventas' => $ventas,
+        ]);
+    }
+
+    /**
+     * Reporte de productos con stock bajo.
+     */
+    public function reporteStockBajo()
+    {
+        $stockBajo = DB::table('almacen_producto')
+            ->join('productos', 'almacen_producto.producto_id', '=', 'productos.id')
+            ->join('almacens', 'almacen_producto.almacen_id', '=', 'almacens.id')
+            ->select('productos.nombre_producto', 'almacens.nombre_almacen', 'almacen_producto.cantidad')
+            ->where('almacen_producto.cantidad', '<=', 5) // Umbral de stock bajo
+            ->orderBy('almacens.nombre_almacen')
+            ->orderBy('almacen_producto.cantidad')
+            ->get();
+
+        return Inertia::render('Reportes/Report/ReporteStockBajo', [
+            'productos' => $stockBajo,
+        ]);
+    }
+
+    /**
+     * Reporte del valor total del inventario.
+     */
+    public function valorInventario()
+    {
+        $inventario = DB::table('almacen_producto')
+            ->join('productos', 'almacen_producto.producto_id', '=', 'productos.id')
+            ->select(
+                'productos.nombre_producto',
+                'almacen_producto.cantidad',
+                'productos.precio_compra_producto'
+            )
+            ->where('almacen_producto.cantidad', '>', 0)
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'nombre_producto' => $item->nombre_producto,
+                    'cantidad' => $item->cantidad,
+                    'costo_unitario' => $item->precio_compra_producto,
+                    'valor_total_costo' => $item->cantidad * $item->precio_compra_producto,
+                ];
+            });
+
+        $valorTotal = $inventario->sum('valor_total_costo');
+
+        return Inertia::render('Reportes/Report/ValorInventario', [
+            'inventario' => $inventario,
+            'valorTotal' => $valorTotal,
+        ]);
+    }
+
+    /**
+     * Historial de cambios de precios.
+     */
+    public function historialPrecios()
+    {
+        $historial = DB::table('precio_historials')
+            ->join('productos', 'precio_historials.producto_id', '=', 'productos.id')
+            ->join('users', 'precio_historials.user_id', '=', 'users.id')
+            ->join('almacens', 'precio_historials.almacen_id', '=', 'almacens.id')
+            ->select(
+                'precio_historials.id',
+                'productos.nombre_producto as producto',
+                'users.name as usuario',
+                'almacens.nombre_almacen as almacen',
+                'precio_historials.precio_anterior',
+                'precio_historials.precio_nuevo',
+                'precio_historials.created_at as fecha'
+            )
+            ->latest('precio_historials.created_at')
+            ->get();
+
+        return Inertia::render('Reportes/Report/HistorialPrecios', [
+            'historial' => $historial,
+        ]);
+    }
+
+    /**
+     * Historial de Movimientos Financieros.
+     */
+    public function movimientosFinancieros(Request $request)
+    {
+        $query = DB::table('movimiento_financieros')
+            ->leftJoin('cuentas as c_origen', 'movimiento_financieros.cuenta_origen_id', '=', 'c_origen.id')
+            ->leftJoin('cuentas as c_destino', 'movimiento_financieros.cuenta_destino_id', '=', 'c_destino.id')
+            ->leftJoin('clientes as cl_origen', 'movimiento_financieros.cliente_origen_id', '=', 'cl_origen.id')
+            ->leftJoin('clientes as cl_destino', 'movimiento_financieros.cliente_destino_id', '=', 'cl_destino.id')
+            ->leftJoin('proveedors as p_destino', 'movimiento_financieros.proveedor_destino_id', '=', 'p_destino.id')
+            ->join('tipo_movimiento_financieros', 'movimiento_financieros.tipo_movimiento_id', '=', 'tipo_movimiento_financieros.id')
+            ->select(
+                'movimiento_financieros.id',
+                'tipo_movimiento_financieros.nombre as tipo_movimiento',
+                'movimiento_financieros.monto',
+                'movimiento_financieros.moneda',
+                'movimiento_financieros.descripcion',
+                'movimiento_financieros.fecha_operacion',
+                DB::raw("COALESCE(c_origen.nombre_cuenta, cl_origen.nombre_cliente) as origen"),
+                DB::raw("COALESCE(c_destino.nombre_cuenta, cl_destino.nombre_cliente, p_destino.nombre_proveedor) as destino")
+            );
+
+        if ($request->filled('start_date')) {
+            $query->whereDate('fecha_operacion', '>=', $request->start_date);
+        }
+
+        if ($request->filled('end_date')) {
+            $query->whereDate('fecha_operacion', '<=', $request->end_date);
+        }
+
+        if ($request->filled('tipo_movimiento_id')) {
+            $query->where('tipo_movimiento_id', $request->tipo_movimiento_id);
+        }
+
+        $movimientos = $query->orderByDesc('fecha_operacion')->get();
+
+        return Inertia::render('Reportes/Report/MovimientosFinancieros', [
+            'movimientos' => $movimientos,
+            'tipos' => DB::table('tipo_movimiento_financieros')->get(),
+        ]);
     }
 }
