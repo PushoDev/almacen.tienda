@@ -143,6 +143,8 @@ interface Venta {
     items: Item[];
     total: number;
     total_ganancia: number;
+    ganancia_perdida_cambiaria: number;
+    ganancia_real_total: number;
     fecha: string;
     usuario: Usuario;
     pagos: Pago[];
@@ -475,6 +477,43 @@ export default function ResultadoCarrito({ venta }: Props) {
 
                 <Separator />
 
+                {/* Resumen de Ganancias - NUEVO */}
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                    <div className="rounded-xl border bg-card p-4 text-center">
+                        <DollarSign size={24} className="mx-auto mb-2 text-green-500" />
+                        <p className="mb-1 text-sm text-muted-foreground">Ganancia Operacional</p>
+                        <p className="text-2xl font-bold text-green-600">
+                            {formatCurrency(currentVenta.total_ganancia, monedaPrincipal?.codigo || 'USD')}
+                        </p>
+                    </div>
+
+                    <div className="rounded-xl border bg-card p-4 text-center">
+                        <DollarSign size={24} className={`mx-auto mb-2 ${currentVenta.ganancia_perdida_cambiaria >= 0 ? 'text-green-500' : 'text-red-500'}`} />
+                        <p className="mb-1 text-sm text-muted-foreground">Ganancia/Pérdida Cambiaria</p>
+                        <p className={`text-2xl font-bold ${currentVenta.ganancia_perdida_cambiaria >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatCurrency(currentVenta.ganancia_perdida_cambiaria, monedaPrincipal?.codigo || 'USD')}
+                        </p>
+                    </div>
+
+                    <div className="rounded-xl border bg-card p-4 text-center">
+                        <DollarSign size={24} className="mx-auto mb-2 text-blue-500" />
+                        <p className="mb-1 text-sm text-muted-foreground">Ganancia Real Total</p>
+                        <p className="text-2xl font-bold text-blue-600">
+                            {formatCurrency(currentVenta.ganancia_real_total, monedaPrincipal?.codigo || 'USD')}
+                        </p>
+                    </div>
+
+                    <div className="rounded-xl border bg-card p-4 text-center">
+                        <DollarSign size={24} className="mx-auto mb-2 text-purple-500" />
+                        <p className="mb-1 text-sm text-muted-foreground">Tasa Cambio Principal</p>
+                        <p className="text-2xl font-bold text-purple-600">
+                            1 {monedaPrincipal?.codigo || 'USD'} = {Number(currentVenta.tasa_cambio_principal)?.toFixed(2) || '0.00'}
+                        </p>
+                    </div>
+                </div>
+
+                <Separator />
+
                 {/* Botones de acción */}
                 <div className="flex flex-wrap justify-end gap-2">
                     <Link
@@ -724,7 +763,13 @@ export default function ResultadoCarrito({ venta }: Props) {
                                                             Cant
                                                         </th>
                                                         <th className="px-4 py-2 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
-                                                            Precio
+                                                            Precio Unitario
+                                                        </th>
+                                                        <th className="px-4 py-2 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
+                                                            Costo Unitario
+                                                        </th>
+                                                        <th className="px-4 py-2 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
+                                                            Ganancia Unitaria
                                                         </th>
                                                         <th className="px-4 py-2 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
                                                             Subtotal
@@ -742,6 +787,12 @@ export default function ResultadoCarrito({ venta }: Props) {
                                                                 {formatCurrency(item.precio_venta, simboloMonedaPrincipal)}
                                                             </td>
                                                             <td className="px-4 py-2 text-sm">
+                                                                {formatCurrency(item.costo_unitario, simboloMonedaPrincipal)}
+                                                            </td>
+                                                            <td className="px-4 py-2 text-sm">
+                                                                {formatCurrency(item.ganancia, simboloMonedaPrincipal)}
+                                                            </td>
+                                                            <td className="px-4 py-2 text-sm">
                                                                 {formatCurrency(item.subtotal, simboloMonedaPrincipal)}
                                                             </td>
                                                         </tr>
@@ -749,7 +800,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                                                 </tbody>
                                                 <tfoot className="font-semibold">
                                                     <tr>
-                                                        <td colSpan={3} className="px-4 py-2 text-right">
+                                                        <td colSpan={5} className="px-4 py-2 text-right">
                                                             TOTAL:
                                                         </td>
                                                         <td className="px-4 py-2">{formatCurrency(currentVenta.total, simboloMonedaPrincipal)}</td>
@@ -765,18 +816,25 @@ export default function ResultadoCarrito({ venta }: Props) {
                                             currentVenta.pagos.map((pago, index) => {
                                                 const simboloMonedaPago = getCurrencySymbol(pago.moneda);
                                                 return (
-                                                    <div key={index} className="mb-2 rounded p-2">
+                                                    <div key={index} className="mb-2 rounded border p-3">
                                                         <div className="grid grid-cols-2 gap-2">
                                                             <p>
                                                                 <span className="font-medium">Método:</span> {pago.metodo}
                                                             </p>
                                                             <p>
-                                                                <span className="font-medium">Monto:</span>{' '}
+                                                                <span className="font-medium">Moneda:</span>{' '}
+                                                                {pago.moneda?.nombre || 'No especificada'}
+                                                            </p>
+                                                            <p>
+                                                                <span className="font-medium">Monto Original:</span>{' '}
                                                                 {formatCurrency(pago.monto, simboloMonedaPago)}
                                                             </p>
                                                             <p>
-                                                                <span className="font-medium">Moneda:</span>{' '}
-                                                                {pago.moneda?.nombre || 'No especificada'}
+                                                                <span className="font-medium">Equivalente USD:</span>{' '}
+                                                                {formatCurrency(pago.monto_equivalente, 'USD')}
+                                                            </p>
+                                                            <p>
+                                                                <span className="font-medium">Tasa Cambio:</span> {Number(pago.tasa_cambio)?.toFixed(2) || '0.00'}
                                                             </p>
                                                             <p>
                                                                 <span className="font-medium">Cuenta:</span> {pago.cuenta.nombre}
@@ -816,11 +874,26 @@ export default function ResultadoCarrito({ venta }: Props) {
                                                 {formatCurrency(currentVenta.restante, simboloMonedaPrincipal)}
                                             </p>
                                             <p>
-                                                <span className="font-medium">Ganancia Total:</span>{' '}
+                                                <span className="font-medium">Ganancia Operacional:</span>{' '}
                                                 {formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}
                                             </p>
                                             <p>
+                                                <span className="font-medium">Ganancia/Pérdida Cambiaria:</span>{' '}
+                                                <span className={currentVenta.ganancia_perdida_cambiaria >= 0 ? 'text-green-600' : 'text-red-600'}>
+                                                    {formatCurrency(currentVenta.ganancia_perdida_cambiaria, simboloMonedaPrincipal)}
+                                                </span>
+                                            </p>
+                                            <p>
+                                                <span className="font-medium">Ganancia Real Total:</span>{' '}
+                                                <span className="font-bold text-blue-600">
+                                                    {formatCurrency(currentVenta.ganancia_real_total, simboloMonedaPrincipal)}
+                                                </span>
+                                            </p>
+                                            <p>
                                                 <span className="font-medium">Estado:</span> {currentVenta.estado}
+                                            </p>
+                                            <p>
+                                                <span className="font-medium">Tasa Cambio Principal:</span> 1 {simboloMonedaPrincipal} = {Number(currentVenta.tasa_cambio_principal)?.toFixed(2) || '0.00'}
                                             </p>
                                         </div>
                                     </div>
@@ -932,8 +1005,14 @@ export default function ResultadoCarrito({ venta }: Props) {
                                                 20,
                                                 finalY + 40,
                                             );
-                                            doc.text(`Ganancia Total: ${formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}`, 20, finalY + 50);
-                                            doc.text(`Estado: ${currentVenta.estado}`, 20, finalY + 60);
+                                            doc.text(`Ganancia Operacional: ${formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}`, 20, finalY + 50);
+                                            if (currentVenta.estado === 'completada') {
+                                                doc.text(`Ganancia/Pérdida Cambiaria: ${formatCurrency(currentVenta.ganancia_perdida_cambiaria, simboloMonedaPrincipal)}`, 20, finalY + 60);
+                                                doc.text(`Ganancia Real Total: ${formatCurrency(currentVenta.ganancia_real_total, simboloMonedaPrincipal)}`, 20, finalY + 70);
+                                                doc.text(`Estado: ${currentVenta.estado}`, 20, finalY + 80);
+                                            } else {
+                                                doc.text(`Estado: ${currentVenta.estado}`, 20, finalY + 60);
+                                            }
 
                                             // Guardar el PDF
                                             doc.save(`venta_${currentVenta.id}_reporte.pdf`);
@@ -1043,9 +1122,25 @@ export default function ResultadoCarrito({ venta }: Props) {
                                             <span>{formatCurrency(currentVenta.restante, simboloMonedaPrincipal)}</span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span>Ganancia Total:</span>
+                                            <span>Ganancia Operacional:</span>
                                             <span>{formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}</span>
                                         </div>
+                                        {currentVenta.estado === 'completada' && (
+                                            <>
+                                                <div className="flex justify-between">
+                                                    <span>Ganancia/Pérdida Cambiaria:</span>
+                                                    <span>
+                                                        {formatCurrency(currentVenta.ganancia_perdida_cambiaria, simboloMonedaPrincipal)}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span>Ganancia Real Total:</span>
+                                                    <span>
+                                                        {formatCurrency(currentVenta.ganancia_real_total, simboloMonedaPrincipal)}
+                                                    </span>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
 
                                     <div className="mb-2 border-t pt-2">
@@ -1474,10 +1569,32 @@ export default function ResultadoCarrito({ venta }: Props) {
                                     {formatCurrency(currentVenta.restante, simboloMonedaPrincipal)}
                                 </span>
                             </div>
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Ganancia Total:</span>
-                                <span className="font-semibold text-green-600">{formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}</span>
-                            </div>
+                                                        <div className="flex justify-between">
+                                                            <span className="text-muted-foreground">Ganancia Operacional:</span>
+                                                            <span className="font-semibold text-green-600">
+                                                                {formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}
+                                                            </span>
+                                                        </div>
+                                                        {currentVenta.estado === 'completada' && (
+                                                            <>
+                                                                <div className="flex justify-between">
+                                                                    <span className="text-muted-foreground">Ganancia/Pérdida Cambiaria:</span>
+                                                                    <span
+                                                                        className={`font-semibold ${
+                                                                            currentVenta.ganancia_perdida_cambiaria < 0 ? 'text-red-500' : 'text-green-600'
+                                                                        }`}
+                                                                    >
+                                                                        {formatCurrency(currentVenta.ganancia_perdida_cambiaria, simboloMonedaPrincipal)}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex justify-between">
+                                                                    <span className="text-muted-foreground">Ganancia Real Total:</span>
+                                                                    <span className="font-semibold text-green-600">
+                                                                        {formatCurrency(currentVenta.ganancia_real_total, simboloMonedaPrincipal)}
+                                                                    </span>
+                                                                </div>
+                                                            </>
+                                                        )}
                             <Separator />
                             <div className="flex justify-between">
                                 <span className="text-muted-foreground">Estado:</span>

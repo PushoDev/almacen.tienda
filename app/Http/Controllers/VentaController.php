@@ -346,6 +346,8 @@ class VentaController extends Controller
             }),
             'total' => $venta->total,
             'total_ganancia' => $venta->total_ganancia,
+            'ganancia_perdida_cambiaria' => $venta->ganancia_perdida_cambiaria,
+            'ganancia_real_total' => $venta->ganancia_real_total,
             'estado' => $venta->estado,
             'fecha' => $venta->created_at->toISOString(),
             'usuario' => [
@@ -667,6 +669,7 @@ class VentaController extends Controller
             }
 
             // Procesar pagos y actualizar cuentas
+            $totalPagadoEquivalente = 0;
             foreach ($venta->pagos as $pago) {
                 $cuenta = $pago->cuenta;
                 if ($cuenta) {
@@ -681,10 +684,19 @@ class VentaController extends Controller
                 } else {
                     throw new \Exception("Cuenta no encontrada: {$pago->cuenta_id}");
                 }
+                $totalPagadoEquivalente += $pago->monto_equivalente;
             }
 
-            // Actualizar estado de la venta
-            $venta->update(['estado' => 'completada']);
+            // AÑADIDO: Calcular ganancia/pérdida cambiaria
+            $gananciaPerdidaCambiaria = $totalPagadoEquivalente - $venta->total;
+            $gananciaRealTotal = $venta->total_ganancia + $gananciaPerdidaCambiaria;
+
+            // Actualizar estado de la venta y añadir nuevos cálculos
+            $venta->update([
+                'estado' => 'completada',
+                'ganancia_perdida_cambiaria' => $gananciaPerdidaCambiaria,
+                'ganancia_real_total' => $gananciaRealTotal,
+            ]);
 
             DB::commit();
 
@@ -1014,6 +1026,8 @@ class VentaController extends Controller
                     ],
                     'total' => $venta->total,
                     'total_ganancia' => $venta->total_ganancia,
+                    'ganancia_perdida_cambiaria' => $venta->ganancia_perdida_cambiaria,
+                    'ganancia_real_total' => $venta->ganancia_real_total,
                     'estado' => $venta->estado,
                     'total_pagado' => $venta->pagos->sum('monto_equivalente'),
                     'restante' => $venta->total - $venta->pagos->sum('monto_equivalente'),
