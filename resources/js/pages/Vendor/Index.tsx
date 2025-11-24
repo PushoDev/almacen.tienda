@@ -160,6 +160,7 @@ export default function PuntoVentaOficial({
         moneda_id: string;
         via: string;
         amount: string;
+        exchangeRate: string;
         cuenta_id: string;
         referencia: string;
     }>({
@@ -167,6 +168,7 @@ export default function PuntoVentaOficial({
         moneda_id: '',
         via: '',
         amount: '',
+        exchangeRate: '',
         cuenta_id: '',
         referencia: '',
     });
@@ -208,23 +210,24 @@ export default function PuntoVentaOficial({
 
     // 🆕 NUEVO: Efecto para calcular la conversión en tiempo real
     useEffect(() => {
-        if (currentPayment.amount && currentPayment.moneda_id && parseFloat(currentPayment.amount) > 0) {
+        if (currentPayment.amount && currentPayment.moneda_id && parseFloat(currentPayment.amount) > 0 && currentPayment.exchangeRate && parseFloat(currentPayment.exchangeRate) > 0) {
             const monto = parseFloat(currentPayment.amount);
+            const exchangeRate = parseFloat(currentPayment.exchangeRate);
             const selectedCurrency = currencies.find((c) => c.id === currentPayment.moneda_id);
 
             if (selectedCurrency) {
-                const montoUSD = monto / selectedCurrency.exchangeRate;
+                const montoUSD = convertToUsd(monto, exchangeRate);
                 setConversionCalculada({
                     montoOriginal: monto,
                     montoUSD: montoUSD,
-                    tasaCambio: selectedCurrency.exchangeRate,
+                    tasaCambio: exchangeRate,
                     monedaSimbolo: selectedCurrency.symbol,
                 });
             }
         } else {
             setConversionCalculada(null);
         }
-    }, [currentPayment.amount, currentPayment.moneda_id, currencies]);
+    }, [currentPayment.amount, currentPayment.moneda_id, currentPayment.exchangeRate, currencies]);
 
     const cargarAlmacenes = async () => {
         try {
@@ -326,15 +329,12 @@ export default function PuntoVentaOficial({
     };
 
     const handleMonedaChange = (monedaId: string) => {
-        console.log('Moneda seleccionada:', monedaId);
         const selectedCurrency = currencies.find((c) => c.id === monedaId);
-        console.log('Moneda encontrada:', selectedCurrency);
-
         setCurrentPayment({
             ...currentPayment,
             moneda_id: monedaId,
+            exchangeRate: selectedCurrency ? selectedCurrency.exchangeRate.toString() : '',
             cuenta_id: '',
-            via: currentPayment.method === 'efectivo' ? 'efectivo' : currentPayment.via,
         });
         cargarCuentasFiltradas(monedaId);
     };
@@ -468,14 +468,11 @@ export default function PuntoVentaOficial({
     const totalPaid = useMemo(() => payments.reduce((sum, payment) => sum + payment.amountInUsd, 0), [payments]);
     const remainingInUsd = calcularTotal - totalPaid;
 
-    const convertToUsd = (amount: number, currencyId: string): number => {
-        const currency = currencies.find((c) => c.id === currencyId);
-        if (!currency) {
-            console.error(`Moneda no encontrada: ${currencyId}`);
+    const convertToUsd = (amount: number, exchangeRate: number): number => {
+        if (!exchangeRate || exchangeRate <= 0) {
             return 0;
         }
-        console.log(`Convirtiendo ${amount} ${currency.symbol} a USD. Tasa: ${currency.exchangeRate}`);
-        return amount / currency.exchangeRate;
+        return amount / exchangeRate;
     };
 
     const handleAddPayment = () => {
@@ -489,7 +486,9 @@ export default function PuntoVentaOficial({
             (currentPayment.method === 'transferencia' && !currentPayment.referencia) ||
             !currentPayment.amount ||
             parseFloat(currentPayment.amount) <= 0 ||
-            !currentPayment.cuenta_id
+            !currentPayment.cuenta_id ||
+            !currentPayment.exchangeRate ||
+            parseFloat(currentPayment.exchangeRate) <= 0
         ) {
             console.log('Faltan campos requeridos:', {
                 method: currentPayment.method,
@@ -497,9 +496,10 @@ export default function PuntoVentaOficial({
                 via: currentPayment.via,
                 referencia: currentPayment.referencia,
                 amount: currentPayment.amount,
+                exchangeRate: currentPayment.exchangeRate,
                 cuenta_id: currentPayment.cuenta_id,
             });
-            toast.warning('Por favor, complete todos los campos del pago y asegure un monto válido.');
+            toast.warning('Por favor, complete todos los campos del pago y asegure un monto y tasa de cambio válidos.');
             return;
         }
 
@@ -515,8 +515,8 @@ export default function PuntoVentaOficial({
         }
 
         const amount = parseFloat(currentPayment.amount);
-        const exchangeRate = selectedCurrency.exchangeRate;
-        const amountInUsd = convertToUsd(amount, currentPayment.moneda_id);
+        const exchangeRate = parseFloat(currentPayment.exchangeRate);
+        const amountInUsd = convertToUsd(amount, exchangeRate);
 
         console.log(`Monto: ${amount}, Tasa: ${exchangeRate}, USD: ${amountInUsd}`);
 
@@ -550,6 +550,7 @@ export default function PuntoVentaOficial({
             moneda_id: '',
             via: '',
             amount: '',
+            exchangeRate: '',
             cuenta_id: '',
             referencia: '',
         });
@@ -1035,7 +1036,7 @@ export default function PuntoVentaOficial({
                                                     </Button>
                                                 </AlertDialogTrigger>
 
-                                                <AlertDialogContent className="max-w-2xl">
+                                                <AlertDialogContent className="max-h-[500px] overflow-y-auto sm:max-w-[800px]">
                                                     <AlertDialogHeader>
                                                         <AlertDialogTitle>Procesar Venta</AlertDialogTitle>
                                                         <AlertDialogDescription>
@@ -1133,6 +1134,19 @@ export default function PuntoVentaOficial({
                                                                 </div>
 
                                                                 <div className="space-y-2">
+                                                                    <Label>Tasa de Cambio</Label>
+                                                                    <Input
+                                                                        type="number"
+                                                                        value={currentPayment.exchangeRate}
+                                                                        onChange={(e) => setCurrentPayment({ ...currentPayment, exchangeRate: e.target.value })}
+                                                                        placeholder="Tasa de cambio"
+                                                                        disabled={!currentPayment.moneda_id}
+                                                                        min="0.0001"
+                                                                        step="0.0001"
+                                                                    />
+                                                                </div>
+
+                                                                <div className="space-y-2">
                                                                     <Label>Cuenta Destino</Label>
                                                                     <Select
                                                                         value={currentPayment.cuenta_id}
@@ -1208,19 +1222,6 @@ export default function PuntoVentaOficial({
                                                                         placeholder="Ingrese el número de referencia"
                                                                         required
                                                                     />
-                                                                </div>
-                                                            )}
-
-                                                            {/* Información de tasa de cambio */}
-                                                            {selectedCurrencyInfo && (
-                                                                <div className="rounded-lg bg-blue-50 p-3 text-sm">
-                                                                    <p className="text-center text-blue-700">
-                                                                        <strong>Tasa de cambio actual:</strong> 1 {selectedCurrencyInfo.symbol} ={' '}
-                                                                        {selectedCurrencyInfo.exchangeRate} USD
-                                                                    </p>
-                                                                    <p className="mt-1 text-center text-xs text-blue-600">
-                                                                        Esta tasa se aplicará automáticamente al monto ingresado
-                                                                    </p>
                                                                 </div>
                                                             )}
 
@@ -1317,7 +1318,7 @@ export default function PuntoVentaOficial({
                                                                 'Confirmar Venta'
                                                             )}
                                                         </Button>
-                                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                        <AlertDialogCancel className="cursor-pointer">Cancelar</AlertDialogCancel>
                                                     </AlertDialogFooter>
                                                 </AlertDialogContent>
                                             </AlertDialog>

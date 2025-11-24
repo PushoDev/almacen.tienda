@@ -71,6 +71,7 @@ interface Venta {
         nombre: string;
     };
     total: number;
+    total_ganancia: number;
     estado: string;
     total_pagado: number;
     restante: number;
@@ -653,6 +654,13 @@ export default function ListadoVentas() {
                                                     {formatMonto(venta.total)} {venta.moneda_principal?.codigo || 'USD'}
                                                 </div>
                                             </div>
+                                            <div>
+                                                <p className="font-medium text-gray-600">Ganancia</p>
+                                                <div className="flex items-center gap-1 font-semibold text-green-600">
+                                                    <DollarSign className="h-3 w-3" />
+                                                    {formatMonto(venta.total_ganancia)} {venta.moneda_principal?.codigo || 'USD'}
+                                                </div>
+                                            </div>
                                         </div>
 
                                         <div className="mt-4 flex items-center justify-between border-t pt-3">
@@ -702,6 +710,7 @@ export default function ListadoVentas() {
                                             <TableHead>Receptor</TableHead>
                                             <TableHead>Items</TableHead>
                                             <TableHead>Total</TableHead>
+                                            <TableHead>Ganancia Total</TableHead>
                                             <TableHead>Estado / Pago</TableHead>
                                             <TableHead>Fecha</TableHead>
                                             <TableHead className="text-right">Acciones</TableHead>
@@ -757,6 +766,11 @@ export default function ListadoVentas() {
                                                     </div>
                                                     <div className="text-sm text-gray-500">
                                                         Pagado: {formatMonto(venta.total_pagado)} {venta.moneda_principal?.codigo || 'USD'}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="font-semibold text-green-600">
+                                                        {formatMonto(venta.total_ganancia)} {venta.moneda_principal?.codigo || 'USD'}
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
