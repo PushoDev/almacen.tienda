@@ -72,6 +72,7 @@ interface Item {
     precio_venta: number;
     subtotal: number;
     costo_unitario: number;
+    ganancia: number;
 }
 
 interface MonedaPago {
@@ -141,6 +142,7 @@ interface Venta {
     destinatario: Destinatario | null;
     items: Item[];
     total: number;
+    total_ganancia: number;
     fecha: string;
     usuario: Usuario;
     pagos: Pago[];
@@ -438,20 +440,6 @@ export default function ResultadoCarrito({ venta }: Props) {
             setIsCancelling(false);
         }
     };
-
-    // Calcular ganancia total
-    const calcularGananciaTotal = () => {
-        const ganancia = currentVenta.items.reduce((total, item) => {
-            const costoTotal = item.cantidad * item.costo_unitario;
-            const ingresoTotal = item.subtotal;
-            return total + (ingresoTotal - costoTotal);
-        }, 0);
-
-        console.log('💰 Ganancia calculada:', ganancia);
-        return ganancia;
-    };
-
-    const gananciaTotal = calcularGananciaTotal();
 
     // Obtener moneda principal
     const monedaPrincipal = currentVenta.moneda_principal;
@@ -829,7 +817,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                                             </p>
                                             <p>
                                                 <span className="font-medium">Ganancia Total:</span>{' '}
-                                                {formatCurrency(gananciaTotal, simboloMonedaPrincipal)}
+                                                {formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}
                                             </p>
                                             <p>
                                                 <span className="font-medium">Estado:</span> {currentVenta.estado}
@@ -908,13 +896,15 @@ export default function ResultadoCarrito({ venta }: Props) {
                                                 `${item.producto.nombre} - ${item.producto.marca} (${item.producto.categoria})`,
                                                 item.cantidad.toString(),
                                                 formatCurrency(item.precio_venta, simboloMonedaPrincipal),
+                                                formatCurrency(item.costo_unitario, simboloMonedaPrincipal),
+                                                formatCurrency(item.ganancia, simboloMonedaPrincipal),
                                                 formatCurrency(item.subtotal, simboloMonedaPrincipal),
                                             ]);
 
                                             // Configurar idioma español para la tabla
                                             (doc as any).autoTable({
                                                 startY: startY,
-                                                head: [['Producto', 'Cantidad', 'Precio Unitario', 'Subtotal']],
+                                                head: [['Producto', 'Cant', 'Precio Unitario', 'Costo Unitario', 'Ganancia Unitaria', 'Subtotal']],
                                                 body: productosData,
                                                 margin: { top: startY, right: 20, bottom: 20, left: 20 },
                                                 styles: {
@@ -942,7 +932,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                                                 20,
                                                 finalY + 40,
                                             );
-                                            doc.text(`Ganancia Total: ${formatCurrency(gananciaTotal, simboloMonedaPrincipal)}`, 20, finalY + 50);
+                                            doc.text(`Ganancia Total: ${formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}`, 20, finalY + 50);
                                             doc.text(`Estado: ${currentVenta.estado}`, 20, finalY + 60);
 
                                             // Guardar el PDF
@@ -1021,6 +1011,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                                                     <th className="text-left">Producto</th>
                                                     <th className="text-center">Cant</th>
                                                     <th className="text-right">Precio</th>
+                                                    <th className="text-right">Ganancia</th>
                                                     <th className="text-right">Total</th>
                                                 </tr>
                                             </thead>
@@ -1030,6 +1021,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                                                         <td className="text-left">{item.producto.nombre}</td>
                                                         <td className="text-center">{item.cantidad}</td>
                                                         <td className="text-right">{formatCurrency(item.precio_venta, simboloMonedaPrincipal)}</td>
+                                                        <td className="text-right">{formatCurrency(item.ganancia, simboloMonedaPrincipal)}</td>
                                                         <td className="text-right">{formatCurrency(item.subtotal, simboloMonedaPrincipal)}</td>
                                                     </tr>
                                                 ))}
@@ -1049,6 +1041,10 @@ export default function ResultadoCarrito({ venta }: Props) {
                                         <div className="flex justify-between">
                                             <span>Restante:</span>
                                             <span>{formatCurrency(currentVenta.restante, simboloMonedaPrincipal)}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span>Ganancia Total:</span>
+                                            <span>{formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}</span>
                                         </div>
                                     </div>
 
@@ -1361,7 +1357,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                                             <td className="p-3">{item.cantidad}</td>
                                             <td className="p-3">{formatCurrency(item.precio_venta, simboloMonedaPrincipal)}</td>
                                             <td className="p-3 text-red-600">{formatCurrency(item.costo_unitario, simboloMonedaPrincipal)}</td>
-                                            <td className="p-3 text-green-600">{formatCurrency(gananciaUnitaria, simboloMonedaPrincipal)}</td>
+                                            <td className="p-3 text-green-600">{formatCurrency(item.ganancia, simboloMonedaPrincipal)}</td>
                                             <td className="p-3 font-medium">{formatCurrency(item.subtotal, simboloMonedaPrincipal)}</td>
                                         </tr>
                                     );
@@ -1381,7 +1377,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                                         Ganancia Total:
                                     </td>
                                     <td className="py-3 text-center text-lg font-semibold text-green-800">
-                                        {formatCurrency(gananciaTotal, simboloMonedaPrincipal)}
+                                        {formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}
                                     </td>
                                 </tr>
                             </tfoot>
@@ -1480,7 +1476,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-muted-foreground">Ganancia Total:</span>
-                                <span className="font-semibold text-green-600">{formatCurrency(gananciaTotal, simboloMonedaPrincipal)}</span>
+                                <span className="font-semibold text-green-600">{formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}</span>
                             </div>
                             <Separator />
                             <div className="flex justify-between">

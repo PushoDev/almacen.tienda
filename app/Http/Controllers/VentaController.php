@@ -341,9 +341,11 @@ class VentaController extends Controller
                     'precio_venta' => $detalle->precio_venta,
                     'subtotal' => $detalle->subtotal,
                     'costo_unitario' => $detalle->costo_unitario,
+                    'ganancia' => $detalle->ganancia,
                 ];
             }),
             'total' => $venta->total,
+            'total_ganancia' => $venta->total_ganancia,
             'estado' => $venta->estado,
             'fecha' => $venta->created_at->toISOString(),
             'usuario' => [
@@ -433,22 +435,26 @@ class VentaController extends Controller
             if ($user->role !== 'admin' && !$user->almacenes->contains('id', $validatedData['almacen_id'])) {
                 throw new \Exception('No tienes acceso a este almacén');
             }
+            $total_ganancia = 0;
 
             // ✅ NUEVO: Validación y descuento inmediato de stock - MEJORADO PARA EVITAR CANTIDADES NEGATIVAS
             foreach ($validatedData['items'] as $item) {
+                $producto = Producto::find($item['producto_id']);
+                if ($item['precio_venta'] < $producto->precio_compra_producto) {
+                    throw new \Exception("El precio de venta de {$producto->nombre_producto} no puede ser menor que su costo de compra.");
+                }
+
                 $almacenProducto = AlmacenProducto::where('almacen_id', $validatedData['almacen_id'])
                     ->where('producto_id', $item['producto_id'])
                     ->first();
 
                 if (!$almacenProducto) {
-                    $producto = Producto::find($item['producto_id']);
                     throw new \Exception("El producto {$producto->nombre_producto} no existe en este almacén.");
                 }
 
                 // Verificar si hay suficiente stock disponible
                 $cantidadDisponible = $almacenProducto->cantidad;
                 if ($cantidadDisponible < $item['cantidad']) {
-                    $producto = Producto::find($item['producto_id']);
                     throw new \Exception("Stock insuficiente para: {$producto->nombre_producto}. Disponible: {$cantidadDisponible}, Solicitado: {$item['cantidad']}");
                 }
 
@@ -514,6 +520,7 @@ class VentaController extends Controller
                 'almacen_id' => $validatedData['almacen_id'],
                 'cliente_id' => $validatedData['cliente_id'],
                 'total' => $validatedData['total'],
+                'total_ganancia' => $total_ganancia,
                 'estado' => 'pendiente',
                 'moneda_id' => $validatedData['moneda_principal_id'],
                 'tasa_cambio_principal' => $validatedData['tasa_cambio_principal'],
@@ -528,6 +535,8 @@ class VentaController extends Controller
             // Crear detalles de venta
             foreach ($validatedData['items'] as $item) {
                 $producto = Producto::find($item['producto_id']);
+                $ganancia = ($item['precio_venta'] - $producto->precio_compra_producto) * $item['cantidad'];
+                $total_ganancia += $ganancia;
 
                 VentaDetalle::create([
                     'venta_id' => $venta->id,
@@ -536,8 +545,11 @@ class VentaController extends Controller
                     'precio_venta' => $item['precio_venta'],
                     'subtotal' => $item['subtotal'],
                     'costo_unitario' => $producto->precio_compra_producto,
+                    'ganancia' => $ganancia,
                 ]);
             }
+            $venta->update(['total_ganancia' => $total_ganancia]);
+
 
             // Procesar pagos con tasas editables
             foreach ($validatedData['pagos'] as $pago) {
@@ -1001,6 +1013,7 @@ class VentaController extends Controller
                         'nombre' => $venta->usuario->name,
                     ],
                     'total' => $venta->total,
+                    'total_ganancia' => $venta->total_ganancia,
                     'estado' => $venta->estado,
                     'total_pagado' => $venta->pagos->sum('monto_equivalente'),
                     'restante' => $venta->total - $venta->pagos->sum('monto_equivalente'),
