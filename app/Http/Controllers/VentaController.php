@@ -693,11 +693,31 @@ class VentaController extends Controller
                 $totalPagadoEquivalente += $pago->monto_equivalente;
             }
 
-            // CAMBIO AQUÍ: Calcular correctamente la ganancia/pérdida cambiaria
+            // CAMBIO AQUÍ: Lógica de ganancia cambiaria ajustada a la operatoria cubana.
             $ingreso_real_usd = $totalPagadoEquivalente;
-            $ingreso_esperado_usd = $venta->total_esperado_usd ?? ($venta->tasa_cambio_principal > 0 ? $venta->total / $venta->tasa_cambio_principal : 0);
 
-            $gananciaPerdidaCambiaria = $ingreso_real_usd - $ingreso_esperado_usd;
+            // Buscar la tasa de cambio real del CUP aplicada en los pagos.
+            $tasa_real_cup_pago = null;
+            $pago_en_cup = $venta->pagos->first(function ($pago) {
+                return $pago->moneda && $pago->moneda->codigo_moneda === 'CUP';
+            });
+
+            if ($pago_en_cup) {
+                $tasa_real_cup_pago = $pago_en_cup->tasa_cambio_aplicada;
+            }
+
+            // Si se encontró una tasa real en un pago en CUP, se recalcula el valor de la deuda.
+            // Si no, se usa la lógica anterior como fallback.
+            if ($tasa_real_cup_pago && $tasa_real_cup_pago > 0) {
+                // Valor real de la deuda en CUP convertida a USD con la tasa del día del pago.
+                $valor_real_deuda_en_usd = $venta->total / $tasa_real_cup_pago;
+                $gananciaPerdidaCambiaria = $ingreso_real_usd - $valor_real_deuda_en_usd;
+            } else {
+                // Fallback a la lógica original si no hay pagos en CUP para determinar la tasa real.
+                $ingreso_esperado_usd = $venta->total_esperado_usd ?? ($venta->tasa_cambio_principal > 0 ? $venta->total / $venta->tasa_cambio_principal : 0);
+                $gananciaPerdidaCambiaria = $ingreso_real_usd - $ingreso_esperado_usd;
+            }
+
             $gananciaRealTotal = $venta->total_ganancia + $gananciaPerdidaCambiaria;
 
             // Actualizar estado de la venta y añadir nuevos cálculos
