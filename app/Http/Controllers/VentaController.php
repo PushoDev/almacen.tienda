@@ -346,6 +346,7 @@ class VentaController extends Controller
             }),
             'total' => $venta->total,
             'total_ganancia' => $venta->total_ganancia,
+            'total_esperado_usd' => $venta->total_esperado_usd, // CAMBIO AQUÍ
             'ganancia_perdida_cambiaria' => $venta->ganancia_perdida_cambiaria,
             'ganancia_real_total' => $venta->ganancia_real_total,
             'estado' => $venta->estado,
@@ -550,7 +551,12 @@ class VentaController extends Controller
                     'ganancia' => $ganancia,
                 ]);
             }
-            $venta->update(['total_ganancia' => $total_ganancia]);
+            // CAMBIO AQUÍ: Calcular y guardar total_ganancia y total_esperado_usd
+            $total_esperado_usd = ($venta->tasa_cambio_principal > 0) ? $venta->total / $venta->tasa_cambio_principal : 0;
+            $venta->update([
+                'total_ganancia' => $total_ganancia,
+                'total_esperado_usd' => $total_esperado_usd
+            ]);
 
 
             // Procesar pagos con tasas editables
@@ -687,8 +693,11 @@ class VentaController extends Controller
                 $totalPagadoEquivalente += $pago->monto_equivalente;
             }
 
-            // AÑADIDO: Calcular ganancia/pérdida cambiaria
-            $gananciaPerdidaCambiaria = $totalPagadoEquivalente - $venta->total;
+            // CAMBIO AQUÍ: Calcular correctamente la ganancia/pérdida cambiaria
+            $ingreso_real_usd = $totalPagadoEquivalente;
+            $ingreso_esperado_usd = $venta->total_esperado_usd ?? ($venta->tasa_cambio_principal > 0 ? $venta->total / $venta->tasa_cambio_principal : 0);
+
+            $gananciaPerdidaCambiaria = $ingreso_real_usd - $ingreso_esperado_usd;
             $gananciaRealTotal = $venta->total_ganancia + $gananciaPerdidaCambiaria;
 
             // Actualizar estado de la venta y añadir nuevos cálculos
@@ -1026,6 +1035,7 @@ class VentaController extends Controller
                     ],
                     'total' => $venta->total,
                     'total_ganancia' => $venta->total_ganancia,
+                    'total_esperado_usd' => $venta->total_esperado_usd, // CAMBIO AQUÍ
                     'ganancia_perdida_cambiaria' => $venta->ganancia_perdida_cambiaria,
                     'ganancia_real_total' => $venta->ganancia_real_total,
                     'estado' => $venta->estado,

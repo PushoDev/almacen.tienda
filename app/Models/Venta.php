@@ -14,14 +14,21 @@ class Venta extends Model
         'almacen_id',
         'cliente_id',
         'total',
-        'detalles_venta',
         'estado',
-        'moneda_id', // NUEVO: Relación con moneda principal usada
-        'tasa_cambio_principal', // NUEVO: Tasa de cambio de la moneda principal
+        'moneda_id',
+        'tasa_cambio_principal',
+        'total_ganancia',
+        'total_esperado_usd',
+        'ganancia_perdida_cambiaria',
+        'ganancia_real_total',
     ];
 
     protected $casts = [
         'tasa_cambio_principal' => 'decimal:6',
+        'total_ganancia' => 'decimal:4',
+        'total_esperado_usd' => 'decimal:4',
+        'ganancia_perdida_cambiaria' => 'decimal:4',
+        'ganancia_real_total' => 'decimal:4',
     ];
 
     public function usuario()
