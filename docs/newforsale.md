@@ -1,65 +1,84 @@
-Eres un senior Laravel developer cubano que entiende perfectamente cómo funciona el negocio real en la calle en 2025.
+Eres un experto Laravel 10 + Inertia + React/TypeScript que conoce perfectamente mi proyecto.
 
-Mi sistema es así y punto:
+Mi proyecto tiene estos modelos relevantes:
 
-- Productos tienen costo en USD.
-- Precio de venta objetivo en USD (ej: 150 USD).
-- Tasa general del sistema: CUP = 356 (solo de referencia).
-- Pero en cada venta YO (el dueño) decido la tasa que le cobro al cliente. Puede ser 400, 450, 500, 45, la que me dé la gana ese día.
-- El cliente paga en USD + CUP, y en los pagos de CUP yo le digo: "paga X CUP por cada USD que debes".
-- Esa tasa que yo decido por venta es la que se usa para calcular cuánto CUP debe pagar.
-- Al final, yo recibo los CUP y los cambio en la calle a la tasa real (no importa cuál sea).
+- app/Models/Venta.php
+- app/Models/PagoVenta.php
+- app/Models/Moneda.php
+- app/Models/VentaDetalle.php
+- app/Models/Producto.php
 
-Ejemplo real que quiero que entiendas al 100%:
+El controlador principal es: app/Http/Controllers/VentaController.php
 
-Producto:
+Necesito implementar el cálculo exacto de ganancia/pérdida cambiaria por tasa aplicada vs tasa oficial, permitiendo valores positivos y negativos.
 
-- Costo: 25 USD
-- Precio de venta objetivo: 150 USD → ganancia planeada: 125 USD
-- Tasa sistema: 356 → precio "normal" sería 150 × 356 = 53.400 CUP
+REQUISITERO: SÍ debe permitir valores negativos (pérdida) cuando el vendedor cobra por debajo de la tasa oficial.
 
-Pero en esta venta yo decidí cobrar a tasa 500:
-→ Le dije al cliente: "debes 150 USD equivalentes a tasa 500 → 75.000 CUP"
-→ Cliente paga 50 USD + 50.000 CUP (porque 100 USD × 500 = 50.000 CUP)
-→ Total recibido: 50 + 100 = 150 USD equivalentes
-→ Ganancia: 125 USD (exacto lo que quería)
-→ Pero en CUP cobré 50.000 en vez de 35.600 → me metí 14.400 CUP extra en el bolsillo
+Datos que ya llegan del frontend en el request de crear venta:
 
-Yo quiero ver en cada venta:
+- tasa_aplicada_venta (decimal, ejemplo: 500)
+- moneda_cobro_id (id de la moneda en que se aplicó esa tasa, ejemplo: CUP)
+- pagos[] → array con todos los pagos (pueden ser en varias monedas)
+- items[] → productos vendidos
+- total → total en la moneda de cobro (ej: 75000 CUP)
 
-- Ganancia del producto: 125 USD (ya la tengo en total_ganancia)
-- CUP extras que me embolsillé por cobrar a tasa más alta: +14.400 CUP
-- Y opcional: cuántos USD extras serían si los cambio a tasa real (pero eso después)
+Objetivo final:
+Calcular y guardar en la tabla ventas:
+→ monto_diferencia_cambiaria (decimal 16,2) → puede ser positivo, negativo o cero
 
-TAREA EXACTA QUE DEBES HACER (sin cuentos, solo código):
+Fórmula exacta que debe usar:
 
-1. Crear migración que añada estos DOS campos a la tabla `ventas`:
+1. USD objetivo real = suma de (costo_unitario \* cantidad) + ganancia_total_productos
+   (esto ya lo tienes como $total_esperado_usd o puedes recalcularlo)
 
-    - tasa_venta_aplicada decimal(15,4) nullable → la tasa que YO decidí en esta venta (ej: 500)
-    - cup_extras_cobrados decimal(15,2) default 0 → cuántos CUP me metí de más por encima de la tasa 356
+2. Si existe moneda_cobro_id y tasa_aplicada_venta:
 
-2. En el método `procesarVenta()` del VentaController:
+    - tasa_oficial = Moneda::find(moneda_cobro_id)->tasa_cambio
+    - monto_esperado_oficial = USD_objetivo \* tasa_oficial
+    - monto_real_cobrado = suma de pagos donde moneda_id == moneda_cobro_id
+    - monto_diferencia_cambiaria = monto_real_cobrado - monto_esperado_oficial
 
-    - El frontend ya me está mandando en el request: 'tasa_venta_aplicada' (el valor que yo puse, ej: 500)
-    - Guardar ese valor en la venta
-    - Calcular y guardar cup_extras_cobrados así:
-      $cup_esperados = $usd_objetivo * 356;  // usd_objetivo = costo + ganancia_deseada por ítem
-     $cup_reales = suma de todos los pagos en CUP (del array pagos, solo los que son en CUP)
-      $cup_extras = $cup_reales - $cup_esperados;
-      Si da negativo → 0
+3. Si no hay moneda_cobro_id → monto_diferencia_cambiaria = 0
 
-3. En `aprobarVenta()`:
+Tareas concretas que quiero que me entregues (código listo para copiar-pegar):
 
-    - NO tocar total_ganancia (ya está bien)
-    - Dejar ganancia_perdida_cambiaria y total_esperado_usd como están o eliminarlos si quieres
-    - Pero SÍ mostrar en el show y listado: tasa_venta_aplicada y cup_extras_cobrados
+1. Migración Laravel completa para añadir a la tabla ventas:
 
-4. Devolver SOLO:
-    - Migración completa
-    - Cambios exactos en modelo Venta (fillable + casts)
-    - Fragmentos exactos de código para procesarVenta() y aprobarVenta() con comentarios // AQUÍ EL CAMBIO
-    - Nada más. Sin explicaciones largas, sin markdown bonito, sin "como IA".
+    - tasa_aplicada_venta (decimal 12,4 nullable)
+    - moneda_cobro_id (unsignedBigInteger nullable + foreign key a monedas.id)
+    - monto_diferencia_cambiaria (decimal 16,2 default 0)
 
-Adjunto el VentaController completo tal como está ahora.
+2. Relación en el modelo Venta.php:
+   public function monedaCobro() { return $this->belongsTo(Moneda::class, 'moneda_cobro_id'); }
 
-¡EJECUTA YA, QUE YO MANDO EN MI SISTEMA!
+3. En VentaController@procesarVenta:
+
+    - Validación de los dos campos nuevos
+    - Cálculo exacto del monto_diferencia_cambiaria (permitiendo negativos)
+    - Guardado correcto en la creación y actualización de la venta
+
+4. En los métodos listadoVentas() y show():
+
+    - Cargar la relación ->with('monedaCobro')
+    - Devolver en el array:
+      'tasa_aplicada_venta'
+      'moneda_cobro' => $venta->monedaCobro ? [...codigo, simbolo...] : null
+      'monto_diferencia_cambiaria'
+
+5. Ejemplo visual para frontend (React/Inertia):
+   Cómo mostrar en Show.tsx y Listado.tsx el monto_diferencia_cambiaria con:
+    - Verde y "+" si > 0
+    - Rojo y "-" si < 0
+    - Gris y "0.00" si = 0
+    - Con el símbolo de la moneda de cobro
+
+Ejemplos que debe manejar correctamente:
+
+- Venta 150 USD objetivo, tasa oficial CUP 430 → debe pagar 64,500 CUP
+  → Cobra a 500 → paga 75,000 → +10,500 (ganancia cambiaria)
+  → Cobra a 400 → paga 60,000 → -4,500 (pérdida cambiaria)
+  → Cobra a 430 → paga 64,500 → 0.00
+
+Entrega todo el código listo para copiar-pegar, sin explicaciones largas, en español cubano directo, con comentarios claros tipo “// Aquí se calcula la diferencia real, puede ser negativa”.
+
+¡Este es el prompt definitivo para que cualquier IA me lo haga perfecto en mi proyecto real! o sea Listaos, fuera, Empieza!

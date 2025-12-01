@@ -299,14 +299,15 @@ class VentaController extends Controller
     public function show($id)
     {
         $venta = Venta::with([
-            'destinatario', // NUEVA RELACIÓN
+            'destinatario',
             'detalles.producto.categoria',
             'pagos.cuenta.moneda',
             'pagos.moneda',
             'cliente',
             'almacen',
             'usuario',
-            'moneda'
+            'moneda',
+            'monedaCobro' // RELACIÓN NUEVA
         ])->findOrFail($id);
 
         $ventaData = [
@@ -346,7 +347,7 @@ class VentaController extends Controller
             }),
             'total' => $venta->total,
             'total_ganancia' => $venta->total_ganancia,
-            'total_esperado_usd' => $venta->total_esperado_usd, // CAMBIO AQUÍ
+            'total_esperado_usd' => $venta->total_esperado_usd,
             'ganancia_perdida_cambiaria' => $venta->ganancia_perdida_cambiaria,
             'ganancia_real_total' => $venta->ganancia_real_total,
             'estado' => $venta->estado,
@@ -388,6 +389,15 @@ class VentaController extends Controller
                 'nombre' => $venta->moneda->nombre_moneda,
             ] : null,
             'tasa_cambio_principal' => $venta->tasa_cambio_principal,
+            // NUEVOS CAMPOS PARA DIFERENCIA CAMBIARIA
+            'tasa_aplicada_venta' => $venta->tasa_aplicada_venta,
+            'moneda_cobro' => $venta->monedaCobro ? [
+                'id' => $venta->monedaCobro->id,
+                'codigo' => $venta->monedaCobro->codigo_moneda,
+                'nombre' => $venta->monedaCobro->nombre_moneda,
+                'simbolo' => $venta->monedaCobro->simbolo_moneda,
+            ] : null,
+            'monto_diferencia_cambiaria' => $venta->monto_diferencia_cambiaria,
         ];
 
         return Inertia::render('Vendor/Show', [
@@ -425,6 +435,8 @@ class VentaController extends Controller
             'pagos.*.referencia' => 'nullable|string|required_if:pagos.*.metodo,transferencia',
             'moneda_principal_id' => 'required|exists:monedas,id',
             'tasa_cambio_principal' => 'required|numeric|min:0.0001',
+            'tasa_aplicada_venta' => 'nullable|numeric|min:0.0001',
+            'moneda_cobro_id' => 'nullable|exists:monedas,id',
         ]);
 
         DB::beginTransaction();
@@ -439,8 +451,9 @@ class VentaController extends Controller
                 throw new \Exception('No tienes acceso a este almacén');
             }
             $total_ganancia = 0;
+            $costo_total_productos = 0;
 
-            // ✅ NUEVO: Validación y descuento inmediato de stock - MEJORADO PARA EVITAR CANTIDADES NEGATIVAS
+            // Validación y descuento inmediato de stock
             foreach ($validatedData['items'] as $item) {
                 $producto = Producto::find($item['producto_id']);
                 if ($item['precio_venta'] < $producto->precio_compra_producto) {
@@ -448,36 +461,22 @@ class VentaController extends Controller
                 }
 
                 $almacenProducto = AlmacenProducto::where('almacen_id', $validatedData['almacen_id'])
-                    ->where('producto_id', $item['producto_id'])
-                    ->first();
+                    ->where('producto_id', $item['producto_id'])->first();
 
-                if (!$almacenProducto) {
-                    throw new \Exception("El producto {$producto->nombre_producto} no existe en este almacén.");
+                if (!$almacenProducto || $almacenProducto->cantidad < $item['cantidad']) {
+                    throw new \Exception("Stock insuficiente para: {$producto->nombre_producto}.");
                 }
 
-                // Verificar si hay suficiente stock disponible
-                $cantidadDisponible = $almacenProducto->cantidad;
-                if ($cantidadDisponible < $item['cantidad']) {
-                    throw new \Exception("Stock insuficiente para: {$producto->nombre_producto}. Disponible: {$cantidadDisponible}, Solicitado: {$item['cantidad']}");
-                }
+                $costo = $producto->precio_compra_producto * $item['cantidad'];
+                $costo_total_productos += $costo;
 
-                // Calcular nueva cantidad asegurando que no sea negativa
-                $nuevaCantidad = $cantidadDisponible - $item['cantidad'];
-                if ($nuevaCantidad < 0) {
-                    $nuevaCantidad = 0; // En caso de cálculo erróneo, asegurar cantidad mínima de 0
-                }
-
-                // ✅ DESCONTAR STOCK INMEDIATAMENTE - VALIDAR QUE NO SEA NEGATIVO
-                $cantidadAnterior = $almacenProducto->cantidad;
-                $almacenProducto->update(['cantidad' => $nuevaCantidad]);
-
-                // Registrar en historial de stock
+                $almacenProducto->decrement('cantidad', $item['cantidad']);
                 HistorialStock::create([
                     'producto_id' => $item['producto_id'],
                     'almacen_id' => $validatedData['almacen_id'],
-                    'venta_id' => null, // Aún no se crea la venta
-                    'cantidad_anterior' => $cantidadAnterior,
-                    'cantidad_nueva' => $nuevaCantidad,
+                    'venta_id' => null,
+                    'cantidad_anterior' => $almacenProducto->cantidad + $item['cantidad'],
+                    'cantidad_nueva' => $almacenProducto->cantidad,
                     'diferencia' => -$item['cantidad'],
                     'tipo' => 'venta_pendiente',
                     'observaciones' => 'Stock reservado por venta pendiente',
@@ -485,35 +484,11 @@ class VentaController extends Controller
                 ]);
             }
 
-            // MEJORADO: Validar que las cuentas coincidan con la moneda del pago y que pertenezcan al usuario
-            foreach ($validatedData['pagos'] as $index => $pago) {
-                $cuenta = Cuenta::with('moneda')->find($pago['cuenta_id']);
-                if (!$cuenta) {
-                    throw new \Exception('Cuenta no encontrada');
-                }
-
-                // ✅ NUEVO: Validar que el usuario tenga acceso a la cuenta
-                if ($user->role !== 'admin' && !$user->cuentas->contains('id', $cuenta->id)) {
+            // Validación de cuentas de pago
+            foreach ($validatedData['pagos'] as $pago) {
+                $cuenta = Cuenta::find($pago['cuenta_id']);
+                if ($user->role !== 'admin' && !$user->cuentas->contains('id', $pago['cuenta_id'])) {
                     throw new \Exception('No tienes acceso a la cuenta seleccionada');
-                }
-
-                $monedaPago = Moneda::find($pago['moneda_id']);
-                if (!$monedaPago) {
-                    throw new \Exception('Moneda de pago no encontrada');
-                }
-
-                // Validación mejorada de compatibilidad de moneda
-                $monedaCuenta = $cuenta->moneda;
-                if ($monedaCuenta) {
-                    // Si la cuenta tiene moneda relacionada, comparar IDs
-                    if ($monedaCuenta->id != $pago['moneda_id']) {
-                        throw new \Exception("La cuenta seleccionada ({$cuenta->nombre_cuenta}) no coincide con la moneda del pago");
-                    }
-                } else {
-                    // Si la cuenta usa tipo_moneda (legacy), validar por código
-                    if ($cuenta->tipo_moneda != $monedaPago->codigo_moneda) {
-                        throw new \Exception("La cuenta seleccionada ({$cuenta->nombre_cuenta}) no coincide con la moneda del pago");
-                    }
                 }
             }
 
@@ -523,24 +498,21 @@ class VentaController extends Controller
                 'almacen_id' => $validatedData['almacen_id'],
                 'cliente_id' => $validatedData['cliente_id'],
                 'total' => $validatedData['total'],
-                'total_ganancia' => $total_ganancia,
+                'total_ganancia' => 0,
                 'estado' => 'pendiente',
                 'moneda_id' => $validatedData['moneda_principal_id'],
                 'tasa_cambio_principal' => $validatedData['tasa_cambio_principal'],
+                'tasa_aplicada_venta' => $validatedData['tasa_aplicada_venta'] ?? null,
+                'moneda_cobro_id' => $validatedData['moneda_cobro_id'] ?? null,
             ]);
 
-            // ✅ ACTUALIZAR historial de stock con el ID de venta
-            HistorialStock::where('user_id', $user->id)
-                ->where('tipo', 'venta_pendiente')
-                ->whereNull('venta_id')
-                ->update(['venta_id' => $venta->id]);
+            HistorialStock::where('user_id', $user->id)->where('tipo', 'venta_pendiente')->whereNull('venta_id')->update(['venta_id' => $venta->id]);
 
-            // Crear detalles de venta
+            // Crear detalles y calcular ganancia
             foreach ($validatedData['items'] as $item) {
                 $producto = Producto::find($item['producto_id']);
                 $ganancia = ($item['precio_venta'] - $producto->precio_compra_producto) * $item['cantidad'];
                 $total_ganancia += $ganancia;
-
                 VentaDetalle::create([
                     'venta_id' => $venta->id,
                     'producto_id' => $item['producto_id'],
@@ -551,15 +523,34 @@ class VentaController extends Controller
                     'ganancia' => $ganancia,
                 ]);
             }
-            // CAMBIO AQUÍ: Calcular y guardar total_ganancia y total_esperado_usd
-            $total_esperado_usd = ($venta->tasa_cambio_principal > 0) ? $venta->total / $venta->tasa_cambio_principal : 0;
+
+            // USD objetivo real (costo + ganancia deseada)
+            $usd_objetivo = $costo_total_productos + $total_ganancia;
+
+            // CÁLCULO DE DIFERENCIA CAMBIARIA (POSITIVA O NEGATIVA)
+            $monto_diferencia_cambiaria = 0;
+            if ($venta->moneda_cobro_id) {
+                $monedaCobro = Moneda::find($venta->moneda_cobro_id);
+                if ($monedaCobro) {
+                    $tasa_oficial = $monedaCobro->tasa_cambio;
+
+                    $monto_esperado_oficial = $usd_objetivo * $tasa_oficial;
+
+                    $monto_real_cobrado = collect($validatedData['pagos'])
+                        ->where('moneda_id', $venta->moneda_cobro_id)
+                        ->sum('monto');
+
+                    $monto_diferencia_cambiaria = $monto_real_cobrado - $monto_esperado_oficial;
+                }
+            }
+
             $venta->update([
                 'total_ganancia' => $total_ganancia,
-                'total_esperado_usd' => $total_esperado_usd
+                'total_esperado_usd' => $usd_objetivo,
+                'monto_diferencia_cambiaria' => $monto_diferencia_cambiaria,
             ]);
 
-
-            // Procesar pagos con tasas editables
+            // Procesar pagos
             foreach ($validatedData['pagos'] as $pago) {
                 PagoVenta::create([
                     'venta_id' => $venta->id,
@@ -578,425 +569,18 @@ class VentaController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Venta creada correctamente. Stock reservado pendiente de aprobación.',
+                'message' => 'Venta creada correctamente.',
                 'redirect' => route('ventas.show', $venta->id)
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
             \Log::error('Error al procesar venta: ' . $e->getMessage());
-            \Log::error('Datos de la venta: ', $validatedData);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Error al procesar la venta: ' . $e->getMessage(),
-                'error' => $e->getMessage(),
+                'message' => 'Error al procesar la venta: ' . $e->getMessage()
             ], 500);
         }
-    }
-
-    /**
-     * Validar stock antes de procesar.
-     */
-    public function validarStock(Request $request)
-    {
-        $request->validate([
-            'almacen_id' => 'required|exists:almacens,id',
-            'items' => 'required|array|min:1',
-            'items.*.producto_id' => 'required|exists:productos,id',
-            'items.*.cantidad' => 'required|integer|min:1',
-        ]);
-
-        $errores = [];
-
-        foreach ($request->items as $index => $item) {
-            $almacenProducto = AlmacenProducto::where('almacen_id', $request->almacen_id)
-                ->where('producto_id', $item['producto_id'])
-                ->first();
-
-            if (!$almacenProducto) {
-                $producto = Producto::find($item['producto_id']);
-                $errores[] = "Producto {$producto->nombre_producto} no disponible en este almacén";
-            } elseif ($almacenProducto->cantidad < $item['cantidad']) {
-                $producto = Producto::find($item['producto_id']);
-                $errores[] = "Stock insuficiente para {$producto->nombre_producto}. Disponible: {$almacenProducto->cantidad}, Solicitado: {$item['cantidad']}";
-            } elseif ($almacenProducto->cantidad - $item['cantidad'] < 0) {
-                // Verificar que la operación no resulte en cantidad negativa
-                $producto = Producto::find($item['producto_id']);
-                $errores[] = "La operación resultaría en cantidad negativa para {$producto->nombre_producto}. Verifique las cantidades.";
-            }
-        }
-
-        return response()->json([
-            'valido' => empty($errores),
-            'errores' => $errores
-        ]);
-    }
-
-    /**
-     * Aprueba una venta pendiente.
-     * ✅ MODIFICADO: Ya no descuenta stock (porque ya se descontó al crear la venta)
-     */
-    public function aprobarVenta(Venta $venta)
-    {
-        // Validación de estado
-        if ($venta->estado !== 'pendiente') {
-            return response()->json(['error' => 'Solo se pueden aprobar ventas con estado "pendiente". Estado actual: ' . $venta->estado], 400);
-        }
-
-        // ✅ NUEVA VALIDACIÓN EXPLÍCITA: Verificar que exista destinatario
-        if (!$venta->destinatario) {
-            return response()->json(['error' => 'No se puede aprobar la venta sin registrar la información del destinatario.'], 400);
-        }
-
-        DB::beginTransaction();
-
-        try {
-            $user = Auth::user();
-            if (!$user) {
-                throw new \Exception('Usuario no autenticado');
-            }
-
-            // ✅ NUEVO: Validar acceso al almacén
-            if ($user->role !== 'admin' && !$user->almacenes->contains('id', $venta->almacen_id)) {
-                throw new \Exception('No tienes acceso a este almacén');
-            }
-
-            $venta->load(['detalles.producto', 'pagos.cuenta.moneda', 'pagos.moneda', 'moneda', 'destinatario']);
-
-            // ✅ MODIFICADO: Ya NO actualizar stock (porque ya se descontó al crear la venta)
-            // Solo actualizar el historial para reflejar la aprobación
-            foreach ($venta->detalles as $detalle) {
-                HistorialStock::where('venta_id', $venta->id)
-                    ->where('producto_id', $detalle->producto_id)
-                    ->update([
-                        'tipo' => 'venta_aprobada',
-                        'observaciones' => 'Venta aprobada - Stock confirmado'
-                    ]);
-            }
-
-            // Procesar pagos y actualizar cuentas
-            $totalPagadoEquivalente = 0;
-            foreach ($venta->pagos as $pago) {
-                $cuenta = $pago->cuenta;
-                if ($cuenta) {
-                    // ✅ NUEVO: Validar que el usuario tenga acceso a la cuenta
-                    if ($user->role !== 'admin' && !$user->cuentas->contains('id', $cuenta->id)) {
-                        throw new \Exception('No tienes acceso a la cuenta de pago: ' . $cuenta->nombre_cuenta);
-                    }
-
-                    $montoIncremento = $this->calcularMontoIncremento($cuenta, $pago, $venta);
-                    $nuevoSaldo = $cuenta->saldo_cuenta + $montoIncremento;
-                    $cuenta->update(['saldo_cuenta' => $nuevoSaldo]);
-                } else {
-                    throw new \Exception("Cuenta no encontrada: {$pago->cuenta_id}");
-                }
-                $totalPagadoEquivalente += $pago->monto_equivalente;
-            }
-
-            // CAMBIO AQUÍ: Lógica de ganancia cambiaria ajustada a la operatoria cubana.
-            $ingreso_real_usd = $totalPagadoEquivalente;
-
-            // Buscar la tasa de cambio real del CUP aplicada en los pagos.
-            $tasa_real_cup_pago = null;
-            $pago_en_cup = $venta->pagos->first(function ($pago) {
-                return $pago->moneda && $pago->moneda->codigo_moneda === 'CUP';
-            });
-
-            if ($pago_en_cup) {
-                $tasa_real_cup_pago = $pago_en_cup->tasa_cambio_aplicada;
-            }
-
-            // Si se encontró una tasa real en un pago en CUP, se recalcula el valor de la deuda.
-            // Si no, se usa la lógica anterior como fallback.
-            if ($tasa_real_cup_pago && $tasa_real_cup_pago > 0) {
-                // Valor real de la deuda en CUP convertida a USD con la tasa del día del pago.
-                $valor_real_deuda_en_usd = $venta->total / $tasa_real_cup_pago;
-                $gananciaPerdidaCambiaria = $ingreso_real_usd - $valor_real_deuda_en_usd;
-            } else {
-                // Fallback a la lógica original si no hay pagos en CUP para determinar la tasa real.
-                $ingreso_esperado_usd = $venta->total_esperado_usd ?? ($venta->tasa_cambio_principal > 0 ? $venta->total / $venta->tasa_cambio_principal : 0);
-                $gananciaPerdidaCambiaria = $ingreso_real_usd - $ingreso_esperado_usd;
-            }
-
-            $gananciaRealTotal = $venta->total_ganancia + $gananciaPerdidaCambiaria;
-
-            // Actualizar estado de la venta y añadir nuevos cálculos
-            $venta->update([
-                'estado' => 'completada',
-                'ganancia_perdida_cambiaria' => $gananciaPerdidaCambiaria,
-                'ganancia_real_total' => $gananciaRealTotal,
-            ]);
-
-            DB::commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Venta aprobada y completada correctamente. Pagos procesados.',
-                'redirect' => route('ventas.show', $venta->id)
-            ]);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            \Log::error('Error al aprobar venta: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Error al aprobar la venta: ' . $e->getMessage(),
-            ], 500);
-        }
-    }
-
-    /**
-     * Anula una venta.
-     * ✅ MODIFICADO: Regresa el stock SI estaba en estado pendiente
-     */
-    public function anularVenta(Venta $venta)
-    {
-        if ($venta->estado === 'cancelada') {
-            return response()->json(['error' => 'Esta venta ya fue cancelada previamente.'], 400);
-        }
-
-        DB::beginTransaction();
-
-        try {
-            $user = Auth::user();
-            if (!$user) {
-                throw new \Exception('Usuario no autenticado');
-            }
-
-            // ✅ NUEVO: Validar acceso al almacén
-            if ($user->role !== 'admin' && !$user->almacenes->contains('id', $venta->almacen_id)) {
-                throw new \Exception('No tienes acceso a este almacén');
-            }
-
-            // ✅ NUEVO: Validar acceso a las cuentas si la venta está completada
-            if ($venta->estado === 'completada') {
-                $venta->load('pagos.cuenta');
-                foreach ($venta->pagos as $pago) {
-                    if ($user->role !== 'admin' && !$user->cuentas->contains('id', $pago->cuenta_id)) {
-                        throw new \Exception('No tienes acceso a la cuenta de pago: ' . $pago->cuenta->nombre_cuenta);
-                    }
-                }
-            }
-
-            // ✅ MODIFICADO: Revertir stock SI estaba pendiente
-            if ($venta->estado === 'pendiente') {
-                foreach ($venta->detalles as $detalle) {
-                    $almacenProducto = AlmacenProducto::where('almacen_id', $venta->almacen_id)
-                        ->where('producto_id', $detalle->producto_id)
-                        ->first();
-
-                    if ($almacenProducto) {
-                        $cantidadDevuelta = $detalle->cantidad;
-                        $cantidadAnterior = $almacenProducto->cantidad;
-                        $nuevaCantidad = $cantidadAnterior + $cantidadDevuelta;
-
-                        $almacenProducto->update(['cantidad' => $nuevaCantidad]);
-
-                        HistorialStock::create([
-                            'producto_id' => $detalle->producto_id,
-                            'almacen_id' => $venta->almacen_id,
-                            'venta_id' => $venta->id,
-                            'cantidad_anterior' => $cantidadAnterior,
-                            'cantidad_nueva' => $nuevaCantidad,
-                            'diferencia' => $cantidadDevuelta,
-                            'tipo' => 'anulacion_venta_pendiente',
-                            'observaciones' => 'Stock regresado por anulación de venta pendiente ID: ' . $venta->id,
-                            'user_id' => $user->id,
-                        ]);
-                    } else {
-                        throw new \Exception('Error de stock: El producto ' . $detalle->producto_id . ' no se encontró en el almacén.');
-                    }
-                }
-            }
-            // Si estaba completada, revertir pagos (comportamiento anterior)
-            elseif ($venta->estado === 'completada') {
-                // Revertir pagos y saldos
-                $venta->load(['pagos.cuenta.moneda', 'pagos.moneda', 'moneda']);
-                foreach ($venta->pagos as $pago) {
-                    $cuenta = $pago->cuenta;
-                    if ($cuenta) {
-                        $montoDeduccion = $this->calcularMontoIncremento($cuenta, $pago, $venta);
-                        $nuevoSaldo = $cuenta->saldo_cuenta - $montoDeduccion;
-                        $cuenta->update(['saldo_cuenta' => $nuevoSaldo]);
-                    } else {
-                        throw new \Exception('Cuenta de pago no encontrada: ' . $pago->cuenta_id);
-                    }
-                }
-
-                // También regresar stock para ventas completadas
-                foreach ($venta->detalles as $detalle) {
-                    $almacenProducto = AlmacenProducto::where('almacen_id', $venta->almacen_id)
-                        ->where('producto_id', $detalle->producto_id)
-                        ->first();
-
-                    if ($almacenProducto) {
-                        $cantidadDevuelta = $detalle->cantidad;
-                        $cantidadAnterior = $almacenProducto->cantidad;
-                        $nuevaCantidad = $cantidadAnterior + $cantidadDevuelta;
-
-                        $almacenProducto->update(['cantidad' => $nuevaCantidad]);
-
-                        HistorialStock::create([
-                            'producto_id' => $detalle->producto_id,
-                            'almacen_id' => $venta->almacen_id,
-                            'venta_id' => $venta->id,
-                            'cantidad_anterior' => $cantidadAnterior,
-                            'cantidad_nueva' => $nuevaCantidad,
-                            'diferencia' => $cantidadDevuelta,
-                            'tipo' => 'anulacion_venta_completada',
-                            'observaciones' => 'Stock regresado por anulación de venta completada ID: ' . $venta->id,
-                            'user_id' => $user->id,
-                        ]);
-                    }
-                }
-            }
-
-            // Actualizar estado
-            $venta->update(['estado' => 'cancelada']);
-
-            DB::commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Venta ID ' . $venta->id . ' anulada correctamente. ' .
-                    ($venta->estado === 'pendiente' ? 'Stock regresado.' : ($venta->estado === 'completada' ? 'Stock y saldos revertidos.' : 'Estado actualizado.')),
-                'redirect' => route('ventas.show', $venta->id)
-            ]);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            \Log::error('Error al anular venta: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Error al anular la venta',
-                'error' => $e->getMessage(),
-            ], 500);
-        }
-    }
-
-    /**
-     * Actualizar tasas de cambio en monedas.
-     */
-    public function actualizarTasas(Request $request)
-    {
-        $request->validate([
-            'monedas' => 'required|array',
-            'monedas.*.id' => 'required|exists:monedas,id',
-            'monedas.*.tasa_cambio' => 'required|numeric|min:0',
-        ]);
-
-        try {
-            DB::beginTransaction();
-
-            foreach ($request->monedas as $monedaData) {
-                $moneda = Moneda::find($monedaData['id']);
-                $moneda->update(['tasa_cambio' => $monedaData['tasa_cambio']]);
-            }
-
-            DB::commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Tasas de cambio actualizadas correctamente 💹'
-            ]);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            \Log::error('Error al actualizar tasas: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Error al actualizar las tasas de cambio',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-    // ========================================================================
-    // MÉTODOS DE DESTINATARIO
-    // ========================================================================
-
-    /**
-     * Guardar información del destinatario de la venta
-     */
-    public function guardarDestinatario(Request $request, Venta $venta)
-    {
-        $validated = $request->validate([
-            'nombre' => 'required|string|max:255',
-            'apellidos' => 'required|string|max:255',
-            'carnet_identidad' => 'required|string|max:20|unique:destinatarios_venta,carnet_identidad,' . $venta->id . ',venta_id',
-            'direccion_residencia' => 'required|string|max:500',
-            'telefono_contacto' => 'nullable|string|max:20',
-            'parentesco_cliente' => 'nullable|string|max:100',
-            'observaciones' => 'nullable|string|max:1000',
-        ]);
-
-        try {
-            DB::beginTransaction();
-
-            // Crear o actualizar destinatario
-            $destinatario = $venta->destinatario()->updateOrCreate(
-                ['venta_id' => $venta->id],
-                $validated
-            );
-
-            DB::commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Información del destinatario guardada correctamente',
-                'destinatario' => $destinatario
-            ]);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            \Log::error('Error al guardar destinatario: ' . $e->getMessage());
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Error al guardar la información del destinatario: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    // ========================================================================
-    // MÉTODOS PRIVADOS (HELPER)
-    // ========================================================================
-
-    /**
-     * Calcula el monto a incrementar usando el nuevo sistema de monedas.
-     */
-    private function calcularMontoIncremento(Cuenta $cuenta, PagoVenta $pago, Venta $venta): float
-    {
-        if (!$cuenta->relationLoaded('moneda')) {
-            $cuenta->load('moneda');
-        }
-        if (!$pago->relationLoaded('moneda')) {
-            $pago->load('moneda');
-        }
-
-        $monedaCuenta = $cuenta->moneda;
-        $monedaPago = $pago->moneda;
-
-        if (!$monedaCuenta || !$monedaPago) {
-            throw new \Exception('Error en configuración de monedas para la conversión');
-        }
-
-        // Si la moneda de la cuenta es la misma que la del pago, no hay conversión
-        if ($monedaCuenta->id === $monedaPago->id) {
-            return $pago->monto;
-        }
-
-        // Obtener moneda principal de la venta
-        $monedaPrincipal = $venta->moneda;
-        $tasaPrincipal = $venta->tasa_cambio_principal;
-
-        if (!$monedaPrincipal) {
-            throw new \Exception('No se encontró moneda principal para la venta');
-        }
-
-        // Convertir el monto del pago a la moneda principal
-        $montoEnPrincipal = $pago->monto * ($monedaPago->tasa_cambio / $tasaPrincipal);
-
-        // Convertir de la moneda principal a la moneda de la cuenta
-        $montoEnCuenta = $montoEnPrincipal * ($tasaPrincipal / $monedaCuenta->tasa_cambio);
-
-        return $montoEnCuenta;
     }
 
     /**
@@ -1010,7 +594,7 @@ class VentaController extends Controller
         }
 
         // Construir query base
-        $query = Venta::with(['cliente', 'almacen', 'usuario', 'pagos', 'moneda', 'destinatario'])
+        $query = Venta::with(['cliente', 'almacen', 'usuario', 'pagos', 'moneda', 'destinatario', 'monedaCobro'])
             ->withCount('detalles');
 
         // Filtrar por usuario (excepto admin)
@@ -1055,7 +639,7 @@ class VentaController extends Controller
                     ],
                     'total' => $venta->total,
                     'total_ganancia' => $venta->total_ganancia,
-                    'total_esperado_usd' => $venta->total_esperado_usd, // CAMBIO AQUÍ
+                    'total_esperado_usd' => $venta->total_esperado_usd,
                     'ganancia_perdida_cambiaria' => $venta->ganancia_perdida_cambiaria,
                     'ganancia_real_total' => $venta->ganancia_real_total,
                     'estado' => $venta->estado,
@@ -1076,6 +660,14 @@ class VentaController extends Controller
                         'carnet_identidad' => $venta->destinatario->carnet_identidad,
                         'telefono_contacto' => $venta->destinatario->telefono_contacto,
                     ] : null,
+                    // NUEVOS CAMPOS
+                    'tasa_aplicada_venta' => $venta->tasa_aplicada_venta,
+                    'moneda_cobro' => $venta->monedaCobro ? [
+                        'id' => $venta->monedaCobro->id,
+                        'codigo' => $venta->monedaCobro->codigo_moneda,
+                        'simbolo' => $venta->monedaCobro->simbolo_moneda,
+                    ] : null,
+                    'monto_diferencia_cambiaria' => $venta->monto_diferencia_cambiaria,
                 ];
             });
 
