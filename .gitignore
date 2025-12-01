@@ -2,7 +2,6 @@
 /bootstrap/ssr
 /node_modules
 /public/hot
-public/storage
 /storage/*.key
 /storage/pail
 /vendor
@@ -21,6 +20,3 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
-Qwen.md
-docker-compose.yml
-tareas_pendientes_mañana.md
