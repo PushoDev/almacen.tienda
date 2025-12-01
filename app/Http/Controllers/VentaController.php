@@ -584,6 +584,46 @@ class VentaController extends Controller
     }
 
     /**
+     * Guarda o actualiza el destinatario de una venta pendiente
+     */
+    public function guardarDestinatario(Request $request, Venta $venta)
+    {
+        // Solo permitir si la venta está pendiente
+        if ($venta->estado !== 'pendiente') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Solo se puede modificar el receptor en ventas pendientes.'
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'nombre' => 'required|string|max:100',
+            'apellidos' => 'required|string|max:100',
+            'carnet_identidad' => 'required|string|min:11|max:11|regex:/^\d+$/',
+            'direccion_residencia' => 'required|string|max:500',
+            'telefono_contacto' => 'nullable|string|max:20',
+            'parentesco_cliente' => 'nullable|string|max:100',
+            'observaciones' => 'nullable|string|max:500',
+        ]);
+
+        // Limpiar CI por si viene con espacios
+        $validated['carnet_identidad'] = preg_replace('/\D/', '', $validated['carnet_identidad']);
+
+        DB::transaction(function () use ($venta, $validated) {
+            if ($venta->destinatario) {
+                $venta->destinatario->update($validated);
+            } else {
+                $venta->destinatario()->create($validated);
+            }
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Información del receptor guardada correctamente',
+        ]);
+    }
+
+    /**
      * Obtener listado de ventas con filtros y paginación.
      */
     public function listadoVentas(Request $request)
