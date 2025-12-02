@@ -632,50 +632,49 @@ class VentaController extends Controller
     public function aprobarVenta(Venta $venta)
     {
         if ($venta->estado !== 'pendiente') {
-            return response()->json([
-                'success' => false,
-                'message' => 'La venta ya no está pendiente'
-            ], 400);
+            return response()->json(['success' => false, 'message' => 'Ya no está pendiente'], 400);
         }
 
         if (!$venta->destinatario) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Es obligatorio agregar el receptor antes de aprobar'
-            ], 400);
+            return response()->json(['success' => false, 'message' => 'Falta receptor'], 400);
         }
 
         DB::transaction(function () use ($venta) {
-            // Cambiar estado
+            // 1. Aprobar la venta
             $venta->update(['estado' => 'completada']);
 
-            // Calcular diferencia cambiaria real
-            $usdObjetivo = $venta->total_esperado_usd ?? ($venta->detalles->sum('costo_unitario') + $venta->total_ganancia);
+            // 2. Buscar la tasa oficial del CUP (la que tienes en la tabla monedas)
+            $tasaOficialCUP = DB::table('monedas')
+                ->where('codigo_moneda', 'CUP')
+                ->value('tasa_cambio') ?? 365;   // si no existe, usa 365 por defecto
 
-            if ($venta->moneda_cobro_id) {
-                $monedaCobro = $venta->monedaCobro;
-                $tasaOficial = $monedaCobro->tasa_cambio ?? 1;
+            $gananciaExtraUSD = 0;
 
-                $montoEsperadoOficial = $usdObjetivo * $tasaOficial;
-                $montoRealCobrado = $venta->pagos
-                    ->where('moneda_id', $venta->moneda_cobro_id)
-                    ->sum('monto');
+            // 3. Recorrer solo los pagos que sean en CUP
+            foreach ($venta->pagos as $pago) {
+                if ($pago->moneda && $pago->moneda->codigo_moneda === 'CUP') {
+                    $montoCUP = $pago->monto;                    // ej: 46500
+                    $tasaQueTuPusiste = $pago->tasa_cambio_aplicada; // ej: 465
 
-                $diferenciaCambiaria = $montoRealCobrado - $montoEsperadoOficial;
-                $gananciaCambiariaUsd = $diferenciaCambiaria / $tasaOficial;
+                    // Valor real de esos CUP con la tasa oficial
+                    $valorRealUSD = $montoCUP / $tasaOficialCUP;     // 46500 / 365 = 127.40
+                    $valorQueTuContasteUSD = $pago->monto_equivalente; // 100
 
-                $venta->update([
-                    'monto_diferencia_cambiaria' => $diferenciaCambiaria,
-                    'ganancia_perdida_cambiaria' => $gananciaCambiariaUsd,
-                    'ganancia_real_total' => $venta->total_ganancia + $gananciaCambiariaUsd,
-                ]);
+                    // La diferencia es ganancia extra
+                    $gananciaExtraUSD += ($valorRealUSD - $valorQueTuContasteUSD);
+                }
             }
+
+            $gananciaExtraUSD = round($gananciaExtraUSD, 2);
+
+            // 4. Guardar los dos campos que ya tienes en la tabla ventas
+            $venta->update([
+                'ganancia_perdida_cambiaria' => $gananciaExtraUSD,
+                'ganancia_real_total'        => $venta->total_ganancia + $gananciaExtraUSD,
+            ]);
         });
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Venta aprobada correctamente'
-        ]);
+        return response()->json(['success' => true]);
     }
 
     /**
