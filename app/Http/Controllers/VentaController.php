@@ -624,6 +624,61 @@ class VentaController extends Controller
     }
 
     /**
+     * Aprobar la venta
+     *
+     * @param Venta $venta
+     * @return void
+     */
+    public function aprobarVenta(Venta $venta)
+    {
+        if ($venta->estado !== 'pendiente') {
+            return response()->json([
+                'success' => false,
+                'message' => 'La venta ya no está pendiente'
+            ], 400);
+        }
+
+        if (!$venta->destinatario) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Es obligatorio agregar el receptor antes de aprobar'
+            ], 400);
+        }
+
+        DB::transaction(function () use ($venta) {
+            // Cambiar estado
+            $venta->update(['estado' => 'completada']);
+
+            // Calcular diferencia cambiaria real
+            $usdObjetivo = $venta->total_esperado_usd ?? ($venta->detalles->sum('costo_unitario') + $venta->total_ganancia);
+
+            if ($venta->moneda_cobro_id) {
+                $monedaCobro = $venta->monedaCobro;
+                $tasaOficial = $monedaCobro->tasa_cambio ?? 1;
+
+                $montoEsperadoOficial = $usdObjetivo * $tasaOficial;
+                $montoRealCobrado = $venta->pagos
+                    ->where('moneda_id', $venta->moneda_cobro_id)
+                    ->sum('monto');
+
+                $diferenciaCambiaria = $montoRealCobrado - $montoEsperadoOficial;
+                $gananciaCambiariaUsd = $diferenciaCambiaria / $tasaOficial;
+
+                $venta->update([
+                    'monto_diferencia_cambiaria' => $diferenciaCambiaria,
+                    'ganancia_perdida_cambiaria' => $gananciaCambiariaUsd,
+                    'ganancia_real_total' => $venta->total_ganancia + $gananciaCambiariaUsd,
+                ]);
+            }
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Venta aprobada correctamente'
+        ]);
+    }
+
+    /**
      * Obtener listado de ventas con filtros y paginación.
      */
     public function listadoVentas(Request $request)
