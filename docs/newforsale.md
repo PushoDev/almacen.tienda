@@ -1,4 +1,4 @@
-Eres un experto Laravel 10 + Inertia + React/TypeScript que conoce perfectamente mi proyecto.
+Eres un experto Laravel 12 + Inertia + React/TypeScript que conoce perfectamente mi proyecto.
 
 Mi proyecto tiene estos modelos relevantes:
 
