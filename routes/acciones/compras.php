@@ -13,7 +13,7 @@ Route::middleware(['auth', 'verified'])->group(
         /**
          * Interactuar Api para los Select
          */
-        Route::prefix('compras')->name('compras')->group(function () {
+        Route::prefix('compras')->name('compras.')->group(function () {
             // Rutas para los Select
             Route::get('/almacenes', [CompraController::class, 'getAlmacen']);
             Route::get('/proveedores', [CompraController::class, 'getProveedor']);
@@ -22,6 +22,9 @@ Route::middleware(['auth', 'verified'])->group(
 
             // Ruta para obtener cuentas
             Route::get('/cuentas/pago', [CompraController::class, 'getCuentas']);
+
+            // Ruta para crear un cliente nuevo durante la compra
+            Route::post('/clientes', [CompraController::class, 'storeClienteForCompra'])->name('cliente.store');
 
             // Rutas para cargar datos iniciales
             Route::get('/datos', [CompraController::class, 'cargarDatos'])->name('compras.datos');

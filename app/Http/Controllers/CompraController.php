@@ -308,6 +308,40 @@ class CompraController extends Controller
     }
 
     /**
+     * Store a newly created cliente for use during compra process.
+     */
+    public function storeClienteForCompra(Request $request)
+    {
+        // Validación de datos
+        $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'nombre_cliente' => ['required', 'string', 'unique:clientes,nombre_cliente'],
+            'tipo_cliente' => ['required', 'in:fisico,asociado'],
+            'telefono_cliente' => ['required', 'string', 'unique:clientes,telefono_cliente'],
+            'direccion_cliente' => ['nullable', 'string'],
+            'ciudad_cliente' => ['nullable', 'string'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        // Crear el cliente con deuda_pago_cliente en 0
+        $cliente = Cliente::create([
+            'nombre_cliente' => $request->nombre_cliente,
+            'tipo_cliente' => $request->tipo_cliente ?? 'fisico',
+            'deuda_pago_cliente' => 0, // Siempre crear con valor 0
+            'telefono_cliente' => $request->telefono_cliente,
+            'direccion_cliente' => $request->direccion_cliente ?? null,
+            'ciudad_cliente' => $request->ciudad_cliente ?? null,
+        ]);
+
+        return response()->json([
+            'message' => 'Cliente creado exitosamente para la compra.',
+            'cliente' => $cliente
+        ], 201);
+    }
+
+    /**
      * Devuelve los productos asociados a un almacén.
      *
      * @param  int  $id
