@@ -139,7 +139,7 @@ const footerNavItems: NavItem[] = [
         title: 'Documentación',
         href: 'https://documentacion-glorietapos.vercel.app/',
         icon: BookOpen,
-        roles: ['admin', 'moderador', 'vendedor'],
+        roles: ['moderador', 'vendedor'],
     },
 ];
 
