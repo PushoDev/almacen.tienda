@@ -10,6 +10,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,10 +18,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Toaster } from '@/components/ui/sonner';
-import { Spinner } from '@/components/ui/spinner';
 import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
@@ -33,10 +35,12 @@ import {
     BookCheck,
     CalendarIcon,
     CheckCircle,
+    ChevronsUpDown,
     CreditCard,
     DollarSign,
     Edit2,
     HardDriveUpload,
+    Info,
     Loader2,
     PlusCircle,
     PlusIcon,
@@ -138,6 +142,12 @@ export default function ComprarPage() {
     const [clientes, setClientes] = useState<ClienteProps[]>([]);
     const [loading, setLoading] = useState(true);
 
+    // Estados para búsqueda de clientes
+    const [clienteSearchTerm, setClienteSearchTerm] = useState('');
+    const [filteredClientes, setFilteredClientes] = useState<ClienteProps[]>([]);
+    const [isSearchingClientes, setIsSearchingClientes] = useState(false);
+    const [clienteSelectOpen, setClienteSelectOpen] = useState(false);
+
     const [tempFormData, setTempFormData] = useState<Omit<ProductoComprarProps, 'id' | 'almacen_id'> & { almacen_id: string }>({
         almacen_id: '',
         producto: '',
@@ -167,13 +177,32 @@ export default function ComprarPage() {
 
     // Estado para el modal de crear cliente
     const [isCrearClienteDialogOpen, setIsCrearClienteDialogOpen] = useState(false);
-    const [nuevoCliente, setNuevoCliente] = useState({
-        nombre_cliente: '',
-        telefono_cliente: '',
-        direccion_cliente: '',
-        ciudad_cliente: '',
-    });
     const [clienteErrors, setClienteErrors] = useState<Record<string, string>>({});
+
+    // 🔍 EFECTO PARA BÚSQUEDA EN TIEMPO REAL DE CLIENTES
+    useEffect(() => {
+        const searchClientes = async () => {
+            if (clienteSearchTerm.length >= 2) {
+                setIsSearchingClientes(true);
+                try {
+                    const response = await axios.get(route('compras.clientes.fisicos'), {
+                        params: { search: clienteSearchTerm },
+                    });
+                    setFilteredClientes(response.data);
+                } catch (error) {
+                    console.error('Error buscando clientes:', error);
+                    toast.error('Error al buscar clientes');
+                } finally {
+                    setIsSearchingClientes(false);
+                }
+            } else {
+                setFilteredClientes(clientes);
+            }
+        };
+
+        const debounceTimer = setTimeout(searchClientes, 300);
+        return () => clearTimeout(debounceTimer);
+    }, [clienteSearchTerm, clientes]);
 
     useEffect(() => {
         const productosParaBackend = productos.map((p) => ({
@@ -202,6 +231,7 @@ export default function ComprarPage() {
                 setCategorias(categoriasRes.data);
                 setCuentas(cuentasRes.data);
                 setClientes(clientesRes.data);
+                setFilteredClientes(clientesRes.data);
             } catch (error) {
                 console.error('Error al cargar datos:', error);
                 toast.error('Error al cargar los datos necesarios');
@@ -342,50 +372,6 @@ export default function ComprarPage() {
         return productos.reduce((total, p) => total + p.cantidad * p.precio, 0).toFixed(2);
     };
 
-    const handleNuevoClienteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const { name, value } = e.target;
-        setNuevoCliente((prev) => ({
-            ...prev,
-            [name]: value,
-        }));
-    };
-
-    const crearNuevoCliente = async () => {
-        try {
-            const response = await axios.post(route('compras.cliente.store'), {
-                ...nuevoCliente,
-                tipo_cliente: 'fisico', // Siempre crear como fisico con deuda 0
-            });
-
-            // Agregar el nuevo cliente a la lista de clientes
-            setClientes((prev) => [...prev, response.data.cliente]);
-
-            // Agregar el nuevo cliente a los pagos_clientes
-            setData('pagos_clientes', [...data.pagos_clientes, { cliente_id: response.data.cliente.id, monto: 0 }]);
-
-            toast.success('Cliente creado y agregado a los pagos exitosamente');
-
-            // Limpiar el formulario
-            setNuevoCliente({
-                nombre_cliente: '',
-                telefono_cliente: '',
-                direccion_cliente: '',
-                ciudad_cliente: '',
-            });
-
-            setIsCrearClienteDialogOpen(false);
-            setClienteErrors({});
-        } catch (error: any) {
-            if (error.response?.data?.errors) {
-                setClienteErrors(error.response.data.errors);
-                toast.error('Error al crear el cliente. Por favor, revisa los datos ingresados.');
-            } else {
-                console.error('Error al crear cliente:', error);
-                toast.error('Error al crear el cliente');
-            }
-        }
-    };
-
     const filteredProvedors = proveedors.filter((proveedor) => proveedor.nombre_proveedor.toLowerCase().includes(searchProveedor.toLowerCase()));
     const filteredCategorias = categorias.filter((cat) => cat.nombre_categoria.toLowerCase().includes(searchCategoria.toLowerCase()));
 
@@ -423,13 +409,239 @@ export default function ComprarPage() {
         });
     };
 
+    // 🆕 COMPONENTE DE CREACIÓN DE CLIENTE - FIXED
+    const CrearClienteDialogContent = () => {
+        const [localCliente, setLocalCliente] = useState({
+            nombre_cliente: '',
+            telefono_cliente: '',
+            direccion_cliente: '',
+            ciudad_cliente: '',
+        });
+
+        const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
+
+        const handleLocalChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+            const { name, value } = e.target;
+            setLocalCliente((prev) => ({
+                ...prev,
+                [name]: value,
+            }));
+        };
+
+        const crearClienteLocal = async () => {
+            // Validación básica en frontend
+            if (!localCliente.nombre_cliente.trim() || !localCliente.telefono_cliente.trim()) {
+                toast.error('Nombre y teléfono son requeridos');
+                return;
+            }
+
+            try {
+                const response = await axios.post(route('compras.cliente.store'), {
+                    ...localCliente,
+                    tipo_cliente: 'fisico',
+                });
+
+                const { cliente, existe, message } = response.data;
+
+                // Si el cliente ya existe (retornado por el backend)
+                if (existe) {
+                    toast.info(message, {
+                        description: 'El cliente ya existía en el sistema. Se ha agregado automáticamente.',
+                    });
+
+                    // Verificar si el cliente ya está en la lista
+                    if (!clientes.some((c) => c.id === cliente.id)) {
+                        setClientes((prev) => [...prev, cliente]);
+                    }
+                } else {
+                    // Cliente nuevo creado
+                    toast.success(message, {
+                        description: 'Cliente creado exitosamente.',
+                    });
+                    setClientes((prev) => [...prev, cliente]);
+                }
+
+                // Agregar automáticamente a pagos_clientes con monto 0
+                if (!data.pagos_clientes.some((p) => p.cliente_id === cliente.id)) {
+                    setData('pagos_clientes', [...data.pagos_clientes, { cliente_id: cliente.id, monto: 0 }]);
+                }
+
+                // Limpiar formulario y cerrar diálogo
+                setLocalCliente({
+                    nombre_cliente: '',
+                    telefono_cliente: '',
+                    direccion_cliente: '',
+                    ciudad_cliente: '',
+                });
+
+                setLocalErrors({});
+                setIsCrearClienteDialogOpen(false);
+            } catch (error: any) {
+                console.error('Error al crear cliente:', error);
+
+                if (error.response?.status === 409 && error.response?.data?.cliente_existente) {
+                    // Cliente ya existe - usar el existente
+                    const clienteExistente = error.response.data.cliente_existente;
+                    toast.warning('Cliente ya existe', {
+                        description: 'Se usará el cliente existente en el sistema.',
+                    });
+
+                    // Agregar a la lista si no está
+                    if (!clientes.some((c) => c.id === clienteExistente.id)) {
+                        setClientes((prev) => [...prev, clienteExistente]);
+                    }
+
+                    // Agregar a pagos_clientes
+                    if (!data.pagos_clientes.some((p) => p.cliente_id === clienteExistente.id)) {
+                        setData('pagos_clientes', [...data.pagos_clientes, { cliente_id: clienteExistente.id, monto: 0 }]);
+                    }
+
+                    setIsCrearClienteDialogOpen(false);
+                } else if (error.response?.data?.errors) {
+                    setLocalErrors(error.response.data.errors);
+                    toast.error('Error de validación', {
+                        description: 'Por favor corrige los errores en el formulario.',
+                    });
+                } else {
+                    toast.error('Error al crear cliente', {
+                        description: 'Intenta nuevamente o contacta al administrador.',
+                    });
+                }
+            }
+        };
+
+        const resetDialog = () => {
+            setLocalCliente({
+                nombre_cliente: '',
+                telefono_cliente: '',
+                direccion_cliente: '',
+                ciudad_cliente: '',
+            });
+            setLocalErrors({});
+            setIsCrearClienteDialogOpen(false);
+        };
+
+        return (
+            <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-[500px]">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2 text-xl">
+                        <Users className="h-5 w-5 text-blue-600" />
+                        Crear Nuevo Cliente Físico
+                    </DialogTitle>
+                    <DialogDescription>Los clientes físicos pueden usarse como fuente de financiamiento para compras.</DialogDescription>
+                </DialogHeader>
+
+                <div className="grid gap-6 py-4">
+                    <div className="space-y-4">
+                        <div className="grid gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="dialog-nombre-cliente" className="flex items-center gap-1">
+                                    Nombre Completo <span className="text-red-500">*</span>
+                                </Label>
+                                <Input
+                                    id="dialog-nombre-cliente"
+                                    name="nombre_cliente"
+                                    value={localCliente.nombre_cliente}
+                                    onChange={handleLocalChange}
+                                    placeholder="Ej: Juan Pérez"
+                                    className={localErrors.nombre_cliente ? 'border-red-500' : ''}
+                                />
+                                {localErrors.nombre_cliente && <p className="text-sm text-red-500">{localErrors.nombre_cliente}</p>}
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="dialog-telefono-cliente" className="flex items-center gap-1">
+                                    Teléfono <span className="text-red-500">*</span>
+                                </Label>
+                                <Input
+                                    id="dialog-telefono-cliente"
+                                    name="telefono_cliente"
+                                    value={localCliente.telefono_cliente}
+                                    onChange={handleLocalChange}
+                                    placeholder="Ej: 555-1234"
+                                    className={localErrors.telefono_cliente ? 'border-red-500' : ''}
+                                />
+                                {localErrors.telefono_cliente && <p className="text-sm text-red-500">{localErrors.telefono_cliente}</p>}
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="dialog-ciudad-cliente">Ciudad</Label>
+                                    <Input
+                                        id="dialog-ciudad-cliente"
+                                        name="ciudad_cliente"
+                                        value={localCliente.ciudad_cliente}
+                                        onChange={handleLocalChange}
+                                        placeholder="Ej: Lima"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="deuda_inicial">Crédito Inicial</Label>
+                                    <div className="flex items-center rounded-md border bg-gray-50">
+                                        <span className="bg-muted px-3 py-2 text-gray-500">$</span>
+                                        <Input type="number" value="0" disabled className="border-0 bg-transparent" />
+                                    </div>
+                                    <p className="text-xs text-gray-500">Todos los clientes nuevos empiezan con crédito 0</p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="dialog-direccion-cliente">Dirección</Label>
+                                <textarea
+                                    id="dialog-direccion-cliente"
+                                    name="direccion_cliente"
+                                    value={localCliente.direccion_cliente}
+                                    onChange={handleLocalChange}
+                                    placeholder="Dirección completa"
+                                    rows={3}
+                                    className="border-input ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex w-full rounded-md border bg-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="rounded-lg bg-blue-50 p-4 dark:bg-blue-950/30">
+                            <div className="flex items-start gap-3">
+                                <Info className="h-5 w-5 text-blue-600" />
+                                <div className="text-sm text-blue-800 dark:text-blue-300">
+                                    <p className="font-medium">¿Cómo funciona el financiamiento con clientes?</p>
+                                    <p className="mt-1">
+                                        Los clientes pueden prestar dinero a la empresa. Al usar un cliente para pagar una compra, se reduce su
+                                        crédito (si tenía) o se genera una nueva deuda con el cliente.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <DialogFooter className="gap-2">
+                    <Button type="button" variant="outline" onClick={resetDialog}>
+                        Cancelar
+                    </Button>
+                    <Button
+                        type="button"
+                        onClick={crearClienteLocal}
+                        className="bg-blue-600 hover:bg-blue-700"
+                        disabled={!localCliente.nombre_cliente.trim() || !localCliente.telefono_cliente.trim()}
+                    >
+                        <CheckCircle className="mr-2 h-4 w-4" />
+                        Crear Cliente
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        );
+    };
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Comprar" />
 
             {loading && (
                 <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black">
-                    <Spinner className="text-sidebar-accent size-8" />
+                    <div className="bg-sidebar-accent rounded-lg p-4 shadow-lg">
+                        <p>Cargando datos...</p>
+                    </div>
                 </div>
             )}
 
@@ -1071,206 +1283,277 @@ export default function ComprarPage() {
                                     <>
                                         <Separator className="my-2" />
 
-                                        {/* Sección de Pagos con Clientes */}
-                                        <div className="space-y-6 rounded-2xl border border-blue-200 bg-blue-50/50 p-8 dark:border-blue-800 dark:bg-blue-950/20">
+                                        {/* Sección de Pagos con Clientes - MEJORADA */}
+                                        <div className="space-y-6 rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50/50 to-indigo-50/50 p-8 dark:border-blue-800 dark:from-blue-950/20 dark:to-indigo-950/20">
                                             <div className="space-y-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/30">
-                                                        <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30">
+                                                            <Users className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                                                        </div>
+                                                        <div>
+                                                            <Label className="text-lg font-semibold text-gray-700 dark:text-gray-200">
+                                                                Pagos con Crédito de Clientes
+                                                            </Label>
+                                                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                                Usa créditos existentes de clientes o genera nuevos préstamos
+                                                            </p>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <Label htmlFor="clientes" className="text-lg font-semibold text-gray-700 dark:text-gray-200">
-                                                            Pagos con Clientes
-                                                        </Label>
-                                                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                                                            Opcional - Aplicar pagos de clientes
-                                                        </p>
-                                                    </div>
+
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="border-blue-300 text-blue-700 dark:border-blue-600 dark:text-blue-300"
+                                                    >
+                                                        {data.pagos_clientes.length} cliente(s) seleccionado(s)
+                                                    </Badge>
                                                 </div>
 
-                                                <Select
-                                                    name="clientes"
-                                                    value={data.pagos_clientes.map((p) => p.cliente_id.toString())}
-                                                    onValueChange={(value) => {
-                                                        // Verificar si se seleccionó la opción de crear nuevo cliente
-                                                        if (value === 'crear_nuevo_cliente') {
-                                                            setIsCrearClienteDialogOpen(true);
-                                                            return;
-                                                        }
-
-                                                        const selectedClientes = Array.isArray(value) ? value : [value];
-                                                        const updatedClientes = [
-                                                            ...new Set([
-                                                                ...data.pagos_clientes.map((p) => p.cliente_id),
-                                                                ...selectedClientes.map((id) => parseInt(id)),
-                                                            ]),
-                                                        ];
-                                                        const updatedPagosClientes = updatedClientes.map((cliente_id) => ({
-                                                            cliente_id,
-                                                            monto: data.pagos_clientes.find((p) => p.cliente_id === cliente_id)?.monto || 0,
-                                                        }));
-                                                        setData('pagos_clientes', updatedPagosClientes);
-                                                    }}
-                                                    multiple
-                                                >
-                                                    <SelectTrigger className="h-14 w-full border-2 border-blue-300 text-base shadow-sm dark:border-blue-600">
-                                                        <SelectValue placeholder="Seleccione clientes para pago..." />
-                                                    </SelectTrigger>
-                                                    <SelectContent className="max-h-60 border-0 shadow-xl">
-                                                        {clientes.map((cliente) => (
-                                                            <SelectItem key={cliente.id} value={cliente.id.toString()} className="py-3 text-base">
-                                                                <div className="flex items-center justify-between">
-                                                                    <span className="font-medium">{cliente.nombre_cliente}</span>
-                                                                    <span className="text-sm text-gray-500">
-                                                                        Deuda: ${cliente.deuda_pago_cliente}
-                                                                    </span>
-                                                                </div>
-                                                            </SelectItem>
-                                                        ))}
-                                                        <SelectItem value="crear_nuevo_cliente" className="py-3 text-base">
-                                                            <div className="flex items-center justify-between">
-                                                                <span className="font-medium text-blue-600">+ Crear Nuevo Cliente</span>
+                                                {/* Selector de Clientes Mejorado */}
+                                                <Popover open={clienteSelectOpen} onOpenChange={setClienteSelectOpen}>
+                                                    <PopoverTrigger asChild>
+                                                        <Button
+                                                            variant="outline"
+                                                            role="combobox"
+                                                            aria-expanded={clienteSelectOpen}
+                                                            className="h-14 w-full justify-between border-2 border-blue-300 text-base hover:border-blue-400 dark:border-blue-600"
+                                                        >
+                                                            <div className="flex items-center gap-2">
+                                                                <Users className="h-4 w-4" />
+                                                                {clienteSearchTerm ? (
+                                                                    <span>Buscando: "{clienteSearchTerm}"</span>
+                                                                ) : (
+                                                                    <span>Buscar cliente por nombre o teléfono...</span>
+                                                                )}
                                                             </div>
-                                                        </SelectItem>
-                                                    </SelectContent>
-                                                </Select>
+                                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                        </Button>
+                                                    </PopoverTrigger>
+                                                    <PopoverContent className="w-full p-0" align="start">
+                                                        <div className="space-y-2 p-2">
+                                                            <Input
+                                                                placeholder="Buscar cliente..."
+                                                                value={clienteSearchTerm}
+                                                                onChange={(e) => setClienteSearchTerm(e.target.value)}
+                                                                className="h-9"
+                                                            />
+                                                            <ScrollArea className="h-60">
+                                                                {isSearchingClientes ? (
+                                                                    <div className="flex items-center justify-center py-6">
+                                                                        <Skeleton className="h-4 w-32" />
+                                                                    </div>
+                                                                ) : filteredClientes.length > 0 ? (
+                                                                    filteredClientes.map((cliente) => {
+                                                                        const isSelected = data.pagos_clientes.some(
+                                                                            (p) => p.cliente_id === cliente.id,
+                                                                        );
+                                                                        return (
+                                                                            <div
+                                                                                key={cliente.id}
+                                                                                className={`hover:bg-accent flex cursor-pointer items-center justify-between rounded-md px-3 py-2 text-sm ${isSelected ? 'bg-accent' : ''}`}
+                                                                                onClick={() => {
+                                                                                    if (!isSelected) {
+                                                                                        setData('pagos_clientes', [
+                                                                                            ...data.pagos_clientes,
+                                                                                            { cliente_id: cliente.id, monto: 0 },
+                                                                                        ]);
+                                                                                    }
+                                                                                    setClienteSelectOpen(false);
+                                                                                    setClienteSearchTerm('');
+                                                                                }}
+                                                                            >
+                                                                                <div className="flex items-center gap-3">
+                                                                                    <div
+                                                                                        className={`h-2 w-2 rounded-full ${isSelected ? 'bg-green-500' : 'bg-gray-300'}`}
+                                                                                    />
+                                                                                    <div>
+                                                                                        <p className="font-medium">{cliente.nombre_cliente}</p>
+                                                                                        <p className="text-sm text-gray-500">
+                                                                                            {cliente.telefono_cliente}
+                                                                                        </p>
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div className="text-right">
+                                                                                    <p
+                                                                                        className={`font-medium ${cliente.deuda_pago_cliente > 0 ? 'text-green-600' : 'text-gray-500'}`}
+                                                                                    >
+                                                                                        ${cliente.deuda_pago_cliente}
+                                                                                    </p>
+                                                                                    <p className="text-xs text-gray-500">Crédito disponible</p>
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })
+                                                                ) : clienteSearchTerm ? (
+                                                                    <div className="py-6 text-center">
+                                                                        <p className="text-gray-500">No se encontraron clientes</p>
+                                                                        <Button
+                                                                            variant="link"
+                                                                            className="mt-2"
+                                                                            onClick={() => {
+                                                                                // Pre-llenar nombre si hay búsqueda
+                                                                                setIsCrearClienteDialogOpen(true);
+                                                                                setClienteSelectOpen(false);
+                                                                            }}
+                                                                        >
+                                                                            <PlusCircle className="mr-2 h-4 w-4" />
+                                                                            Crear cliente "{clienteSearchTerm}"
+                                                                        </Button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="py-6 text-center">
+                                                                        <p className="text-gray-500">Escribe para buscar clientes</p>
+                                                                    </div>
+                                                                )}
+                                                            </ScrollArea>
+                                                            <div
+                                                                className="flex cursor-pointer items-center rounded-md bg-blue-50 px-3 py-2 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-300"
+                                                                onClick={() => {
+                                                                    setIsCrearClienteDialogOpen(true);
+                                                                    setClienteSelectOpen(false);
+                                                                }}
+                                                            >
+                                                                <PlusCircle className="mr-2 h-4 w-4" />
+                                                                Crear nuevo cliente
+                                                                {clienteSearchTerm && <span className="ml-2 font-medium">"{clienteSearchTerm}"</span>}
+                                                            </div>
+                                                        </div>
+                                                    </PopoverContent>
+                                                </Popover>
 
+                                                {/* Lista de Clientes Seleccionados */}
                                                 {data.pagos_clientes.length > 0 && (
                                                     <div className="mt-6 space-y-4">
-                                                        <h4 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Montos a cobrar:</h4>
-                                                        <div className="grid gap-4">
-                                                            {data.pagos_clientes.map((pago) => (
-                                                                <div
-                                                                    key={pago.cliente_id}
-                                                                    className="flex items-center gap-4 rounded-xl border border-blue-200 bg-white p-4 shadow-sm dark:border-blue-800 dark:bg-gray-800"
-                                                                >
-                                                                    <div className="flex-1">
-                                                                        <span className="block font-medium text-gray-900 dark:text-white">
-                                                                            {clientes.find((c) => c.id === pago.cliente_id)?.nombre_cliente}
-                                                                        </span>
-                                                                        <span className="text-sm text-gray-500 dark:text-gray-400">
-                                                                            Deuda pendiente: $
-                                                                            {clientes.find((c) => c.id === pago.cliente_id)?.deuda_pago_cliente}
-                                                                        </span>
-                                                                    </div>
-                                                                    <div className="flex-1">
-                                                                        <Input
-                                                                            type="number"
-                                                                            min="0.01"
-                                                                            step="0.01"
-                                                                            placeholder="$ 0.00"
-                                                                            value={pago.monto || ''}
-                                                                            onChange={(e) => {
-                                                                                const monto = parseFloat(e.target.value) || 0;
-                                                                                const updatedPagos = data.pagos_clientes.map((p) =>
-                                                                                    p.cliente_id === pago.cliente_id ? { ...p, monto } : p,
-                                                                                );
-                                                                                setData('pagos_clientes', updatedPagos);
-                                                                            }}
-                                                                            className="h-12 border-blue-200 text-base focus:border-blue-400 dark:border-gray-600"
-                                                                        />
-                                                                    </div>
-                                                                    <Button
-                                                                        variant="destructive"
-                                                                        size="sm"
-                                                                        className="h-12 cursor-pointer px-4"
-                                                                        onClick={() => {
-                                                                            const updatedPagos = data.pagos_clientes.filter(
-                                                                                (p) => p.cliente_id !== pago.cliente_id,
-                                                                            );
-                                                                            setData('pagos_clientes', updatedPagos);
-                                                                        }}
-                                                                    >
-                                                                        <X className="h-4 w-4" />
-                                                                    </Button>
-                                                                </div>
-                                                            ))}
+                                                        <div className="flex items-center justify-between">
+                                                            <h4 className="text-lg font-semibold text-gray-700 dark:text-gray-200">
+                                                                Montos a Aplicar
+                                                            </h4>
+                                                            <Badge variant="secondary">
+                                                                Total: ${data.pagos_clientes.reduce((acc, p) => acc + (p.monto || 0), 0).toFixed(2)}
+                                                            </Badge>
                                                         </div>
+
+                                                        <ScrollArea className="h-[300px]">
+                                                            <div className="space-y-3 pr-4">
+                                                                {data.pagos_clientes.map((pago) => {
+                                                                    const cliente = clientes.find((c) => c.id === pago.cliente_id);
+                                                                    const saldoCliente = cliente?.deuda_pago_cliente || 0;
+                                                                    const montoAsignado = pago.monto || 0;
+
+                                                                    return (
+                                                                        <Card
+                                                                            key={pago.cliente_id}
+                                                                            className="overflow-hidden border-blue-200 dark:border-blue-800"
+                                                                        >
+                                                                            <CardContent className="p-4">
+                                                                                <div className="flex items-start justify-between">
+                                                                                    <div className="flex-1">
+                                                                                        <div className="flex items-center gap-3">
+                                                                                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/30">
+                                                                                                <span className="font-semibold text-blue-700 dark:text-blue-300">
+                                                                                                    {cliente?.nombre_cliente?.charAt(0) || 'C'}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            <div>
+                                                                                                <p className="font-medium">
+                                                                                                    {cliente?.nombre_cliente ||
+                                                                                                        'Cliente no encontrado'}
+                                                                                                </p>
+                                                                                                <p className="text-sm text-gray-500">
+                                                                                                    {cliente?.telefono_cliente}
+                                                                                                </p>
+                                                                                            </div>
+                                                                                        </div>
+
+                                                                                        <div className="mt-4 grid grid-cols-2 gap-4">
+                                                                                            <div className="space-y-1">
+                                                                                                <p className="text-sm text-gray-500">
+                                                                                                    Crédito Disponible
+                                                                                                </p>
+                                                                                                <p
+                                                                                                    className={`text-lg font-semibold ${saldoCliente > 0 ? 'text-green-600' : 'text-gray-600'}`}
+                                                                                                >
+                                                                                                    ${saldoCliente}
+                                                                                                </p>
+                                                                                            </div>
+                                                                                            <div className="space-y-1">
+                                                                                                <p className="text-sm text-gray-500">
+                                                                                                    Monto a Aplicar
+                                                                                                </p>
+                                                                                                <div className="relative">
+                                                                                                    <Input
+                                                                                                        type="number"
+                                                                                                        min="0"
+                                                                                                        step="0.01"
+                                                                                                        placeholder="0.00"
+                                                                                                        value={montoAsignado}
+                                                                                                        onChange={(e) => {
+                                                                                                            const monto =
+                                                                                                                parseFloat(e.target.value) || 0;
+                                                                                                            const updated = data.pagos_clientes.map(
+                                                                                                                (p) =>
+                                                                                                                    p.cliente_id === pago.cliente_id
+                                                                                                                        ? { ...p, monto }
+                                                                                                                        : p,
+                                                                                                            );
+                                                                                                            setData('pagos_clientes', updated);
+                                                                                                        }}
+                                                                                                        className="h-10 text-base"
+                                                                                                    />
+                                                                                                    <div className="absolute top-1/2 right-2 -translate-y-1/2 text-gray-500">
+                                                                                                        USD
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </div>
+
+                                                                                    <Button
+                                                                                        variant="ghost"
+                                                                                        size="icon"
+                                                                                        className="h-8 w-8 text-red-500 hover:bg-red-50 hover:text-red-700"
+                                                                                        onClick={() => {
+                                                                                            const updated = data.pagos_clientes.filter(
+                                                                                                (p) => p.cliente_id !== pago.cliente_id,
+                                                                                            );
+                                                                                            setData('pagos_clientes', updated);
+                                                                                        }}
+                                                                                    >
+                                                                                        <X className="h-4 w-4" />
+                                                                                    </Button>
+                                                                                </div>
+
+                                                                                {/* Estado del préstamo */}
+                                                                                <div className="mt-4 rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
+                                                                                    <div className="flex items-center justify-between text-sm">
+                                                                                        <span className="text-gray-600 dark:text-gray-400">
+                                                                                            {saldoCliente > 0
+                                                                                                ? 'Usando crédito existente del cliente'
+                                                                                                : 'Generando nuevo préstamo del cliente'}
+                                                                                        </span>
+                                                                                        <span
+                                                                                            className={`font-medium ${
+                                                                                                montoAsignado > 0 ? 'text-blue-600' : 'text-gray-500'
+                                                                                            }`}
+                                                                                        >
+                                                                                            Nuevo saldo: ${(saldoCliente - montoAsignado).toFixed(2)}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </CardContent>
+                                                                        </Card>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </ScrollArea>
                                                     </div>
                                                 )}
                                             </div>
                                         </div>
 
-                                        {/* Diálogo para crear nuevo cliente */}
+                                        {/* Diálogo para crear cliente */}
                                         <Dialog open={isCrearClienteDialogOpen} onOpenChange={setIsCrearClienteDialogOpen}>
-                                            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[600px]">
-                                                <DialogHeader>
-                                                    <DialogTitle className="flex items-center gap-2">
-                                                        <Users className="h-6 w-6 text-blue-600" />
-                                                        Crear Nuevo Cliente
-                                                    </DialogTitle>
-                                                    <DialogDescription>
-                                                        Agrega un nuevo cliente físico al sistema. Inicialmente tendrá deuda 0.
-                                                    </DialogDescription>
-                                                </DialogHeader>
-                                                <div className="grid gap-6 py-4">
-                                                    <div className="grid grid-cols-1 gap-4">
-                                                        <div className="space-y-2">
-                                                            <Label htmlFor="nombre_cliente">Nombre del Cliente *</Label>
-                                                            <Input
-                                                                id="nombre_cliente"
-                                                                name="nombre_cliente"
-                                                                value={nuevoCliente.nombre_cliente}
-                                                                onChange={handleNuevoClienteChange}
-                                                                placeholder="Nombre completo del cliente"
-                                                            />
-                                                            {clienteErrors.nombre_cliente && (
-                                                                <p className="text-sm text-red-500">{clienteErrors.nombre_cliente}</p>
-                                                            )}
-                                                        </div>
-
-                                                        <div className="space-y-2">
-                                                            <Label htmlFor="telefono_cliente">Teléfono *</Label>
-                                                            <Input
-                                                                id="telefono_cliente"
-                                                                name="telefono_cliente"
-                                                                value={nuevoCliente.telefono_cliente}
-                                                                onChange={handleNuevoClienteChange}
-                                                                placeholder="Teléfono del cliente"
-                                                            />
-                                                            {clienteErrors.telefono_cliente && (
-                                                                <p className="text-sm text-red-500">{clienteErrors.telefono_cliente}</p>
-                                                            )}
-                                                        </div>
-
-                                                        <div className="space-y-2">
-                                                            <Label htmlFor="direccion_cliente">Dirección</Label>
-                                                            <Input
-                                                                id="direccion_cliente"
-                                                                name="direccion_cliente"
-                                                                value={nuevoCliente.direccion_cliente}
-                                                                onChange={handleNuevoClienteChange}
-                                                                placeholder="Dirección del cliente"
-                                                            />
-                                                            {clienteErrors.direccion_cliente && (
-                                                                <p className="text-sm text-red-500">{clienteErrors.direccion_cliente}</p>
-                                                            )}
-                                                        </div>
-
-                                                        <div className="space-y-2">
-                                                            <Label htmlFor="ciudad_cliente">Ciudad</Label>
-                                                            <Input
-                                                                id="ciudad_cliente"
-                                                                name="ciudad_cliente"
-                                                                value={nuevoCliente.ciudad_cliente}
-                                                                onChange={handleNuevoClienteChange}
-                                                                placeholder="Ciudad del cliente"
-                                                            />
-                                                            {clienteErrors.ciudad_cliente && (
-                                                                <p className="text-sm text-red-500">{clienteErrors.ciudad_cliente}</p>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <DialogFooter className="flex gap-2">
-                                                    <Button type="button" variant="secondary" onClick={() => setIsCrearClienteDialogOpen(false)}>
-                                                        Cancelar
-                                                    </Button>
-                                                    <Button type="button" onClick={crearNuevoCliente} className="bg-blue-600 hover:bg-blue-700">
-                                                        Crear Cliente
-                                                    </Button>
-                                                </DialogFooter>
-                                            </DialogContent>
+                                            <CrearClienteDialogContent />
                                         </Dialog>
 
                                         {/* Sección de Pagos con Cuentas */}
