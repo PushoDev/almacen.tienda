@@ -20,6 +20,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from '@/components/ui/sonner';
+import { Spinner } from '@/components/ui/spinner';
 import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
@@ -343,7 +344,7 @@ export default function ComprarPage() {
 
     const handleNuevoClienteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
-        setNuevoCliente(prev => ({
+        setNuevoCliente((prev) => ({
             ...prev,
             [name]: value,
         }));
@@ -357,13 +358,10 @@ export default function ComprarPage() {
             });
 
             // Agregar el nuevo cliente a la lista de clientes
-            setClientes(prev => [...prev, response.data.cliente]);
+            setClientes((prev) => [...prev, response.data.cliente]);
 
             // Agregar el nuevo cliente a los pagos_clientes
-            setData('pagos_clientes', [
-                ...data.pagos_clientes,
-                { cliente_id: response.data.cliente.id, monto: 0 }
-            ]);
+            setData('pagos_clientes', [...data.pagos_clientes, { cliente_id: response.data.cliente.id, monto: 0 }]);
 
             toast.success('Cliente creado y agregado a los pagos exitosamente');
 
@@ -431,9 +429,7 @@ export default function ComprarPage() {
 
             {loading && (
                 <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black">
-                    <div className="bg-sidebar-accent rounded-lg p-4 shadow-lg">
-                        <p>Cargando datos...</p>
-                    </div>
+                    <Spinner className="text-sidebar-accent size-8" />
                 </div>
             )}
 
@@ -738,7 +734,7 @@ export default function ComprarPage() {
                                             </AlertDialogTrigger>
                                             <AlertDialogContent className="flex h-[90vh] w-[95vw] max-w-6xl flex-col p-0 sm:h-[85vh]">
                                                 <AlertDialogHeader className="shrink-0 border-b px-6 py-4">
-                                                    <AlertDialogTitle className="flex items-center gap-3 text-xl font-semibold text-gray-800 dark:text-white sm:text-2xl">
+                                                    <AlertDialogTitle className="flex items-center gap-3 text-xl font-semibold text-gray-800 sm:text-2xl dark:text-white">
                                                         <Edit2 className="h-6 w-6" />
                                                         <span>Editar Producto</span>
                                                     </AlertDialogTitle>
@@ -843,9 +839,7 @@ export default function ComprarPage() {
                                                     {/* Sidebar Section */}
                                                     <div className="col-span-1 flex flex-col border-l border-slate-200 bg-slate-50/50 p-6 dark:border-slate-700 dark:bg-slate-800/20">
                                                         <div className="space-y-6">
-                                                            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
-                                                                Organización
-                                                            </h3>
+                                                            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">Organización</h3>
                                                             <div>
                                                                 <Label htmlFor="edit-almacen">Almacén Destino *</Label>
                                                                 <Select
@@ -880,9 +874,7 @@ export default function ComprarPage() {
                                                                                 type="text"
                                                                                 placeholder="Buscar o crear..."
                                                                                 value={searchCategoria}
-                                                                                onChange={(e) =>
-                                                                                    setSearchCategoria(e.target.value.toUpperCase())
-                                                                                }
+                                                                                onChange={(e) => setSearchCategoria(e.target.value.toUpperCase())}
                                                                                 onKeyDown={(e) => {
                                                                                     if (e.key === 'Enter') {
                                                                                         e.preventDefault();
@@ -941,9 +933,7 @@ export default function ComprarPage() {
                                                                     </span>
                                                                 </div>
                                                                 <div className="flex justify-between">
-                                                                    <span className="text-slate-600 dark:text-slate-400">
-                                                                        Precio Unitario:
-                                                                    </span>
+                                                                    <span className="text-slate-600 dark:text-slate-400">Precio Unitario:</span>
                                                                     <span className="font-medium text-slate-800 dark:text-slate-200">
                                                                         ${(tempFormData.precio || 0).toFixed(2)}
                                                                     </span>
@@ -954,10 +944,7 @@ export default function ComprarPage() {
                                                                         Subtotal:
                                                                     </span>
                                                                     <span className="text-xl font-bold text-blue-800 dark:text-blue-300">
-                                                                        $
-                                                                        {(
-                                                                            (tempFormData.cantidad || 0) * (tempFormData.precio || 0)
-                                                                        ).toFixed(2)}
+                                                                        ${((tempFormData.cantidad || 0) * (tempFormData.precio || 0)).toFixed(2)}
                                                                     </span>
                                                                 </div>
                                                             </div>
@@ -1276,18 +1263,10 @@ export default function ComprarPage() {
                                                     </div>
                                                 </div>
                                                 <DialogFooter className="flex gap-2">
-                                                    <Button
-                                                        type="button"
-                                                        variant="secondary"
-                                                        onClick={() => setIsCrearClienteDialogOpen(false)}
-                                                    >
+                                                    <Button type="button" variant="secondary" onClick={() => setIsCrearClienteDialogOpen(false)}>
                                                         Cancelar
                                                     </Button>
-                                                    <Button
-                                                        type="button"
-                                                        onClick={crearNuevoCliente}
-                                                        className="bg-blue-600 hover:bg-blue-700"
-                                                    >
+                                                    <Button type="button" onClick={crearNuevoCliente} className="bg-blue-600 hover:bg-blue-700">
                                                         Crear Cliente
                                                     </Button>
                                                 </DialogFooter>

@@ -14,7 +14,6 @@ import {
     HandCoins,
     Landmark,
     LayoutGrid,
-    MessageSquare,
     Package,
     Repeat,
     ShoppingBasket,
@@ -130,12 +129,12 @@ const allNavItems: NavItem[] = [
 ];
 
 const footerNavItems: NavItem[] = [
-    {
-        title: 'Chat.POS',
-        href: '#',
-        icon: MessageSquare,
-        roles: ['admin', 'moderador', 'vendedor'],
-    },
+    // {
+    //     title: 'Chat.POS',
+    //     href: '#',
+    //     icon: MessageSquare,
+    //     roles: ['admin', 'moderador', 'vendedor'],
+    // },
     {
         title: 'Documentación',
         href: 'https://documentacion-glorietapos.vercel.app/',
