@@ -11,7 +11,6 @@ use App\Models\CompraPago; // ✅ AGREGAR IMPORT DE COMPRAPAGO
 use App\Models\Cuenta;
 use App\Models\Producto;
 use App\Models\Proveedor;
-use App\Models\Moneda;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -52,15 +51,30 @@ class CompraController extends Controller
     }
 
     /**
-     * Devuelve una lista de clientes físicos.
+     * Devuelve una lista de clientes físicos con opción de búsqueda.
      *
+     * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\JsonResponse
      */
-    public function getClientesFisicos()
+    public function getClientesFisicos(Request $request)
     {
-        $clientes = Cliente::where('tipo_cliente', 'fisico')
-            ->select('id', 'nombre_cliente', 'deuda_pago_cliente')
-            ->get();
+        $query = Cliente::where('tipo_cliente', 'fisico')
+            ->select('id', 'nombre_cliente', 'deuda_pago_cliente', 'telefono_cliente');
+
+        // Agregar búsqueda si se proporciona
+        if ($request->has('search') && !empty($request->search)) {
+            $searchTerm = $request->search;
+            $query->where(function ($q) use ($searchTerm) {
+                $q->where('nombre_cliente', 'like', '%' . $searchTerm . '%')
+                    ->orWhere('telefono_cliente', 'like', '%' . $searchTerm . '%');
+            });
+        }
+
+        // Ordenar por nombre
+        $query->orderBy('nombre_cliente');
+
+        $clientes = $query->get();
+
         return response()->json($clientes);
     }
 
@@ -80,6 +94,31 @@ class CompraController extends Controller
             ->get();
 
         return response()->json($cuentas);
+    }
+
+    /**
+     * Busca clientes rápidamente por nombre o teléfono.
+     * Usado para verificación en tiempo real en el frontend.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function buscarClienteRapido(Request $request)
+    {
+        $request->validate([
+            'search' => 'required|string|min:2'
+        ]);
+
+        $clientes = Cliente::where('tipo_cliente', 'fisico')
+            ->where(function ($query) use ($request) {
+                $query->where('nombre_cliente', 'like', '%' . $request->search . '%')
+                    ->orWhere('telefono_cliente', 'like', '%' . $request->search . '%');
+            })
+            ->select('id', 'nombre_cliente', 'telefono_cliente', 'deuda_pago_cliente')
+            ->limit(10)
+            ->get();
+
+        return response()->json($clientes);
     }
 
     /**
@@ -309,14 +348,31 @@ class CompraController extends Controller
 
     /**
      * Store a newly created cliente for use during compra process.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
      */
     public function storeClienteForCompra(Request $request)
     {
+        // Primero, verificar si el cliente ya existe (por nombre O teléfono)
+        $clienteExistente = Cliente::where('nombre_cliente', $request->nombre_cliente)
+            ->orWhere('telefono_cliente', $request->telefono_cliente)
+            ->first();
+
+        // Si el cliente ya existe, retornarlo inmediatamente
+        if ($clienteExistente) {
+            return response()->json([
+                'message' => 'Cliente ya existe en el sistema. Usando cliente existente.',
+                'cliente' => $clienteExistente,
+                'existe' => true
+            ], 200);
+        }
+
         // Validación de datos
         $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
-            'nombre_cliente' => ['required', 'string', 'unique:clientes,nombre_cliente'],
+            'nombre_cliente' => ['required', 'string'],
             'tipo_cliente' => ['required', 'in:fisico,asociado'],
-            'telefono_cliente' => ['required', 'string', 'unique:clientes,telefono_cliente'],
+            'telefono_cliente' => ['required', 'string'],
             'direccion_cliente' => ['nullable', 'string'],
             'ciudad_cliente' => ['nullable', 'string'],
         ]);
@@ -329,7 +385,7 @@ class CompraController extends Controller
         $cliente = Cliente::create([
             'nombre_cliente' => $request->nombre_cliente,
             'tipo_cliente' => $request->tipo_cliente ?? 'fisico',
-            'deuda_pago_cliente' => 0, // Siempre crear con valor 0
+            'deuda_pago_cliente' => 0,
             'telefono_cliente' => $request->telefono_cliente,
             'direccion_cliente' => $request->direccion_cliente ?? null,
             'ciudad_cliente' => $request->ciudad_cliente ?? null,
@@ -337,7 +393,8 @@ class CompraController extends Controller
 
         return response()->json([
             'message' => 'Cliente creado exitosamente para la compra.',
-            'cliente' => $cliente
+            'cliente' => $cliente,
+            'existe' => false
         ], 201);
     }
 

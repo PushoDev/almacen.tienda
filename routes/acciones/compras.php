@@ -18,19 +18,20 @@ Route::middleware(['auth', 'verified'])->group(
             Route::get('/almacenes', [CompraController::class, 'getAlmacen']);
             Route::get('/proveedores', [CompraController::class, 'getProveedor']);
             Route::get('/categorias', [CompraController::class, 'getCategorias']);
+
+            // Ruta MEJORADA para obtener clientes (ahora acepta parámetro search)
             Route::get('/clientes/fisicos', [CompraController::class, 'getClientesFisicos']);
 
-            // Ruta para obtener cuentas
-            Route::get('/cuentas/pago', [CompraController::class, 'getCuentas']);
+            // NUEVA: Ruta para búsqueda rápida de clientes (opcional, pero útil para autocomplete)
+            Route::get('/clientes/buscar', [CompraController::class, 'buscarClienteRapido'])->name('clientes.buscar');
 
-            // Ruta para crear un cliente nuevo durante la compra
+            // Ruta para crear un cliente nuevo durante la compra (YA EXISTE)
             Route::post('/clientes', [CompraController::class, 'storeClienteForCompra'])->name('cliente.store');
 
-            // Rutas para cargar datos iniciales
+            // Resto de rutas existentes...
+            Route::get('/cuentas/pago', [CompraController::class, 'getCuentas']);
             Route::get('/datos', [CompraController::class, 'cargarDatos'])->name('compras.datos');
             Route::post('/registrar', [CompraController::class, 'registrarCompra'])->name('compras.registrar');
-
-            // Api: Ruta para obtener productos por almacén
             Route::get('/almacenes/{id}/productos', [CompraController::class, 'getProductos']);
         });
     }
