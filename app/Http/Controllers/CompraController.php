@@ -426,4 +426,67 @@ class CompraController extends Controller
             'productos' => $productos,
         ]);
     }
+
+    /**
+     * Devuelve una lista de almacenes con opción de búsqueda.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getAlmacenes(Request $request)
+    {
+        $query = Almacen::select('id', 'nombre_almacen', 'tipo_almacen');
+
+        // Agregar búsqueda si se proporciona
+        if ($request->has('search') && !empty($request->search)) {
+            $searchTerm = $request->search;
+            $query->where(function ($q) use ($searchTerm) {
+                $q->where('nombre_almacen', 'like', '%' . $searchTerm . '%')
+                    ->orWhere('tipo_almacen', 'like', '%' . $searchTerm . '%');
+            });
+        }
+
+        // Ordenar por nombre
+        $query->orderBy('nombre_almacen');
+
+        $almacenes = $query->get();
+
+        return response()->json($almacenes);
+    }
+
+    /**
+     * Store a newly created almacen for use during compra process.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function storeAlmacenForCompra(Request $request)
+    {
+        // Validación de datos
+        $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'nombre_almacen' => ['required', 'string', 'unique:almacens,nombre_almacen'],
+            'tipo_almacen' => ['required', 'in:almacen,punto_venta,transportacion'],
+            'telefono_almacen' => ['required', 'string', 'unique:almacens,telefono_almacen'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        // Crear el almacén
+        $almacen = Almacen::create([
+            'nombre_almacen' => $request->nombre_almacen,
+            'tipo_almacen' => $request->tipo_almacen,
+            'telefono_almacen' => $request->telefono_almacen,
+            'correo_almacen' => $request->correo_almacen ?? null,
+            'provincia_almacen' => $request->provincia_almacen ?? null,
+            'ciudad_almacen' => $request->ciudad_almacen ?? null,
+            'notas_almacen' => $request->notas_almacen ?? null,
+        ]);
+
+        return response()->json([
+            'message' => 'Almacén creado exitosamente.',
+            'almacen' => $almacen
+        ], 201);
+    }
 }

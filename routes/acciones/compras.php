@@ -15,7 +15,12 @@ Route::middleware(['auth', 'verified'])->group(
          */
         Route::prefix('compras')->name('compras.')->group(function () {
             // Rutas para los Select
-            Route::get('/almacenes', [CompraController::class, 'getAlmacen']);
+            // ✅ MEJORADA: Ruta para obtener almacenes con búsqueda
+            Route::get('/almacenes', [CompraController::class, 'getAlmacenes']);
+
+            // ✅ NUEVA: Ruta para crear almacén durante compra
+            Route::post('/almacenes', [CompraController::class, 'storeAlmacenForCompra'])->name('almacen.store');
+
             Route::get('/proveedores', [CompraController::class, 'getProveedor']);
             Route::get('/categorias', [CompraController::class, 'getCategorias']);
 
