@@ -42,6 +42,7 @@ import {
     HardDriveUpload,
     Info,
     Loader2,
+    Phone,
     PlusCircle,
     PlusIcon,
     ShoppingBasket,
@@ -49,6 +50,7 @@ import {
     Trash2Icon,
     Users,
     Wallet,
+    Warehouse,
     X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -148,6 +150,15 @@ export default function ComprarPage() {
     const [isSearchingClientes, setIsSearchingClientes] = useState(false);
     const [clienteSelectOpen, setClienteSelectOpen] = useState(false);
 
+    // Estados para búsqueda de almacenes
+    const [almacenSearchTerm, setAlmacenSearchTerm] = useState('');
+    const [filteredAlmacens, setFilteredAlmacens] = useState<AlmacenProps[]>([]);
+    const [lastSelectedAlmacenId, setLastSelectedAlmacenId] = useState<string>('');
+
+    // Estado para el modal de crear almacén
+    const [isCrearAlmacenDialogOpen, setIsCrearAlmacenDialogOpen] = useState(false);
+    const [almacenErrors, setAlmacenErrors] = useState<Record<string, string>>({});
+
     const [tempFormData, setTempFormData] = useState<Omit<ProductoComprarProps, 'id' | 'almacen_id'> & { almacen_id: string }>({
         almacen_id: '',
         producto: '',
@@ -204,6 +215,26 @@ export default function ComprarPage() {
         return () => clearTimeout(debounceTimer);
     }, [clienteSearchTerm, clientes]);
 
+    // 🔍 EFECTO PARA BÚSQUEDA EN TIEMPO REAL DE ALMACENES
+    useEffect(() => {
+        if (almacenSearchTerm) {
+            const filtered = almacens.filter((almacen) => almacen.nombre_almacen.toLowerCase().includes(almacenSearchTerm.toLowerCase()));
+            setFilteredAlmacens(filtered);
+        } else {
+            setFilteredAlmacens(almacens);
+        }
+    }, [almacenSearchTerm, almacens]);
+
+    // ⚡ EFECTO PARA MANTENER EL ÚLTIMO ALMACÉN SELECCIONADO
+    useEffect(() => {
+        if (lastSelectedAlmacenId && !tempFormData.almacen_id) {
+            setTempFormData((prev) => ({
+                ...prev,
+                almacen_id: lastSelectedAlmacenId,
+            }));
+        }
+    }, [lastSelectedAlmacenId, tempFormData.almacen_id]);
+
     useEffect(() => {
         const productosParaBackend = productos.map((p) => ({
             ...p,
@@ -232,6 +263,7 @@ export default function ComprarPage() {
                 setCuentas(cuentasRes.data);
                 setClientes(clientesRes.data);
                 setFilteredClientes(clientesRes.data);
+                setFilteredAlmacens(almacenesRes.data);
             } catch (error) {
                 console.error('Error al cargar datos:', error);
                 toast.error('Error al cargar los datos necesarios');
@@ -256,11 +288,16 @@ export default function ComprarPage() {
             ...prev,
             [name]: value,
         }));
+
+        // Guardar el último almacén seleccionado
+        if (name === 'almacen_id') {
+            setLastSelectedAlmacenId(value);
+        }
     };
 
     const resetTempForm = () => {
         setTempFormData({
-            almacen_id: '',
+            almacen_id: lastSelectedAlmacenId || '', // Mantener el último almacén seleccionado
             producto: '',
             marca: '',
             modelo: '',
@@ -409,7 +446,287 @@ export default function ComprarPage() {
         });
     };
 
-    // 🆕 COMPONENTE DE CREACIÓN DE CLIENTE - FIXED
+    // 🏗️ COMPONENTE DE CREACIÓN DE ALMACÉN - CORREGIDO CON CAMPOS REALES
+    const CrearAlmacenDialogContent = () => {
+        const [localAlmacen, setLocalAlmacen] = useState({
+            nombre_almacen: '',
+            tipo_almacen: 'punto_venta',
+            telefono_almacen: '',
+            correo_almacen: '',
+            provincia_almacen: '',
+            ciudad_almacen: '',
+            notas_almacen: '',
+        });
+
+        const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
+
+        const handleLocalChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+            const { name, value } = e.target;
+            setLocalAlmacen((prev) => ({
+                ...prev,
+                [name]: value,
+            }));
+        };
+
+        const handleLocalSelectChange = (name: string, value: string) => {
+            setLocalAlmacen((prev) => ({
+                ...prev,
+                [name]: value,
+            }));
+        };
+
+        const crearAlmacenLocal = async () => {
+            // Validación básica en frontend
+            if (!localAlmacen.nombre_almacen.trim() || !localAlmacen.telefono_almacen.trim()) {
+                toast.error('Nombre y teléfono son requeridos');
+                return;
+            }
+
+            try {
+                const response = await axios.post(route('compras.almacen.store'), localAlmacen);
+
+                const { almacen, message } = response.data;
+
+                toast.success(message, {
+                    description: 'Almacén creado exitosamente.',
+                });
+
+                // Agregar a la lista de almacenes
+                setAlmacens((prev) => [...prev, almacen]);
+                setFilteredAlmacens((prev) => [...prev, almacen]);
+
+                // Seleccionar automáticamente el nuevo almacén
+                setLastSelectedAlmacenId(almacen.id.toString());
+                setTempFormData((prev) => ({
+                    ...prev,
+                    almacen_id: almacen.id.toString(),
+                }));
+
+                // Limpiar formulario y cerrar diálogo
+                setLocalAlmacen({
+                    nombre_almacen: '',
+                    tipo_almacen: 'punto_venta',
+                    telefono_almacen: '',
+                    correo_almacen: '',
+                    provincia_almacen: '',
+                    ciudad_almacen: '',
+                    notas_almacen: '',
+                });
+
+                setLocalErrors({});
+                setIsCrearAlmacenDialogOpen(false);
+                setAlmacenSearchTerm('');
+            } catch (error: any) {
+                console.error('Error al crear almacén:', error);
+
+                if (error.response?.status === 409) {
+                    // Almacén ya existe
+                    toast.warning('Almacén ya existe', {
+                        description: 'El almacén ya se encuentra registrado en el sistema.',
+                    });
+
+                    // Buscar el almacén existente
+                    const almacenExistente = almacens.find(
+                        (a) => a.nombre_almacen.toLowerCase() === localAlmacen.nombre_almacen.trim().toLowerCase(),
+                    );
+
+                    if (almacenExistente) {
+                        setLastSelectedAlmacenId(almacenExistente.id.toString());
+                        setTempFormData((prev) => ({
+                            ...prev,
+                            almacen_id: almacenExistente.id.toString(),
+                        }));
+                    }
+
+                    setIsCrearAlmacenDialogOpen(false);
+                    setAlmacenSearchTerm('');
+                } else if (error.response?.data?.errors) {
+                    setLocalErrors(error.response.data.errors);
+                    toast.error('Error de validación', {
+                        description: 'Por favor corrige los errores en el formulario.',
+                    });
+                } else {
+                    toast.error('Error al crear almacén', {
+                        description: 'Intenta nuevamente o contacta al administrador.',
+                    });
+                }
+            }
+        };
+
+        const resetDialog = () => {
+            setLocalAlmacen({
+                nombre_almacen: '',
+                tipo_almacen: 'punto_venta',
+                telefono_almacen: '',
+                correo_almacen: '',
+                provincia_almacen: '',
+                ciudad_almacen: '',
+                notas_almacen: '',
+            });
+            setLocalErrors({});
+            setIsCrearAlmacenDialogOpen(false);
+        };
+
+        return (
+            <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-[500px]">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2 text-xl">
+                        <Warehouse className="h-5 w-5 text-blue-600" />
+                        Crear Nuevo Almacén
+                    </DialogTitle>
+                    <DialogDescription>Configura un nuevo espacio de almacenamiento para tus productos.</DialogDescription>
+                </DialogHeader>
+
+                <div className="grid gap-4 py-4">
+                    <div className="space-y-4">
+                        <div className="grid gap-4">
+                            {/* Nombre del Almacén */}
+                            <div className="space-y-2">
+                                <Label htmlFor="dialog-nombre-almacen" className="flex items-center gap-1">
+                                    Nombre del Almacén <span className="text-red-500">*</span>
+                                </Label>
+                                <Input
+                                    id="dialog-nombre-almacen"
+                                    name="nombre_almacen"
+                                    value={localAlmacen.nombre_almacen}
+                                    onChange={handleLocalChange}
+                                    placeholder="Ej: Almacén Central, Bodega Norte"
+                                    className={localErrors.nombre_almacen ? 'border-red-500' : ''}
+                                />
+                                {localErrors.nombre_almacen && <p className="text-sm text-red-500">{localErrors.nombre_almacen}</p>}
+                            </div>
+
+                            {/* Tipo de Almacén */}
+                            <div className="space-y-2">
+                                <Label htmlFor="dialog-tipo-almacen">
+                                    Tipo de Almacén <span className="text-red-500">*</span>
+                                </Label>
+                                <Select value={localAlmacen.tipo_almacen} onValueChange={(value) => handleLocalSelectChange('tipo_almacen', value)}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Seleccione tipo" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="almacen">Almacén</SelectItem>
+                                        <SelectItem value="punto_venta">Punto de Venta</SelectItem>
+                                        <SelectItem value="transportacion">Transportación</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                {localErrors.tipo_almacen && <p className="text-sm text-red-500">{localErrors.tipo_almacen}</p>}
+                            </div>
+
+                            {/* Teléfono */}
+                            <div className="space-y-2">
+                                <Label htmlFor="dialog-telefono-almacen" className="flex items-center gap-1">
+                                    Teléfono <span className="text-red-500">*</span>
+                                </Label>
+                                <div className="flex items-center">
+                                    <Phone className="absolute ml-3 h-4 w-4 text-gray-500" />
+                                    <Input
+                                        id="dialog-telefono-almacen"
+                                        name="telefono_almacen"
+                                        value={localAlmacen.telefono_almacen}
+                                        onChange={handleLocalChange}
+                                        placeholder="Ej: 555-1234"
+                                        className={`pl-10 ${localErrors.telefono_almacen ? 'border-red-500' : ''}`}
+                                    />
+                                </div>
+                                {localErrors.telefono_almacen && <p className="text-sm text-red-500">{localErrors.telefono_almacen}</p>}
+                            </div>
+
+                            {/* Correo */}
+                            <div className="space-y-2">
+                                <Label htmlFor="dialog-correo-almacen">Correo Electrónico</Label>
+                                <Input
+                                    id="dialog-correo-almacen"
+                                    name="correo_almacen"
+                                    type="email"
+                                    value={localAlmacen.correo_almacen}
+                                    onChange={handleLocalChange}
+                                    placeholder="ejemplo@empresa.com"
+                                />
+                            </div>
+
+                            {/* Provincia y Ciudad */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="dialog-provincia-almacen">Provincia</Label>
+                                    <Input
+                                        id="dialog-provincia-almacen"
+                                        name="provincia_almacen"
+                                        value={localAlmacen.provincia_almacen}
+                                        onChange={handleLocalChange}
+                                        placeholder="Ej: Lima"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="dialog-ciudad-almacen">Ciudad</Label>
+                                    <Input
+                                        id="dialog-ciudad-almacen"
+                                        name="ciudad_almacen"
+                                        value={localAlmacen.ciudad_almacen}
+                                        onChange={handleLocalChange}
+                                        placeholder="Ej: Lima Centro"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Notas */}
+                            <div className="space-y-2">
+                                <Label htmlFor="dialog-notas-almacen">Notas Adicionales</Label>
+                                <textarea
+                                    id="dialog-notas-almacen"
+                                    name="notas_almacen"
+                                    value={localAlmacen.notas_almacen}
+                                    onChange={handleLocalChange}
+                                    placeholder="Información adicional sobre el almacén..."
+                                    rows={3}
+                                    className="border-input ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex w-full rounded-md border bg-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Información importante */}
+                        <div className="rounded-lg bg-blue-50 p-4 dark:bg-blue-950/30">
+                            <div className="flex items-start gap-3">
+                                <Info className="h-5 w-5 text-blue-600" />
+                                <div className="text-sm text-blue-800 dark:text-blue-300">
+                                    <p className="font-medium">Tipos de almacén:</p>
+                                    <ul className="mt-1 list-inside list-disc space-y-1">
+                                        <li>
+                                            <strong>Almacén:</strong> Para guardar productos en inventario
+                                        </li>
+                                        <li>
+                                            <strong>Punto de Venta:</strong> Para venta directa al público
+                                        </li>
+                                        <li>
+                                            <strong>Transportación:</strong> Para movilización de productos
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <DialogFooter className="gap-2">
+                    <Button type="button" variant="outline" onClick={resetDialog}>
+                        Cancelar
+                    </Button>
+                    <Button
+                        type="button"
+                        onClick={crearAlmacenLocal}
+                        className="bg-blue-600 hover:bg-blue-700"
+                        disabled={!localAlmacen.nombre_almacen.trim() || !localAlmacen.telefono_almacen.trim()}
+                    >
+                        <CheckCircle className="mr-2 h-4 w-4" />
+                        Crear Almacén
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        );
+    };
+
+    // 🆕 COMPONENTE DE CREACIÓN DE CLIENTE
     const CrearClienteDialogContent = () => {
         const [localCliente, setLocalCliente] = useState({
             nombre_cliente: '',
@@ -765,7 +1082,7 @@ export default function ComprarPage() {
                     </CardHeader>
                     <CardContent>
                         <div className="grid grid-cols-4 gap-4">
-                            {/* Fila 1 */}
+                            {/* Fila 1 - ALMACÉN CON BÚSQUEDA Y MODAL */}
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="almacen_id">Almacén Destino *</Label>
                                 <Select
@@ -774,16 +1091,55 @@ export default function ComprarPage() {
                                     onValueChange={(value) => handleTempSelectChange('almacen_id', value)}
                                 >
                                     <SelectTrigger className="w-full">
-                                        <SelectValue placeholder="Seleccione Almacén" />
+                                        <SelectValue placeholder={lastSelectedAlmacenId ? 'Último seleccionado' : 'Seleccione Almacén'} />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {almacens.map((almacen) => (
-                                            <SelectItem key={almacen.id} value={almacen.id.toString()}>
-                                                {almacen.nombre_almacen}
-                                            </SelectItem>
-                                        ))}
+                                        <div className="p-2">
+                                            <Input
+                                                type="text"
+                                                placeholder="Buscar almacén..."
+                                                value={almacenSearchTerm}
+                                                onChange={(e) => setAlmacenSearchTerm(e.target.value)}
+                                                className="text-sm"
+                                            />
+                                        </div>
+                                        <div className="max-h-60 overflow-y-auto">
+                                            {filteredAlmacens.length > 0 ? (
+                                                filteredAlmacens.map((almacen) => (
+                                                    <SelectItem key={almacen.id} value={almacen.id.toString()}>
+                                                        <div className="flex items-center gap-2">
+                                                            <Warehouse className="h-4 w-4 text-gray-500" />
+                                                            <span>{almacen.nombre_almacen}</span>
+                                                            {almacen.tipo_almacen && (
+                                                                <Badge variant="outline" className="ml-auto text-xs">
+                                                                    {almacen.tipo_almacen}
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+                                                    </SelectItem>
+                                                ))
+                                            ) : (
+                                                <div className="text-muted-foreground px-2 py-4 text-center text-sm">
+                                                    {almacenSearchTerm ? 'No se encontraron almacenes' : 'No hay almacenes disponibles'}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <Separator className="my-2" />
+                                        <div
+                                            className="flex cursor-pointer items-center rounded-md bg-blue-50 px-3 py-3 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-300"
+                                            onClick={() => {
+                                                setIsCrearAlmacenDialogOpen(true);
+                                            }}
+                                        >
+                                            <PlusCircle className="mr-2 h-4 w-4" />
+                                            <span className="font-medium">Crear nuevo almacén</span>
+                                            {almacenSearchTerm && <span className="ml-2 text-sm">"{almacenSearchTerm}"</span>}
+                                        </div>
                                     </SelectContent>
                                 </Select>
+                                {!tempFormData.almacen_id && productos.some((p) => !p.almacen_id) && (
+                                    <p className="text-sm text-red-500">Debe seleccionar un almacén válido</p>
+                                )}
                             </div>
 
                             <div className="grid w-full max-w-sm items-center gap-1">
@@ -920,281 +1276,334 @@ export default function ComprarPage() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {productos.map((p) => (
-                                <TableRow key={p.id}>
-                                    <TableCell className="font-medium">{p.producto}</TableCell>
-                                    <TableCell>{p.marca || 'N/A'}</TableCell>
-                                    <TableCell>{p.modelo || 'N/A'}</TableCell>
-                                    <TableCell>{p.capacidad || 'N/A'}</TableCell>
-                                    <TableCell>{almacens.find((a) => a.id === p.almacen_id)?.nombre_almacen || 'Desconocido'}</TableCell>
-                                    <TableCell>{p.categoria}</TableCell>
-                                    <TableCell>{p.codigo || 'ERROR'}</TableCell>
-                                    <TableCell>{p.cantidad}</TableCell>
-                                    <TableCell>${p.precio.toFixed(2)}</TableCell>
-                                    <TableCell>${(p.cantidad * p.precio).toFixed(2)}</TableCell>
-                                    <TableCell className="text-right">
-                                        {/* DIÁLOGO MEJORADO - LISTO PARA USAR */}
-                                        <AlertDialog open={isDialogOpen && editingProductId === p.id} onOpenChange={setIsDialogOpen}>
-                                            <AlertDialogTrigger asChild>
-                                                <Button
-                                                    variant="link"
-                                                    className="cursor-pointer text-blue-600 hover:text-blue-800"
-                                                    onClick={() => editarProducto(p.id)}
-                                                >
-                                                    <Edit2 />
-                                                </Button>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent className="flex h-[90vh] w-[95vw] max-w-6xl flex-col p-0 sm:h-[85vh]">
-                                                <AlertDialogHeader className="shrink-0 border-b px-6 py-4">
-                                                    <AlertDialogTitle className="flex items-center gap-3 text-xl font-semibold text-gray-800 sm:text-2xl dark:text-white">
-                                                        <Edit2 className="h-6 w-6" />
-                                                        <span>Editar Producto</span>
-                                                    </AlertDialogTitle>
-                                                    <AlertDialogDescription className="text-base text-gray-600 dark:text-gray-300">
-                                                        Realiza ajustes detallados al producto. Los cambios se reflejarán en la lista de compra.
-                                                    </AlertDialogDescription>
-                                                </AlertDialogHeader>
+                            {productos.map((p) => {
+                                const almacen = almacens.find((a) => a.id === p.almacen_id);
+                                return (
+                                    <TableRow key={p.id} className={!almacen ? 'bg-red-50 dark:bg-red-950/20' : ''}>
+                                        <TableCell className="font-medium">{p.producto}</TableCell>
+                                        <TableCell>{p.marca || 'N/A'}</TableCell>
+                                        <TableCell>{p.modelo || 'N/A'}</TableCell>
+                                        <TableCell>{p.capacidad || 'N/A'}</TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                {almacen ? (
+                                                    <>
+                                                        <Warehouse className="h-4 w-4 text-gray-500" />
+                                                        <span>{almacen.nombre_almacen}</span>
+                                                        {almacen.tipo_almacen && (
+                                                            <Badge variant="outline" className="text-xs">
+                                                                {almacen.tipo_almacen}
+                                                            </Badge>
+                                                        )}
+                                                    </>
+                                                ) : (
+                                                    <span className="flex items-center gap-2 text-red-600">
+                                                        <X className="h-4 w-4" />
+                                                        <span>Almacén no válido</span>
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>{p.categoria}</TableCell>
+                                        <TableCell>{p.codigo || 'ERROR'}</TableCell>
+                                        <TableCell>{p.cantidad}</TableCell>
+                                        <TableCell>${p.precio.toFixed(2)}</TableCell>
+                                        <TableCell>${(p.cantidad * p.precio).toFixed(2)}</TableCell>
+                                        <TableCell className="text-right">
+                                            {/* DIÁLOGO MEJORADO - LISTO PARA USAR */}
+                                            <AlertDialog open={isDialogOpen && editingProductId === p.id} onOpenChange={setIsDialogOpen}>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button
+                                                        variant="link"
+                                                        className="cursor-pointer text-blue-600 hover:text-blue-800"
+                                                        onClick={() => editarProducto(p.id)}
+                                                    >
+                                                        <Edit2 />
+                                                    </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent className="flex h-[90vh] w-[95vw] max-w-6xl flex-col p-0 sm:h-[85vh]">
+                                                    <AlertDialogHeader className="shrink-0 border-b px-6 py-4">
+                                                        <AlertDialogTitle className="flex items-center gap-3 text-xl font-semibold text-gray-800 sm:text-2xl dark:text-white">
+                                                            <Edit2 className="h-6 w-6" />
+                                                            <span>Editar Producto</span>
+                                                        </AlertDialogTitle>
+                                                        <AlertDialogDescription className="text-base text-gray-600 dark:text-gray-300">
+                                                            Realiza ajustes detallados al producto. Los cambios se reflejarán en la lista de compra.
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
 
-                                                <div className="grid flex-1 grid-cols-1 overflow-hidden md:grid-cols-3 lg:grid-cols-4">
-                                                    {/* Main Form Section */}
-                                                    <div className="col-span-1 flex flex-col gap-y-8 overflow-y-auto px-6 py-8 md:col-span-2 lg:col-span-3">
-                                                        {/* Product Information Card */}
-                                                        <div className="space-y-6 rounded-lg border border-slate-200 p-6 dark:border-slate-700">
-                                                            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
-                                                                Detalles del Producto
-                                                            </h3>
-                                                            <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-                                                                <div className="sm:col-span-2">
-                                                                    <Label htmlFor="edit-producto">Nombre del Producto *</Label>
-                                                                    <Input
-                                                                        id="edit-producto"
-                                                                        name="producto"
-                                                                        value={tempFormData.producto}
-                                                                        onChange={handleTempInputChange}
-                                                                        placeholder="Ej: Memoria RAM"
-                                                                    />
+                                                    <div className="grid flex-1 grid-cols-1 overflow-hidden md:grid-cols-3 lg:grid-cols-4">
+                                                        {/* Main Form Section */}
+                                                        <div className="col-span-1 flex flex-col gap-y-8 overflow-y-auto px-6 py-8 md:col-span-2 lg:col-span-3">
+                                                            {/* Product Information Card */}
+                                                            <div className="space-y-6 rounded-lg border border-slate-200 p-6 dark:border-slate-700">
+                                                                <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
+                                                                    Detalles del Producto
+                                                                </h3>
+                                                                <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                                                                    <div className="sm:col-span-2">
+                                                                        <Label htmlFor="edit-producto">Nombre del Producto *</Label>
+                                                                        <Input
+                                                                            id="edit-producto"
+                                                                            name="producto"
+                                                                            value={tempFormData.producto}
+                                                                            onChange={handleTempInputChange}
+                                                                            placeholder="Ej: Memoria RAM"
+                                                                        />
+                                                                    </div>
+                                                                    <div>
+                                                                        <Label htmlFor="edit-marca">Marca</Label>
+                                                                        <Input
+                                                                            id="edit-marca"
+                                                                            name="marca"
+                                                                            value={tempFormData.marca}
+                                                                            onChange={handleTempInputChange}
+                                                                            placeholder="Ej: Kingston"
+                                                                        />
+                                                                    </div>
+                                                                    <div>
+                                                                        <Label htmlFor="edit-modelo">Modelo</Label>
+                                                                        <Input
+                                                                            id="edit-modelo"
+                                                                            name="modelo"
+                                                                            value={tempFormData.modelo}
+                                                                            onChange={handleTempInputChange}
+                                                                            placeholder="Ej: Fury Beast"
+                                                                        />
+                                                                    </div>
+                                                                    <div className="sm:col-span-2">
+                                                                        <Label htmlFor="edit-capacidad">Capacidad / Tamaño</Label>
+                                                                        <Input
+                                                                            id="edit-capacidad"
+                                                                            name="capacidad"
+                                                                            value={tempFormData.capacidad}
+                                                                            onChange={handleTempInputChange}
+                                                                            placeholder="Ej: 16GB, 1TB, 27''"
+                                                                        />
+                                                                    </div>
                                                                 </div>
-                                                                <div>
-                                                                    <Label htmlFor="edit-marca">Marca</Label>
-                                                                    <Input
-                                                                        id="edit-marca"
-                                                                        name="marca"
-                                                                        value={tempFormData.marca}
-                                                                        onChange={handleTempInputChange}
-                                                                        placeholder="Ej: Kingston"
-                                                                    />
-                                                                </div>
-                                                                <div>
-                                                                    <Label htmlFor="edit-modelo">Modelo</Label>
-                                                                    <Input
-                                                                        id="edit-modelo"
-                                                                        name="modelo"
-                                                                        value={tempFormData.modelo}
-                                                                        onChange={handleTempInputChange}
-                                                                        placeholder="Ej: Fury Beast"
-                                                                    />
-                                                                </div>
-                                                                <div className="sm:col-span-2">
-                                                                    <Label htmlFor="edit-capacidad">Capacidad / Tamaño</Label>
-                                                                    <Input
-                                                                        id="edit-capacidad"
-                                                                        name="capacidad"
-                                                                        value={tempFormData.capacidad}
-                                                                        onChange={handleTempInputChange}
-                                                                        placeholder="Ej: 16GB, 1TB, 27''"
-                                                                    />
+                                                            </div>
+
+                                                            {/* Inventory and Pricing Card */}
+                                                            <div className="space-y-6 rounded-lg border border-slate-200 p-6 dark:border-slate-700">
+                                                                <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
+                                                                    Inventario y Precio
+                                                                </h3>
+                                                                <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                                                                    <div>
+                                                                        <Label htmlFor="edit-cantidad">Cantidad *</Label>
+                                                                        <Input
+                                                                            id="edit-cantidad"
+                                                                            type="number"
+                                                                            name="cantidad"
+                                                                            value={tempFormData.cantidad || ''}
+                                                                            onChange={handleTempInputChange}
+                                                                            placeholder="0"
+                                                                            min="1"
+                                                                        />
+                                                                    </div>
+                                                                    <div>
+                                                                        <Label htmlFor="edit-precio">Precio Unitario *</Label>
+                                                                        <div className="relative">
+                                                                            <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">
+                                                                                $
+                                                                            </span>
+                                                                            <Input
+                                                                                id="edit-precio"
+                                                                                type="number"
+                                                                                step="0.01"
+                                                                                name="precio"
+                                                                                value={tempFormData.precio || ''}
+                                                                                onChange={handleTempInputChange}
+                                                                                className="pl-7"
+                                                                                placeholder="0.00"
+                                                                                min="0"
+                                                                            />
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         </div>
 
-                                                        {/* Inventory and Pricing Card */}
-                                                        <div className="space-y-6 rounded-lg border border-slate-200 p-6 dark:border-slate-700">
-                                                            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
-                                                                Inventario y Precio
-                                                            </h3>
-                                                            <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                                                        {/* Sidebar Section */}
+                                                        <div className="col-span-1 flex flex-col border-l border-slate-200 bg-slate-50/50 p-6 dark:border-slate-700 dark:bg-slate-800/20">
+                                                            <div className="space-y-6">
+                                                                <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
+                                                                    Organización
+                                                                </h3>
                                                                 <div>
-                                                                    <Label htmlFor="edit-cantidad">Cantidad *</Label>
-                                                                    <Input
-                                                                        id="edit-cantidad"
-                                                                        type="number"
-                                                                        name="cantidad"
-                                                                        value={tempFormData.cantidad || ''}
-                                                                        onChange={handleTempInputChange}
-                                                                        placeholder="0"
-                                                                        min="1"
-                                                                    />
+                                                                    <Label htmlFor="edit-almacen">Almacén Destino *</Label>
+                                                                    <Select
+                                                                        name="almacen_id"
+                                                                        value={tempFormData.almacen_id}
+                                                                        onValueChange={(value) => handleTempSelectChange('almacen_id', value)}
+                                                                    >
+                                                                        <SelectTrigger>
+                                                                            <SelectValue placeholder="Seleccione Almacén" />
+                                                                        </SelectTrigger>
+                                                                        <SelectContent>
+                                                                            <div className="p-2">
+                                                                                <Input
+                                                                                    type="text"
+                                                                                    placeholder="Buscar almacén..."
+                                                                                    value={almacenSearchTerm}
+                                                                                    onChange={(e) => setAlmacenSearchTerm(e.target.value)}
+                                                                                    className="text-sm"
+                                                                                />
+                                                                            </div>
+                                                                            <div className="max-h-40 overflow-y-auto">
+                                                                                {filteredAlmacens.map((almacen) => (
+                                                                                    <SelectItem key={almacen.id} value={almacen.id.toString()}>
+                                                                                        <div className="flex items-center gap-2">
+                                                                                            <Warehouse className="h-4 w-4 text-gray-500" />
+                                                                                            <span>{almacen.nombre_almacen}</span>
+                                                                                            {almacen.tipo_almacen && (
+                                                                                                <Badge variant="outline" className="ml-auto text-xs">
+                                                                                                    {almacen.tipo_almacen}
+                                                                                                </Badge>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    </SelectItem>
+                                                                                ))}
+                                                                            </div>
+                                                                            <Separator className="my-2" />
+                                                                            <div
+                                                                                className="flex cursor-pointer items-center rounded-md bg-blue-50 px-3 py-2 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-300"
+                                                                                onClick={() => {
+                                                                                    setIsCrearAlmacenDialogOpen(true);
+                                                                                }}
+                                                                            >
+                                                                                <PlusCircle className="mr-2 h-4 w-4" />
+                                                                                <span>Crear nuevo almacén</span>
+                                                                            </div>
+                                                                        </SelectContent>
+                                                                    </Select>
                                                                 </div>
                                                                 <div>
-                                                                    <Label htmlFor="edit-precio">Precio Unitario *</Label>
-                                                                    <div className="relative">
-                                                                        <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">
-                                                                            $
+                                                                    <Label htmlFor="edit-categoria">Categoría *</Label>
+                                                                    <Select
+                                                                        value={tempFormData.categoria}
+                                                                        onValueChange={(value) => handleTempSelectChange('categoria', value)}
+                                                                    >
+                                                                        <SelectTrigger>
+                                                                            <SelectValue placeholder="Seleccione o cree" />
+                                                                        </SelectTrigger>
+                                                                        <SelectContent>
+                                                                            <div className="p-2">
+                                                                                <Input
+                                                                                    type="text"
+                                                                                    placeholder="Buscar o crear..."
+                                                                                    value={searchCategoria}
+                                                                                    onChange={(e) => setSearchCategoria(e.target.value.toUpperCase())}
+                                                                                    onKeyDown={(e) => {
+                                                                                        if (e.key === 'Enter') {
+                                                                                            e.preventDefault();
+                                                                                            const trimmed = searchCategoria.trim();
+                                                                                            if (trimmed) {
+                                                                                                handleTempSelectChange('categoria', trimmed);
+                                                                                                setSearchCategoria('');
+                                                                                            }
+                                                                                        }
+                                                                                    }}
+                                                                                />
+                                                                            </div>
+                                                                            <div className="max-h-40 overflow-y-auto">
+                                                                                {searchCategoria.trim() &&
+                                                                                    !filteredCategorias.some(
+                                                                                        (c) => c.nombre_categoria === searchCategoria.trim(),
+                                                                                    ) && (
+                                                                                        <SelectItem value={searchCategoria.trim()}>
+                                                                                            <div className="flex items-center gap-2">
+                                                                                                <PlusIcon className="h-4 w-4" />
+                                                                                                <span>
+                                                                                                    Crear: <strong>{searchCategoria.trim()}</strong>
+                                                                                                </span>
+                                                                                            </div>
+                                                                                        </SelectItem>
+                                                                                    )}
+                                                                                {filteredCategorias.map((cat) => (
+                                                                                    <SelectItem key={cat.id} value={cat.nombre_categoria}>
+                                                                                        {cat.nombre_categoria}
+                                                                                    </SelectItem>
+                                                                                ))}
+                                                                            </div>
+                                                                        </SelectContent>
+                                                                    </Select>
+                                                                </div>
+                                                                <div>
+                                                                    <Label htmlFor="edit-codigo">Código de Barras</Label>
+                                                                    <Input
+                                                                        id="edit-codigo"
+                                                                        value={tempFormData.codigo || 'Generado automáticamente...'}
+                                                                        className="cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-700"
+                                                                        disabled
+                                                                    />
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="mt-auto rounded-xl border-2 border-blue-500/40 bg-blue-50/50 p-4 shadow-lg dark:border-blue-700/60 dark:bg-blue-900/30">
+                                                                <h4 className="mb-3 text-lg font-bold text-blue-900 dark:text-blue-200">
+                                                                    Resumen de Costo
+                                                                </h4>
+                                                                <div className="space-y-2 text-base">
+                                                                    <div className="flex justify-between">
+                                                                        <span className="text-slate-600 dark:text-slate-400">Unidades:</span>
+                                                                        <span className="font-medium text-slate-800 dark:text-slate-200">
+                                                                            {tempFormData.cantidad || 0}
                                                                         </span>
-                                                                        <Input
-                                                                            id="edit-precio"
-                                                                            type="number"
-                                                                            step="0.01"
-                                                                            name="precio"
-                                                                            value={tempFormData.precio || ''}
-                                                                            onChange={handleTempInputChange}
-                                                                            className="pl-7"
-                                                                            placeholder="0.00"
-                                                                            min="0"
-                                                                        />
+                                                                    </div>
+                                                                    <div className="flex justify-between">
+                                                                        <span className="text-slate-600 dark:text-slate-400">Precio Unitario:</span>
+                                                                        <span className="font-medium text-slate-800 dark:text-slate-200">
+                                                                            ${(tempFormData.precio || 0).toFixed(2)}
+                                                                        </span>
+                                                                    </div>
+                                                                    <Separator className="!my-3 bg-blue-300/50 dark:bg-blue-600/40" />
+                                                                    <div className="flex items-center justify-between">
+                                                                        <span className="text-lg font-semibold text-slate-700 dark:text-slate-300">
+                                                                            Subtotal:
+                                                                        </span>
+                                                                        <span className="text-xl font-bold text-blue-800 dark:text-blue-300">
+                                                                            ${((tempFormData.cantidad || 0) * (tempFormData.precio || 0)).toFixed(2)}
+                                                                        </span>
                                                                     </div>
                                                                 </div>
                                                             </div>
                                                         </div>
                                                     </div>
 
-                                                    {/* Sidebar Section */}
-                                                    <div className="col-span-1 flex flex-col border-l border-slate-200 bg-slate-50/50 p-6 dark:border-slate-700 dark:bg-slate-800/20">
-                                                        <div className="space-y-6">
-                                                            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">Organización</h3>
-                                                            <div>
-                                                                <Label htmlFor="edit-almacen">Almacén Destino *</Label>
-                                                                <Select
-                                                                    name="almacen_id"
-                                                                    value={tempFormData.almacen_id}
-                                                                    onValueChange={(value) => handleTempSelectChange('almacen_id', value)}
-                                                                >
-                                                                    <SelectTrigger>
-                                                                        <SelectValue placeholder="Seleccione Almacén" />
-                                                                    </SelectTrigger>
-                                                                    <SelectContent>
-                                                                        {almacens.map((almacen) => (
-                                                                            <SelectItem key={almacen.id} value={almacen.id.toString()}>
-                                                                                {almacen.nombre_almacen}
-                                                                            </SelectItem>
-                                                                        ))}
-                                                                    </SelectContent>
-                                                                </Select>
-                                                            </div>
-                                                            <div>
-                                                                <Label htmlFor="edit-categoria">Categoría *</Label>
-                                                                <Select
-                                                                    value={tempFormData.categoria}
-                                                                    onValueChange={(value) => handleTempSelectChange('categoria', value)}
-                                                                >
-                                                                    <SelectTrigger>
-                                                                        <SelectValue placeholder="Seleccione o cree" />
-                                                                    </SelectTrigger>
-                                                                    <SelectContent>
-                                                                        <div className="p-2">
-                                                                            <Input
-                                                                                type="text"
-                                                                                placeholder="Buscar o crear..."
-                                                                                value={searchCategoria}
-                                                                                onChange={(e) => setSearchCategoria(e.target.value.toUpperCase())}
-                                                                                onKeyDown={(e) => {
-                                                                                    if (e.key === 'Enter') {
-                                                                                        e.preventDefault();
-                                                                                        const trimmed = searchCategoria.trim();
-                                                                                        if (trimmed) {
-                                                                                            handleTempSelectChange('categoria', trimmed);
-                                                                                            setSearchCategoria('');
-                                                                                        }
-                                                                                    }
-                                                                                }}
-                                                                            />
-                                                                        </div>
-                                                                        <div className="max-h-40 overflow-y-auto">
-                                                                            {searchCategoria.trim() &&
-                                                                                !filteredCategorias.some(
-                                                                                    (c) => c.nombre_categoria === searchCategoria.trim(),
-                                                                                ) && (
-                                                                                    <SelectItem value={searchCategoria.trim()}>
-                                                                                        <div className="flex items-center gap-2">
-                                                                                            <PlusIcon className="h-4 w-4" />
-                                                                                            <span>
-                                                                                                Crear: <strong>{searchCategoria.trim()}</strong>
-                                                                                            </span>
-                                                                                        </div>
-                                                                                    </SelectItem>
-                                                                                )}
-                                                                            {filteredCategorias.map((cat) => (
-                                                                                <SelectItem key={cat.id} value={cat.nombre_categoria}>
-                                                                                    {cat.nombre_categoria}
-                                                                                </SelectItem>
-                                                                            ))}
-                                                                        </div>
-                                                                    </SelectContent>
-                                                                </Select>
-                                                            </div>
-                                                            <div>
-                                                                <Label htmlFor="edit-codigo">Código de Barras</Label>
-                                                                <Input
-                                                                    id="edit-codigo"
-                                                                    value={tempFormData.codigo || 'Generado automáticamente...'}
-                                                                    className="cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-700"
-                                                                    disabled
-                                                                />
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="mt-auto rounded-xl border-2 border-blue-500/40 bg-blue-50/50 p-4 shadow-lg dark:border-blue-700/60 dark:bg-blue-900/30">
-                                                            <h4 className="mb-3 text-lg font-bold text-blue-900 dark:text-blue-200">
-                                                                Resumen de Costo
-                                                            </h4>
-                                                            <div className="space-y-2 text-base">
-                                                                <div className="flex justify-between">
-                                                                    <span className="text-slate-600 dark:text-slate-400">Unidades:</span>
-                                                                    <span className="font-medium text-slate-800 dark:text-slate-200">
-                                                                        {tempFormData.cantidad || 0}
-                                                                    </span>
-                                                                </div>
-                                                                <div className="flex justify-between">
-                                                                    <span className="text-slate-600 dark:text-slate-400">Precio Unitario:</span>
-                                                                    <span className="font-medium text-slate-800 dark:text-slate-200">
-                                                                        ${(tempFormData.precio || 0).toFixed(2)}
-                                                                    </span>
-                                                                </div>
-                                                                <Separator className="!my-3 bg-blue-300/50 dark:bg-blue-600/40" />
-                                                                <div className="flex items-center justify-between">
-                                                                    <span className="text-lg font-semibold text-slate-700 dark:text-slate-300">
-                                                                        Subtotal:
-                                                                    </span>
-                                                                    <span className="text-xl font-bold text-blue-800 dark:text-blue-300">
-                                                                        ${((tempFormData.cantidad || 0) * (tempFormData.precio || 0)).toFixed(2)}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <AlertDialogFooter className="shrink-0 flex-row items-center justify-end space-x-4 border-t border-slate-200 bg-slate-50/70 px-6 py-4 dark:border-slate-700 dark:bg-slate-800/50">
-                                                    <AlertDialogCancel asChild>
+                                                    <AlertDialogFooter className="shrink-0 flex-row items-center justify-end space-x-4 border-t border-slate-200 bg-slate-50/70 px-6 py-4 dark:border-slate-700 dark:bg-slate-800/50">
+                                                        <AlertDialogCancel asChild>
+                                                            <Button
+                                                                variant="ghost"
+                                                                className="hover:bg-slate-200 dark:hover:bg-slate-700"
+                                                                onClick={() => setIsDialogOpen(false)}
+                                                            >
+                                                                Cancelar
+                                                            </Button>
+                                                        </AlertDialogCancel>
                                                         <Button
-                                                            variant="ghost"
-                                                            className="hover:bg-slate-200 dark:hover:bg-slate-700"
-                                                            onClick={() => setIsDialogOpen(false)}
+                                                            className="cursor-pointer bg-blue-600 text-white shadow-sm transition-all duration-200 hover:bg-blue-700"
+                                                            onClick={handleActualizarProducto}
                                                         >
-                                                            Cancelar
+                                                            <HardDriveUpload className="mr-2 h-4 w-4" />
+                                                            Guardar Cambios
                                                         </Button>
-                                                    </AlertDialogCancel>
-                                                    <Button
-                                                        className="cursor-pointer bg-blue-600 text-white shadow-sm transition-all duration-200 hover:bg-blue-700"
-                                                        onClick={handleActualizarProducto}
-                                                    >
-                                                        <HardDriveUpload className="mr-2 h-4 w-4" />
-                                                        Guardar Cambios
-                                                    </Button>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        </AlertDialog>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
 
-                                        <Button
-                                            variant="link"
-                                            onClick={() => eliminarProducto(p.id)}
-                                            className="ms-2 cursor-pointer text-red-600 hover:text-red-800"
-                                        >
-                                            <Trash2Icon />
-                                        </Button>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
+                                            <Button
+                                                variant="link"
+                                                onClick={() => eliminarProducto(p.id)}
+                                                className="ms-2 cursor-pointer text-red-600 hover:text-red-800"
+                                            >
+                                                <Trash2Icon />
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
                         </TableBody>
                         <TableFooter>
                             <TableRow>
@@ -1217,9 +1626,15 @@ export default function ComprarPage() {
                             <Button
                                 variant="outline"
                                 className="cursor-pointer rounded-lg bg-green-600 px-6 py-2 font-semibold text-white transition-colors duration-200 hover:bg-green-700 hover:text-white"
+                                disabled={productos.some((p) => !almacens.find((a) => a.id === p.almacen_id))}
                             >
                                 <ShoppingCart className="mr-2 h-5 w-5" />
                                 Realizar Compra
+                                {productos.some((p) => !almacens.find((a) => a.id === p.almacen_id)) && (
+                                    <Badge variant="destructive" className="ml-2">
+                                        ¡Almacén inválido!
+                                    </Badge>
+                                )}
                             </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent className="max-h-[500px] overflow-y-auto sm:max-w-[800px]">
@@ -1715,7 +2130,7 @@ export default function ComprarPage() {
                                 <Button
                                     type="button"
                                     onClick={realizarCompra}
-                                    disabled={processing}
+                                    disabled={processing || productos.some((p) => !almacens.find((a) => a.id === p.almacen_id))}
                                     className="h-14 cursor-pointer bg-green-600 px-10 text-base font-semibold text-white transition-all duration-200 hover:bg-green-700 hover:shadow-lg"
                                 >
                                     {processing ? (
@@ -1750,6 +2165,12 @@ export default function ComprarPage() {
                         </Tooltip>
                     </TooltipProvider>
                 </div>
+
+                {/* Diálogo para crear almacén */}
+                <Dialog open={isCrearAlmacenDialogOpen} onOpenChange={setIsCrearAlmacenDialogOpen}>
+                    <CrearAlmacenDialogContent />
+                </Dialog>
+
                 <Toaster position="top-center" />
             </div>
         </AppLayout>
