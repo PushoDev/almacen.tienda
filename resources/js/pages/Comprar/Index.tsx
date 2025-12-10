@@ -55,6 +55,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { InputGroup, InputGroupInput } from '@/components/ui/input-group';
+import { Spinner } from '@/components/ui/spinner';
 
 // =================================================================
 // 🚨 ATRIBUTOS DE PRODUCTO ACTUALIZADOS EN TYPESCRIPT
@@ -709,7 +710,7 @@ export default function ComprarPage() {
                 </div>
 
                 <DialogFooter className="gap-2">
-                    <Button type="button" variant="outline" onClick={resetDialog}>
+                    <Button type="button" variant="destructive" onClick={resetDialog}>
                         Cancelar
                     </Button>
                     <Button
@@ -933,7 +934,7 @@ export default function ComprarPage() {
                 </div>
 
                 <DialogFooter className="gap-2">
-                    <Button type="button" variant="outline" onClick={resetDialog}>
+                    <Button type="button" variant="destructive" onClick={resetDialog}>
                         Cancelar
                     </Button>
                     <Button
@@ -955,10 +956,8 @@ export default function ComprarPage() {
             <Head title="Comprar" />
 
             {loading && (
-                <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black">
-                    <div className="bg-sidebar-accent rounded-lg p-4 shadow-lg">
-                        <p>Cargando datos...</p>
-                    </div>
+                <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-neutral-800">
+                    <Spinner className="text-sidebar-accent size-8" />
                 </div>
             )}
 
@@ -1623,7 +1622,7 @@ export default function ComprarPage() {
                 <div className="flex justify-center gap-4 p-6">
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
-                            <Button className="cursor-pointer">
+                            <Button className="bg-sidebar-accent cursor-pointer text-white hover:bg-emerald-500">
                                 <ShoppingCart className="mr-2 h-5 w-5" />
                                 Realizar Compra
                                 {productos.some((p) => !almacens.find((a) => a.id === p.almacen_id)) && (
@@ -1695,7 +1694,9 @@ export default function ComprarPage() {
                                                 </div>
 
                                                 <AlertDialogFooter className="bg-muted/50 border-t px-8 py-5">
-                                                    <AlertDialogCancel className="cursor-pointer">Cancelar</AlertDialogCancel>
+                                                    <AlertDialogCancel className="bg-sidebar-accent hover:bg-destructive cursor-pointer text-white">
+                                                        Cancelar
+                                                    </AlertDialogCancel>
                                                 </AlertDialogFooter>
                                             </>
                                         )}
@@ -1778,7 +1779,7 @@ export default function ComprarPage() {
                                                     </div>
                                                 </AlertDialogHeader>
 
-                                                <ScrollArea className="h-[800px] w-[800px]">
+                                                <ScrollArea className="flex-1 overflow-y-auto">
                                                     <div className="space-y-8 px-8 py-6">
                                                         <div className="grid gap-8 lg:grid-cols-2">
                                                             {/* CLIENTES */}
