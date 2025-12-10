@@ -15,13 +15,13 @@ import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Toaster } from '@/components/ui/sonner';
 import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -32,7 +32,6 @@ import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { format } from 'date-fns';
 import {
-    BookCheck,
     CalendarIcon,
     CheckCircle,
     ChevronsUpDown,
@@ -55,6 +54,8 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+
+import { InputGroup, InputGroupInput, InputGroupText } from '@/components/ui/input-group';
 
 // =================================================================
 // 🚨 ATRIBUTOS DE PRODUCTO ACTUALIZADOS EN TYPESCRIPT
@@ -1619,340 +1620,265 @@ export default function ComprarPage() {
                     </Table>
                 </div>
 
-                {/* Sección del Modal de Compra */}
-                <div className="flex justify-center gap-4 p-4">
+                {/* ==================== BOTÓN + MODAL PROFESIONAL DE COMPRA ==================== */}
+                <div className="flex justify-center gap-6 p-6">
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
                             <Button
-                                variant="outline"
-                                className="cursor-pointer rounded-lg bg-green-600 px-6 py-2 font-semibold text-white transition-colors duration-200 hover:bg-green-700 hover:text-white"
-                                disabled={productos.some((p) => !almacens.find((a) => a.id === p.almacen_id))}
+                                size="lg"
+                                className="h-14 bg-gradient-to-r from-emerald-600 to-emerald-700 px-8 text-lg font-semibold shadow-lg hover:from-emerald-700 hover:to-emerald-800 disabled:opacity-60"
+                                disabled={productos.length === 0 || productos.some((p) => !almacens.find((a) => a.id === p.almacen_id))}
                             >
-                                <ShoppingCart className="mr-2 h-5 w-5" />
+                                <ShoppingCart className="mr-3 h-6 w-6" />
                                 Realizar Compra
                                 {productos.some((p) => !almacens.find((a) => a.id === p.almacen_id)) && (
-                                    <Badge variant="destructive" className="ml-2">
-                                        ¡Almacén inválido!
+                                    <Badge variant="destructive" className="ml-3">
+                                        Almacén inválido
                                     </Badge>
                                 )}
                             </Button>
                         </AlertDialogTrigger>
-                        <AlertDialogContent className="max-h-[500px] overflow-y-auto sm:max-w-[800px]">
-                            <AlertDialogHeader className="border-b pb-6">
-                                <div className="flex flex-col items-center space-y-3">
-                                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
-                                        <ShoppingCart className="h-6 w-6 text-green-600 dark:text-green-400" />
+
+                        <AlertDialogContent className="max-h-[90vh] max-w-4xl overflow-hidden p-0">
+                            <AlertDialogHeader className="border-b bg-gradient-to-r from-emerald-600 to-emerald-700 px-8 py-6 text-white">
+                                <div className="flex items-center gap-4">
+                                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <ShoppingCart className="h-8 w-8" />
                                     </div>
-                                    <AlertDialogTitle className="text-center text-2xl font-bold text-green-700 dark:text-green-400">
-                                        Tipo de Compra
-                                    </AlertDialogTitle>
-                                    <AlertDialogDescription className="text-center text-lg text-gray-600 dark:text-gray-300">
-                                        Seleccione si desea pagar ahora o comprar y pagar luego
-                                    </AlertDialogDescription>
+                                    <div>
+                                        <AlertDialogTitle className="text-2xl font-bold">Finalizar Compra</AlertDialogTitle>
+                                        <AlertDialogDescription className="text-emerald-100">
+                                            Total a pagar: <span className="text-3xl font-bold">${parseFloat(calcularTotal()).toFixed(2)}</span>
+                                        </AlertDialogDescription>
+                                    </div>
                                 </div>
                             </AlertDialogHeader>
 
-                            <div className="flex flex-col gap-8 py-8">
-                                {/* Tipo de Compra */}
-                                <div className="space-y-4">
-                                    <Label htmlFor="tipo_compra" className="text-lg font-semibold text-gray-700 dark:text-gray-200">
-                                        Tipo de Compra *
-                                    </Label>
-                                    <Select
-                                        name="compra"
-                                        value={data.compra}
-                                        onValueChange={(value) => setData('compra', value as 'deuda_proveedor' | 'pago_cash')}
-                                    >
-                                        <SelectTrigger className="h-14 w-full border-2 border-green-300 text-base transition-all duration-200 focus:border-green-500 focus:ring-2 focus:ring-green-200 dark:border-green-600 dark:focus:border-green-400">
-                                            <SelectValue placeholder="Seleccione tipo de compra" />
-                                        </SelectTrigger>
-                                        <SelectContent className="border-0 text-base shadow-xl">
-                                            <SelectItem value="deuda_proveedor" className="py-4 text-base hover:bg-gray-50 dark:hover:bg-gray-800">
-                                                <div className="flex items-center space-x-4">
-                                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/30">
-                                                        <CreditCard className="h-5 w-5 text-orange-500 dark:text-orange-400" />
-                                                    </div>
-                                                    <div className="flex flex-col">
-                                                        <div className="font-medium text-gray-900 dark:text-white">Generar Deuda a Proveedor</div>
-                                                        <div className="text-sm text-gray-500 dark:text-gray-400">Pagar más tarde</div>
-                                                    </div>
-                                                </div>
-                                            </SelectItem>
-                                            <SelectItem value="pago_cash" className="py-4 text-base hover:bg-gray-50 dark:hover:bg-gray-800">
-                                                <div className="flex items-center space-x-4">
-                                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
-                                                        <DollarSign className="h-5 w-5 text-green-500 dark:text-green-400" />
-                                                    </div>
-                                                    <div className="flex flex-col">
-                                                        <div className="font-medium text-gray-900 dark:text-white">Pagar Ahora</div>
-                                                        <div className="text-sm text-gray-500 dark:text-gray-400">Pago inmediato</div>
-                                                    </div>
-                                                </div>
-                                            </SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                    {errors.compra && <InputError message={errors.compra} />}
-                                </div>
+                            <ScrollArea className="max-h-[65vh] px-8 py-6">
+                                <div className="space-y-8">
+                                    {/* ===================== TIPO DE COMPRA ===================== */}
+                                    <FieldSet>
+                                        <FieldLegend className="text-foreground text-xl font-semibold">Tipo de Compra</FieldLegend>
+                                        <FieldDescription className="text-muted-foreground">Elige cómo deseas registrar esta compra</FieldDescription>
 
-                                {data.compra === 'pago_cash' && (
-                                    <>
-                                        <Separator className="my-2" />
-
-                                        {/* Sección de Pagos con Clientes - MEJORADA */}
-                                        <div className="space-y-6 rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50/50 to-indigo-50/50 p-8 dark:border-blue-800 dark:from-blue-950/20 dark:to-indigo-950/20">
-                                            <div className="space-y-4">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30">
-                                                            <Users className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-                                                        </div>
-                                                        <div>
-                                                            <Label className="text-lg font-semibold text-gray-700 dark:text-gray-200">
-                                                                Pagos con Crédito de Clientes
-                                                            </Label>
-                                                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                                                                Usa créditos existentes de clientes o genera nuevos préstamos
-                                                            </p>
-                                                        </div>
+                                        <FieldGroup className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                            <Field orientation="horizontal">
+                                                <Button
+                                                    variant={data.compra === 'deuda_proveedor' ? 'default' : 'outline'}
+                                                    className={cn(
+                                                        'h-32 w-full flex-col gap-3 text-left transition-all',
+                                                        data.compra === 'deuda_proveedor' && 'ring-2 ring-orange-500 ring-offset-2',
+                                                    )}
+                                                    onClick={() => setData('compra', 'deuda_proveedor')}
+                                                >
+                                                    <CreditCard className="h-10 w-10 text-orange-600" />
+                                                    <div>
+                                                        <p className="font-semibold">Generar Deuda al Proveedor</p>
+                                                        <p className="text-sm opacity-80">Pagar más tarde</p>
                                                     </div>
+                                                </Button>
+                                            </Field>
 
-                                                    <Badge
-                                                        variant="outline"
-                                                        className="border-blue-300 text-blue-700 dark:border-blue-600 dark:text-blue-300"
-                                                    >
-                                                        {data.pagos_clientes.length} cliente(s) seleccionado(s)
-                                                    </Badge>
-                                                </div>
+                                            <Field orientation="horizontal">
+                                                <Button
+                                                    variant={data.compra === 'pago_cash' ? 'default' : 'outline'}
+                                                    className={cn(
+                                                        'h-32 w-full flex-col gap-3 text-left transition-all',
+                                                        data.compra === 'pago_cash' && 'ring-2 ring-emerald-500 ring-offset-2',
+                                                    )}
+                                                    onClick={() => setData('compra', 'pago_cash')}
+                                                >
+                                                    <DollarSign className="h-10 w-10 text-emerald-600" />
+                                                    <div>
+                                                        <p className="font-semibold">Pagar Ahora</p>
+                                                        <p className="text-sm opacity-80">Pago inmediato con cuentas o clientes</p>
+                                                    </div>
+                                                </Button>
+                                            </Field>
+                                        </FieldGroup>
+                                    </FieldSet>
 
-                                                {/* Selector de Clientes Mejorado */}
-                                                <Popover open={clienteSelectOpen} onOpenChange={setClienteSelectOpen}>
-                                                    <PopoverTrigger asChild>
-                                                        <Button
-                                                            variant="outline"
-                                                            role="combobox"
-                                                            aria-expanded={clienteSelectOpen}
-                                                            className="h-14 w-full justify-between border-2 border-blue-300 text-base hover:border-blue-400 dark:border-blue-600"
-                                                        >
-                                                            <div className="flex items-center gap-2">
-                                                                <Users className="h-4 w-4" />
-                                                                {clienteSearchTerm ? (
-                                                                    <span>Buscando: "{clienteSearchTerm}"</span>
-                                                                ) : (
-                                                                    <span>Buscar cliente por nombre o teléfono...</span>
-                                                                )}
-                                                            </div>
-                                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                                        </Button>
-                                                    </PopoverTrigger>
-                                                    <PopoverContent className="w-full p-0" align="start">
-                                                        <div className="space-y-2 p-2">
-                                                            <Input
-                                                                placeholder="Buscar cliente..."
-                                                                value={clienteSearchTerm}
-                                                                onChange={(e) => setClienteSearchTerm(e.target.value)}
-                                                                className="h-9"
-                                                            />
-                                                            <ScrollArea className="h-60">
-                                                                {isSearchingClientes ? (
-                                                                    <div className="flex items-center justify-center py-6">
-                                                                        <Skeleton className="h-4 w-32" />
-                                                                    </div>
-                                                                ) : filteredClientes.length > 0 ? (
-                                                                    filteredClientes.map((cliente) => {
-                                                                        const isSelected = data.pagos_clientes.some(
-                                                                            (p) => p.cliente_id === cliente.id,
-                                                                        );
-                                                                        return (
-                                                                            <div
-                                                                                key={cliente.id}
-                                                                                className={`hover:bg-accent flex cursor-pointer items-center justify-between rounded-md px-3 py-2 text-sm ${isSelected ? 'bg-accent' : ''}`}
-                                                                                onClick={() => {
-                                                                                    if (!isSelected) {
-                                                                                        setData('pagos_clientes', [
-                                                                                            ...data.pagos_clientes,
-                                                                                            { cliente_id: cliente.id, monto: 0 },
-                                                                                        ]);
-                                                                                    }
-                                                                                    setClienteSelectOpen(false);
-                                                                                    setClienteSearchTerm('');
-                                                                                }}
-                                                                            >
-                                                                                <div className="flex items-center gap-3">
-                                                                                    <div
-                                                                                        className={`h-2 w-2 rounded-full ${isSelected ? 'bg-green-500' : 'bg-gray-300'}`}
-                                                                                    />
-                                                                                    <div>
-                                                                                        <p className="font-medium">{cliente.nombre_cliente}</p>
-                                                                                        <p className="text-sm text-gray-500">
-                                                                                            {cliente.telefono_cliente}
-                                                                                        </p>
-                                                                                    </div>
-                                                                                </div>
-                                                                                <div className="text-right">
-                                                                                    <p
-                                                                                        className={`font-medium ${cliente.deuda_pago_cliente > 0 ? 'text-green-600' : 'text-gray-500'}`}
-                                                                                    >
-                                                                                        ${cliente.deuda_pago_cliente}
-                                                                                    </p>
-                                                                                    <p className="text-xs text-gray-500">Crédito disponible</p>
-                                                                                </div>
+                                    {/* ===================== PAGAR AHORA ===================== */}
+                                    {data.compra === 'pago_cash' && (
+                                        <>
+                                            <Separator />
+
+                                            {/* ---- CLIENTES ---- */}
+                                            <FieldSet>
+                                                <FieldLegend className="flex items-center gap-3 text-xl font-semibold">
+                                                    <Users className="h-6 w-6 text-blue-600" />
+                                                    Financiamiento con Clientes
+                                                </FieldLegend>
+                                                <FieldDescription>Usa créditos de clientes o genera préstamos</FieldDescription>
+
+                                                <FieldGroup className="space-y-6">
+                                                    <Field>
+                                                        <Popover open={clienteSelectOpen} onOpenChange={setClienteSelectOpen}>
+                                                            <PopoverTrigger asChild>
+                                                                <Button variant="outline" role="combobox" className="h-12 w-full justify-between">
+                                                                    <span className="flex items-center gap-2">
+                                                                        <Users className="h-4 w-4" />
+                                                                        {clienteSearchTerm || 'Buscar cliente...'}
+                                                                    </span>
+                                                                    <ChevronsUpDown className="h-4 w-4 opacity-50" />
+                                                                </Button>
+                                                            </PopoverTrigger>
+                                                            <PopoverContent className="w-full p-0" align="start">
+                                                                <div className="space-y-3 p-3">
+                                                                    <Input
+                                                                        placeholder="Buscar cliente..."
+                                                                        value={clienteSearchTerm}
+                                                                        onChange={(e) => setClienteSearchTerm(e.target.value)}
+                                                                        autoFocus
+                                                                    />
+                                                                    <ScrollArea className="h-64 rounded-md border">
+                                                                        {isSearchingClientes ? (
+                                                                            <div className="py-8 text-center">
+                                                                                <Loader2 className="text-muted-foreground mx-auto h-8 w-8 animate-spin" />
                                                                             </div>
-                                                                        );
-                                                                    })
-                                                                ) : clienteSearchTerm ? (
-                                                                    <div className="py-6 text-center">
-                                                                        <p className="text-gray-500">No se encontraron clientes</p>
-                                                                        <Button
-                                                                            variant="link"
-                                                                            className="mt-2"
-                                                                            onClick={() => {
-                                                                                // Pre-llenar nombre si hay búsqueda
-                                                                                setIsCrearClienteDialogOpen(true);
-                                                                                setClienteSelectOpen(false);
-                                                                            }}
-                                                                        >
-                                                                            <PlusCircle className="mr-2 h-4 w-4" />
-                                                                            Crear cliente "{clienteSearchTerm}"
-                                                                        </Button>
-                                                                    </div>
-                                                                ) : (
-                                                                    <div className="py-6 text-center">
-                                                                        <p className="text-gray-500">Escribe para buscar clientes</p>
-                                                                    </div>
-                                                                )}
-                                                            </ScrollArea>
-                                                            <div
-                                                                className="flex cursor-pointer items-center rounded-md bg-blue-50 px-3 py-2 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-300"
-                                                                onClick={() => {
-                                                                    setIsCrearClienteDialogOpen(true);
-                                                                    setClienteSelectOpen(false);
-                                                                }}
-                                                            >
-                                                                <PlusCircle className="mr-2 h-4 w-4" />
-                                                                Crear nuevo cliente
-                                                                {clienteSearchTerm && <span className="ml-2 font-medium">"{clienteSearchTerm}"</span>}
-                                                            </div>
-                                                        </div>
-                                                    </PopoverContent>
-                                                </Popover>
-
-                                                {/* Lista de Clientes Seleccionados */}
-                                                {data.pagos_clientes.length > 0 && (
-                                                    <div className="mt-6 space-y-4">
-                                                        <div className="flex items-center justify-between">
-                                                            <h4 className="text-lg font-semibold text-gray-700 dark:text-gray-200">
-                                                                Montos a Aplicar
-                                                            </h4>
-                                                            <Badge variant="secondary">
-                                                                Total: ${data.pagos_clientes.reduce((acc, p) => acc + (p.monto || 0), 0).toFixed(2)}
-                                                            </Badge>
-                                                        </div>
-
-                                                        <ScrollArea className="h-[300px]">
-                                                            <div className="space-y-3 pr-4">
-                                                                {data.pagos_clientes.map((pago) => {
-                                                                    const cliente = clientes.find((c) => c.id === pago.cliente_id);
-                                                                    const saldoCliente = cliente?.deuda_pago_cliente || 0;
-                                                                    const montoAsignado = pago.monto || 0;
-
-                                                                    return (
-                                                                        <Card
-                                                                            key={pago.cliente_id}
-                                                                            className="overflow-hidden border-blue-200 dark:border-blue-800"
-                                                                        >
-                                                                            <CardContent className="p-4">
-                                                                                <div className="flex items-start justify-between">
-                                                                                    <div className="flex-1">
+                                                                        ) : filteredClientes.length > 0 ? (
+                                                                            filteredClientes.map((cliente) => {
+                                                                                const seleccionado = data.pagos_clientes.some(
+                                                                                    (p) => p.cliente_id === cliente.id,
+                                                                                );
+                                                                                return (
+                                                                                    <div
+                                                                                        key={cliente.id}
+                                                                                        className={cn(
+                                                                                            'flex cursor-pointer items-center justify-between rounded-lg px-4 py-3 transition-colors',
+                                                                                            seleccionado ? 'bg-primary/10' : 'hover:bg-accent',
+                                                                                        )}
+                                                                                        onClick={() => {
+                                                                                            if (!seleccionado) {
+                                                                                                setData('pagos_clientes', [
+                                                                                                    ...data.pagos_clientes,
+                                                                                                    { cliente_id: cliente.id, monto: 0 },
+                                                                                                ]);
+                                                                                            }
+                                                                                            setClienteSelectOpen(false);
+                                                                                            setClienteSearchTerm('');
+                                                                                        }}
+                                                                                    >
                                                                                         <div className="flex items-center gap-3">
-                                                                                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/30">
-                                                                                                <span className="font-semibold text-blue-700 dark:text-blue-300">
-                                                                                                    {cliente?.nombre_cliente?.charAt(0) || 'C'}
-                                                                                                </span>
+                                                                                            <div className="bg-primary/10 text-primary flex h-10 w-10 items-center justify-center rounded-full font-bold">
+                                                                                                {cliente.nombre_cliente[0]}
                                                                                             </div>
                                                                                             <div>
                                                                                                 <p className="font-medium">
-                                                                                                    {cliente?.nombre_cliente ||
-                                                                                                        'Cliente no encontrado'}
+                                                                                                    {cliente.nombre_cliente}
                                                                                                 </p>
-                                                                                                <p className="text-sm text-gray-500">
-                                                                                                    {cliente?.telefono_cliente}
+                                                                                                <p className="text-muted-foreground text-sm">
+                                                                                                    {cliente.telefono_cliente}
                                                                                                 </p>
                                                                                             </div>
                                                                                         </div>
+                                                                                        <Badge
+                                                                                            variant={
+                                                                                                cliente.deuda_pago_cliente > 0
+                                                                                                    ? 'default'
+                                                                                                    : 'secondary'
+                                                                                            }
+                                                                                        >
+                                                                                            ${cliente.deuda_pago_cliente}
+                                                                                        </Badge>
+                                                                                    </div>
+                                                                                );
+                                                                            })
+                                                                        ) : (
+                                                                            <div className="py-py-8 text-muted-foreground text-center">
+                                                                                No se encontraron clientes
+                                                                            </div>
+                                                                        )}
+                                                                    </ScrollArea>
+                                                                    <Button
+                                                                        variant="outline"
+                                                                        className="w-full"
+                                                                        onClick={() => {
+                                                                            setIsCrearClienteDialogOpen(true);
+                                                                            setClienteSelectOpen(false);
+                                                                        }}
+                                                                    >
+                                                                        <PlusCircle className="mr-2 h-4 w-4" />
+                                                                        Crear nuevo cliente
+                                                                    </Button>
+                                                                </div>
+                                                            </PopoverContent>
+                                                        </Popover>
+                                                    </Field>
 
-                                                                                        <div className="mt-4 grid grid-cols-2 gap-4">
-                                                                                            <div className="space-y-1">
-                                                                                                <p className="text-sm text-gray-500">
-                                                                                                    Crédito Disponible
-                                                                                                </p>
-                                                                                                <p
-                                                                                                    className={`text-lg font-semibold ${saldoCliente > 0 ? 'text-green-600' : 'text-gray-600'}`}
-                                                                                                >
-                                                                                                    ${saldoCliente}
-                                                                                                </p>
-                                                                                            </div>
-                                                                                            <div className="space-y-1">
-                                                                                                <p className="text-sm text-gray-500">
-                                                                                                    Monto a Aplicar
-                                                                                                </p>
-                                                                                                <div className="relative">
-                                                                                                    <Input
-                                                                                                        type="number"
-                                                                                                        min="0"
-                                                                                                        step="0.01"
-                                                                                                        placeholder="0.00"
-                                                                                                        value={montoAsignado}
-                                                                                                        onChange={(e) => {
-                                                                                                            const monto =
-                                                                                                                parseFloat(e.target.value) || 0;
-                                                                                                            const updated = data.pagos_clientes.map(
-                                                                                                                (p) =>
-                                                                                                                    p.cliente_id === pago.cliente_id
-                                                                                                                        ? { ...p, monto }
-                                                                                                                        : p,
-                                                                                                            );
-                                                                                                            setData('pagos_clientes', updated);
-                                                                                                        }}
-                                                                                                        className="h-10 text-base"
-                                                                                                    />
-                                                                                                    <div className="absolute top-1/2 right-2 -translate-y-1/2 text-gray-500">
-                                                                                                        USD
-                                                                                                    </div>
-                                                                                                </div>
-                                                                                            </div>
+                                                    {/* Lista de clientes */}
+                                                    {data.pagos_clientes.length > 0 && (
+                                                        <div className="space-y-4">
+                                                            <div className="flex items-center justify-between">
+                                                                <h4 className="text-lg font-semibold">Clientes seleccionados</h4>
+                                                                <Badge variant="secondary" className="px-3 py-1 text-base">
+                                                                    Total: ${data.pagos_clientes.reduce((a, p) => a + (p.monto || 0), 0).toFixed(2)}
+                                                                </Badge>
+                                                            </div>
+
+                                                            <div className="space-y-3">
+                                                                {data.pagos_clientes.map((pago) => {
+                                                                    const cliente = clientes.find((c) => c.id === pago.cliente_id);
+                                                                    const disponible = cliente?.deuda_pago_cliente || 0;
+
+                                                                    return (
+                                                                        <Card key={pago.cliente_id}>
+                                                                            <CardContent className="p-5">
+                                                                                <div className="flex items-center justify-between gap-4">
+                                                                                    <div className="flex items-center gap-4">
+                                                                                        <div className="bg-primary/10 text-primary flex h-12 w-12 items-center justify-center rounded-full text-xl font-bold">
+                                                                                            {cliente?.nombre_cliente[0] || '?'}
+                                                                                        </div>
+                                                                                        <div>
+                                                                                            <p className="text-lg font-semibold">
+                                                                                                {cliente?.nombre_cliente || 'Cliente'}
+                                                                                            </p>
+                                                                                            <p className="text-muted-foreground text-sm">
+                                                                                                Crédito: ${disponible}
+                                                                                            </p>
                                                                                         </div>
                                                                                     </div>
 
-                                                                                    <Button
-                                                                                        variant="ghost"
-                                                                                        size="icon"
-                                                                                        className="h-8 w-8 text-red-500 hover:bg-red-50 hover:text-red-700"
-                                                                                        onClick={() => {
-                                                                                            const updated = data.pagos_clientes.filter(
-                                                                                                (p) => p.cliente_id !== pago.cliente_id,
-                                                                                            );
-                                                                                            setData('pagos_clientes', updated);
-                                                                                        }}
-                                                                                    >
-                                                                                        <X className="h-4 w-4" />
-                                                                                    </Button>
-                                                                                </div>
-
-                                                                                {/* Estado del préstamo */}
-                                                                                <div className="mt-4 rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
-                                                                                    <div className="flex items-center justify-between text-sm">
-                                                                                        <span className="text-gray-600 dark:text-gray-400">
-                                                                                            {saldoCliente > 0
-                                                                                                ? 'Usando crédito existente del cliente'
-                                                                                                : 'Generando nuevo préstamo del cliente'}
-                                                                                        </span>
-                                                                                        <span
-                                                                                            className={`font-medium ${
-                                                                                                montoAsignado > 0 ? 'text-blue-600' : 'text-gray-500'
-                                                                                            }`}
+                                                                                    <div className="flex items-center gap-3">
+                                                                                        <Field>
+                                                                                            <FieldLabel className="sr-only">Monto</FieldLabel>
+                                                                                            <InputGroup>
+                                                                                                <InputGroupText>$</InputGroupText>
+                                                                                                <InputGroupInput
+                                                                                                    type="number"
+                                                                                                    min="0"
+                                                                                                    step="0.01"
+                                                                                                    placeholder="0.00"
+                                                                                                    value={pago.monto || ''}
+                                                                                                    onChange={(e) => {
+                                                                                                        const monto = parseFloat(e.target.value) || 0;
+                                                                                                        setData(
+                                                                                                            'pagos_clientes',
+                                                                                                            data.pagos_clientes.map((p) =>
+                                                                                                                p.cliente_id === pago.cliente_id
+                                                                                                                    ? { ...p, monto }
+                                                                                                                    : p,
+                                                                                                            ),
+                                                                                                        );
+                                                                                                    }}
+                                                                                                    className="h-12 text-lg font-medium"
+                                                                                                />
+                                                                                            </InputGroup>
+                                                                                        </Field>
+                                                                                        <Button
+                                                                                            variant="ghost"
+                                                                                            size="icon"
+                                                                                            onClick={() =>
+                                                                                                setData(
+                                                                                                    'pagos_clientes',
+                                                                                                    data.pagos_clientes.filter(
+                                                                                                        (p) => p.cliente_id !== pago.cliente_id,
+                                                                                                    ),
+                                                                                                )
+                                                                                            }
                                                                                         >
-                                                                                            Nuevo saldo: ${(saldoCliente - montoAsignado).toFixed(2)}
-                                                                                        </span>
+                                                                                            <X className="h-5 w-5 text-red-600" />
+                                                                                        </Button>
                                                                                     </div>
                                                                                 </div>
                                                                             </CardContent>
@@ -1960,188 +1886,171 @@ export default function ComprarPage() {
                                                                     );
                                                                 })}
                                                             </div>
-                                                        </ScrollArea>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* Diálogo para crear cliente */}
-                                        <Dialog open={isCrearClienteDialogOpen} onOpenChange={setIsCrearClienteDialogOpen}>
-                                            <CrearClienteDialogContent />
-                                        </Dialog>
-
-                                        {/* Sección de Pagos con Cuentas */}
-                                        <div className="space-y-6 rounded-2xl border border-green-200 bg-green-50/50 p-8 dark:border-green-800 dark:bg-green-950/20">
-                                            <div className="space-y-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
-                                                        <Wallet className="h-5 w-5 text-green-600 dark:text-green-400" />
-                                                    </div>
-                                                    <div>
-                                                        <Label htmlFor="cuentas" className="text-lg font-semibold text-gray-700 dark:text-gray-200">
-                                                            Pagos con Cuentas
-                                                        </Label>
-                                                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                                                            Opcional - Pagar desde cuentas disponibles
-                                                        </p>
-                                                    </div>
-                                                </div>
-
-                                                <Select
-                                                    name="cuentas"
-                                                    value={data.pagos.map((p) => p.cuenta_id.toString())}
-                                                    onValueChange={(value) => {
-                                                        const selectedCuentas = Array.isArray(value) ? value : [value];
-                                                        const updatedCuentas = [
-                                                            ...new Set([
-                                                                ...data.pagos.map((p) => p.cuenta_id),
-                                                                ...selectedCuentas.map((id) => parseInt(id)),
-                                                            ]),
-                                                        ];
-                                                        const updatedPagos = updatedCuentas.map((cuenta_id) => ({
-                                                            cuenta_id,
-                                                            monto: data.pagos.find((p) => p.cuenta_id === cuenta_id)?.monto || 0,
-                                                        }));
-                                                        setData('pagos', updatedPagos);
-                                                    }}
-                                                    multiple
-                                                >
-                                                    <SelectTrigger className="h-14 w-full border-2 border-green-300 text-base shadow-sm dark:border-green-600">
-                                                        <SelectValue placeholder="Seleccione cuentas para pago..." />
-                                                    </SelectTrigger>
-                                                    <SelectContent className="max-h-60 border-0 shadow-xl">
-                                                        {cuentas.map((cuenta) => (
-                                                            <SelectItem key={cuenta.id} value={cuenta.id.toString()} className="py-3 text-base">
-                                                                <div className="flex items-center justify-between">
-                                                                    <span className="font-medium">{cuenta.nombre_cuenta}</span>
-                                                                    <span className="text-sm text-gray-500">Saldo: ${cuenta.saldo_cuenta}</span>
-                                                                </div>
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-
-                                                {data.pagos.length > 0 && (
-                                                    <div className="mt-6 space-y-4">
-                                                        <h4 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Montos a debitar:</h4>
-                                                        <div className="grid gap-4">
-                                                            {data.pagos.map((pago) => (
-                                                                <div
-                                                                    key={pago.cuenta_id}
-                                                                    className="flex items-center gap-4 rounded-xl border border-green-200 bg-white p-4 shadow-sm dark:border-green-800 dark:bg-gray-800"
-                                                                >
-                                                                    <div className="flex-1">
-                                                                        <span className="block font-medium text-gray-900 dark:text-white">
-                                                                            {cuentas.find((c) => c.id === pago.cuenta_id)?.nombre_cuenta}
-                                                                        </span>
-                                                                        <span className="text-sm text-gray-500 dark:text-gray-400">
-                                                                            Saldo disponible: $
-                                                                            {cuentas.find((c) => c.id === pago.cuenta_id)?.saldo_cuenta}
-                                                                        </span>
-                                                                    </div>
-                                                                    <div className="flex-1">
-                                                                        <Input
-                                                                            type="number"
-                                                                            min="0.01"
-                                                                            step="0.01"
-                                                                            placeholder="$ 0.00"
-                                                                            value={pago.monto || ''}
-                                                                            onChange={(e) => {
-                                                                                const monto = parseFloat(e.target.value) || 0;
-                                                                                const updatedPagos = data.pagos.map((p) =>
-                                                                                    p.cuenta_id === pago.cuenta_id ? { ...p, monto } : p,
-                                                                                );
-                                                                                setData('pagos', updatedPagos);
-                                                                            }}
-                                                                            className="h-12 border-green-200 text-base focus:border-green-400 dark:border-gray-600"
-                                                                        />
-                                                                    </div>
-                                                                    <Button
-                                                                        variant="destructive"
-                                                                        size="sm"
-                                                                        className="h-12 cursor-pointer px-4"
-                                                                        onClick={() => {
-                                                                            const updatedPagos = data.pagos.filter(
-                                                                                (p) => p.cuenta_id !== pago.cuenta_id,
-                                                                            );
-                                                                            setData('pagos', updatedPagos);
-                                                                        }}
-                                                                    >
-                                                                        <X className="h-4 w-4" />
-                                                                    </Button>
-                                                                </div>
-                                                            ))}
                                                         </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
+                                                    )}
+                                                </FieldGroup>
+                                            </FieldSet>
 
-                                        {/* Resumen de Pagos */}
-                                        <div className="rounded-2xl border border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100 p-8 shadow-sm dark:border-gray-700 dark:from-gray-800 dark:to-gray-900">
-                                            <h3 className="mb-6 text-xl font-semibold text-gray-700 dark:text-gray-200">Resumen de Pagos</h3>
-                                            <div className="space-y-4 text-base">
-                                                <div className="flex items-center justify-between rounded-lg bg-white p-4 shadow-sm dark:bg-gray-700">
-                                                    <span className="text-gray-600 dark:text-gray-300">Total pagado con cuentas:</span>
-                                                    <span className="text-lg font-semibold text-blue-600 dark:text-blue-400">
-                                                        ${data.pagos?.reduce((acc, pago) => acc + pago.monto, 0).toFixed(2) || '0.00'}
-                                                    </span>
-                                                </div>
-                                                <div className="flex items-center justify-between rounded-lg bg-white p-4 shadow-sm dark:bg-gray-700">
-                                                    <span className="text-gray-600 dark:text-gray-300">Total pagado con clientes:</span>
-                                                    <span className="text-lg font-semibold text-green-600 dark:text-green-400">
-                                                        ${data.pagos_clientes?.reduce((acc, pago) => acc + pago.monto, 0).toFixed(2) || '0.00'}
-                                                    </span>
-                                                </div>
-                                                <Separator className="my-4" />
-                                                <div className="flex items-center justify-between rounded-lg bg-gradient-to-r from-green-50 to-green-100 p-6 dark:from-green-900/30 dark:to-green-800/30">
-                                                    <span className="text-xl font-bold text-gray-700 dark:text-gray-200">Total pagado:</span>
-                                                    <span
-                                                        className={`text-2xl font-bold ${
+                                            <Separator />
+
+                                            {/* ---- CUENTAS BANCARIAS ---- */}
+                                            <FieldSet>
+                                                <FieldLegend className="flex items-center gap-3 text-xl font-semibold">
+                                                    <Wallet className="h-6 w-6 text-emerald-600" />
+                                                    Pago desde Cuentas Bancarias
+                                                </FieldLegend>
+                                                <FieldDescription>Opcional • Usa tu saldo disponible</FieldDescription>
+
+                                                <FieldGroup className="space-y-6">
+                                                    <Field>
+                                                        <Select
+                                                            value={data.pagos.map((p) => p.cuenta_id.toString())}
+                                                            onValueChange={(value) => {
+                                                                const ids = Array.isArray(value) ? value.map(Number) : [Number(value)];
+                                                                const nuevos = ids.map((id) => ({
+                                                                    cuenta_id: id,
+                                                                    monto: data.pagos.find((p) => p.cuenta_id === id)?.monto || 0,
+                                                                }));
+                                                                setData('pagos', nuevos);
+                                                            }}
+                                                            multiple
+                                                        >
+                                                            <SelectTrigger className="h-12">
+                                                                <SelectValue placeholder="Seleccionar cuentas..." />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {cuentas.map((cuenta) => (
+                                                                    <SelectItem key={cuenta.id} value={cuenta.id.toString()}>
+                                                                        <div className="flex w-full justify-between">
+                                                                            <span>{cuenta.nombre_cuenta}</span>
+                                                                            <span className="text-muted-foreground">
+                                                                                Saldo: ${cuenta.saldo_cuenta}
+                                                                            </span>
+                                                                        </div>
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </Field>
+
+                                                    {data.pagos.length > 0 && (
+                                                        <div className="space-y-4">
+                                                            {data.pagos.map((pago) => {
+                                                                const cuenta = cuentas.find((c) => c.id === pago.cuenta_id);
+                                                                return (
+                                                                    <div
+                                                                        key={pago.cuenta_id}
+                                                                        className="bg-muted/50 flex items-center gap-4 rounded-xl p-4"
+                                                                    >
+                                                                        <div className="flex-1">
+                                                                            <p className="font-semibold">{cuenta?.nombre_cuenta}</p>
+                                                                            <p className="text-muted-foreground text-sm">
+                                                                                Disponible: ${cuenta?.saldo_cuenta}
+                                                                            </p>
+                                                                        </div>
+                                                                        <Field className="w-48">
+                                                                            <InputGroup>
+                                                                                <InputGroupText>$</InputGroupText>
+                                                                                <InputGroupInput
+                                                                                    type="number"
+                                                                                    min="0.01"
+                                                                                    step="0.01"
+                                                                                    value={pago.monto || ''}
+                                                                                    onChange={(e) => {
+                                                                                        const monto = parseFloat(e.target.value) || 0;
+                                                                                        setData(
+                                                                                            'pagos',
+                                                                                            data.pagos.map((p) =>
+                                                                                                p.cuenta_id === pago.cuenta_id ? { ...p, monto } : p,
+                                                                                            ),
+                                                                                        );
+                                                                                    }}
+                                                                                    className="h-12 text-lg"
+                                                                                />
+                                                                            </InputGroup>
+                                                                        </Field>
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="icon"
+                                                                            onClick={() =>
+                                                                                setData(
+                                                                                    'pagos',
+                                                                                    data.pagos.filter((p) => p.cuenta_id !== pago.cuenta_id),
+                                                                                )
+                                                                            }
+                                                                        >
+                                                                            <X className="h-5 w-5 text-red-600" />
+                                                                        </Button>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </FieldGroup>
+                                            </FieldSet>
+                                        </>
+                                    )}
+
+                                    {/* ===================== RESUMEN FINAL ===================== */}
+                                    <div className="rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50/50 p-6 dark:border-emerald-700 dark:bg-emerald-950/30">
+                                        <h3 className="mb-6 text-center text-xl font-bold">Resumen de Pago</h3>
+                                        <div className="space-y-4 text-lg">
+                                            <div className="flex justify-between">
+                                                <span>Pagado con cuentas:</span>
+                                                <span className="font-semibold text-blue-600">
+                                                    ${data.pagos.reduce((a, p) => a + p.monto, 0).toFixed(2)}
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Pagado con clientes:</span>
+                                                <span className="font-semibold text-emerald-600">
+                                                    ${data.pagos_clientes.reduce((a, p) => a + (p.monto || 0), 0).toFixed(2)}
+                                                </span>
+                                            </div>
+                                            <Separator className="my-4" />
+                                            <div className="flex justify-between text-xl font-bold">
+                                                <span>Total cubierto:</span>
+                                                <span
+                                                    className={cn(
+                                                        'transition-colors',
+                                                        Number(
                                                             (
-                                                                data.pagos?.reduce((acc, pago) => acc + pago.monto, 0) +
-                                                                data.pagos_clientes?.reduce((acc, pago) => acc + pago.monto, 0)
-                                                            ).toFixed(2) === parseFloat(calcularTotal()).toFixed(2)
-                                                                ? 'text-green-600 dark:text-green-400'
-                                                                : 'text-orange-600 dark:text-orange-400'
-                                                        }`}
-                                                    >
-                                                        $
-                                                        {(
-                                                            data.pagos?.reduce((acc, pago) => acc + pago.monto, 0) +
-                                                            data.pagos_clientes?.reduce((acc, pago) => acc + pago.monto, 0)
-                                                        ).toFixed(2) || '0.00'}
-                                                        <span className="ml-3 text-base font-normal text-gray-500 dark:text-gray-400">
-                                                            / ${parseFloat(calcularTotal()).toFixed(2)}
-                                                        </span>
-                                                    </span>
-                                                </div>
+                                                                data.pagos.reduce((a, p) => a + p.monto, 0) +
+                                                                data.pagos_clientes.reduce((a, p) => a + (p.monto || 0), 0)
+                                                            ).toFixed(2),
+                                                        ) === Number(calcularTotal().toString())
+                                                            ? 'text-emerald-600'
+                                                            : 'text-orange-600',
+                                                    )}
+                                                >
+                                                    $
+                                                    {(
+                                                        data.pagos.reduce((a, p) => a + p.monto, 0) +
+                                                        data.pagos_clientes.reduce((a, p) => a + (p.monto || 0), 0)
+                                                    ).toFixed(2)}{' '}
+                                                    / ${calcularTotal()}
+                                                </span>
                                             </div>
                                         </div>
-                                    </>
-                                )}
-                            </div>
+                                    </div>
+                                </div>
+                            </ScrollArea>
 
-                            <AlertDialogFooter className="border-t pt-6">
-                                <AlertDialogCancel className="h-14 cursor-pointer border-2 border-gray-300 px-8 text-base font-medium hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-800">
-                                    Cancelar
-                                </AlertDialogCancel>
+                            <AlertDialogFooter className="bg-muted/50 border-t px-8 py-5">
+                                <AlertDialogCancel className="h-12 px-6 text-base">Cancelar</AlertDialogCancel>
                                 <Button
-                                    type="button"
+                                    size="lg"
+                                    className="h-12 px-10 text-base font-semibold shadow-lg"
                                     onClick={realizarCompra}
                                     disabled={processing || productos.some((p) => !almacens.find((a) => a.id === p.almacen_id))}
-                                    className="h-14 cursor-pointer bg-green-600 px-10 text-base font-semibold text-white transition-all duration-200 hover:bg-green-700 hover:shadow-lg"
                                 >
                                     {processing ? (
                                         <>
-                                            <Loader2 className="mr-3 h-5 w-5 animate-spin" />
-                                            Registrando...
+                                            Procesando <Loader2 className="ml-2 h-5 w-5 animate-spin" />
                                         </>
                                     ) : (
                                         <>
-                                            <CheckCircle className="mr-3 h-5 w-5" />
-                                            Proceder Compra
+                                            Confirmar Compra <CheckCircle className="ml-2 h-5 w-5" />
                                         </>
                                     )}
                                 </Button>
@@ -2149,19 +2058,18 @@ export default function ComprarPage() {
                         </AlertDialogContent>
                     </AlertDialog>
 
+                    {/* Botón cancelar */}
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <Link href="/dashboard">
-                                    <Button variant="secondary" className="ms-2 cursor-pointer">
-                                        <BookCheck />
-                                        Cancelar Compra
-                                    </Button>
-                                </Link>
+                                <Button asChild variant="outline" size="lg">
+                                    <Link href="/dashboard">
+                                        <X className="mr-2 h-5 w-5" />
+                                        Cancelar
+                                    </Link>
+                                </Button>
                             </TooltipTrigger>
-                            <TooltipContent>
-                                <p>Cancelar y regresar</p>
-                            </TooltipContent>
+                            <TooltipContent>Regresar sin guardar</TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
                 </div>
