@@ -14,14 +14,27 @@ class Venta extends Model
         'almacen_id',
         'cliente_id',
         'total',
-        'detalles_venta',
         'estado',
-        'moneda_id', // NUEVO: Relación con moneda principal usada
-        'tasa_cambio_principal', // NUEVO: Tasa de cambio de la moneda principal
+        'moneda_id',
+        'tasa_cambio_principal',
+        'total_ganancia',
+        'total_esperado_usd',
+        'ganancia_perdida_cambiaria',
+        'ganancia_real_total',
+        // NUEVOS CAMPOS (aceptan negativos)
+        'tasa_aplicada_venta',
+        'moneda_cobro_id',
+        'monto_diferencia_cambiaria',
     ];
 
     protected $casts = [
         'tasa_cambio_principal' => 'decimal:6',
+        'total_ganancia' => 'decimal:4',
+        'total_esperado_usd' => 'decimal:4',
+        'ganancia_perdida_cambiaria' => 'decimal:4',
+        'ganancia_real_total' => 'decimal:4',
+        'tasa_aplicada_venta' => 'decimal:6',
+        'monto_diferencia_cambiaria' => 'decimal:2', // ← AQUÍ SE ACEPTAN NEGATIVOS
     ];
 
     public function usuario()
@@ -49,13 +62,17 @@ class Venta extends Model
         return $this->hasMany(PagoVenta::class);
     }
 
-    // NUEVA: Relación con moneda
     public function moneda()
     {
         return $this->belongsTo(Moneda::class);
     }
 
-    // NUEVO: Scope para ventas activas
+    // RELACIÓN NUEVA PARA LA MONEDA DE COBRO
+    public function monedaCobro()
+    {
+        return $this->belongsTo(Moneda::class, 'moneda_cobro_id');
+    }
+
     public function scopeCompletadas($query)
     {
         return $query->where('estado', 'completada');
