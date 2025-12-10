@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field';
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -54,8 +54,9 @@ import {
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-import { InputGroup, InputGroupInput } from '@/components/ui/input-group';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Spinner } from '@/components/ui/spinner';
+import { Textarea } from '@/components/ui/textarea';
 
 // =================================================================
 // 🚨 ATRIBUTOS DE PRODUCTO ACTUALIZADOS EN TYPESCRIPT
@@ -569,88 +570,112 @@ export default function ComprarPage() {
         };
 
         return (
-            <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-[500px]">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2 text-xl">
-                        <Warehouse className="h-5 w-5 text-blue-600" />
-                        Crear Nuevo Almacén
-                    </DialogTitle>
-                    <DialogDescription>Configura un nuevo espacio de almacenamiento para tus productos.</DialogDescription>
+            <DialogContent className="max-h-[90vh] sm:max-w-lg">
+                {/* HEADER ELEGANTE */}
+                <DialogHeader className="border-b bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 text-white">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                            <Warehouse className="h-7 w-7" />
+                        </div>
+                        <div>
+                            <DialogTitle className="text-2xl font-bold">Crear Nuevo Almacén</DialogTitle>
+                            <DialogDescription className="text-blue-100">
+                                Configura un nuevo espacio de almacenamiento para tus productos
+                            </DialogDescription>
+                        </div>
+                    </div>
                 </DialogHeader>
 
-                <div className="grid gap-4 py-4">
-                    <div className="space-y-4">
-                        <div className="grid gap-4">
-                            {/* Nombre del Almacén */}
-                            <div className="space-y-2">
-                                <Label htmlFor="dialog-nombre-almacen" className="flex items-center gap-1">
-                                    Nombre del Almacén <span className="text-red-500">*</span>
-                                </Label>
-                                <Input
-                                    id="dialog-nombre-almacen"
-                                    name="nombre_almacen"
-                                    value={localAlmacen.nombre_almacen}
-                                    onChange={handleLocalChange}
-                                    placeholder="Ej: Almacén Central, Bodega Norte"
-                                    className={localErrors.nombre_almacen ? 'border-red-500' : ''}
-                                />
-                                {localErrors.nombre_almacen && <p className="text-sm text-red-500">{localErrors.nombre_almacen}</p>}
-                            </div>
+                {/* CONTENIDO CON SCROLL PERFECTO */}
+                <ScrollArea className="max-h-[60vh] px-6 py-6">
+                    <div className="space-y-8">
+                        {/* INFORMACIÓN PRINCIPAL */}
+                        <FieldSet>
+                            <FieldLegend className="text-lg font-semibold">Información Principal</FieldLegend>
 
-                            {/* Tipo de Almacén */}
-                            <div className="space-y-2">
-                                <Label htmlFor="dialog-tipo-almacen">
-                                    Tipo de Almacén <span className="text-red-500">*</span>
-                                </Label>
-                                <Select value={localAlmacen.tipo_almacen} onValueChange={(value) => handleLocalSelectChange('tipo_almacen', value)}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Seleccione tipo" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="almacen">Almacén</SelectItem>
-                                        <SelectItem value="punto_venta">Punto de Venta</SelectItem>
-                                        <SelectItem value="transportacion">Transportación</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                {localErrors.tipo_almacen && <p className="text-sm text-red-500">{localErrors.tipo_almacen}</p>}
-                            </div>
-
-                            {/* Teléfono */}
-                            <div className="space-y-2">
-                                <Label htmlFor="dialog-telefono-almacen" className="flex items-center gap-1">
-                                    Teléfono <span className="text-red-500">*</span>
-                                </Label>
-                                <div className="flex items-center">
-                                    <Phone className="absolute ml-3 h-4 w-4 text-gray-500" />
+                            <FieldGroup className="space-y-6">
+                                {/* Nombre del Almacén */}
+                                <Field>
+                                    <FieldLabel className="flex items-center gap-1">
+                                        Nombre del Almacén <span className="text-red-500">*</span>
+                                    </FieldLabel>
                                     <Input
-                                        id="dialog-telefono-almacen"
-                                        name="telefono_almacen"
-                                        value={localAlmacen.telefono_almacen}
+                                        id="dialog-nombre-almacen"
+                                        name="nombre_almacen"
+                                        value={localAlmacen.nombre_almacen}
                                         onChange={handleLocalChange}
-                                        placeholder="Ej: 555-1234"
-                                        className={`pl-10 ${localErrors.telefono_almacen ? 'border-red-500' : ''}`}
+                                        placeholder="Ej: Almacén Central, Bodega Norte"
+                                        className={localErrors.nombre_almacen ? 'border-red-500 focus-visible:ring-red-500' : ''}
                                     />
-                                </div>
-                                {localErrors.telefono_almacen && <p className="text-sm text-red-500">{localErrors.telefono_almacen}</p>}
-                            </div>
+                                    {localErrors.nombre_almacen && <FieldError>{localErrors.nombre_almacen}</FieldError>}
+                                </Field>
 
-                            {/* Correo */}
-                            <div className="space-y-2">
-                                <Label htmlFor="dialog-correo-almacen">Correo Electrónico</Label>
-                                <Input
-                                    id="dialog-correo-almacen"
-                                    name="correo_almacen"
-                                    type="email"
-                                    value={localAlmacen.correo_almacen}
-                                    onChange={handleLocalChange}
-                                    placeholder="ejemplo@empresa.com"
-                                />
-                            </div>
+                                {/* Tipo de Almacén */}
+                                <Field>
+                                    <FieldLabel className="flex items-center gap-1">
+                                        Tipo de Almacén <span className="text-red-500">*</span>
+                                    </FieldLabel>
+                                    <Select
+                                        value={localAlmacen.tipo_almacen}
+                                        onValueChange={(value) => handleLocalSelectChange('tipo_almacen', value)}
+                                    >
+                                        <SelectTrigger className="h-11">
+                                            <SelectValue placeholder="Seleccione tipo" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="almacen">Almacén</SelectItem>
+                                            <SelectItem value="punto_venta">Punto de Venta</SelectItem>
+                                            <SelectItem value="transportacion">Transportación</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    {localErrors.tipo_almacen && <FieldError>{localErrors.tipo_almacen}</FieldError>}
+                                </Field>
 
-                            {/* Provincia y Ciudad */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="dialog-provincia-almacen">Provincia</Label>
+                                {/* Teléfono */}
+                                <Field>
+                                    <FieldLabel className="flex items-center gap-1">
+                                        Teléfono <span className="text-red-500">*</span>
+                                    </FieldLabel>
+                                    <InputGroup>
+                                        <InputGroupAddon>
+                                            <Phone className="text-muted-foreground h-4 w-4" />
+                                        </InputGroupAddon>
+                                        <InputGroupInput
+                                            id="dialog-telefono-almacen"
+                                            name="telefono_almacen"
+                                            value={localAlmacen.telefono_almacen}
+                                            onChange={handleLocalChange}
+                                            placeholder="Ej: 555-1234"
+                                            className={localErrors.telefono_almacen ? 'border-red-500' : ''}
+                                        />
+                                    </InputGroup>
+                                    {localErrors.telefono_almacen && <FieldError>{localErrors.telefono_almacen}</FieldError>}
+                                </Field>
+
+                                {/* Correo */}
+                                <Field>
+                                    <FieldLabel>Correo Electrónico</FieldLabel>
+                                    <InputGroup>
+                                        <InputGroupAddon>@</InputGroupAddon>
+                                        <InputGroupInput
+                                            id="dialog-correo-almacen"
+                                            name="correo_almacen"
+                                            type="email"
+                                            value={localAlmacen.correo_almacen}
+                                            onChange={handleLocalChange}
+                                            placeholder="ejemplo@empresa.com"
+                                        />
+                                    </InputGroup>
+                                </Field>
+                            </FieldGroup>
+                        </FieldSet>
+
+                        {/* UBICACIÓN */}
+                        <FieldSet>
+                            <FieldLegend>Ubicación</FieldLegend>
+                            <FieldGroup className="grid grid-cols-2 gap-4">
+                                <Field>
+                                    <FieldLabel>Provincia</FieldLabel>
                                     <Input
                                         id="dialog-provincia-almacen"
                                         name="provincia_almacen"
@@ -658,9 +683,9 @@ export default function ComprarPage() {
                                         onChange={handleLocalChange}
                                         placeholder="Ej: Lima"
                                     />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="dialog-ciudad-almacen">Ciudad</Label>
+                                </Field>
+                                <Field>
+                                    <FieldLabel>Ciudad</FieldLabel>
                                     <Input
                                         id="dialog-ciudad-almacen"
                                         name="ciudad_almacen"
@@ -668,31 +693,33 @@ export default function ComprarPage() {
                                         onChange={handleLocalChange}
                                         placeholder="Ej: Lima Centro"
                                     />
-                                </div>
-                            </div>
+                                </Field>
+                            </FieldGroup>
+                        </FieldSet>
 
-                            {/* Notas */}
-                            <div className="space-y-2">
-                                <Label htmlFor="dialog-notas-almacen">Notas Adicionales</Label>
-                                <textarea
+                        {/* NOTAS */}
+                        <FieldSet>
+                            <FieldLegend>Notas Adicionales</FieldLegend>
+                            <Field>
+                                <Textarea
                                     id="dialog-notas-almacen"
                                     name="notas_almacen"
                                     value={localAlmacen.notas_almacen}
                                     onChange={handleLocalChange}
                                     placeholder="Información adicional sobre el almacén..."
                                     rows={3}
-                                    className="border-input ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex w-full rounded-md border bg-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="resize-none"
                                 />
-                            </div>
-                        </div>
+                            </Field>
+                        </FieldSet>
 
-                        {/* Información importante */}
-                        <div className="rounded-lg bg-blue-50 p-4 dark:bg-blue-950/30">
+                        {/* CAJA DE INFO BONITA */}
+                        <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100 p-5 dark:border-blue-800 dark:from-blue-950/50 dark:to-blue-900/50">
                             <div className="flex items-start gap-3">
-                                <Info className="h-5 w-5 text-blue-600" />
-                                <div className="text-sm text-blue-800 dark:text-blue-300">
-                                    <p className="font-medium">Tipos de almacén:</p>
-                                    <ul className="mt-1 list-inside list-disc space-y-1">
+                                <Info className="mt-0.5 h-6 w-6 text-blue-600 dark:text-blue-400" />
+                                <div className="space-y-2 text-sm">
+                                    <p className="font-semibold text-blue-900 dark:text-blue-100">Tipos de almacén:</p>
+                                    <ul className="list-disc space-y-1 pl-5 text-blue-800 dark:text-blue-200">
                                         <li>
                                             <strong>Almacén:</strong> Para guardar productos en inventario
                                         </li>
@@ -707,19 +734,19 @@ export default function ComprarPage() {
                             </div>
                         </div>
                     </div>
-                </div>
+                </ScrollArea>
 
-                <DialogFooter className="gap-2">
-                    <Button type="button" variant="destructive" onClick={resetDialog}>
+                {/* FOOTER FIJO Y ELEGANTE */}
+                <DialogFooter className="bg-background border-t px-6 py-5">
+                    <Button variant="outline" onClick={resetDialog} className="h-11 px-6">
                         Cancelar
                     </Button>
                     <Button
-                        type="button"
                         onClick={crearAlmacenLocal}
-                        className="bg-blue-600 hover:bg-blue-700"
                         disabled={!localAlmacen.nombre_almacen.trim() || !localAlmacen.telefono_almacen.trim()}
+                        className="h-11 bg-gradient-to-r from-blue-600 to-blue-700 px-8 hover:from-blue-700 hover:to-blue-800"
                     >
-                        <CheckCircle className="mr-2 h-4 w-4" />
+                        <CheckCircle className="mr-2 h-5 w-5" />
                         Crear Almacén
                     </Button>
                 </DialogFooter>
