@@ -24,11 +24,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from '@/components/ui/sonner';
 import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
 import { AlmacenProps, CategoriasProps, ClienteProps, CuentaNegocioProps, ProveedorProps, type BreadcrumbItem } from '@/types';
-import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import { Head, useForm, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { format } from 'date-fns';
 import {
@@ -55,7 +54,7 @@ import {
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-import { InputGroup, InputGroupInput, InputGroupText } from '@/components/ui/input-group';
+import { InputGroup, InputGroupInput } from '@/components/ui/input-group';
 
 // =================================================================
 // 🚨 ATRIBUTOS DE PRODUCTO ACTUALIZADOS EN TYPESCRIPT
@@ -1620,458 +1619,534 @@ export default function ComprarPage() {
                     </Table>
                 </div>
 
-                {/* ==================== BOTÓN + MODAL PROFESIONAL DE COMPRA ==================== */}
-                <div className="flex justify-center gap-6 p-6">
+                {/* ==================== PROCESAR LAS COMPRAS DE LOS PRDUCTOS ==================== */}
+                <div className="flex justify-center gap-4 p-6">
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
-                            <Button
-                                size="lg"
-                                className="h-14 bg-gradient-to-r from-emerald-600 to-emerald-700 px-8 text-lg font-semibold shadow-lg hover:from-emerald-700 hover:to-emerald-800 disabled:opacity-60"
-                                disabled={productos.length === 0 || productos.some((p) => !almacens.find((a) => a.id === p.almacen_id))}
-                            >
-                                <ShoppingCart className="mr-3 h-6 w-6" />
+                            <Button className="cursor-pointer">
+                                <ShoppingCart className="mr-2 h-5 w-5" />
                                 Realizar Compra
                                 {productos.some((p) => !almacens.find((a) => a.id === p.almacen_id)) && (
-                                    <Badge variant="destructive" className="ml-3">
+                                    <Badge variant="destructive" className="ml-2">
                                         Almacén inválido
                                     </Badge>
                                 )}
                             </Button>
                         </AlertDialogTrigger>
 
-                        <AlertDialogContent className="max-h-[90vh] max-w-4xl overflow-hidden p-0">
-                            <AlertDialogHeader className="border-b bg-gradient-to-r from-emerald-600 to-emerald-700 px-8 py-6 text-white">
-                                <div className="flex items-center gap-4">
-                                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
-                                        <ShoppingCart className="h-8 w-8" />
-                                    </div>
-                                    <div>
-                                        <AlertDialogTitle className="text-2xl font-bold">Finalizar Compra</AlertDialogTitle>
-                                        <AlertDialogDescription className="text-emerald-100">
-                                            Total a pagar: <span className="text-3xl font-bold">${parseFloat(calcularTotal()).toFixed(2)}</span>
-                                        </AlertDialogDescription>
-                                    </div>
-                                </div>
-                            </AlertDialogHeader>
+                        <AlertDialogContent className="flex max-h-[90vh] flex-col overflow-hidden p-0 sm:max-w-5xl">
+                            {/* Estado actual del paso */}
+                            {(() => {
+                                const step = data.compra === 'deuda_proveedor' ? 'deuda' : data.compra === 'pago_cash' ? 'pago' : 'select';
 
-                            <ScrollArea className="max-h-[65vh] px-8 py-6">
-                                <div className="space-y-8">
-                                    {/* ===================== TIPO DE COMPRA ===================== */}
-                                    <FieldSet>
-                                        <FieldLegend className="text-foreground text-xl font-semibold">Tipo de Compra</FieldLegend>
-                                        <FieldDescription className="text-muted-foreground">Elige cómo deseas registrar esta compra</FieldDescription>
-
-                                        <FieldGroup className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                            <Field orientation="horizontal">
-                                                <Button
-                                                    variant={data.compra === 'deuda_proveedor' ? 'default' : 'outline'}
-                                                    className={cn(
-                                                        'h-32 w-full flex-col gap-3 text-left transition-all',
-                                                        data.compra === 'deuda_proveedor' && 'ring-2 ring-orange-500 ring-offset-2',
-                                                    )}
-                                                    onClick={() => setData('compra', 'deuda_proveedor')}
-                                                >
-                                                    <CreditCard className="h-10 w-10 text-orange-600" />
-                                                    <div>
-                                                        <p className="font-semibold">Generar Deuda al Proveedor</p>
-                                                        <p className="text-sm opacity-80">Pagar más tarde</p>
+                                return (
+                                    <>
+                                        {/* STEP 1: SELECTOR DE TIPO */}
+                                        {step === 'select' && (
+                                            <>
+                                                <AlertDialogHeader className="border-b bg-gradient-to-r from-emerald-600 to-emerald-700 px-8 py-6 text-white">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                                            <ShoppingCart className="h-8 w-8" />
+                                                        </div>
+                                                        <div>
+                                                            <AlertDialogTitle className="text-2xl font-bold">Finalizar Compra</AlertDialogTitle>
+                                                            <AlertDialogDescription className="text-emerald-100">
+                                                                Total a pagar:{' '}
+                                                                <span className="text-3xl font-bold">${parseFloat(calcularTotal()).toFixed(2)}</span>
+                                                            </AlertDialogDescription>
+                                                        </div>
                                                     </div>
-                                                </Button>
-                                            </Field>
+                                                </AlertDialogHeader>
 
-                                            <Field orientation="horizontal">
-                                                <Button
-                                                    variant={data.compra === 'pago_cash' ? 'default' : 'outline'}
-                                                    className={cn(
-                                                        'h-32 w-full flex-col gap-3 text-left transition-all',
-                                                        data.compra === 'pago_cash' && 'ring-2 ring-emerald-500 ring-offset-2',
-                                                    )}
-                                                    onClick={() => setData('compra', 'pago_cash')}
-                                                >
-                                                    <DollarSign className="h-10 w-10 text-emerald-600" />
-                                                    <div>
-                                                        <p className="font-semibold">Pagar Ahora</p>
-                                                        <p className="text-sm opacity-80">Pago inmediato con cuentas o clientes</p>
+                                                <div className="px-8 py-12">
+                                                    <h3 className="mb-8 text-center text-xl font-semibold">¿Cómo deseas registrar esta compra?</h3>
+                                                    <div className="grid gap-6 sm:grid-cols-2">
+                                                        <button
+                                                            onClick={() => setData('compra', 'deuda_proveedor')}
+                                                            className="flex cursor-pointer flex-col gap-4 rounded-xl border-2 border-gray-200 p-6 text-left transition-all hover:border-orange-500 hover:bg-orange-50 dark:border-gray-700 dark:hover:bg-orange-950/20"
+                                                        >
+                                                            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-orange-100 dark:bg-orange-950">
+                                                                <CreditCard className="h-6 w-6 text-orange-600" />
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-semibold">Generar Deuda</p>
+                                                                <p className="text-muted-foreground text-sm">
+                                                                    Registrar compra a crédito al proveedor
+                                                                </p>
+                                                            </div>
+                                                        </button>
+
+                                                        <button
+                                                            onClick={() => setData('compra', 'pago_cash')}
+                                                            className="flex cursor-pointer flex-col gap-4 rounded-xl border-2 border-gray-200 p-6 text-left transition-all hover:border-emerald-500 hover:bg-emerald-50 dark:border-gray-700 dark:hover:bg-emerald-950/20"
+                                                        >
+                                                            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-950">
+                                                                <DollarSign className="h-6 w-6 text-emerald-600" />
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-semibold">Pagar Ahora</p>
+                                                                <p className="text-muted-foreground text-sm">
+                                                                    Realizar pago inmediato con fondos disponibles
+                                                                </p>
+                                                            </div>
+                                                        </button>
                                                     </div>
-                                                </Button>
-                                            </Field>
-                                        </FieldGroup>
-                                    </FieldSet>
+                                                </div>
 
-                                    {/* ===================== PAGAR AHORA ===================== */}
-                                    {data.compra === 'pago_cash' && (
-                                        <>
-                                            <Separator />
+                                                <AlertDialogFooter className="bg-muted/50 border-t px-8 py-5">
+                                                    <AlertDialogCancel className="cursor-pointer">Cancelar</AlertDialogCancel>
+                                                </AlertDialogFooter>
+                                            </>
+                                        )}
 
-                                            {/* ---- CLIENTES ---- */}
-                                            <FieldSet>
-                                                <FieldLegend className="flex items-center gap-3 text-xl font-semibold">
-                                                    <Users className="h-6 w-6 text-blue-600" />
-                                                    Financiamiento con Clientes
-                                                </FieldLegend>
-                                                <FieldDescription>Usa créditos de clientes o genera préstamos</FieldDescription>
+                                        {/* STEP 2: CONFIRMAR DEUDA */}
+                                        {step === 'deuda' && (
+                                            <>
+                                                <AlertDialogHeader className="border-b bg-gradient-to-r from-orange-600 to-orange-700 px-8 py-6 text-white">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                                            <CreditCard className="h-8 w-8" />
+                                                        </div>
+                                                        <div>
+                                                            <AlertDialogTitle className="text-2xl font-bold">Registrar Deuda</AlertDialogTitle>
+                                                            <AlertDialogDescription className="text-orange-100">
+                                                                Confirma la creación de deuda con el proveedor
+                                                            </AlertDialogDescription>
+                                                        </div>
+                                                    </div>
+                                                </AlertDialogHeader>
 
-                                                <FieldGroup className="space-y-6">
-                                                    <Field>
-                                                        <Popover open={clienteSelectOpen} onOpenChange={setClienteSelectOpen}>
-                                                            <PopoverTrigger asChild>
-                                                                <Button variant="outline" role="combobox" className="h-12 w-full justify-between">
-                                                                    <span className="flex items-center gap-2">
-                                                                        <Users className="h-4 w-4" />
-                                                                        {clienteSearchTerm || 'Buscar cliente...'}
-                                                                    </span>
-                                                                    <ChevronsUpDown className="h-4 w-4 opacity-50" />
-                                                                </Button>
-                                                            </PopoverTrigger>
-                                                            <PopoverContent className="w-full p-0" align="start">
-                                                                <div className="space-y-3 p-3">
-                                                                    <Input
-                                                                        placeholder="Buscar cliente..."
-                                                                        value={clienteSearchTerm}
-                                                                        onChange={(e) => setClienteSearchTerm(e.target.value)}
-                                                                        autoFocus
-                                                                    />
-                                                                    <ScrollArea className="h-64 rounded-md border">
-                                                                        {isSearchingClientes ? (
-                                                                            <div className="py-8 text-center">
-                                                                                <Loader2 className="text-muted-foreground mx-auto h-8 w-8 animate-spin" />
-                                                                            </div>
-                                                                        ) : filteredClientes.length > 0 ? (
-                                                                            filteredClientes.map((cliente) => {
-                                                                                const seleccionado = data.pagos_clientes.some(
-                                                                                    (p) => p.cliente_id === cliente.id,
-                                                                                );
-                                                                                return (
-                                                                                    <div
-                                                                                        key={cliente.id}
-                                                                                        className={cn(
-                                                                                            'flex cursor-pointer items-center justify-between rounded-lg px-4 py-3 transition-colors',
-                                                                                            seleccionado ? 'bg-primary/10' : 'hover:bg-accent',
+                                                <div className="px-8 py-8">
+                                                    <div className="rounded-xl border border-orange-200 bg-orange-50 p-6 dark:border-orange-800 dark:bg-orange-950/30">
+                                                        <h4 className="mb-4 font-semibold">Resumen de la operación</h4>
+                                                        <div className="space-y-3">
+                                                            <div className="flex justify-between">
+                                                                <span className="text-muted-foreground">Monto total:</span>
+                                                                <span className="text-xl font-bold">${parseFloat(calcularTotal()).toFixed(2)}</span>
+                                                            </div>
+                                                            <Separator />
+                                                            <p className="text-muted-foreground text-sm">
+                                                                Esta compra se registrará como deuda con el proveedor y será pagadera en el futuro.
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <AlertDialogFooter className="bg-muted/50 border-t px-8 py-5">
+                                                    <Button
+                                                        variant="outline"
+                                                        onClick={() => setData('compra', '')}
+                                                        className="h-12 cursor-pointer px-6"
+                                                    >
+                                                        Atrás
+                                                    </Button>
+                                                    <Button
+                                                        onClick={realizarCompra}
+                                                        disabled={processing}
+                                                        className="h-12 cursor-pointer bg-orange-600 px-8 hover:bg-orange-700"
+                                                    >
+                                                        {processing ? (
+                                                            <>
+                                                                Procesando <Loader2 className="ml-2 h-5 w-5 animate-spin" />
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                Confirmar Deuda <CheckCircle className="ml-2 h-5 w-5" />
+                                                            </>
+                                                        )}
+                                                    </Button>
+                                                </AlertDialogFooter>
+                                            </>
+                                        )}
+
+                                        {/* STEP 3: PAGAR AHORA */}
+                                        {step === 'pago' && (
+                                            <>
+                                                <AlertDialogHeader className="border-b bg-gradient-to-r from-emerald-600 to-emerald-700 px-8 py-6 text-white">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                                            <DollarSign className="h-8 w-8" />
+                                                        </div>
+                                                        <div>
+                                                            <AlertDialogTitle className="text-2xl font-bold">Procesar Pago</AlertDialogTitle>
+                                                            <AlertDialogDescription className="text-emerald-100">
+                                                                Total a cubrir:{' '}
+                                                                <span className="text-3xl font-bold">${parseFloat(calcularTotal()).toFixed(2)}</span>
+                                                            </AlertDialogDescription>
+                                                        </div>
+                                                    </div>
+                                                </AlertDialogHeader>
+
+                                                <ScrollArea className="h-[800px] w-[800px]">
+                                                    <div className="space-y-8 px-8 py-6">
+                                                        <div className="grid gap-8 lg:grid-cols-2">
+                                                            {/* CLIENTES */}
+                                                            <FieldSet>
+                                                                <FieldLegend className="flex items-center gap-3 text-lg font-semibold">
+                                                                    <Users className="h-5 w-5 text-blue-600" />
+                                                                    Financiamiento con Clientes
+                                                                </FieldLegend>
+                                                                <FieldDescription>Usa créditos de clientes o genera préstamos</FieldDescription>
+
+                                                                <FieldGroup className="space-y-6 pt-4">
+                                                                    <Field>
+                                                                        <Popover open={clienteSelectOpen} onOpenChange={setClienteSelectOpen}>
+                                                                            <PopoverTrigger asChild>
+                                                                                <Button
+                                                                                    variant="outline"
+                                                                                    className="h-12 w-full cursor-pointer justify-between"
+                                                                                >
+                                                                                    <span className="flex items-center gap-2">
+                                                                                        <Users className="h-4 w-4" />
+                                                                                        {clienteSearchTerm || 'Buscar cliente...'}
+                                                                                    </span>
+                                                                                    <ChevronsUpDown className="h-4 w-4 opacity-50" />
+                                                                                </Button>
+                                                                            </PopoverTrigger>
+                                                                            <PopoverContent className="w-full p-0" align="start">
+                                                                                <div className="space-y-3 p-3">
+                                                                                    <Input
+                                                                                        placeholder="Buscar cliente..."
+                                                                                        value={clienteSearchTerm}
+                                                                                        onChange={(e) => setClienteSearchTerm(e.target.value)}
+                                                                                        autoFocus
+                                                                                    />
+                                                                                    <ScrollArea className="h-64 rounded-md border">
+                                                                                        {isSearchingClientes ? (
+                                                                                            <div className="py-8 text-center">
+                                                                                                <Loader2 className="h-8 w-8 animate-spin" />
+                                                                                            </div>
+                                                                                        ) : filteredClientes.length > 0 ? (
+                                                                                            filteredClientes.map((cliente) => {
+                                                                                                const seleccionado = data.pagos_clientes.some(
+                                                                                                    (p) => p.cliente_id === cliente.id,
+                                                                                                );
+                                                                                                return (
+                                                                                                    <div
+                                                                                                        key={cliente.id}
+                                                                                                        className={cn(
+                                                                                                            'flex cursor-pointer items-center justify-between rounded-lg px-4 py-3 transition-colors',
+                                                                                                            seleccionado
+                                                                                                                ? 'bg-primary/10'
+                                                                                                                : 'hover:bg-accent',
+                                                                                                        )}
+                                                                                                        onClick={() => {
+                                                                                                            if (!seleccionado) {
+                                                                                                                setData('pagos_clientes', [
+                                                                                                                    ...data.pagos_clientes,
+                                                                                                                    {
+                                                                                                                        cliente_id: cliente.id,
+                                                                                                                        monto: 0,
+                                                                                                                    },
+                                                                                                                ]);
+                                                                                                            }
+                                                                                                            setClienteSelectOpen(false);
+                                                                                                            setClienteSearchTerm('');
+                                                                                                        }}
+                                                                                                    >
+                                                                                                        <div className="flex items-center gap-3">
+                                                                                                            <div className="bg-primary/10 text-primary flex h-10 w-10 items-center justify-center rounded-full font-bold">
+                                                                                                                {cliente.nombre_cliente[0]}
+                                                                                                            </div>
+                                                                                                            <div>
+                                                                                                                <p className="font-medium">
+                                                                                                                    {cliente.nombre_cliente}
+                                                                                                                </p>
+                                                                                                                <p className="text-muted-foreground text-sm">
+                                                                                                                    {cliente.telefono_cliente}
+                                                                                                                </p>
+                                                                                                            </div>
+                                                                                                        </div>
+                                                                                                        <Badge
+                                                                                                            variant={
+                                                                                                                cliente.deuda_pago_cliente > 0
+                                                                                                                    ? 'default'
+                                                                                                                    : 'secondary'
+                                                                                                            }
+                                                                                                        >
+                                                                                                            ${cliente.deuda_pago_cliente}
+                                                                                                        </Badge>
+                                                                                                    </div>
+                                                                                                );
+                                                                                            })
+                                                                                        ) : (
+                                                                                            <div className="text-muted-foreground py-8 text-center">
+                                                                                                No hay clientes
+                                                                                            </div>
                                                                                         )}
+                                                                                    </ScrollArea>
+                                                                                    <Button
+                                                                                        variant="outline"
+                                                                                        className="w-full cursor-pointer"
                                                                                         onClick={() => {
-                                                                                            if (!seleccionado) {
-                                                                                                setData('pagos_clientes', [
-                                                                                                    ...data.pagos_clientes,
-                                                                                                    { cliente_id: cliente.id, monto: 0 },
-                                                                                                ]);
-                                                                                            }
+                                                                                            setIsCrearClienteDialogOpen(true);
                                                                                             setClienteSelectOpen(false);
-                                                                                            setClienteSearchTerm('');
                                                                                         }}
                                                                                     >
-                                                                                        <div className="flex items-center gap-3">
-                                                                                            <div className="bg-primary/10 text-primary flex h-10 w-10 items-center justify-center rounded-full font-bold">
-                                                                                                {cliente.nombre_cliente[0]}
-                                                                                            </div>
-                                                                                            <div>
-                                                                                                <p className="font-medium">
-                                                                                                    {cliente.nombre_cliente}
-                                                                                                </p>
-                                                                                                <p className="text-muted-foreground text-sm">
-                                                                                                    {cliente.telefono_cliente}
-                                                                                                </p>
-                                                                                            </div>
-                                                                                        </div>
-                                                                                        <Badge
-                                                                                            variant={
-                                                                                                cliente.deuda_pago_cliente > 0
-                                                                                                    ? 'default'
-                                                                                                    : 'secondary'
-                                                                                            }
-                                                                                        >
-                                                                                            ${cliente.deuda_pago_cliente}
-                                                                                        </Badge>
-                                                                                    </div>
-                                                                                );
-                                                                            })
-                                                                        ) : (
-                                                                            <div className="py-py-8 text-muted-foreground text-center">
-                                                                                No se encontraron clientes
-                                                                            </div>
-                                                                        )}
-                                                                    </ScrollArea>
-                                                                    <Button
-                                                                        variant="outline"
-                                                                        className="w-full"
-                                                                        onClick={() => {
-                                                                            setIsCrearClienteDialogOpen(true);
-                                                                            setClienteSelectOpen(false);
-                                                                        }}
-                                                                    >
-                                                                        <PlusCircle className="mr-2 h-4 w-4" />
-                                                                        Crear nuevo cliente
-                                                                    </Button>
-                                                                </div>
-                                                            </PopoverContent>
-                                                        </Popover>
-                                                    </Field>
+                                                                                        <PlusCircle className="mr-2 h-4 w-4" />
+                                                                                        Crear cliente
+                                                                                    </Button>
+                                                                                </div>
+                                                                            </PopoverContent>
+                                                                        </Popover>
+                                                                    </Field>
 
-                                                    {/* Lista de clientes */}
-                                                    {data.pagos_clientes.length > 0 && (
-                                                        <div className="space-y-4">
-                                                            <div className="flex items-center justify-between">
-                                                                <h4 className="text-lg font-semibold">Clientes seleccionados</h4>
-                                                                <Badge variant="secondary" className="px-3 py-1 text-base">
-                                                                    Total: ${data.pagos_clientes.reduce((a, p) => a + (p.monto || 0), 0).toFixed(2)}
-                                                                </Badge>
-                                                            </div>
-
-                                                            <div className="space-y-3">
-                                                                {data.pagos_clientes.map((pago) => {
-                                                                    const cliente = clientes.find((c) => c.id === pago.cliente_id);
-                                                                    const disponible = cliente?.deuda_pago_cliente || 0;
-
-                                                                    return (
-                                                                        <Card key={pago.cliente_id}>
-                                                                            <CardContent className="p-5">
-                                                                                <div className="flex items-center justify-between gap-4">
-                                                                                    <div className="flex items-center gap-4">
-                                                                                        <div className="bg-primary/10 text-primary flex h-12 w-12 items-center justify-center rounded-full text-xl font-bold">
-                                                                                            {cliente?.nombre_cliente[0] || '?'}
-                                                                                        </div>
-                                                                                        <div>
-                                                                                            <p className="text-lg font-semibold">
-                                                                                                {cliente?.nombre_cliente || 'Cliente'}
-                                                                                            </p>
-                                                                                            <p className="text-muted-foreground text-sm">
-                                                                                                Crédito: ${disponible}
-                                                                                            </p>
-                                                                                        </div>
-                                                                                    </div>
-
-                                                                                    <div className="flex items-center gap-3">
-                                                                                        <Field>
-                                                                                            <FieldLabel className="sr-only">Monto</FieldLabel>
-                                                                                            <InputGroup>
-                                                                                                <InputGroupText>$</InputGroupText>
-                                                                                                <InputGroupInput
-                                                                                                    type="number"
-                                                                                                    min="0"
-                                                                                                    step="0.01"
-                                                                                                    placeholder="0.00"
-                                                                                                    value={pago.monto || ''}
-                                                                                                    onChange={(e) => {
-                                                                                                        const monto = parseFloat(e.target.value) || 0;
+                                                                    {data.pagos_clientes.length > 0 && (
+                                                                        <div className="space-y-4">
+                                                                            {data.pagos_clientes.map((pago) => {
+                                                                                const cliente = clientes.find((c) => c.id === pago.cliente_id);
+                                                                                return (
+                                                                                    <Card key={pago.cliente_id}>
+                                                                                        <CardContent className="p-4">
+                                                                                            <div className="mb-3 flex items-center justify-between">
+                                                                                                <div>
+                                                                                                    <p className="font-semibold">
+                                                                                                        {cliente?.nombre_cliente}
+                                                                                                    </p>
+                                                                                                    <p className="text-muted-foreground text-xs">
+                                                                                                        Crédito: ${cliente?.deuda_pago_cliente || 0}
+                                                                                                    </p>
+                                                                                                </div>
+                                                                                                <Button
+                                                                                                    variant="ghost"
+                                                                                                    size="icon"
+                                                                                                    className="cursor-pointer"
+                                                                                                    onClick={() =>
                                                                                                         setData(
                                                                                                             'pagos_clientes',
-                                                                                                            data.pagos_clientes.map((p) =>
-                                                                                                                p.cliente_id === pago.cliente_id
-                                                                                                                    ? { ...p, monto }
-                                                                                                                    : p,
+                                                                                                            data.pagos_clientes.filter(
+                                                                                                                (p) =>
+                                                                                                                    p.cliente_id !== pago.cliente_id,
                                                                                                             ),
-                                                                                                        );
-                                                                                                    }}
-                                                                                                    className="h-12 text-lg font-medium"
-                                                                                                />
-                                                                                            </InputGroup>
-                                                                                        </Field>
-                                                                                        <Button
-                                                                                            variant="ghost"
-                                                                                            size="icon"
-                                                                                            onClick={() =>
-                                                                                                setData(
-                                                                                                    'pagos_clientes',
-                                                                                                    data.pagos_clientes.filter(
-                                                                                                        (p) => p.cliente_id !== pago.cliente_id,
-                                                                                                    ),
-                                                                                                )
-                                                                                            }
-                                                                                        >
-                                                                                            <X className="h-5 w-5 text-red-600" />
-                                                                                        </Button>
-                                                                                    </div>
-                                                                                </div>
-                                                                            </CardContent>
-                                                                        </Card>
-                                                                    );
-                                                                })}
+                                                                                                        )
+                                                                                                    }
+                                                                                                >
+                                                                                                    <X className="h-4 w-4" />
+                                                                                                </Button>
+                                                                                            </div>
+                                                                                            <Field>
+                                                                                                <FieldLabel className="text-xs">Monto</FieldLabel>
+                                                                                                <InputGroup>
+                                                                                                    <InputGroupInput
+                                                                                                        type="number"
+                                                                                                        min="0"
+                                                                                                        step="0.01"
+                                                                                                        value={pago.monto || ''}
+                                                                                                        onChange={(e) => {
+                                                                                                            const monto =
+                                                                                                                parseFloat(e.target.value) || 0;
+                                                                                                            setData(
+                                                                                                                'pagos_clientes',
+                                                                                                                data.pagos_clientes.map((p) =>
+                                                                                                                    p.cliente_id === pago.cliente_id
+                                                                                                                        ? { ...p, monto }
+                                                                                                                        : p,
+                                                                                                                ),
+                                                                                                            );
+                                                                                                        }}
+                                                                                                    />
+                                                                                                </InputGroup>
+                                                                                            </Field>
+                                                                                        </CardContent>
+                                                                                    </Card>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    )}
+                                                                </FieldGroup>
+                                                            </FieldSet>
+
+                                                            {/* CUENTAS */}
+                                                            <FieldSet>
+                                                                <FieldLegend className="flex items-center gap-3 text-lg font-semibold">
+                                                                    <Wallet className="h-5 w-5 text-emerald-600" />
+                                                                    Pago desde Cuentas
+                                                                </FieldLegend>
+                                                                <FieldDescription>Selecciona las cuentas a débitar</FieldDescription>
+
+                                                                <FieldGroup className="space-y-6 pt-4">
+                                                                    <Field>
+                                                                        <Select
+                                                                            value={data.pagos.map((p) => p.cuenta_id.toString())}
+                                                                            onValueChange={(value) => {
+                                                                                const ids = Array.isArray(value)
+                                                                                    ? value.map(Number)
+                                                                                    : [Number(value)];
+                                                                                const nuevos = ids.map((id) => ({
+                                                                                    cuenta_id: id,
+                                                                                    monto: data.pagos.find((p) => p.cuenta_id === id)?.monto || 0,
+                                                                                }));
+                                                                                setData('pagos', nuevos);
+                                                                            }}
+                                                                            multiple
+                                                                        >
+                                                                            <SelectTrigger className="h-12 cursor-pointer">
+                                                                                <SelectValue placeholder="Seleccionar cuentas..." />
+                                                                            </SelectTrigger>
+                                                                            <SelectContent>
+                                                                                {cuentas.map((cuenta) => (
+                                                                                    <SelectItem key={cuenta.id} value={cuenta.id.toString()}>
+                                                                                        <div className="flex w-full justify-between">
+                                                                                            <span>{cuenta.nombre_cuenta}</span>
+                                                                                            <span className="text-muted-foreground">
+                                                                                                ${cuenta.saldo_cuenta}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                    </SelectItem>
+                                                                                ))}
+                                                                            </SelectContent>
+                                                                        </Select>
+                                                                    </Field>
+
+                                                                    {data.pagos.length > 0 && (
+                                                                        <div className="space-y-4">
+                                                                            {data.pagos.map((pago) => {
+                                                                                const cuenta = cuentas.find((c) => c.id === pago.cuenta_id);
+                                                                                return (
+                                                                                    <Card key={pago.cuenta_id}>
+                                                                                        <CardContent className="p-4">
+                                                                                            <div className="mb-3 flex items-center justify-between">
+                                                                                                <div>
+                                                                                                    <p className="font-semibold">
+                                                                                                        {cuenta?.nombre_cuenta}
+                                                                                                    </p>
+                                                                                                    <p className="text-muted-foreground text-xs">
+                                                                                                        Saldo: ${cuenta?.saldo_cuenta}
+                                                                                                    </p>
+                                                                                                </div>
+                                                                                                <Button
+                                                                                                    variant="ghost"
+                                                                                                    size="icon"
+                                                                                                    className="cursor-pointer"
+                                                                                                    onClick={() =>
+                                                                                                        setData(
+                                                                                                            'pagos',
+                                                                                                            data.pagos.filter(
+                                                                                                                (p) => p.cuenta_id !== pago.cuenta_id,
+                                                                                                            ),
+                                                                                                        )
+                                                                                                    }
+                                                                                                >
+                                                                                                    <X className="h-4 w-4" />
+                                                                                                </Button>
+                                                                                            </div>
+                                                                                            <Field>
+                                                                                                <FieldLabel className="text-xs">Monto</FieldLabel>
+                                                                                                <InputGroup>
+                                                                                                    <InputGroupInput
+                                                                                                        type="number"
+                                                                                                        min="0.01"
+                                                                                                        step="0.01"
+                                                                                                        value={pago.monto || ''}
+                                                                                                        onChange={(e) => {
+                                                                                                            const monto =
+                                                                                                                parseFloat(e.target.value) || 0;
+                                                                                                            setData(
+                                                                                                                'pagos',
+                                                                                                                data.pagos.map((p) =>
+                                                                                                                    p.cuenta_id === pago.cuenta_id
+                                                                                                                        ? { ...p, monto }
+                                                                                                                        : p,
+                                                                                                                ),
+                                                                                                            );
+                                                                                                        }}
+                                                                                                    />
+                                                                                                </InputGroup>
+                                                                                            </Field>
+                                                                                        </CardContent>
+                                                                                    </Card>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    )}
+                                                                </FieldGroup>
+                                                            </FieldSet>
+                                                        </div>
+
+                                                        {/* RESUMEN */}
+                                                        <div className="rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50/50 p-6 dark:border-emerald-700 dark:bg-emerald-950/30">
+                                                            <h3 className="mb-6 text-center font-bold">Resumen de Pago</h3>
+                                                            <div className="space-y-4">
+                                                                <div className="flex justify-between">
+                                                                    <span className="text-muted-foreground">Cuentas:</span>
+                                                                    <span className="font-semibold">
+                                                                        ${data.pagos.reduce((a, p) => a + p.monto, 0).toFixed(2)}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex justify-between">
+                                                                    <span className="text-muted-foreground">Clientes:</span>
+                                                                    <span className="font-semibold">
+                                                                        ${data.pagos_clientes.reduce((a, p) => a + (p.monto || 0), 0).toFixed(2)}
+                                                                    </span>
+                                                                </div>
+                                                                <Separator />
+                                                                <div className="flex justify-between text-lg font-bold">
+                                                                    <span>Total cubierto:</span>
+                                                                    <span
+                                                                        className={
+                                                                            Number(
+                                                                                (
+                                                                                    data.pagos.reduce((a, p) => a + p.monto, 0) +
+                                                                                    data.pagos_clientes.reduce((a, p) => a + (p.monto || 0), 0)
+                                                                                ).toFixed(2),
+                                                                            ) === Number(calcularTotal())
+                                                                                ? 'text-emerald-600'
+                                                                                : 'text-orange-600'
+                                                                        }
+                                                                    >
+                                                                        $
+                                                                        {(
+                                                                            data.pagos.reduce((a, p) => a + p.monto, 0) +
+                                                                            data.pagos_clientes.reduce((a, p) => a + (p.monto || 0), 0)
+                                                                        ).toFixed(2)}{' '}
+                                                                        / ${calcularTotal()}
+                                                                    </span>
+                                                                </div>
                                                             </div>
                                                         </div>
-                                                    )}
-                                                </FieldGroup>
-                                            </FieldSet>
+                                                    </div>
+                                                </ScrollArea>
 
-                                            <Separator />
-
-                                            {/* ---- CUENTAS BANCARIAS ---- */}
-                                            <FieldSet>
-                                                <FieldLegend className="flex items-center gap-3 text-xl font-semibold">
-                                                    <Wallet className="h-6 w-6 text-emerald-600" />
-                                                    Pago desde Cuentas Bancarias
-                                                </FieldLegend>
-                                                <FieldDescription>Opcional • Usa tu saldo disponible</FieldDescription>
-
-                                                <FieldGroup className="space-y-6">
-                                                    <Field>
-                                                        <Select
-                                                            value={data.pagos.map((p) => p.cuenta_id.toString())}
-                                                            onValueChange={(value) => {
-                                                                const ids = Array.isArray(value) ? value.map(Number) : [Number(value)];
-                                                                const nuevos = ids.map((id) => ({
-                                                                    cuenta_id: id,
-                                                                    monto: data.pagos.find((p) => p.cuenta_id === id)?.monto || 0,
-                                                                }));
-                                                                setData('pagos', nuevos);
-                                                            }}
-                                                            multiple
-                                                        >
-                                                            <SelectTrigger className="h-12">
-                                                                <SelectValue placeholder="Seleccionar cuentas..." />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {cuentas.map((cuenta) => (
-                                                                    <SelectItem key={cuenta.id} value={cuenta.id.toString()}>
-                                                                        <div className="flex w-full justify-between">
-                                                                            <span>{cuenta.nombre_cuenta}</span>
-                                                                            <span className="text-muted-foreground">
-                                                                                Saldo: ${cuenta.saldo_cuenta}
-                                                                            </span>
-                                                                        </div>
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </Field>
-
-                                                    {data.pagos.length > 0 && (
-                                                        <div className="space-y-4">
-                                                            {data.pagos.map((pago) => {
-                                                                const cuenta = cuentas.find((c) => c.id === pago.cuenta_id);
-                                                                return (
-                                                                    <div
-                                                                        key={pago.cuenta_id}
-                                                                        className="bg-muted/50 flex items-center gap-4 rounded-xl p-4"
-                                                                    >
-                                                                        <div className="flex-1">
-                                                                            <p className="font-semibold">{cuenta?.nombre_cuenta}</p>
-                                                                            <p className="text-muted-foreground text-sm">
-                                                                                Disponible: ${cuenta?.saldo_cuenta}
-                                                                            </p>
-                                                                        </div>
-                                                                        <Field className="w-48">
-                                                                            <InputGroup>
-                                                                                <InputGroupText>$</InputGroupText>
-                                                                                <InputGroupInput
-                                                                                    type="number"
-                                                                                    min="0.01"
-                                                                                    step="0.01"
-                                                                                    value={pago.monto || ''}
-                                                                                    onChange={(e) => {
-                                                                                        const monto = parseFloat(e.target.value) || 0;
-                                                                                        setData(
-                                                                                            'pagos',
-                                                                                            data.pagos.map((p) =>
-                                                                                                p.cuenta_id === pago.cuenta_id ? { ...p, monto } : p,
-                                                                                            ),
-                                                                                        );
-                                                                                    }}
-                                                                                    className="h-12 text-lg"
-                                                                                />
-                                                                            </InputGroup>
-                                                                        </Field>
-                                                                        <Button
-                                                                            variant="ghost"
-                                                                            size="icon"
-                                                                            onClick={() =>
-                                                                                setData(
-                                                                                    'pagos',
-                                                                                    data.pagos.filter((p) => p.cuenta_id !== pago.cuenta_id),
-                                                                                )
-                                                                            }
-                                                                        >
-                                                                            <X className="h-5 w-5 text-red-600" />
-                                                                        </Button>
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    )}
-                                                </FieldGroup>
-                                            </FieldSet>
-                                        </>
-                                    )}
-
-                                    {/* ===================== RESUMEN FINAL ===================== */}
-                                    <div className="rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50/50 p-6 dark:border-emerald-700 dark:bg-emerald-950/30">
-                                        <h3 className="mb-6 text-center text-xl font-bold">Resumen de Pago</h3>
-                                        <div className="space-y-4 text-lg">
-                                            <div className="flex justify-between">
-                                                <span>Pagado con cuentas:</span>
-                                                <span className="font-semibold text-blue-600">
-                                                    ${data.pagos.reduce((a, p) => a + p.monto, 0).toFixed(2)}
-                                                </span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span>Pagado con clientes:</span>
-                                                <span className="font-semibold text-emerald-600">
-                                                    ${data.pagos_clientes.reduce((a, p) => a + (p.monto || 0), 0).toFixed(2)}
-                                                </span>
-                                            </div>
-                                            <Separator className="my-4" />
-                                            <div className="flex justify-between text-xl font-bold">
-                                                <span>Total cubierto:</span>
-                                                <span
-                                                    className={cn(
-                                                        'transition-colors',
-                                                        Number(
-                                                            (
-                                                                data.pagos.reduce((a, p) => a + p.monto, 0) +
-                                                                data.pagos_clientes.reduce((a, p) => a + (p.monto || 0), 0)
-                                                            ).toFixed(2),
-                                                        ) === Number(calcularTotal().toString())
-                                                            ? 'text-emerald-600'
-                                                            : 'text-orange-600',
-                                                    )}
-                                                >
-                                                    $
-                                                    {(
-                                                        data.pagos.reduce((a, p) => a + p.monto, 0) +
-                                                        data.pagos_clientes.reduce((a, p) => a + (p.monto || 0), 0)
-                                                    ).toFixed(2)}{' '}
-                                                    / ${calcularTotal()}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </ScrollArea>
-
-                            <AlertDialogFooter className="bg-muted/50 border-t px-8 py-5">
-                                <AlertDialogCancel className="h-12 px-6 text-base">Cancelar</AlertDialogCancel>
-                                <Button
-                                    size="lg"
-                                    className="h-12 px-10 text-base font-semibold shadow-lg"
-                                    onClick={realizarCompra}
-                                    disabled={processing || productos.some((p) => !almacens.find((a) => a.id === p.almacen_id))}
-                                >
-                                    {processing ? (
-                                        <>
-                                            Procesando <Loader2 className="ml-2 h-5 w-5 animate-spin" />
-                                        </>
-                                    ) : (
-                                        <>
-                                            Confirmar Compra <CheckCircle className="ml-2 h-5 w-5" />
-                                        </>
-                                    )}
-                                </Button>
-                            </AlertDialogFooter>
+                                                <AlertDialogFooter className="bg-muted/50 border-t px-8 py-5">
+                                                    <Button
+                                                        variant="outline"
+                                                        onClick={() => setData('compra', '')}
+                                                        className="h-12 cursor-pointer px-6"
+                                                    >
+                                                        Atrás
+                                                    </Button>
+                                                    <Button
+                                                        onClick={realizarCompra}
+                                                        disabled={
+                                                            processing ||
+                                                            Number(
+                                                                (
+                                                                    data.pagos.reduce((a, p) => a + p.monto, 0) +
+                                                                    data.pagos_clientes.reduce((a, p) => a + (p.monto || 0), 0)
+                                                                ).toFixed(2),
+                                                            ) !== Number(calcularTotal())
+                                                        }
+                                                        className="h-12 cursor-pointer bg-emerald-600 px-8 hover:bg-emerald-700"
+                                                    >
+                                                        {processing ? (
+                                                            <>
+                                                                Procesando <Loader2 className="ml-2 h-5 w-5 animate-spin" />
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                Confirmar Pago <CheckCircle className="ml-2 h-5 w-5" />
+                                                            </>
+                                                        )}
+                                                    </Button>
+                                                </AlertDialogFooter>
+                                            </>
+                                        )}
+                                    </>
+                                );
+                            })()}
                         </AlertDialogContent>
                     </AlertDialog>
-
-                    {/* Botón cancelar */}
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button asChild variant="outline" size="lg">
-                                    <Link href="/dashboard">
-                                        <X className="mr-2 h-5 w-5" />
-                                        Cancelar
-                                    </Link>
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Regresar sin guardar</TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
                 </div>
 
                 {/* Diálogo para crear almacén */}
