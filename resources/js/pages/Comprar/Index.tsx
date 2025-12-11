@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field';
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSeparator, FieldSet } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -570,7 +570,7 @@ export default function ComprarPage() {
         };
 
         return (
-            <DialogContent className="max-h-[90vh] sm:max-w-lg">
+            <DialogContent className="max-h-[190vh] sm:max-w-lg">
                 {/* HEADER ELEGANTE */}
                 <DialogHeader className="border-b bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 text-white">
                     <div className="flex items-center gap-3">
@@ -670,6 +670,7 @@ export default function ComprarPage() {
                             </FieldGroup>
                         </FieldSet>
 
+                        <FieldSeparator />
                         {/* UBICACIÓN */}
                         <FieldSet>
                             <FieldLegend>Ubicación</FieldLegend>
@@ -681,7 +682,7 @@ export default function ComprarPage() {
                                         name="provincia_almacen"
                                         value={localAlmacen.provincia_almacen}
                                         onChange={handleLocalChange}
-                                        placeholder="Ej: Lima"
+                                        placeholder="Ej: Granma, Mayabeque"
                                     />
                                 </Field>
                                 <Field>
@@ -691,12 +692,13 @@ export default function ComprarPage() {
                                         name="ciudad_almacen"
                                         value={localAlmacen.ciudad_almacen}
                                         onChange={handleLocalChange}
-                                        placeholder="Ej: Lima Centro"
+                                        placeholder="Ej: Manzanillo, Quivicán"
                                     />
                                 </Field>
                             </FieldGroup>
                         </FieldSet>
 
+                        <FieldSeparator />
                         {/* NOTAS */}
                         <FieldSet>
                             <FieldLegend>Notas Adicionales</FieldLegend>
@@ -867,7 +869,7 @@ export default function ComprarPage() {
         };
 
         return (
-            <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-[500px]">
+            <DialogContent className="max-h-[190vh] sm:max-w-lg">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2 text-xl">
                         <Users className="h-5 w-5 text-blue-600" />
@@ -875,90 +877,91 @@ export default function ComprarPage() {
                     </DialogTitle>
                     <DialogDescription>Los clientes físicos pueden usarse como fuente de financiamiento para compras.</DialogDescription>
                 </DialogHeader>
-
-                <div className="grid gap-6 py-4">
-                    <div className="space-y-4">
-                        <div className="grid gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="dialog-nombre-cliente" className="flex items-center gap-1">
-                                    Nombre Completo <span className="text-red-500">*</span>
-                                </Label>
-                                <Input
-                                    id="dialog-nombre-cliente"
-                                    name="nombre_cliente"
-                                    value={localCliente.nombre_cliente}
-                                    onChange={handleLocalChange}
-                                    placeholder="Ej: Juan Pérez"
-                                    className={localErrors.nombre_cliente ? 'border-red-500' : ''}
-                                />
-                                {localErrors.nombre_cliente && <p className="text-sm text-red-500">{localErrors.nombre_cliente}</p>}
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="dialog-telefono-cliente" className="flex items-center gap-1">
-                                    Teléfono <span className="text-red-500">*</span>
-                                </Label>
-                                <Input
-                                    id="dialog-telefono-cliente"
-                                    name="telefono_cliente"
-                                    value={localCliente.telefono_cliente}
-                                    onChange={handleLocalChange}
-                                    placeholder="Ej: 555-1234"
-                                    className={localErrors.telefono_cliente ? 'border-red-500' : ''}
-                                />
-                                {localErrors.telefono_cliente && <p className="text-sm text-red-500">{localErrors.telefono_cliente}</p>}
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
+                <ScrollArea className="max-h-[70vh]">
+                    <div className="grid gap-6 py-4">
+                        <div className="space-y-4">
+                            <div className="grid gap-4">
                                 <div className="space-y-2">
-                                    <Label htmlFor="dialog-ciudad-cliente">Ciudad</Label>
+                                    <Label htmlFor="dialog-nombre-cliente" className="flex items-center gap-1">
+                                        Nombre Completo <span className="text-red-500">*</span>
+                                    </Label>
                                     <Input
-                                        id="dialog-ciudad-cliente"
-                                        name="ciudad_cliente"
-                                        value={localCliente.ciudad_cliente}
+                                        id="dialog-nombre-cliente"
+                                        name="nombre_cliente"
+                                        value={localCliente.nombre_cliente}
                                         onChange={handleLocalChange}
-                                        placeholder="Ej: Lima"
+                                        placeholder="Ej: Juan Pérez"
+                                        className={localErrors.nombre_cliente ? 'border-red-500' : ''}
+                                    />
+                                    {localErrors.nombre_cliente && <p className="text-sm text-red-500">{localErrors.nombre_cliente}</p>}
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="dialog-telefono-cliente" className="flex items-center gap-1">
+                                        Teléfono <span className="text-red-500">*</span>
+                                    </Label>
+                                    <Input
+                                        id="dialog-telefono-cliente"
+                                        name="telefono_cliente"
+                                        value={localCliente.telefono_cliente}
+                                        onChange={handleLocalChange}
+                                        placeholder="Ej: 555-1234"
+                                        className={localErrors.telefono_cliente ? 'border-red-500' : ''}
+                                    />
+                                    {localErrors.telefono_cliente && <p className="text-sm text-red-500">{localErrors.telefono_cliente}</p>}
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="dialog-ciudad-cliente">Ciudad</Label>
+                                        <Input
+                                            id="dialog-ciudad-cliente"
+                                            name="ciudad_cliente"
+                                            value={localCliente.ciudad_cliente}
+                                            onChange={handleLocalChange}
+                                            placeholder="Ej: Manzanillo, Quivicán"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="deuda_inicial">Crédito Inicial</Label>
+                                        <div className="flex items-center rounded-md border">
+                                            <span className="bg-muted px-3 py-2 text-amber-500">$</span>
+                                            <Input type="number" value="0" disabled className="border-0 bg-transparent" />
+                                        </div>
+                                        <p className="text-xs text-gray-500">Todos los clientes nuevos empiezan con crédito 0</p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="dialog-direccion-cliente">Dirección</Label>
+                                    <textarea
+                                        id="dialog-direccion-cliente"
+                                        name="direccion_cliente"
+                                        value={localCliente.direccion_cliente}
+                                        onChange={handleLocalChange}
+                                        placeholder="Dirección completa"
+                                        rows={3}
+                                        className="border-input ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex w-full rounded-md border bg-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                                     />
                                 </div>
+                            </div>
 
-                                <div className="space-y-2">
-                                    <Label htmlFor="deuda_inicial">Crédito Inicial</Label>
-                                    <div className="flex items-center rounded-md border bg-gray-50">
-                                        <span className="bg-muted px-3 py-2 text-gray-500">$</span>
-                                        <Input type="number" value="0" disabled className="border-0 bg-transparent" />
+                            <div className="rounded-lg bg-blue-50 p-4 dark:bg-blue-950/30">
+                                <div className="flex items-start gap-3">
+                                    <Info className="h-5 w-5 text-blue-600" />
+                                    <div className="text-sm text-blue-800 dark:text-blue-300">
+                                        <p className="font-medium">¿Cómo funciona el financiamiento con clientes?</p>
+                                        <p className="mt-1">
+                                            Los clientes pueden prestar dinero a la empresa. Al usar un cliente para pagar una compra, se reduce su
+                                            crédito (si tenía) o se genera una nueva deuda con el cliente.
+                                        </p>
                                     </div>
-                                    <p className="text-xs text-gray-500">Todos los clientes nuevos empiezan con crédito 0</p>
-                                </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="dialog-direccion-cliente">Dirección</Label>
-                                <textarea
-                                    id="dialog-direccion-cliente"
-                                    name="direccion_cliente"
-                                    value={localCliente.direccion_cliente}
-                                    onChange={handleLocalChange}
-                                    placeholder="Dirección completa"
-                                    rows={3}
-                                    className="border-input ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex w-full rounded-md border bg-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="rounded-lg bg-blue-50 p-4 dark:bg-blue-950/30">
-                            <div className="flex items-start gap-3">
-                                <Info className="h-5 w-5 text-blue-600" />
-                                <div className="text-sm text-blue-800 dark:text-blue-300">
-                                    <p className="font-medium">¿Cómo funciona el financiamiento con clientes?</p>
-                                    <p className="mt-1">
-                                        Los clientes pueden prestar dinero a la empresa. Al usar un cliente para pagar una compra, se reduce su
-                                        crédito (si tenía) o se genera una nueva deuda con el cliente.
-                                    </p>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
+                </ScrollArea>
 
                 <DialogFooter className="gap-2">
                     <Button type="button" variant="destructive" onClick={resetDialog}>
@@ -1645,7 +1648,7 @@ export default function ComprarPage() {
                     </Table>
                 </div>
 
-                {/* ==================== PROCESAR LAS COMPRAS DE LOS PRDUCTOS ==================== */}
+                {/* ==================== PROCESAR LAS COMPRAS DE LOS PRODUCTOS ==================== */}
                 <div className="flex justify-center gap-4 p-6">
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
@@ -1661,7 +1664,6 @@ export default function ComprarPage() {
                         </AlertDialogTrigger>
 
                         <AlertDialogContent className="flex max-h-[90vh] flex-col overflow-hidden p-0 sm:max-w-5xl">
-                            {/* Estado actual del paso */}
                             {(() => {
                                 const step = data.compra === 'deuda_proveedor' ? 'deuda' : data.compra === 'pago_cash' ? 'pago' : 'select';
 
@@ -1904,16 +1906,18 @@ export default function ComprarPage() {
                                                                                             </div>
                                                                                         )}
                                                                                     </ScrollArea>
+
+                                                                                    {/* BOTÓN QUE SÍ ABRE EL MODAL DE CREAR CLIENTE */}
                                                                                     <Button
                                                                                         variant="outline"
-                                                                                        className="w-full cursor-pointer"
+                                                                                        className="mt-2 w-full cursor-pointer"
                                                                                         onClick={() => {
                                                                                             setIsCrearClienteDialogOpen(true);
                                                                                             setClienteSelectOpen(false);
                                                                                         }}
                                                                                     >
                                                                                         <PlusCircle className="mr-2 h-4 w-4" />
-                                                                                        Crear cliente
+                                                                                        Crear nuevo cliente
                                                                                     </Button>
                                                                                 </div>
                                                                             </PopoverContent>
@@ -2175,12 +2179,17 @@ export default function ComprarPage() {
                             })()}
                         </AlertDialogContent>
                     </AlertDialog>
-                </div>
 
-                {/* Diálogo para crear almacén */}
-                <Dialog open={isCrearAlmacenDialogOpen} onOpenChange={setIsCrearAlmacenDialogOpen}>
-                    <CrearAlmacenDialogContent />
-                </Dialog>
+                    {/* MODAL CREAR CLIENTE - SE ABRE CON EL BOTÓN DE ARRIBA */}
+                    <Dialog open={isCrearClienteDialogOpen} onOpenChange={setIsCrearClienteDialogOpen}>
+                        <CrearClienteDialogContent />
+                    </Dialog>
+
+                    {/* MODAL CREAR ALMACÉN */}
+                    <Dialog open={isCrearAlmacenDialogOpen} onOpenChange={setIsCrearAlmacenDialogOpen}>
+                        <CrearAlmacenDialogContent />
+                    </Dialog>
+                </div>
 
                 <Toaster position="top-center" />
             </div>
