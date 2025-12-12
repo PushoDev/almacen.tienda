@@ -586,9 +586,12 @@ class VentaController extends Controller
     /**
      * Guarda o actualiza el destinatario de una venta pendiente
      */
+    /**
+     * Guarda o actualiza el destinatario de una venta pendiente
+     * Permite duplicados libremente - cada venta tiene su registro independiente
+     */
     public function guardarDestinatario(Request $request, Venta $venta)
     {
-        // Solo permitir si la venta está pendiente
         if ($venta->estado !== 'pendiente') {
             return response()->json([
                 'success' => false,
@@ -599,15 +602,16 @@ class VentaController extends Controller
         $validated = $request->validate([
             'nombre' => 'required|string|max:100',
             'apellidos' => 'required|string|max:100',
-            'carnet_identidad' => 'required|string|min:11|max:11|regex:/^\d+$/',
+            'carnet_identidad' => 'nullable|string|size:11|regex:/^\d+$/', // Opcional y exactamente 11 dígitos si se llena
             'direccion_residencia' => 'required|string|max:500',
             'telefono_contacto' => 'nullable|string|max:20',
             'parentesco_cliente' => 'nullable|string|max:100',
             'observaciones' => 'nullable|string|max:500',
         ]);
 
-        // Limpiar CI por si viene con espacios
-        $validated['carnet_identidad'] = preg_replace('/\D/', '', $validated['carnet_identidad']);
+        if ($request->filled('carnet_identidad')) {
+            $validated['carnet_identidad'] = preg_replace('/\D/', '', $validated['carnet_identidad']);
+        }
 
         DB::transaction(function () use ($venta, $validated) {
             if ($venta->destinatario) {
@@ -617,17 +621,18 @@ class VentaController extends Controller
             }
         });
 
+        $venta->load('destinatario');
+
         return response()->json([
             'success' => true,
             'message' => 'Información del receptor guardada correctamente',
+            'destinatario' => $venta->destinatario,
         ]);
     }
 
+
     /**
      * Aprobar la venta
-     *
-     * @param Venta $venta
-     * @return void
      */
     public function aprobarVenta(Venta $venta)
     {
@@ -640,34 +645,42 @@ class VentaController extends Controller
         }
 
         DB::transaction(function () use ($venta) {
-            // 1. Aprobar la venta
+            // 1. Cambiar estado a completada
             $venta->update(['estado' => 'completada']);
 
-            // 2. Buscar la tasa oficial del CUP (la que tienes en la tabla monedas)
+            // 2. Tasa oficial del CUP para ganancia/perdida cambiaria
             $tasaOficialCUP = DB::table('monedas')
                 ->where('codigo_moneda', 'CUP')
-                ->value('tasa_cambio') ?? 365;   // si no existe, usa 365 por defecto
+                ->value('tasa_cambio') ?? 365;
 
             $gananciaExtraUSD = 0;
 
-            // 3. Recorrer solo los pagos que sean en CUP
             foreach ($venta->pagos as $pago) {
+                // Cálculo de ganancia/perdida cambiaria solo para pagos en CUP
                 if ($pago->moneda && $pago->moneda->codigo_moneda === 'CUP') {
-                    $montoCUP = $pago->monto;                    // ej: 46500
-                    $tasaQueTuPusiste = $pago->tasa_cambio_aplicada; // ej: 465
-
-                    // Valor real de esos CUP con la tasa oficial
-                    $valorRealUSD = $montoCUP / $tasaOficialCUP;     // 46500 / 365 = 127.40
-                    $valorQueTuContasteUSD = $pago->monto_equivalente; // 100
-
-                    // La diferencia es ganancia extra
-                    $gananciaExtraUSD += ($valorRealUSD - $valorQueTuContasteUSD);
+                    $montoCUP = $pago->monto;
+                    $valorRealUSD = $montoCUP / $tasaOficialCUP;
+                    $valorContadoUSD = $pago->monto_equivalente;
+                    $gananciaExtraUSD += ($valorRealUSD - $valorContadoUSD);
                 }
+
+                // Incrementar saldo en la cuenta con el monto original si la moneda coincide
+                $cuenta = $pago->cuenta;
+
+                // Moneda de la cuenta
+                $codigoCuenta = $cuenta->moneda?->codigo_moneda ?? $cuenta->tipo_moneda;
+
+                // Moneda del pago
+                $codigoPago = $pago->moneda?->codigo_moneda;
+
+                if ($codigoPago === $codigoCuenta) {
+                    $cuenta->increment('saldo_cuenta', $pago->monto);
+                }
+                // Si no coinciden, por seguridad no acumulamos (puedes ajustar si quieres conversión)
             }
 
             $gananciaExtraUSD = round($gananciaExtraUSD, 2);
 
-            // 4. Guardar los dos campos que ya tienes en la tabla ventas
             $venta->update([
                 'ganancia_perdida_cambiaria' => $gananciaExtraUSD,
                 'ganancia_real_total'        => $venta->total_ganancia + $gananciaExtraUSD,
