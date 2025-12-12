@@ -12,7 +12,6 @@ use App\Models\Almacen;
 use App\Models\Producto;
 use App\Models\Cliente;
 use App\Models\Moneda;
-use App\Models\DestinatarioVenta;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -687,7 +686,10 @@ class VentaController extends Controller
             ]);
         });
 
-        return response()->json(['success' => true]);
+        return response()->json([
+            'success' => true,
+            'message' => 'Venta Aprobada Satisfactoriamente'
+        ]);
     }
 
     /**
