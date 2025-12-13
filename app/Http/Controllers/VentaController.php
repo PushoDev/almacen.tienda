@@ -12,10 +12,10 @@ use App\Models\Almacen;
 use App\Models\Producto;
 use App\Models\Cliente;
 use App\Models\Moneda;
-use App\Models\DestinatarioVenta;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
 
 class VentaController extends Controller
@@ -23,6 +23,58 @@ class VentaController extends Controller
     // ========================================================================
     // MÉTODOS DE CARGA DE DATOS (API / JSON)
     // ========================================================================
+
+    /**
+     * Store a newly created cliente for use during venta process.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function storeClienteForVenta(Request $request)
+    {
+        // Primero, verificar si el cliente ya existe (por nombre O teléfono)
+        $clienteExistente = Cliente::where('nombre_cliente', $request->nombre_cliente)
+            ->orWhere('telefono_cliente', $request->telefono_cliente)
+            ->first();
+
+        // Si el cliente ya existe, retornarlo inmediatamente
+        if ($clienteExistente) {
+            return response()->json([
+                'message' => 'Cliente ya existe en el sistema. Usando cliente existente.',
+                'cliente' => $clienteExistente,
+                'existe' => true
+            ], 200);
+        }
+
+        // Validación de datos
+        $validator = Validator::make($request->all(), [
+            'nombre_cliente' => ['required', 'string'],
+            'tipo_cliente' => ['required', 'in:fisico,asociado'],
+            'telefono_cliente' => ['required', 'string'],
+            'direccion_cliente' => ['nullable', 'string'],
+            'ciudad_cliente' => ['nullable', 'string'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        // Crear el cliente con deuda_pago_cliente en 0
+        $cliente = Cliente::create([
+            'nombre_cliente' => $request->nombre_cliente,
+            'tipo_cliente' => $request->tipo_cliente ?? 'fisico',
+            'deuda_pago_cliente' => 0,
+            'telefono_cliente' => $request->telefono_cliente,
+            'direccion_cliente' => $request->direccion_cliente ?? null,
+            'ciudad_cliente' => $request->ciudad_cliente ?? null,
+        ]);
+
+        return response()->json([
+            'message' => 'Cliente creado exitosamente para la venta.',
+            'cliente' => $cliente,
+            'existe' => false
+        ], 201);
+    }
 
     /**
      * Cargar Almacenes accesibles para el usuario autenticado.
@@ -586,9 +638,12 @@ class VentaController extends Controller
     /**
      * Guarda o actualiza el destinatario de una venta pendiente
      */
+    /**
+     * Guarda o actualiza el destinatario de una venta pendiente
+     * Permite duplicados libremente - cada venta tiene su registro independiente
+     */
     public function guardarDestinatario(Request $request, Venta $venta)
     {
-        // Solo permitir si la venta está pendiente
         if ($venta->estado !== 'pendiente') {
             return response()->json([
                 'success' => false,
@@ -599,15 +654,16 @@ class VentaController extends Controller
         $validated = $request->validate([
             'nombre' => 'required|string|max:100',
             'apellidos' => 'required|string|max:100',
-            'carnet_identidad' => 'required|string|min:11|max:11|regex:/^\d+$/',
+            'carnet_identidad' => 'nullable|string|size:11|regex:/^\d+$/', // Opcional y exactamente 11 dígitos si se llena
             'direccion_residencia' => 'required|string|max:500',
             'telefono_contacto' => 'nullable|string|max:20',
             'parentesco_cliente' => 'nullable|string|max:100',
             'observaciones' => 'nullable|string|max:500',
         ]);
 
-        // Limpiar CI por si viene con espacios
-        $validated['carnet_identidad'] = preg_replace('/\D/', '', $validated['carnet_identidad']);
+        if ($request->filled('carnet_identidad')) {
+            $validated['carnet_identidad'] = preg_replace('/\D/', '', $validated['carnet_identidad']);
+        }
 
         DB::transaction(function () use ($venta, $validated) {
             if ($venta->destinatario) {
@@ -617,17 +673,18 @@ class VentaController extends Controller
             }
         });
 
+        $venta->load('destinatario');
+
         return response()->json([
             'success' => true,
             'message' => 'Información del receptor guardada correctamente',
+            'destinatario' => $venta->destinatario,
         ]);
     }
 
+
     /**
      * Aprobar la venta
-     *
-     * @param Venta $venta
-     * @return void
      */
     public function aprobarVenta(Venta $venta)
     {
@@ -640,41 +697,52 @@ class VentaController extends Controller
         }
 
         DB::transaction(function () use ($venta) {
-            // 1. Aprobar la venta
+            // 1. Cambiar estado a completada
             $venta->update(['estado' => 'completada']);
 
-            // 2. Buscar la tasa oficial del CUP (la que tienes en la tabla monedas)
+            // 2. Tasa oficial del CUP para ganancia/perdida cambiaria
             $tasaOficialCUP = DB::table('monedas')
                 ->where('codigo_moneda', 'CUP')
-                ->value('tasa_cambio') ?? 365;   // si no existe, usa 365 por defecto
+                ->value('tasa_cambio') ?? 365;
 
             $gananciaExtraUSD = 0;
 
-            // 3. Recorrer solo los pagos que sean en CUP
             foreach ($venta->pagos as $pago) {
+                // Cálculo de ganancia/perdida cambiaria solo para pagos en CUP
                 if ($pago->moneda && $pago->moneda->codigo_moneda === 'CUP') {
-                    $montoCUP = $pago->monto;                    // ej: 46500
-                    $tasaQueTuPusiste = $pago->tasa_cambio_aplicada; // ej: 465
-
-                    // Valor real de esos CUP con la tasa oficial
-                    $valorRealUSD = $montoCUP / $tasaOficialCUP;     // 46500 / 365 = 127.40
-                    $valorQueTuContasteUSD = $pago->monto_equivalente; // 100
-
-                    // La diferencia es ganancia extra
-                    $gananciaExtraUSD += ($valorRealUSD - $valorQueTuContasteUSD);
+                    $montoCUP = $pago->monto;
+                    $valorRealUSD = $montoCUP / $tasaOficialCUP;
+                    $valorContadoUSD = $pago->monto_equivalente;
+                    $gananciaExtraUSD += ($valorRealUSD - $valorContadoUSD);
                 }
+
+                // Incrementar saldo en la cuenta con el monto original si la moneda coincide
+                $cuenta = $pago->cuenta;
+
+                // Moneda de la cuenta
+                $codigoCuenta = $cuenta->moneda?->codigo_moneda ?? $cuenta->tipo_moneda;
+
+                // Moneda del pago
+                $codigoPago = $pago->moneda?->codigo_moneda;
+
+                if ($codigoPago === $codigoCuenta) {
+                    $cuenta->increment('saldo_cuenta', $pago->monto);
+                }
+                // Si no coinciden, por seguridad no acumulamos (puedes ajustar si quieres conversión)
             }
 
             $gananciaExtraUSD = round($gananciaExtraUSD, 2);
 
-            // 4. Guardar los dos campos que ya tienes en la tabla ventas
             $venta->update([
                 'ganancia_perdida_cambiaria' => $gananciaExtraUSD,
                 'ganancia_real_total'        => $venta->total_ganancia + $gananciaExtraUSD,
             ]);
         });
 
-        return response()->json(['success' => true]);
+        return response()->json([
+            'success' => true,
+            'message' => 'Venta Aprobada Satisfactoriamente'
+        ]);
     }
 
     /**

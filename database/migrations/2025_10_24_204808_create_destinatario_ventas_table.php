@@ -16,8 +16,8 @@ return new class extends Migration
             $table->foreignId('venta_id')->constrained()->onDelete('cascade');
             $table->string('nombre');
             $table->string('apellidos');
-            $table->string('carnet_identidad')->unique();
-            $table->text('direccion_residencia');
+            $table->string('carnet_identidad', 11)->nullable();
+            $table->text('direccion_residencia')->nullable();
             $table->string('telefono_contacto')->nullable();
             $table->string('parentesco_cliente')->nullable(); // familiar, amigo, etc.
             $table->text('observaciones')->nullable();
