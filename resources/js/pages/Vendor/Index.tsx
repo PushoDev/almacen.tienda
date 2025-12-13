@@ -11,8 +11,17 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from '@/components/ui/sonner';
@@ -21,7 +30,22 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
-import { BoxesIcon, Building2, DollarSign, Eye, Info, Minus, Plus, Search, ShoppingBag, ShoppingCart, Trash2, X } from 'lucide-react';
+import {
+    BoxesIcon,
+    Building2,
+    DollarSign,
+    Eye,
+    Info,
+    Minus,
+    Plus,
+    PlusCircle,
+    Search,
+    ShoppingBag,
+    ShoppingCart,
+    Trash2,
+    Users,
+    X,
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -163,6 +187,11 @@ export default function PuntoVentaOficial({
         tasaCambio: number;
         monedaSimbolo: string;
     } | null>(null);
+
+    // Estado para el modal de crear cliente
+    const [isCrearClienteDialogOpen, setIsCrearClienteDialogOpen] = useState(false);
+    const [clienteErrors, setClienteErrors] = useState<Record<string, string>>({});
+
 
     const currencies = useMemo(() => {
         console.log('Monedas disponibles:', monedas);
@@ -635,6 +664,169 @@ export default function PuntoVentaOficial({
 
     const selectedCurrencyInfo = currentPayment.moneda_id ? getCurrencyInfo(currentPayment.moneda_id) : null;
 
+    // 🆕 COMPONENTE DE CREACIÓN DE CLIENTE
+    const CrearClienteDialogContent = () => {
+        const [localCliente, setLocalCliente] = useState({
+            nombre_cliente: '',
+            telefono_cliente: '',
+            direccion_cliente: '',
+            ciudad_cliente: '',
+        });
+
+        const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
+
+        const handleLocalChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+            const { name, value } = e.target;
+            setLocalCliente((prev) => ({
+                ...prev,
+                [name]: value,
+            }));
+        };
+
+        const crearClienteLocal = async () => {
+            if (!localCliente.nombre_cliente.trim() || !localCliente.telefono_cliente.trim()) {
+                toast.error('Nombre y teléfono son requeridos');
+                return;
+            }
+
+            try {
+                const response = await axios.post(route('ventas.cliente.store'), {
+                    ...localCliente,
+                    tipo_cliente: 'fisico',
+                });
+
+                const { cliente, existe, message } = response.data;
+
+                if (existe) {
+                    toast.info(message, {
+                        description: 'El cliente ya existía en el sistema. Se ha seleccionado automáticamente.',
+                    });
+                } else {
+                    toast.success(message, {
+                        description: 'Cliente creado exitosamente.',
+                    });
+                    setClientes((prev) => [...prev, cliente]);
+                }
+
+                setClienteSeleccionado(cliente.id.toString());
+
+                setLocalCliente({
+                    nombre_cliente: '',
+                    telefono_cliente: '',
+                    direccion_cliente: '',
+                    ciudad_cliente: '',
+                });
+
+                setLocalErrors({});
+                setIsCrearClienteDialogOpen(false);
+            } catch (error: any) {
+                console.error('Error al crear cliente:', error);
+                if (error.response?.data?.errors) {
+                    setLocalErrors(error.response.data.errors);
+                    toast.error('Error de validación', {
+                        description: 'Por favor corrige los errores en el formulario.',
+                    });
+                } else {
+                    toast.error('Error al crear cliente', {
+                        description: 'Intenta nuevamente o contacta al administrador.',
+                    });
+                }
+            }
+        };
+
+        const resetDialog = () => {
+            setLocalCliente({
+                nombre_cliente: '',
+                telefono_cliente: '',
+                direccion_cliente: '',
+                ciudad_cliente: '',
+            });
+            setLocalErrors({});
+            setIsCrearClienteDialogOpen(false);
+        };
+
+        return (
+            <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2 text-xl">
+                        <Users className="h-5 w-5 text-blue-600" />
+                        Crear Nuevo Cliente
+                    </DialogTitle>
+                    <DialogDescription>Añade un nuevo cliente al sistema para asociarlo a esta venta.</DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="dialog-nombre-cliente">
+                            Nombre Completo <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                            id="dialog-nombre-cliente"
+                            name="nombre_cliente"
+                            value={localCliente.nombre_cliente}
+                            onChange={handleLocalChange}
+                            placeholder="Ej: Juan Pérez"
+                            className={localErrors.nombre_cliente ? 'border-red-500' : ''}
+                        />
+                        {localErrors.nombre_cliente && <p className="text-sm text-red-500">{localErrors.nombre_cliente}</p>}
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="dialog-telefono-cliente">
+                            Teléfono <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                            id="dialog-telefono-cliente"
+                            name="telefono_cliente"
+                            value={localCliente.telefono_cliente}
+                            onChange={handleLocalChange}
+                            placeholder="Ej: 555-1234"
+                            className={localErrors.telefono_cliente ? 'border-red-500' : ''}
+                        />
+                        {localErrors.telefono_cliente && <p className="text-sm text-red-500">{localErrors.telefono_cliente}</p>}
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="dialog-ciudad-cliente">Ciudad</Label>
+                        <Input
+                            id="dialog-ciudad-cliente"
+                            name="ciudad_cliente"
+                            value={localCliente.ciudad_cliente}
+                            onChange={handleLocalChange}
+                            placeholder="Ej: La Habana"
+                        />
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="dialog-direccion-cliente">Dirección</Label>
+                        <textarea
+                            id="dialog-direccion-cliente"
+                            name="direccion_cliente"
+                            value={localCliente.direccion_cliente}
+                            onChange={handleLocalChange}
+                            placeholder="Dirección completa"
+                            rows={3}
+                            className="border-input ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex w-full rounded-md border bg-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                        />
+                    </div>
+                </div>
+
+                <DialogFooter className="gap-2">
+                    <Button type="button" variant="outline" onClick={resetDialog}>
+                        Cancelar
+                    </Button>
+                    <Button
+                        type="button"
+                        onClick={crearClienteLocal}
+                        className="bg-blue-600 hover:bg-blue-700"
+                        disabled={!localCliente.nombre_cliente.trim() || !localCliente.telefono_cliente.trim()}
+                    >
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Crear Cliente
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        );
+    };
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Punto de Venta" />
@@ -711,14 +903,24 @@ export default function PuntoVentaOficial({
                                             </Label>
                                             <Select value={clienteSeleccionado} onValueChange={handleClienteChange}>
                                                 <SelectTrigger className="h-11">
-                                                    <SelectValue placeholder="Seleccionar cliente" />
+                                                    <SelectValue placeholder="Seleccionar cliente (Opcional)" />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    {clientes.map((cliente) => (
-                                                        <SelectItem key={cliente.id} value={cliente.id.toString()}>
-                                                            {cliente.nombre_cliente}
-                                                        </SelectItem>
-                                                    ))}
+                                                    <ScrollArea className="max-h-60">
+                                                        {clientes.map((cliente) => (
+                                                            <SelectItem key={cliente.id} value={cliente.id.toString()}>
+                                                                {cliente.nombre_cliente}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </ScrollArea>
+                                                    <Separator className="my-1" />
+                                                    <div
+                                                        className="flex cursor-pointer items-center gap-2 p-2 text-sm text-blue-600 hover:bg-accent"
+                                                        onClick={() => setIsCrearClienteDialogOpen(true)}
+                                                    >
+                                                        <PlusCircle className="h-4 w-4" />
+                                                        Crear Nuevo Cliente
+                                                    </div>
                                                 </SelectContent>
                                             </Select>
                                         </div>
@@ -1333,6 +1535,9 @@ export default function PuntoVentaOficial({
                     </div>
                 </div>
             </div>
+            <Dialog open={isCrearClienteDialogOpen} onOpenChange={setIsCrearClienteDialogOpen}>
+                <CrearClienteDialogContent />
+            </Dialog>
             <Toaster position="top-center" />
         </AppLayout>
     );
