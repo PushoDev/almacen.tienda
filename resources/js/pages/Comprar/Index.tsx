@@ -1049,7 +1049,7 @@ export default function ComprarPage() {
                                         value={data.proveedor}
                                         onValueChange={(value) => {
                                             setData('proveedor', value);
-                                            setSearchProveedor('');
+                                            setSearchProveedor(''); // Limpiar búsqueda después de seleccionar
                                         }}
                                     >
                                         <SelectTrigger className="h-11 w-full">
@@ -1067,9 +1067,12 @@ export default function ComprarPage() {
                                                         if (e.key === 'Enter') {
                                                             e.preventDefault();
                                                             const trimmed = searchProveedor.trim();
-                                                            if (trimmed && !filteredProvedors.some((p) => p.nombre_proveedor === trimmed)) {
+                                                            if (trimmed) {
+                                                                // 🔥 CAMBIO IMPORTANTE: Guardar directamente
                                                                 setData('proveedor', trimmed);
                                                                 setSearchProveedor('');
+                                                                // Cerrar el select después de crear
+                                                                e.currentTarget.blur();
                                                             }
                                                         }
                                                     }}
@@ -1083,7 +1086,14 @@ export default function ComprarPage() {
                                                         </SelectItem>
                                                     ))
                                                 ) : searchProveedor.trim() ? (
-                                                    <SelectItem value={searchProveedor.trim()}>
+                                                    // 🔥 CAMBIO: Al hacer clic, guardar automáticamente
+                                                    <SelectItem
+                                                        value={searchProveedor.trim()}
+                                                        onSelect={() => {
+                                                            setData('proveedor', searchProveedor.trim());
+                                                            setSearchProveedor('');
+                                                        }}
+                                                    >
                                                         <div className="flex items-center">
                                                             <PlusCircle className="mr-2 h-4 w-4" />
                                                             Crear: {searchProveedor.trim()}
