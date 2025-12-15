@@ -12,11 +12,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/punto-venta', [VentaController::class, 'index'])->name('punto-venta.index');
     Route::get('/ventas/listado', [VentaController::class, 'listadoVentas'])->name('ventas.listado');
     Route::get('/ventas/{id}/show', [VentaController::class, 'show'])->name('ventas.show');
+    Route::get('/vendor/cierres', [VentaController::class, 'cierres'])->name('ventas.cierres');
+    Route::get('/vendor/cierres/show', [VentaController::class, 'showCierreDetalle'])->name('ventas.cierres.show');
+    Route::get('/ventas/reporte-diario', [VentaController::class, 'showReporteDiarioView'])->name('ventas.reporte.diario');
 
     // ========================================================================
     // DATOS PARA FORMULARIOS (APIs)
     // ========================================================================
 
+    Route::get('/ventas/reporte-data', [VentaController::class, 'getVentasReporte'])->name('ventas.reporte.data');
     Route::post('/ventas/clientes/store', [VentaController::class, 'storeClienteForVenta'])->name('ventas.cliente.store');
     Route::get('/ventas/almacenes', [VentaController::class, 'getAlmacenes'])->name('ventas.getAlmacenes');
     Route::get('/ventas/almacenes/{id}/productos', [VentaController::class, 'getProductosPorAlmacen'])->name('ventas.getProductosPorAlmacen');
