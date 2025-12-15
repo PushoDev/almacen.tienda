@@ -12,6 +12,8 @@ use App\Models\Almacen;
 use App\Models\Producto;
 use App\Models\Cliente;
 use App\Models\Moneda;
+use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -284,6 +286,55 @@ class VentaController extends Controller
         return response()->json($monedasFormateadas);
     }
 
+    /**
+     * Devuelve un reporte de ventas agregado por período (diario, semanal, mensual).
+     *
+     * @param \Illuminate\Http\Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getVentasReporte(Request $request)
+    {
+        $request->validate([
+            'periodo' => 'required|in:diario,semanal,mensual',
+        ]);
+
+        $user = Auth::user();
+        $periodo = $request->input('periodo');
+
+        $query = Venta::query()->where('estado', 'completada');
+
+        // Filtrar por rol de usuario
+        if ($user->role !== 'admin') {
+            $query->where('user_id', $user->id);
+        }
+
+        // Configurar rango de fechas según el período
+        switch ($periodo) {
+            case 'diario':
+                $query->whereDate('created_at', today());
+                break;
+            case 'semanal':
+                $query->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()]);
+                break;
+            case 'mensual':
+                $query->whereMonth('created_at', now()->month)->whereYear('created_at', now()->year);
+                break;
+        }
+
+        // Obtener y agregar los resultados
+        $reporte = $query->select(
+            DB::raw('SUM(total) as total_vendido'),
+            DB::raw('COUNT(id) as cantidad_ventas'),
+            DB::raw('SUM(total_ganancia) as ganancia_total')
+        )->first();
+
+        return response()->json([
+            'total_vendido' => $reporte->total_vendido ?? 0,
+            'cantidad_ventas' => $reporte->cantidad_ventas ?? 0,
+            'ganancia_total' => $reporte->ganancia_total ?? 0,
+        ]);
+    }
+
     // ========================================================================
     // MÉTODOS DE VISTA (INERTIA)
     // ========================================================================
@@ -343,6 +394,14 @@ class VentaController extends Controller
                 'monedas' => $monedas,
             ]
         ]);
+    }
+
+    /**
+     * Muestra la vista de reporte diario de ventas.
+     */
+    public function showReporteDiarioView()
+    {
+        return Inertia::render('Vendor/ReporteDiario');
     }
 
     /**
@@ -849,4 +908,164 @@ class VentaController extends Controller
             ]
         ]);
     }
+
+    public function cierres(Request $request)
+    {
+        $user = Auth::user();
+
+        $request->validate([
+            'tipo' => 'sometimes|in:diario,semanal,mensual',
+            'fecha' => 'sometimes|date_format:Y-m-d,Y-W,Y-m',
+            'vendedor_id' => 'nullable|exists:users,id',
+        ]);
+
+        $filters = [
+            'tipo' => $request->input('tipo', 'diario'),
+            'fecha' => $request->input('fecha', now()->format('Y-m-d')),
+            'vendedor_id' => $request->input('vendedor_id'),
+        ];
+
+        $query = Venta::where('estado', 'completada')
+            ->join('users', 'ventas.user_id', '=', 'users.id')
+            ->select(
+                'ventas.user_id',
+                'users.name as vendedor_nombre',
+                DB::raw('SUM(ventas.total) as total_ventas'),
+                DB::raw('SUM(ventas.total_ganancia) as total_ganancia'),
+                DB::raw('COUNT(ventas.id) as cantidad_transacciones'),
+                DB::raw('MAX(ventas.created_at) as fecha_cierre') // Usamos MAX como representativo
+            )
+            ->groupBy('ventas.user_id', 'users.name');
+
+        if ($user->role !== 'admin') {
+            $query->where('ventas.user_id', $user->id);
+        } elseif ($filters['vendedor_id']) {
+            $query->where('ventas.user_id', $filters['vendedor_id']);
+        }
+
+        try {
+            $date = Carbon::parse($filters['fecha']);
+        } catch (\Exception $e) {
+            $date = now();
+        }
+
+        switch ($filters['tipo']) {
+            case 'semanal':
+                $start = $date->startOfWeek();
+                $end = $date->endOfWeek();
+                $query->whereBetween('ventas.created_at', [$start, $end]);
+                break;
+            case 'mensual':
+                $query->whereYear('ventas.created_at', $date->year)
+                    ->whereMonth('ventas.created_at', $date->month);
+                break;
+            case 'diario':
+            default:
+                $query->whereDate('ventas.created_at', $date);
+                break;
+        }
+
+        $cierres = $query->get()->map(function ($item, $key) {
+            return [
+                'id' => $item->user_id . '-' . $item->fecha_cierre, // ID sintético
+                'vendedor' => [
+                    'id' => $item->user_id,
+                    'nombre' => $item->vendedor_nombre,
+                ],
+                'fecha_cierre' => $item->fecha_cierre,
+                'total_ventas' => (float) $item->total_ventas,
+                'total_ganancia' => (float) $item->total_ganancia,
+                'cantidad_transacciones' => (int) $item->cantidad_transacciones,
+            ];
+        });
+
+        $vendedores = [];
+        if ($user->role === 'admin') {
+            $vendedores = User::whereIn('role', ['admin', 'vendedor'])->select('id', 'name as nombre')->get();
+        }
+
+        return Inertia::render('Vendor/Cierre', [
+            'cierres' => $cierres,
+            'vendedores' => $vendedores,
+            'filters' => $filters,
+            'auth' => ['user' => ['role' => $user->role]],
+        ]);
+    }
+
+    public function showCierreDetalle(Request $request)
+    {
+        $user = Auth::user();
+
+        $validated = $request->validate([
+            'vendedor_id' => 'required|exists:users,id',
+            'tipo' => 'required|in:diario,semanal,mensual',
+            'fecha' => 'required|date_format:Y-m-d,Y-W,Y-m',
+        ]);
+
+        $vendedor = User::findOrFail($validated['vendedor_id']);
+
+        // Seguridad: Un vendedor solo puede ver sus propios detalles
+        if ($user->role !== 'admin' && $user->id != $vendedor->id) {
+            abort(403, 'No autorizado');
+        }
+
+        $query = Venta::where('estado', 'completada')
+            ->where('user_id', $vendedor->id);
+
+        try {
+            $date = Carbon::parse($validated['fecha']);
+        } catch (\Exception $e) {
+            $date = now();
+        }
+        
+        $fechaCierreStr = '';
+        switch ($validated['tipo']) {
+            case 'semanal':
+                $start = $date->startOfWeek();
+                $end = $date->endOfWeek();
+                $query->whereBetween('created_at', [$start, $end]);
+                $fechaCierreStr = "Semana del " . $start->format('d/m/Y');
+                break;
+            case 'mensual':
+                $query->whereYear('created_at', $date->year)
+                      ->whereMonth('created_at', $date->month);
+                $fechaCierreStr = $date->format('F Y');
+                break;
+            case 'diario':
+            default:
+                $query->whereDate('created_at', $date);
+                $fechaCierreStr = $date->format('d/m/Y');
+                break;
+        }
+
+        $ventas = $query->with('cliente')->get();
+
+        $cierre = [
+            'id' => $vendedor->id . '-' . $validated['fecha'],
+            'vendedor' => [
+                'id' => $vendedor->id,
+                'nombre' => $vendedor->name,
+            ],
+            'fecha_cierre' => $fechaCierreStr,
+            'tipo_reporte' => ucfirst($validated['tipo']),
+            'total_ventas' => $ventas->sum('total'),
+            'total_ganancia' => $ventas->sum('total_ganancia'),
+            'cantidad_transacciones' => $ventas->count(),
+            'ventas' => $ventas->map(function ($venta) {
+                return [
+                    'id' => $venta->id,
+                    'cliente' => $venta->cliente ? ['nombre' => $venta->cliente->nombre_cliente] : null,
+                    'total' => $venta->total,
+                    'total_ganancia' => $venta->total_ganancia,
+                    'estado' => $venta->estado,
+                    'fecha' => $venta->created_at->toISOString(),
+                ];
+            }),
+        ];
+        
+        return Inertia::render('Vendor/DetalleCierre', [
+            'cierre' => $cierre,
+        ]);
+    }
 }
+

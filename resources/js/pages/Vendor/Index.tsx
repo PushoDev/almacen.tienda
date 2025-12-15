@@ -31,6 +31,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
 import {
+    BarChartIcon,
     BoxesIcon,
     Building2,
     DollarSign,
@@ -855,12 +856,20 @@ export default function PuntoVentaOficial({
                             Rol Actual del Vendedor:{' '}
                             <span className="text-primary font-medium">{meta.role_usuario === 'admin' ? 'Administrador' : 'Vendedor'}</span>
                         </p>
-                        <Link href={route('ventas.listado')}>
-                            <Button variant="secondary" className="flex items-center gap-2">
-                                <Eye size={16} />
-                                Mis Ventas
-                            </Button>
-                        </Link>
+                        <div className="flex items-center gap-2">
+                            <Link href={route('ventas.cierres')}>
+                                <Button variant="secondary" className="flex items-center gap-2">
+                                    <BarChartIcon size={16} />
+                                    Cierres de Caja
+                                </Button>
+                            </Link>
+                            <Link href={route('ventas.listado')}>
+                                <Button variant="secondary" className="flex items-center gap-2">
+                                    <Eye size={16} />
+                                    Mis Ventas
+                                </Button>
+                            </Link>
+                        </div>
                     </div>
 
                     <Separator />
