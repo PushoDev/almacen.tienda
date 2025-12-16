@@ -46,6 +46,7 @@ import {
     ShoppingBasket,
     ShoppingCart,
     Trash2Icon,
+    Truck,
     Users,
     Wallet,
     Warehouse,
@@ -160,6 +161,14 @@ export default function ComprarPage() {
     // Estado para el modal de crear almacén
     const [isCrearAlmacenDialogOpen, setIsCrearAlmacenDialogOpen] = useState(false);
     const [almacenErrors, setAlmacenErrors] = useState<Record<string, string>>({});
+
+    // Estado para el modal de crear categoría
+    const [isCrearCategoriaDialogOpen, setIsCrearCategoriaDialogOpen] = useState(false);
+    const [categoriaErrors, setCategoriaErrors] = useState<Record<string, string>>({});
+
+    // 🆕 Estado para el modal de crear proveedor
+    const [isCrearProveedorDialogOpen, setIsCrearProveedorDialogOpen] = useState(false);
+    const [proveedorErrors, setProveedorErrors] = useState<Record<string, string>>({});
 
     const [tempFormData, setTempFormData] = useState<Omit<ProductoComprarProps, 'id' | 'almacen_id'> & { almacen_id: string }>({
         almacen_id: '',
@@ -756,6 +765,178 @@ export default function ComprarPage() {
         );
     };
 
+    // 🆕 COMPONENTE DE CREACIÓN DE CATEGORÍA
+    const CrearCategoriaDialogContent = () => {
+        const [nombreCategoria, setNombreCategoria] = useState('');
+        const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
+
+        const crearCategoriaLocal = async () => {
+            if (!nombreCategoria.trim()) {
+                toast.error('El nombre de la categoría es requerido');
+                return;
+            }
+
+            try {
+                const response = await axios.post(route('compras.categoria.store'), { nombre_categoria: nombreCategoria });
+
+                const { categoria, message } = response.data;
+
+                toast.success(message, {
+                    description: 'Categoría creada exitosamente.',
+                });
+
+                // Actualizar el estado global de categorías
+                setCategorias((prev) => [...prev, categoria]);
+                // Seleccionar automáticamente la nueva categoría en el formulario de producto
+                handleTempSelectChange('categoria', categoria.nombre_categoria);
+
+                resetDialog();
+            } catch (error: any) {
+                console.error('Error al crear categoría:', error);
+                if (error.response?.data?.errors) {
+                    setLocalErrors(error.response.data.errors);
+                    toast.error('Error de validación', {
+                        description: 'Por favor corrige los errores en el formulario.',
+                    });
+                } else {
+                    toast.error('Error al crear categoría', {
+                        description: error.response?.data?.message || 'Intenta nuevamente.',
+                    });
+                }
+            }
+        };
+
+        const resetDialog = () => {
+            setNombreCategoria('');
+            setLocalErrors({});
+            setIsCrearCategoriaDialogOpen(false);
+        };
+
+        return (
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2 text-xl">
+                        <HardDriveUpload className="h-5 w-5 text-purple-600" />
+                        Crear Nueva Categoría
+                    </DialogTitle>
+                    <DialogDescription>Añade una nueva categoría para organizar tus productos.</DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="dialog-nombre-categoria">
+                            Nombre de la Categoría <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                            id="dialog-nombre-categoria"
+                            value={nombreCategoria}
+                            onChange={(e) => setNombreCategoria(e.target.value)}
+                            placeholder="Ej: Smartphones, Laptops"
+                            className={localErrors.nombre_categoria ? 'border-red-500' : ''}
+                            autoFocus
+                        />
+                        {localErrors.nombre_categoria && <p className="text-sm text-red-500">{localErrors.nombre_categoria}</p>}
+                    </div>
+                </div>
+                <DialogFooter className="gap-2">
+                    <Button type="button" variant="outline" onClick={resetDialog}>
+                        Cancelar
+                    </Button>
+                    <Button type="button" onClick={crearCategoriaLocal} className="bg-purple-600 hover:bg-purple-700">
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Crear Categoría
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        );
+    };
+
+    // 🆕 COMPONENTE DE CREACIÓN DE PROVEEDOR (VERSIÓN SIMPLE)
+    const CrearProveedorDialogContent = () => {
+        const [nombreProveedor, setNombreProveedor] = useState('');
+        const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
+
+        const crearProveedorLocal = async () => {
+            if (!nombreProveedor.trim()) {
+                toast.error('El nombre del proveedor es requerido');
+                return;
+            }
+
+            try {
+                // Asumimos que existe una ruta 'compras.proveedor.store'
+                const response = await axios.post(route('compras.proveedor.store'), { nombre_proveedor: nombreProveedor });
+
+                const { proveedor, message } = response.data;
+
+                toast.success(message, {
+                    description: 'Proveedor creado exitosamente.',
+                });
+
+                // Actualizar el estado global de proveedores
+                setProveedors((prev) => [...prev, proveedor]);
+                // Seleccionar automáticamente el nuevo proveedor
+                setData('proveedor', proveedor.nombre_proveedor);
+
+                resetDialog();
+            } catch (error: any) {
+                console.error('Error al crear proveedor:', error);
+                if (error.response?.data?.errors) {
+                    setLocalErrors(error.response.data.errors);
+                    toast.error('Error de validación', {
+                        description: 'Por favor corrige los errores en el formulario.',
+                    });
+                } else {
+                    toast.error('Error al crear proveedor', {
+                        description: error.response?.data?.message || 'Intenta nuevamente.',
+                    });
+                }
+            }
+        };
+
+        const resetDialog = () => {
+            setNombreProveedor('');
+            setLocalErrors({});
+            setIsCrearProveedorDialogOpen(false);
+        };
+
+        return (
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2 text-xl">
+                        <Truck className="h-5 w-5 text-blue-600" />
+                        Crear Nuevo Proveedor
+                    </DialogTitle>
+                    <DialogDescription>Añade un nuevo proveedor al sistema de forma rápida.</DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="dialog-nombre-proveedor">
+                            Nombre del Proveedor <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                            id="dialog-nombre-proveedor"
+                            name="nombre_proveedor"
+                            value={nombreProveedor}
+                            onChange={(e) => setNombreProveedor(e.target.value)}
+                            placeholder="Ej: Proveedor de Electrónica S.A."
+                            className={localErrors.nombre_proveedor ? 'border-red-500' : ''}
+                            autoFocus
+                        />
+                        {localErrors.nombre_proveedor && <p className="text-sm text-red-500">{localErrors.nombre_proveedor}</p>}
+                    </div>
+                </div>
+                <DialogFooter className="gap-2">
+                    <Button type="button" variant="outline" onClick={resetDialog}>
+                        Cancelar
+                    </Button>
+                    <Button type="button" onClick={crearProveedorLocal} className="bg-blue-600 hover:bg-blue-700">
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Crear Proveedor
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        );
+    };
+
     // 🆕 COMPONENTE DE CREACIÓN DE CLIENTE
     const CrearClienteDialogContent = () => {
         const [localCliente, setLocalCliente] = useState({
@@ -1061,6 +1242,7 @@ export default function ComprarPage() {
                                                     type="text"
                                                     className="w-full rounded border border-gray-300 p-2 text-sm"
                                                     placeholder="Buscar o crear proveedor..."
+                                                    placeholder="Buscar proveedor..."
                                                     value={searchProveedor}
                                                     onChange={(e) => setSearchProveedor(e.target.value.toUpperCase())}
                                                     onKeyDown={(e) => {
@@ -1104,6 +1286,14 @@ export default function ComprarPage() {
                                                         No hay proveedores disponibles
                                                     </div>
                                                 )}
+                                            </div>
+                                            <Separator className="my-2" />
+                                            <div
+                                                className="hover:bg-accent flex cursor-pointer items-center gap-2 p-2 text-sm text-blue-600"
+                                                onClick={() => setIsCrearProveedorDialogOpen(true)}
+                                            >
+                                                <PlusCircle className="h-4 w-4" />
+                                                Crear Nuevo Proveedor
                                             </div>
                                         </SelectContent>
                                     </Select>
@@ -1255,6 +1445,33 @@ export default function ComprarPage() {
                                         ) : (
                                             <SelectItem disabled>No hay categorías disponibles</SelectItem>
                                         )}
+                                        <div className="p-2">
+                                            <Input
+                                                type="text"
+                                                placeholder="Buscar categoría..."
+                                                value={searchCategoria}
+                                                onChange={(e) => setSearchCategoria(e.target.value.toUpperCase())}
+                                            />
+                                        </div>
+                                        <div className="max-h-60 overflow-y-auto">
+                                            {filteredCategorias.length > 0 ? (
+                                                filteredCategorias.map((categoria) => (
+                                                    <SelectItem key={categoria.id} value={categoria.nombre_categoria}>
+                                                        {categoria.nombre_categoria}
+                                                    </SelectItem>
+                                                ))
+                                            ) : (
+                                                <div className="text-muted-foreground px-2 py-4 text-center text-sm">No hay categorías</div>
+                                            )}
+                                        </div>
+                                        <Separator className="my-2" />
+                                        <div
+                                            className="hover:bg-accent flex cursor-pointer items-center gap-2 p-2 text-sm text-purple-600"
+                                            onClick={() => setIsCrearCategoriaDialogOpen(true)}
+                                        >
+                                            <PlusCircle className="h-4 w-4" />
+                                            Crear Nueva Categoría
+                                        </div>
                                     </SelectContent>
                                 </Select>
                                 {errors.categorias && <InputError message={errors.categorias} />}
@@ -2200,6 +2417,16 @@ export default function ComprarPage() {
                         <CrearAlmacenDialogContent />
                     </Dialog>
                 </div>
+
+                {/* MODAL CREAR CATEGORÍA */}
+                <Dialog open={isCrearCategoriaDialogOpen} onOpenChange={setIsCrearCategoriaDialogOpen}>
+                    <CrearCategoriaDialogContent />
+                </Dialog>
+
+                {/* 🆕 MODAL CREAR PROVEEDOR */}
+                <Dialog open={isCrearProveedorDialogOpen} onOpenChange={setIsCrearProveedorDialogOpen}>
+                    <CrearProveedorDialogContent />
+                </Dialog>
 
                 <Toaster position="top-center" />
             </div>

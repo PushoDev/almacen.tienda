@@ -22,7 +22,12 @@ Route::middleware(['auth', 'verified'])->group(
             Route::post('/almacenes', [CompraController::class, 'storeAlmacenForCompra'])->name('almacen.store');
 
             Route::get('/proveedores', [CompraController::class, 'getProveedor']);
+            // ✅ NUEVA: Ruta para crear proveedor durante compra
+            Route::post('/proveedores', [CompraController::class, 'storeProveedor'])->name('proveedor.store');
+
             Route::get('/categorias', [CompraController::class, 'getCategorias']);
+            // ✅ NUEVA: Ruta para crear categoría durante compra
+            Route::post('/categorias', [CompraController::class, 'storeCategoria'])->name('categoria.store');
 
             // Ruta MEJORADA para obtener clientes (ahora acepta parámetro search)
             Route::get('/clientes/fisicos', [CompraController::class, 'getClientesFisicos']);
