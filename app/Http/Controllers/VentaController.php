@@ -78,6 +78,15 @@ class VentaController extends Controller
         ], 201);
     }
 
+    public function getClientesFisicosParaPago()
+    {
+        $clientes = Cliente::where('tipo_cliente', 'fisico')
+            ->select('id', 'nombre_cliente', 'deuda_pago_cliente')
+            ->get();
+
+        return response()->json($clientes);
+    }
+
     /**
      * Cargar Almacenes accesibles para el usuario autenticado.
      */
@@ -413,12 +422,13 @@ class VentaController extends Controller
             'destinatario',
             'detalles.producto.categoria',
             'pagos.cuenta.moneda',
+            'pagos.cliente', // ✅ AGREGAR: relación con cliente para pagos
             'pagos.moneda',
             'cliente',
             'almacen',
             'usuario',
             'moneda',
-            'monedaCobro' // RELACIÓN NUEVA
+            'monedaCobro'
         ])->findOrFail($id);
 
         $ventaData = [
@@ -470,6 +480,9 @@ class VentaController extends Controller
                 'rol' => $venta->usuario->role,
             ],
             'pagos' => $venta->pagos->map(function ($pago) {
+                // ✅ DETERMINAR TIPO DE DESTINO
+                $destinoTipo = $pago->cliente_id ? 'cliente' : 'cuenta';
+
                 return [
                     'metodo' => $pago->tipo_pago,
                     'moneda' => $pago->moneda ? [
@@ -481,7 +494,17 @@ class VentaController extends Controller
                     'via' => $pago->via_pago,
                     'tasa_cambio' => $pago->tasa_cambio_aplicada,
                     'monto_equivalente' => $pago->monto_equivalente,
-                    'cuenta' => [
+                    // ✅ NUEVO: Información del destino
+                    'destino_tipo' => $destinoTipo,
+                    // ✅ SI ES CLIENTE: mostrar info del cliente destino
+                    'cliente_destino' => $pago->cliente ? [
+                        'id' => $pago->cliente->id,
+                        'nombre' => $pago->cliente->nombre_cliente,
+                        'tipo_cliente' => $pago->cliente->tipo_cliente,
+                        'deuda_actual' => $pago->cliente->deuda_pago_cliente,
+                    ] : null,
+                    // ✅ SI ES CUENTA: mantener estructura existente
+                    'cuenta' => $pago->cuenta ? [
                         'id' => $pago->cuenta->id,
                         'nombre' => $pago->cuenta->nombre_cuenta,
                         'moneda' => $pago->cuenta->moneda ? [
@@ -489,18 +512,20 @@ class VentaController extends Controller
                             'codigo' => $pago->cuenta->moneda->codigo_moneda,
                             'nombre' => $pago->cuenta->moneda->nombre_moneda,
                         ] : null,
-                    ]
+                    ] : null,
                 ];
             }),
             'total_pagado' => $venta->pagos->sum('monto_equivalente'),
             'restante' => $venta->total - $venta->pagos->sum('monto_equivalente'),
+            // ✅ NUEVO: Totales por tipo de destino
+            'total_pagado_clientes' => $venta->pagos->whereNotNull('cliente_id')->sum('monto'),
+            'total_pagado_cuentas' => $venta->pagos->whereNotNull('cuenta_id')->sum('monto'),
             'moneda_principal' => $venta->moneda ? [
                 'id' => $venta->moneda->id,
                 'codigo' => $venta->moneda->codigo_moneda,
                 'nombre' => $venta->moneda->nombre_moneda,
             ] : null,
             'tasa_cambio_principal' => $venta->tasa_cambio_principal,
-            // NUEVOS CAMPOS PARA DIFERENCIA CAMBIARIA
             'tasa_aplicada_venta' => $venta->tasa_aplicada_venta,
             'moneda_cobro' => $venta->monedaCobro ? [
                 'id' => $venta->monedaCobro->id,
@@ -542,13 +567,28 @@ class VentaController extends Controller
             'pagos.*.via' => 'nullable|string|required_if:pagos.*.metodo,transferencia',
             'pagos.*.tasa_cambio' => 'required|numeric|min:0.0001',
             'pagos.*.monto_equivalente' => 'required|numeric|min:0',
-            'pagos.*.cuenta_id' => 'required|exists:cuentas,id',
+            // ✅ CAMBIO 1: Hacer nullable cuenta_id y agregar cliente_id
+            'pagos.*.cuenta_id' => 'nullable|exists:cuentas,id',
+            'pagos.*.cliente_id' => 'nullable|exists:clientes,id',
             'pagos.*.referencia' => 'nullable|string|required_if:pagos.*.metodo,transferencia',
             'moneda_principal_id' => 'required|exists:monedas,id',
             'tasa_cambio_principal' => 'required|numeric|min:0.0001',
             'tasa_aplicada_venta' => 'nullable|numeric|min:0.0001',
             'moneda_cobro_id' => 'nullable|exists:monedas,id',
         ]);
+
+        // ✅ CAMBIO 2: Agregar validación lógica después del validate
+        foreach ($validatedData['pagos'] as $pago) {
+            // Cada pago debe tener cuenta_id O cliente_id
+            if (empty($pago['cuenta_id']) && empty($pago['cliente_id'])) {
+                throw new \Exception('Cada pago debe tener una cuenta o un cliente como destino.');
+            }
+
+            // No pueden tener ambos
+            if (!empty($pago['cuenta_id']) && !empty($pago['cliente_id'])) {
+                throw new \Exception('Un pago no puede tener cuenta y cliente al mismo tiempo.');
+            }
+        }
 
         DB::beginTransaction();
 
@@ -595,11 +635,13 @@ class VentaController extends Controller
                 ]);
             }
 
-            // Validación de cuentas de pago
+            // ✅ CAMBIO 3: Modificar validación de cuentas (solo si tiene cuenta_id)
             foreach ($validatedData['pagos'] as $pago) {
-                $cuenta = Cuenta::find($pago['cuenta_id']);
-                if ($user->role !== 'admin' && !$user->cuentas->contains('id', $pago['cuenta_id'])) {
-                    throw new \Exception('No tienes acceso a la cuenta seleccionada');
+                if (!empty($pago['cuenta_id'])) {
+                    $cuenta = Cuenta::find($pago['cuenta_id']);
+                    if ($user->role !== 'admin' && !$user->cuentas->contains('id', $pago['cuenta_id'])) {
+                        throw new \Exception('No tienes acceso a la cuenta seleccionada');
+                    }
                 }
             }
 
@@ -661,13 +703,16 @@ class VentaController extends Controller
                 'monto_diferencia_cambiaria' => $monto_diferencia_cambiaria,
             ]);
 
-            // Procesar pagos
+            // ✅ CAMBIO 4: Modificar creación de pagos para incluir cliente_id
             foreach ($validatedData['pagos'] as $pago) {
                 PagoVenta::create([
                     'venta_id' => $venta->id,
                     'tipo_pago' => $pago['metodo'],
                     'moneda_id' => $pago['moneda_id'],
-                    'cuenta_id' => $pago['cuenta_id'],
+                    // ✅ Permite null si el destino es cliente
+                    'cuenta_id' => $pago['cuenta_id'] ?? null,
+                    // ✅ Nuevo campo para cliente destino
+                    'cliente_id' => $pago['cliente_id'] ?? null,
                     'via_pago' => $pago['via'] ?? null,
                     'monto' => $pago['monto'],
                     'tasa_cambio_aplicada' => $pago['tasa_cambio'],
@@ -693,6 +738,7 @@ class VentaController extends Controller
             ], 500);
         }
     }
+
 
     /**
      * Guarda o actualiza el destinatario de una venta pendiente
@@ -775,19 +821,34 @@ class VentaController extends Controller
                     $gananciaExtraUSD += ($valorRealUSD - $valorContadoUSD);
                 }
 
-                // Incrementar saldo en la cuenta con el monto original si la moneda coincide
+                // ✅ CAMBIO: Manejar destino del dinero (cuenta O cliente)
+                // CASO 1: El destino es un Cliente Físico
+                if ($pago->cliente_id) {
+                    $clienteDestino = $pago->cliente;
+
+                    // Verificar que el cliente destino existe y es físico
+                    if ($clienteDestino && $clienteDestino->tipo_cliente === 'fisico') {
+                        // ✅ Incrementar la deuda del cliente destino
+                        $clienteDestino->increment('deuda_pago_cliente', $pago->monto);
+
+                        // ✅ IMPORTANTE: Saltar al siguiente pago, NO procesar cuenta
+                        continue;
+                    }
+                }
+
+                // CASO 2: El destino es una Cuenta (flujo normal)
                 $cuenta = $pago->cuenta;
+                if (!$cuenta) {
+                    continue;
+                }
 
-                // Moneda de la cuenta
                 $codigoCuenta = $cuenta->moneda?->codigo_moneda ?? $cuenta->tipo_moneda;
-
-                // Moneda del pago
                 $codigoPago = $pago->moneda?->codigo_moneda;
 
                 if ($codigoPago === $codigoCuenta) {
                     $cuenta->increment('saldo_cuenta', $pago->monto);
                 }
-                // Si no coinciden, por seguridad no acumulamos (puedes ajustar si quieres conversión)
+                // Si no coinciden, por seguridad no acumulamos
             }
 
             $gananciaExtraUSD = round($gananciaExtraUSD, 2);
@@ -1017,7 +1078,7 @@ class VentaController extends Controller
         } catch (\Exception $e) {
             $date = now();
         }
-        
+
         $fechaCierreStr = '';
         switch ($validated['tipo']) {
             case 'semanal':
@@ -1028,7 +1089,7 @@ class VentaController extends Controller
                 break;
             case 'mensual':
                 $query->whereYear('created_at', $date->year)
-                      ->whereMonth('created_at', $date->month);
+                    ->whereMonth('created_at', $date->month);
                 $fechaCierreStr = $date->format('F Y');
                 break;
             case 'diario':
@@ -1062,10 +1123,9 @@ class VentaController extends Controller
                 ];
             }),
         ];
-        
+
         return Inertia::render('Vendor/DetalleCierre', [
             'cierre' => $cierre,
         ]);
     }
 }
-
