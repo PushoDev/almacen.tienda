@@ -1,3 +1,4 @@
+import HeadingSmall from '@/components/heading-small';
 import {
     AlertDialog,
     AlertDialogCancel,
@@ -11,14 +12,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -192,7 +186,6 @@ export default function PuntoVentaOficial({
     // Estado para el modal de crear cliente
     const [isCrearClienteDialogOpen, setIsCrearClienteDialogOpen] = useState(false);
     const [clienteErrors, setClienteErrors] = useState<Record<string, string>>({});
-
 
     const currencies = useMemo(() => {
         console.log('Monedas disponibles:', monedas);
@@ -834,21 +827,17 @@ export default function PuntoVentaOficial({
             <div className="bg-background min-h-screen">
                 <div className="mx-auto flex h-full max-w-[1600px] flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
                     {/* Header de Lovable */}
-                    <header className="from-primary to-primary/80 relative overflow-hidden rounded-xl bg-gradient-to-r p-6 shadow-lg">
-                        <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="space-y-1">
-                                <h1 className="text-primary-foreground text-2xl font-bold tracking-tight sm:text-3xl">Punto de Venta</h1>
-                                <p className="text-primary/70 text-sm">Gestión integral de ventas y transacciones</p>
-                            </div>
-                            <Badge
-                                variant="secondary"
-                                className="bg-primary/20 text-primary-foreground w-fit border-0 px-3 py-1.5 text-xs font-medium"
-                            >
-                                {meta.role_usuario === 'admin' ? 'Administrador' : 'Vendedor'}
-                            </Badge>
-                        </div>
-                        <ShoppingBag size={120} className="text-primary-foreground/10 pointer-events-none absolute -right-6 -bottom-6" />
-                    </header>
+                    <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                        <HeadingSmall
+                            title="Punto de Venta"
+                            description="Lugar donde se realizan la entas de los Productos disponibles en La Glorieta Tienda"
+                        />
+                        <ShoppingBag
+                            size={70}
+                            color="#f59e0b"
+                            className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
+                        />
+                    </div>
 
                     {/* Info usuario */}
                     <div className="flex items-center justify-between text-sm text-gray-600">
@@ -924,7 +913,7 @@ export default function PuntoVentaOficial({
                                                     </ScrollArea>
                                                     <Separator className="my-1" />
                                                     <div
-                                                        className="flex cursor-pointer items-center gap-2 p-2 text-sm text-blue-600 hover:bg-accent"
+                                                        className="hover:bg-accent flex cursor-pointer items-center gap-2 p-2 text-sm text-blue-600"
                                                         onClick={() => setIsCrearClienteDialogOpen(true)}
                                                     >
                                                         <PlusCircle className="h-4 w-4" />
