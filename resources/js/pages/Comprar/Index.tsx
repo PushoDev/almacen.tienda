@@ -160,15 +160,12 @@ export default function ComprarPage() {
 
     // Estado para el modal de crear almacén
     const [isCrearAlmacenDialogOpen, setIsCrearAlmacenDialogOpen] = useState(false);
-    const [almacenErrors, setAlmacenErrors] = useState<Record<string, string>>({});
 
     // Estado para el modal de crear categoría
     const [isCrearCategoriaDialogOpen, setIsCrearCategoriaDialogOpen] = useState(false);
-    const [categoriaErrors, setCategoriaErrors] = useState<Record<string, string>>({});
 
     // 🆕 Estado para el modal de crear proveedor
     const [isCrearProveedorDialogOpen, setIsCrearProveedorDialogOpen] = useState(false);
-    const [proveedorErrors, setProveedorErrors] = useState<Record<string, string>>({});
 
     const [tempFormData, setTempFormData] = useState<Omit<ProductoComprarProps, 'id' | 'almacen_id'> & { almacen_id: string }>({
         almacen_id: '',
@@ -199,7 +196,6 @@ export default function ComprarPage() {
 
     // Estado para el modal de crear cliente
     const [isCrearClienteDialogOpen, setIsCrearClienteDialogOpen] = useState(false);
-    const [clienteErrors, setClienteErrors] = useState<Record<string, string>>({});
 
     // 🔍 EFECTO PARA BÚSQUEDA EN TIEMPO REAL DE CLIENTES
     useEffect(() => {
@@ -475,7 +471,12 @@ export default function ComprarPage() {
             const { name, value } = e.target;
             setLocalAlmacen((prev) => ({
                 ...prev,
-                [name]: value,
+                [name]:
+                    name === 'nombre_almacen' || name === 'provincia_almacen' || name === 'ciudad_almacen' || name === 'notas_almacen'
+                        ? value.toUpperCase()
+                        : name === 'correo_almacen'
+                          ? value.toLowerCase()
+                          : value,
             }));
         };
 
@@ -494,7 +495,15 @@ export default function ComprarPage() {
             }
 
             try {
-                const response = await axios.post(route('compras.almacen.store'), localAlmacen);
+                const response = await axios.post(route('compras.almacen.store'), {
+                    nombre_almacen: localAlmacen.nombre_almacen.trim().toUpperCase(),
+                    tipo_almacen: localAlmacen.tipo_almacen,
+                    telefono_almacen: localAlmacen.telefono_almacen.trim(),
+                    correo_almacen: localAlmacen.correo_almacen.trim().toLowerCase(),
+                    provincia_almacen: localAlmacen.provincia_almacen.trim().toUpperCase(),
+                    ciudad_almacen: localAlmacen.ciudad_almacen.trim().toUpperCase(),
+                    notas_almacen: localAlmacen.notas_almacen.trim().toUpperCase(),
+                });
 
                 const { almacen, message } = response.data;
 
@@ -613,7 +622,7 @@ export default function ComprarPage() {
                                         name="nombre_almacen"
                                         value={localAlmacen.nombre_almacen}
                                         onChange={handleLocalChange}
-                                        placeholder="Ej: Almacén Central, Bodega Norte"
+                                        placeholder="Ej: ALMACÉN CENTRAL, BODEGA NORTE"
                                         className={localErrors.nombre_almacen ? 'border-red-500 focus-visible:ring-red-500' : ''}
                                     />
                                     {localErrors.nombre_almacen && <FieldError>{localErrors.nombre_almacen}</FieldError>}
@@ -691,7 +700,7 @@ export default function ComprarPage() {
                                         name="provincia_almacen"
                                         value={localAlmacen.provincia_almacen}
                                         onChange={handleLocalChange}
-                                        placeholder="Ej: Granma, Mayabeque"
+                                        placeholder="Ej: GRANMA, MAYABEQUE"
                                     />
                                 </Field>
                                 <Field>
@@ -701,7 +710,7 @@ export default function ComprarPage() {
                                         name="ciudad_almacen"
                                         value={localAlmacen.ciudad_almacen}
                                         onChange={handleLocalChange}
-                                        placeholder="Ej: Manzanillo, Quivicán"
+                                        placeholder="Ej: MANZANILLO, QUIVICÁN"
                                     />
                                 </Field>
                             </FieldGroup>
@@ -717,7 +726,7 @@ export default function ComprarPage() {
                                     name="notas_almacen"
                                     value={localAlmacen.notas_almacen}
                                     onChange={handleLocalChange}
-                                    placeholder="Información adicional sobre el almacén..."
+                                    placeholder="INFORMACIÓN ADICIONAL SOBRE EL ALMACÉN..."
                                     rows={3}
                                     className="resize-none"
                                 />
@@ -771,13 +780,17 @@ export default function ComprarPage() {
         const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
 
         const crearCategoriaLocal = async () => {
-            if (!nombreCategoria.trim()) {
+            const nombreMayusculas = nombreCategoria.trim().toUpperCase();
+
+            if (!nombreMayusculas) {
                 toast.error('El nombre de la categoría es requerido');
                 return;
             }
 
             try {
-                const response = await axios.post(route('compras.categoria.store'), { nombre_categoria: nombreCategoria });
+                const response = await axios.post(route('compras.categoria.store'), {
+                    nombre_categoria: nombreMayusculas,
+                });
 
                 const { categoria, message } = response.data;
 
@@ -829,8 +842,8 @@ export default function ComprarPage() {
                         <Input
                             id="dialog-nombre-categoria"
                             value={nombreCategoria}
-                            onChange={(e) => setNombreCategoria(e.target.value)}
-                            placeholder="Ej: Smartphones, Laptops"
+                            onChange={(e) => setNombreCategoria(e.target.value.toUpperCase())}
+                            placeholder="Ej: SMARTPHONES, LAPTOPS"
                             className={localErrors.nombre_categoria ? 'border-red-500' : ''}
                             autoFocus
                         />
@@ -856,14 +869,17 @@ export default function ComprarPage() {
         const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
 
         const crearProveedorLocal = async () => {
-            if (!nombreProveedor.trim()) {
+            const nombreMayusculas = nombreProveedor.trim().toUpperCase();
+
+            if (!nombreMayusculas) {
                 toast.error('El nombre del proveedor es requerido');
                 return;
             }
 
             try {
-                // Asumimos que existe una ruta 'compras.proveedor.store'
-                const response = await axios.post(route('compras.proveedor.store'), { nombre_proveedor: nombreProveedor });
+                const response = await axios.post(route('compras.proveedor.store'), {
+                    nombre_proveedor: nombreMayusculas,
+                });
 
                 const { proveedor, message } = response.data;
 
@@ -916,8 +932,8 @@ export default function ComprarPage() {
                             id="dialog-nombre-proveedor"
                             name="nombre_proveedor"
                             value={nombreProveedor}
-                            onChange={(e) => setNombreProveedor(e.target.value)}
-                            placeholder="Ej: Proveedor de Electrónica S.A."
+                            onChange={(e) => setNombreProveedor(e.target.value.toUpperCase())}
+                            placeholder="Ej: PROVEEDOR DE ELECTRÓNICA S.A."
                             className={localErrors.nombre_proveedor ? 'border-red-500' : ''}
                             autoFocus
                         />
@@ -952,7 +968,7 @@ export default function ComprarPage() {
             const { name, value } = e.target;
             setLocalCliente((prev) => ({
                 ...prev,
-                [name]: value,
+                [name]: name === 'nombre_cliente' || name === 'ciudad_cliente' || name === 'direccion_cliente' ? value.toUpperCase() : value,
             }));
         };
 
@@ -965,7 +981,10 @@ export default function ComprarPage() {
 
             try {
                 const response = await axios.post(route('compras.cliente.store'), {
-                    ...localCliente,
+                    nombre_cliente: localCliente.nombre_cliente.trim().toUpperCase(),
+                    telefono_cliente: localCliente.telefono_cliente.trim(),
+                    direccion_cliente: localCliente.direccion_cliente.trim().toUpperCase(),
+                    ciudad_cliente: localCliente.ciudad_cliente.trim().toUpperCase(),
                     tipo_cliente: 'fisico',
                 });
 
@@ -1071,7 +1090,7 @@ export default function ComprarPage() {
                                         name="nombre_cliente"
                                         value={localCliente.nombre_cliente}
                                         onChange={handleLocalChange}
-                                        placeholder="Ej: Juan Pérez"
+                                        placeholder="Ej: JUAN PÉREZ"
                                         className={localErrors.nombre_cliente ? 'border-red-500' : ''}
                                     />
                                     {localErrors.nombre_cliente && <p className="text-sm text-red-500">{localErrors.nombre_cliente}</p>}
@@ -1100,7 +1119,7 @@ export default function ComprarPage() {
                                             name="ciudad_cliente"
                                             value={localCliente.ciudad_cliente}
                                             onChange={handleLocalChange}
-                                            placeholder="Ej: Manzanillo, Quivicán"
+                                            placeholder="Ej: MANZANILLO, QUIVICÁN"
                                         />
                                     </div>
 
@@ -1121,7 +1140,7 @@ export default function ComprarPage() {
                                         name="direccion_cliente"
                                         value={localCliente.direccion_cliente}
                                         onChange={handleLocalChange}
-                                        placeholder="Dirección completa"
+                                        placeholder="DIRECCIÓN COMPLETA"
                                         rows={3}
                                         className="border-input ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex w-full rounded-md border bg-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                                     />
@@ -1230,7 +1249,7 @@ export default function ComprarPage() {
                                         value={data.proveedor}
                                         onValueChange={(value) => {
                                             setData('proveedor', value);
-                                            setSearchProveedor(''); // Limpiar búsqueda después de seleccionar
+                                            setSearchProveedor('');
                                         }}
                                     >
                                         <SelectTrigger className="h-11 w-full">
@@ -1238,26 +1257,12 @@ export default function ComprarPage() {
                                         </SelectTrigger>
                                         <SelectContent>
                                             <div className="p-2">
-                                                <input
+                                                <Input
                                                     type="text"
-                                                    className="w-full rounded border border-gray-300 p-2 text-sm"
-                                                    placeholder="Buscar o crear proveedor..."
                                                     placeholder="Buscar proveedor..."
                                                     value={searchProveedor}
-                                                    onChange={(e) => setSearchProveedor(e.target.value.toUpperCase())}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter') {
-                                                            e.preventDefault();
-                                                            const trimmed = searchProveedor.trim();
-                                                            if (trimmed) {
-                                                                // 🔥 CAMBIO IMPORTANTE: Guardar directamente
-                                                                setData('proveedor', trimmed);
-                                                                setSearchProveedor('');
-                                                                // Cerrar el select después de crear
-                                                                e.currentTarget.blur();
-                                                            }
-                                                        }
-                                                    }}
+                                                    onChange={(e) => setSearchProveedor(e.target.value)}
+                                                    className="text-sm"
                                                 />
                                             </div>
                                             <div className="max-h-60 overflow-y-auto">
@@ -1267,24 +1272,8 @@ export default function ComprarPage() {
                                                             {proveedor.nombre_proveedor}
                                                         </SelectItem>
                                                     ))
-                                                ) : searchProveedor.trim() ? (
-                                                    // 🔥 CAMBIO: Al hacer clic, guardar automáticamente
-                                                    <SelectItem
-                                                        value={searchProveedor.trim()}
-                                                        onSelect={() => {
-                                                            setData('proveedor', searchProveedor.trim());
-                                                            setSearchProveedor('');
-                                                        }}
-                                                    >
-                                                        <div className="flex items-center">
-                                                            <PlusCircle className="mr-2 h-4 w-4" />
-                                                            Crear: {searchProveedor.trim()}
-                                                        </div>
-                                                    </SelectItem>
                                                 ) : (
-                                                    <div className="text-muted-foreground px-2 py-4 text-center text-sm">
-                                                        No hay proveedores disponibles
-                                                    </div>
+                                                    <div className="text-muted-foreground px-2 py-4 text-center text-sm">No hay proveedores</div>
                                                 )}
                                             </div>
                                             <Separator className="my-2" />
@@ -1403,7 +1392,7 @@ export default function ComprarPage() {
                                     onChange={handleTempInputChange}
                                 />
                             </div>
-
+                            {/* Categorias */}
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="categorias">Categoría *</Label>
                                 <Select
@@ -1415,42 +1404,13 @@ export default function ComprarPage() {
                                         <SelectValue placeholder="Seleccione Categoría" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <input
-                                            type="text"
-                                            className="mb-2 w-full rounded border border-gray-300 p-2"
-                                            placeholder="Buscar o crear categoría..."
-                                            value={searchCategoria}
-                                            onChange={(e) => setSearchCategoria(e.target.value.toUpperCase())}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') {
-                                                    e.preventDefault();
-                                                    const trimmed = searchCategoria.trim();
-                                                    if (trimmed && !filteredCategorias.some((c) => c.nombre_categoria === trimmed)) {
-                                                        handleTempSelectChange('categoria', trimmed);
-                                                        setSearchCategoria('');
-                                                    }
-                                                }
-                                            }}
-                                        />
-                                        {filteredCategorias.length > 0 ? (
-                                            filteredCategorias.map((categoria) => (
-                                                <SelectItem key={categoria.id} value={categoria.nombre_categoria}>
-                                                    {categoria.nombre_categoria}
-                                                </SelectItem>
-                                            ))
-                                        ) : searchCategoria.trim() ? (
-                                            <SelectItem value={searchCategoria.trim()}>
-                                                ➕ Crear nueva categoría: <strong>{searchCategoria.trim()}</strong>
-                                            </SelectItem>
-                                        ) : (
-                                            <SelectItem disabled>No hay categorías disponibles</SelectItem>
-                                        )}
                                         <div className="p-2">
                                             <Input
                                                 type="text"
                                                 placeholder="Buscar categoría..."
                                                 value={searchCategoria}
-                                                onChange={(e) => setSearchCategoria(e.target.value.toUpperCase())}
+                                                onChange={(e) => setSearchCategoria(e.target.value)}
+                                                className="text-sm"
                                             />
                                         </div>
                                         <div className="max-h-60 overflow-y-auto">

@@ -511,8 +511,6 @@ class CompraController extends Controller
         // Crear el proveedor
         $proveedor = Proveedor::create([
             'nombre_proveedor' => $request->nombre_proveedor,
-            'telefono_proveedor' => 'S/N', // Valor por defecto
-            'localidad_proveedor' => 'SIN LOCALIDAD', // Valor por defecto
             'saldo_proveedor' => 0,
         ]);
 
