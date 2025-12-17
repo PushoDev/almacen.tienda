@@ -102,7 +102,8 @@ interface Payment {
     via?: string;
     exchangeRate: number;
     amountInUsd: number;
-    cuenta_id: string;
+    cuenta_id?: string | null;
+    cliente_id?: string | null;
     referencia?: string;
     moneda_info?: {
         codigo: string;
@@ -164,6 +165,7 @@ export default function PuntoVentaOficial({
         amount: string;
         exchangeRate: string;
         cuenta_id: string;
+        cliente_id: string;
         referencia: string;
     }>({
         method: '',
@@ -172,10 +174,13 @@ export default function PuntoVentaOficial({
         amount: '',
         exchangeRate: '',
         cuenta_id: '',
+        cliente_id: '',
         referencia: '',
     });
     const [cuentasFiltradas, setCuentasFiltradas] = useState<Cuenta[]>([]);
     const [cargandoCuentas, setCargandoCuentas] = useState<boolean>(false);
+    const [clientesFisicos, setClientesFisicos] = useState<Cliente[]>([]);
+    const [cargandoClientesFisicos, setCargandoClientesFisicos] = useState<boolean>(false);
     const [conversionCalculada, setConversionCalculada] = useState<{
         montoOriginal: number;
         montoUSD: number;
@@ -183,7 +188,6 @@ export default function PuntoVentaOficial({
         monedaSimbolo: string;
     } | null>(null);
 
-    // Estado para el modal de crear cliente
     const [isCrearClienteDialogOpen, setIsCrearClienteDialogOpen] = useState(false);
     const [clienteErrors, setClienteErrors] = useState<Record<string, string>>({});
 
@@ -261,6 +265,22 @@ export default function PuntoVentaOficial({
         }
     };
 
+    const cargarClientesFisicos = async () => {
+        setCargandoClientesFisicos(true);
+        try {
+            console.log('Cargando clientes físicos...');
+            const response = await axios.get(route('ventas.getClientesFisicosParaPago'));
+            console.log('Clientes físicos cargados:', response.data);
+            setClientesFisicos(response.data);
+        } catch (error) {
+            console.error('Error al cargar clientes físicos:', error);
+            toast.error('Error al cargar clientes físicos');
+            setClientesFisicos([]);
+        } finally {
+            setCargandoClientesFisicos(false);
+        }
+    };
+
     const cargarCuentasFiltradas = async (monedaId: string) => {
         if (!monedaId) {
             console.log('No hay moneda ID, limpiando cuentas filtradas');
@@ -319,6 +339,7 @@ export default function PuntoVentaOficial({
     useEffect(() => {
         cargarAlmacenes();
         cargarClientes();
+        cargarClientesFisicos();
     }, []);
 
     const handleAlmacenChange = (value: string) => {
@@ -341,6 +362,7 @@ export default function PuntoVentaOficial({
             moneda_id: monedaId,
             exchangeRate: selectedCurrency ? selectedCurrency.exchangeRate.toString() : '',
             cuenta_id: '',
+            cliente_id: '',
         });
         cargarCuentasFiltradas(monedaId);
     };
@@ -481,6 +503,7 @@ export default function PuntoVentaOficial({
     const handleAddPayment = () => {
         console.log('Intentando agregar pago:', currentPayment);
         console.log('Cuentas filtradas disponibles:', cuentasFiltradas);
+
         if (
             !currentPayment.method ||
             !currentPayment.moneda_id ||
@@ -488,7 +511,7 @@ export default function PuntoVentaOficial({
             (currentPayment.method === 'transferencia' && !currentPayment.referencia) ||
             !currentPayment.amount ||
             parseFloat(currentPayment.amount) <= 0 ||
-            !currentPayment.cuenta_id ||
+            (!currentPayment.cuenta_id && !currentPayment.cliente_id) ||
             !currentPayment.exchangeRate ||
             parseFloat(currentPayment.exchangeRate) <= 0
         ) {
@@ -500,26 +523,30 @@ export default function PuntoVentaOficial({
                 amount: currentPayment.amount,
                 exchangeRate: currentPayment.exchangeRate,
                 cuenta_id: currentPayment.cuenta_id,
+                cliente_id: currentPayment.cliente_id,
             });
             toast.warning('Por favor, complete todos los campos del pago y asegure un monto y tasa de cambio válidos.');
             return;
         }
-        const selectedAccount = cuentasFiltradas.find((c) => c.id.toString() === currentPayment.cuenta_id);
+
         const selectedCurrency = currencies.find((c) => c.id === currentPayment.moneda_id);
-        console.log('Cuenta seleccionada:', selectedAccount);
         console.log('Moneda seleccionada:', selectedCurrency);
-        if (!selectedAccount || !selectedCurrency) {
-            toast.error('Error en la selección de cuenta o moneda');
+
+        if (!selectedCurrency) {
+            toast.error('Error en la selección de moneda');
             return;
         }
+
         const amount = parseFloat(currentPayment.amount);
         const exchangeRate = parseFloat(currentPayment.exchangeRate);
         const amountInUsd = convertToUsd(amount, exchangeRate);
         console.log(`Monto: ${amount}, Tasa: ${exchangeRate}, USD: ${amountInUsd}`);
+
         if (amountInUsd === 0 || isNaN(amountInUsd)) {
             toast.error('El monto en USD no puede ser cero o no es válido. Revise la tasa de cambio.');
             return;
         }
+
         const newPayment: Payment = {
             id: crypto.randomUUID(),
             method: currentPayment.method,
@@ -528,7 +555,8 @@ export default function PuntoVentaOficial({
             via: currentPayment.method === 'transferencia' ? currentPayment.via : undefined,
             exchangeRate: exchangeRate,
             amountInUsd: amountInUsd,
-            cuenta_id: currentPayment.cuenta_id,
+            cuenta_id: currentPayment.cuenta_id || null,
+            cliente_id: currentPayment.cliente_id || null,
             referencia: currentPayment.method === 'transferencia' ? currentPayment.referencia : undefined,
             moneda_info: {
                 codigo: selectedCurrency.code,
@@ -536,6 +564,7 @@ export default function PuntoVentaOficial({
                 simbolo: selectedCurrency.symbol,
             },
         };
+
         console.log('Nuevo pago agregado:', newPayment);
         setPayments([...payments, newPayment]);
         setCurrentPayment({
@@ -545,6 +574,7 @@ export default function PuntoVentaOficial({
             amount: '',
             exchangeRate: '',
             cuenta_id: '',
+            cliente_id: '',
             referencia: '',
         });
         setCuentasFiltradas([]);
@@ -588,6 +618,7 @@ export default function PuntoVentaOficial({
             toast.error('Debe agregar al menos un método de pago para completar la venta.');
             return;
         }
+
         const datosVenta = {
             almacen_id: almacenSeleccionado,
             cliente_id: clienteSeleccionado || null,
@@ -605,17 +636,21 @@ export default function PuntoVentaOficial({
                 via: p.via,
                 tasa_cambio: p.exchangeRate,
                 monto_equivalente: p.amountInUsd,
-                cuenta_id: p.cuenta_id,
+                cuenta_id: p.cuenta_id || null,
+                cliente_id: p.cliente_id || null,
                 referencia: p.referencia,
             })),
             moneda_principal_id: monedaPrincipal?.id,
             tasa_cambio_principal: tasaCambioPrincipal,
         };
+
         console.log('Datos de venta a enviar:', datosVenta);
+
         try {
             setProcesandoVenta(true);
             const response = await axios.post(route('ventas.procesar'), datosVenta);
             console.log('Respuesta del servidor:', response.data);
+
             if (response.data.success) {
                 toast.success('✅ Venta creada correctamente. Stock reservado pendiente de aprobación.');
                 setCarrito([]);
@@ -658,7 +693,6 @@ export default function PuntoVentaOficial({
 
     const selectedCurrencyInfo = currentPayment.moneda_id ? getCurrencyInfo(currentPayment.moneda_id) : null;
 
-    // 🆕 COMPONENTE DE CREACIÓN DE CLIENTE
     const CrearClienteDialogContent = () => {
         const [localCliente, setLocalCliente] = useState({
             nombre_cliente: '',
@@ -738,7 +772,6 @@ export default function PuntoVentaOficial({
             setLocalErrors({});
             setIsCrearClienteDialogOpen(false);
         };
-
         return (
             <DialogContent className="sm:max-w-lg">
                 <DialogHeader>
@@ -1307,38 +1340,82 @@ export default function PuntoVentaOficial({
                                                                             />
                                                                         </div>
                                                                         <div className="space-y-2">
-                                                                            <Label>Cuenta Destino</Label>
+                                                                            <Label>Destino del Pago</Label>
+
                                                                             <Select
-                                                                                value={currentPayment.cuenta_id}
+                                                                                value={
+                                                                                    currentPayment.cuenta_id
+                                                                                        ? `cuenta_${currentPayment.cuenta_id}`
+                                                                                        : currentPayment.cliente_id
+                                                                                          ? `cliente_${currentPayment.cliente_id}`
+                                                                                          : ''
+                                                                                }
                                                                                 onValueChange={(value) => {
-                                                                                    console.log('Cuenta seleccionada:', value);
-                                                                                    setCurrentPayment({ ...currentPayment, cuenta_id: value });
+                                                                                    if (value.startsWith('cuenta_')) {
+                                                                                        setCurrentPayment({
+                                                                                            ...currentPayment,
+                                                                                            cuenta_id: value.replace('cuenta_', ''),
+                                                                                            cliente_id: '',
+                                                                                        });
+                                                                                    } else if (value.startsWith('cliente_')) {
+                                                                                        setCurrentPayment({
+                                                                                            ...currentPayment,
+                                                                                            cliente_id: value.replace('cliente_', ''),
+                                                                                            cuenta_id: '',
+                                                                                        });
+                                                                                    }
                                                                                 }}
-                                                                                disabled={!currentPayment.moneda_id || cargandoCuentas}
                                                                             >
                                                                                 <SelectTrigger>
-                                                                                    <SelectValue
-                                                                                        placeholder={
-                                                                                            cargandoCuentas
-                                                                                                ? 'Cargando cuentas...'
-                                                                                                : cuentasFiltradas.length === 0
-                                                                                                  ? 'No hay cuentas disponibles'
-                                                                                                  : 'Seleccione cuenta'
-                                                                                        }
-                                                                                    />
+                                                                                    <SelectValue placeholder="Seleccione destino" />
                                                                                 </SelectTrigger>
+
                                                                                 <SelectContent>
-                                                                                    {cuentasFiltradas.map((account) => (
-                                                                                        <SelectItem key={account.id} value={account.id.toString()}>
-                                                                                            {account.nombre_cuenta}
-                                                                                            {account.moneda
-                                                                                                ? ` (${account.moneda.codigo})`
-                                                                                                : ` (${account.tipo_moneda})`}
-                                                                                            {account.saldo_actual !== undefined
-                                                                                                ? ` - $${account.saldo_actual}`
-                                                                                                : ''}
-                                                                                        </SelectItem>
-                                                                                    ))}
+                                                                                    {cuentasFiltradas.length > 0 && (
+                                                                                        <>
+                                                                                            <div className="px-2 py-1.5 text-xs font-semibold text-gray-500">
+                                                                                                🏦 CUENTAS
+                                                                                            </div>
+                                                                                            {cuentasFiltradas.map((account) => (
+                                                                                                <SelectItem
+                                                                                                    key={`cuenta_${account.id}`}
+                                                                                                    value={`cuenta_${account.id}`}
+                                                                                                >
+                                                                                                    🏦 {account.nombre_cuenta}
+                                                                                                </SelectItem>
+                                                                                            ))}
+                                                                                        </>
+                                                                                    )}
+
+                                                                                    {selectedCurrencyInfo?.code === 'USD' && (
+                                                                                        <>
+                                                                                            {cuentasFiltradas.length > 0 && (
+                                                                                                <Separator className="my-1" />
+                                                                                            )}
+                                                                                            <div className="px-2 py-1.5 text-xs font-semibold text-gray-500">
+                                                                                                👤 CLIENTES FÍSICOS
+                                                                                            </div>
+
+                                                                                            {cargandoClientesFisicos ? (
+                                                                                                <div className="px-2 py-3 text-center text-sm text-gray-500">
+                                                                                                    Cargando clientes...
+                                                                                                </div>
+                                                                                            ) : clientesFisicos.length === 0 ? (
+                                                                                                <div className="px-2 py-3 text-center text-sm text-gray-500">
+                                                                                                    No hay clientes físicos
+                                                                                                </div>
+                                                                                            ) : (
+                                                                                                clientesFisicos.map((cliente) => (
+                                                                                                    <SelectItem
+                                                                                                        key={`cliente_${cliente.id}`}
+                                                                                                        value={`cliente_${cliente.id}`}
+                                                                                                    >
+                                                                                                        👤 {cliente.nombre_cliente}
+                                                                                                    </SelectItem>
+                                                                                                ))
+                                                                                            )}
+                                                                                        </>
+                                                                                    )}
                                                                                 </SelectContent>
                                                                             </Select>
                                                                         </div>
@@ -1432,7 +1509,7 @@ export default function PuntoVentaOficial({
                                                                                             !currentPayment.referencia) ||
                                                                                         !currentPayment.amount ||
                                                                                         parseFloat(currentPayment.amount) <= 0 ||
-                                                                                        !currentPayment.cuenta_id
+                                                                                        (!currentPayment.cuenta_id && !currentPayment.cliente_id)
                                                                                     }
                                                                                     className="h-12 w-full"
                                                                                 >

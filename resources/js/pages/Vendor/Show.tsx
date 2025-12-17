@@ -88,6 +88,12 @@ interface CuentaPago {
     moneda: MonedaPago | null;
 }
 
+// Cliente destino para pagos
+interface ClienteDestino {
+    id: number;
+    nombre: string;
+}
+
 interface Pago {
     metodo: string;
     moneda: MonedaPago | null;
@@ -95,8 +101,9 @@ interface Pago {
     via: string | null;
     tasa_cambio: number;
     monto_equivalente: number;
-    cuenta: CuentaPago;
+    cuenta: CuentaPago | null; // Cambiado a nullable
     referencia?: string | null;
+    cliente_destino?: ClienteDestino | null; // Agregado opcional
 }
 
 interface Cliente {
@@ -841,7 +848,12 @@ export default function ResultadoCarrito({ venta }: Props) {
                                                                 {Number(pago.tasa_cambio)?.toFixed(2) || '0.00'}
                                                             </p>
                                                             <p>
-                                                                <span className="font-medium">Cuenta:</span> {pago.cuenta.nombre}
+                                                                <span className="font-medium">Destino:</span>{' '}
+                                                                {pago.cliente_destino?.nombre
+                                                                    ? `Cliente: ${pago.cliente_destino.nombre}`
+                                                                    : pago.cuenta?.nombre
+                                                                      ? `${pago.cuenta.nombre} (${pago.cuenta.moneda?.nombre || 'Sin moneda'})`
+                                                                      : 'No especificado'}
                                                             </p>
                                                             {pago.via && (
                                                                 <p>
@@ -1506,7 +1518,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                             currentVenta.pagos.map((pago, index) => {
                                 console.log(`📄 Procesando pago ${index}:`, pago);
                                 const simboloMonedaPago = getCurrencySymbol(pago.moneda);
-                                const simboloMonedaCuenta = getCurrencySymbol(pago.cuenta.moneda);
+                                const simboloMonedaCuenta = getCurrencySymbol(pago.cuenta?.moneda || null);
 
                                 return (
                                     <div key={index} className="bg-muted mb-4 rounded-md p-3 last:mb-0">
@@ -1532,9 +1544,13 @@ export default function ResultadoCarrito({ venta }: Props) {
                                                 <p className="text-sm">{pago.tasa_cambio}</p>
                                             </div>
                                             <div>
-                                                <p className="text-sm font-medium">Cuenta:</p>
+                                                <p className="text-sm font-medium">Destino:</p>
                                                 <p className="text-sm">
-                                                    {pago.cuenta.nombre} ({pago.cuenta.moneda?.nombre || simboloMonedaCuenta})
+                                                    {pago.cliente_destino?.nombre
+                                                        ? `Cliente: ${pago.cliente_destino.nombre}`
+                                                        : pago.cuenta?.nombre
+                                                          ? `${pago.cuenta.nombre} (${pago.cuenta.moneda?.nombre || simboloMonedaCuenta})`
+                                                          : 'No especificado'}
                                                 </p>
                                             </div>
                                             {pago.via && (
