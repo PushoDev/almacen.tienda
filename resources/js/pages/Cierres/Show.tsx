@@ -1,3 +1,4 @@
+import HeadingSmall from '@/components/heading-small';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -5,7 +6,7 @@ import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem, PageProps } from '@/types';
 import { Head, Link } from '@inertiajs/react';
-import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, XCircle } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, ComputerIcon, XCircle } from 'lucide-react';
 
 interface Cierre {
     id: number;
@@ -69,27 +70,31 @@ export default function Show({ auth, cierre }: Props) {
 
             <div className="bg-background flex h-screen w-full flex-col">
                 <main className="flex-1 overflow-y-auto p-4 md:p-8">
+                    <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                        {/* Contenido principal */}
+                        <HeadingSmall
+                            title={`Detalle de Cierre #${cierre.id}`}
+                            description={`Vendedor: ${cierre.usuario.name} • ${new Date(cierre.fecha_cierre).toLocaleString()}`}
+                        />
+                        {/* Ícono semitransparente */}
+                        <ComputerIcon
+                            size={70}
+                            color="#d6d3d1"
+                            className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
+                        />
+                    </div>
+
+                    <div className="mb-4" />
+
                     <div className="mx-auto max-w-5xl space-y-6">
-                        {/* Header Section */}
+                        {/* Actions & Status Bar */}
                         <div className="flex items-center justify-between">
-                            <div className="space-y-1">
-                                <h1 className="text-3xl font-bold tracking-tight">Detalle de Cierre #{cierre.id}</h1>
-                                <div className="text-muted-foreground flex items-center gap-2">
-                                    <span>
-                                        Vendedor: <span className="text-foreground font-semibold">{cierre.usuario.name}</span>
-                                    </span>
-                                    <span>•</span>
-                                    <span>{new Date(cierre.fecha_cierre).toLocaleString()}</span>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                {statusInfo.badge}
-                                <Button variant="outline" size="sm" asChild>
-                                    <Link href={route('ventas.cierres')}>
-                                        <ArrowLeft className="mr-2 h-4 w-4" /> Volver
-                                    </Link>
-                                </Button>
-                            </div>
+                            <div className="flex items-center gap-3">{statusInfo.badge}</div>
+                            <Button variant="outline" size="sm" asChild>
+                                <Link href={route('ventas.cierres')}>
+                                    <ArrowLeft className="mr-2 h-4 w-4" /> Volver
+                                </Link>
+                            </Button>
                         </div>
 
                         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">

@@ -1,3 +1,4 @@
+import HeadingSmall from '@/components/heading-small';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -7,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem, PageProps } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
-import { AlertCircle, Calculator, Save } from 'lucide-react';
+import { AlertCircle, Calculator, ComputerIcon, Save } from 'lucide-react';
 import { FormEventHandler, useEffect, useState } from 'react';
 
 interface Calculos {
@@ -66,12 +67,20 @@ export default function Create({ auth, calculos }: Props) {
 
             <div className="bg-background flex h-screen w-full flex-col">
                 <main className="flex-1 overflow-y-auto p-4 md:p-8">
-                    <div className="mx-auto max-w-5xl">
-                        <div className="mb-6">
-                            <h1 className="text-3xl font-bold tracking-tight">Cierre de Caja</h1>
-                            <p className="text-muted-foreground">Verifica los montos y registra el efectivo final del turno.</p>
-                        </div>
+                    <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                        {/* Contenido principal */}
+                        <HeadingSmall title="Cierres de Caja" description="Verifica los montos y registra el efectivo final del turno." />
+                        {/* Ícono semitransparente */}
+                        <ComputerIcon
+                            size={70}
+                            color="#d6d3d1"
+                            className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
+                        />
+                    </div>
 
+                    <div className="mb-4" />
+
+                    <div className="mx-auto max-w-6xl">
                         <form onSubmit={submit}>
                             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                                 {/* Columna Izquierda - Resumen del Sistema */}

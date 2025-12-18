@@ -1,3 +1,4 @@
+import HeadingSmall from '@/components/heading-small';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem, PageProps } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { Filter, Plus } from 'lucide-react';
+import { ComputerIcon, Filter, Plus } from 'lucide-react';
 import { useState } from 'react';
 
 interface Cierre {
@@ -86,20 +87,28 @@ export default function Index({ auth, cierres, filters }: Props) {
 
             <div className="bg-background flex h-screen w-full flex-col">
                 <main className="flex-1 overflow-y-auto p-4 md:p-8">
-                    <div className="mb-6 flex items-center justify-between">
-                        <div>
-                            <h1 className="text-2xl font-bold tracking-tight">Cierres de Caja</h1>
-                            <p className="text-muted-foreground">Historial y gestión de cierres diarios.</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <Button asChild>
-                                <Link href={route('ventas.cierres.create')}>
-                                    <Plus className="mr-2 h-4 w-4" /> Nuevo Cierre
-                                </Link>
-                            </Button>
-                        </div>
+                    <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                        {/* Contenido principal */}
+                        <HeadingSmall title="Cierres de Caja" description="Historial y gestión de cierres diarios." />
+                        {/* Ícono semitransparente */}
+                        <ComputerIcon
+                            size={70}
+                            color="#d6d3d1"
+                            className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
+                        />
                     </div>
 
+                    <div className="mb-4" />
+
+                    <div className="flex items-center gap-2">
+                        <Button asChild>
+                            <Link href={route('ventas.cierres.create')}>
+                                <Plus className="mr-2 h-4 w-4" /> Nuevo Cierre
+                            </Link>
+                        </Button>
+                    </div>
+
+                    <div className="mb-4" />
                     {/* Mensajes Flash */}
                     {flash.success && <div className="mb-6 rounded-md border border-green-200 bg-green-50 p-4 text-green-700">{flash.success}</div>}
 
