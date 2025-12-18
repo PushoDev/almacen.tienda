@@ -32,7 +32,15 @@ export interface SharedData {
     auth: Auth;
     ziggy: Config & { location: string };
     sidebarOpen: boolean;
+    flash: {
+        success?: string;
+        error?: string;
+    };
     [key: string]: unknown;
+}
+
+export interface PageProps extends SharedData {
+    errors: Record<string, string>;
 }
 
 export interface User {

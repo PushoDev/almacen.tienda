@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\VentaController;
+use App\Http\Controllers\CierreCajaController; // Importar nuevo controlador
 use App\Http\Controllers\CompraController; // Asegúrate de importar el controlador de Compras
 use Illuminate\Support\Facades\Route;
 
@@ -12,8 +13,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/punto-venta', [VentaController::class, 'index'])->name('punto-venta.index');
     Route::get('/ventas/listado', [VentaController::class, 'listadoVentas'])->name('ventas.listado');
     Route::get('/ventas/{id}/show', [VentaController::class, 'show'])->name('ventas.show');
-    Route::get('/vendor/cierres', [VentaController::class, 'cierres'])->name('ventas.cierres');
-    Route::get('/vendor/cierres/show', [VentaController::class, 'showCierreDetalle'])->name('ventas.cierres.show');
+    // Modificar estas rutas para usar el nuevo controlador
+    Route::get('/vendor/cierres', [CierreCajaController::class, 'index'])->name('ventas.cierres');
+    Route::get('/vendor/cierres/crear', [CierreCajaController::class, 'create'])->name('ventas.cierres.create');
+    Route::post('/vendor/cierres', [CierreCajaController::class, 'store'])->name('ventas.cierres.store');
+    Route::get('/vendor/cierres/{id}', [CierreCajaController::class, 'show'])->name('ventas.cierres.show');
+    Route::post('/vendor/cierres/{id}/aprobar', [CierreCajaController::class, 'aprobar'])->name('ventas.cierres.aprobar');
     Route::get('/ventas/reporte-diario', [VentaController::class, 'showReporteDiarioView'])->name('ventas.reporte.diario');
 
     // ========================================================================
