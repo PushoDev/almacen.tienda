@@ -28,6 +28,7 @@ class CierreCaja extends Model
         'observaciones',
         'comprobante_url',
         'estado',
+        'detalles',
     ];
 
     protected $casts = [
@@ -41,6 +42,7 @@ class CierreCaja extends Model
         'saldo_esperado' => 'decimal:2',
         'saldo_contado' => 'decimal:2',
         'diferencia' => 'decimal:2',
+        'detalles' => 'array',
     ];
 
     public function usuario()

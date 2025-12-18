@@ -19,6 +19,7 @@ interface Calculos {
     gastos: number;
     devoluciones: number;
     saldo_esperado: number;
+    detalles: Array<{ moneda: string; metodo: string; monto: number; cantidad_pagos: number }>;
 }
 
 interface Props extends PageProps {
@@ -125,6 +126,40 @@ export default function Create({ auth, calculos }: Props) {
                                             </div>
                                         </div>
                                     </CardContent>
+
+                                    {/* Desglose de Pagos */}
+                                    <div className="border-t p-0">
+                                        <div className="bg-muted/20 p-4">
+                                            <h4 className="mb-3 text-sm font-semibold">Desglose Calculado por Sistema</h4>
+                                            <div className="bg-background rounded-md border text-sm">
+                                                <div className="text-muted-foreground bg-muted/40 grid grid-cols-3 gap-2 border-b p-2 font-medium">
+                                                    <div>Método</div>
+                                                    <div>Moneda</div>
+                                                    <div className="text-right">Monto</div>
+                                                </div>
+                                                {calculos.detalles && calculos.detalles.length > 0 ? (
+                                                    calculos.detalles.map((detalle: any, idx: number) => (
+                                                        <div
+                                                            key={idx}
+                                                            className="hover:bg-muted/10 grid grid-cols-3 gap-2 border-b p-2 transition-colors last:border-0"
+                                                        >
+                                                            <div className="capitalize">{detalle.metodo}</div>
+                                                            <div>
+                                                                <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs">
+                                                                    {detalle.moneda}
+                                                                </span>
+                                                            </div>
+                                                            <div className="text-right font-medium">${Number(detalle.monto).toFixed(2)}</div>
+                                                        </div>
+                                                    ))
+                                                ) : (
+                                                    <div className="text-muted-foreground p-4 text-center">
+                                                        No hay pagos registrados en este turno.
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
                                 </Card>
 
                                 {/* Columna Derecha - Conteo Físico */}

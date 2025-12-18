@@ -21,7 +21,9 @@ interface Cierre {
     saldo_contado: string;
     diferencia: string;
     estado: string;
+    estado: string;
     observaciones: string | null;
+    detalles: Array<{ moneda: string; metodo: string; monto: number; cantidad_pagos: number }> | null;
     usuario: { name: string };
     revisor?: { name: string };
 }
@@ -63,6 +65,19 @@ export default function Show({ auth, cierre }: Props) {
     };
 
     const statusInfo = getStatusInfo(cierre.estado);
+
+    // Helper para castear detalles si vienen como string JSON o ya objeto
+    const convertDetalles = (detalles: any) => {
+        if (!detalles) return [];
+        if (typeof detalles === 'string') {
+            try {
+                return JSON.parse(detalles);
+            } catch (e) {
+                return [];
+            }
+        }
+        return detalles;
+    };
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -134,6 +149,36 @@ export default function Show({ auth, cierre }: Props) {
                                         </div>
                                     </CardContent>
                                 </Card>
+
+                                {/ * Desglose de Pagos * /}
+                                {cierre.detalles && convertDetalles(cierre.detalles).length > 0 && (
+                                    <Card className="overflow-hidden">
+                                        <CardHeader className="bg-muted/20 pb-4">
+                                            <CardTitle className="text-base">Desglose de Métodos de Pago</CardTitle>
+                                            <CardDescription>Resumen detallado registrado.</CardDescription>
+                                        </CardHeader>
+                                        <CardContent className="p-0">
+                                            <div className="divide-y text-sm">
+                                                <div className="text-muted-foreground bg-muted/40 grid grid-cols-3 gap-4 p-3 font-medium">
+                                                    <div>Método</div>
+                                                    <div>Moneda</div>
+                                                    <div className="text-right">Monto</div>
+                                                </div>
+                                                {convertDetalles(cierre.detalles).map((detalle: any, idx: number) => (
+                                                    <div key={idx} className="hover:bg-muted/5 grid grid-cols-3 gap-4 p-3">
+                                                        <div className="capitalize">{detalle.metodo}</div>
+                                                        <div>
+                                                            <Badge variant="outline" className="font-mono text-xs">
+                                                                {detalle.moneda}
+                                                            </Badge>
+                                                        </div>
+                                                        <div className="text-right font-medium">${Number(detalle.monto).toFixed(2)}</div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                )}
 
                                 {cierre.observaciones && (
                                     <Card>

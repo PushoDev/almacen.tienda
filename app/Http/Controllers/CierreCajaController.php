@@ -49,75 +49,84 @@ class CierreCajaController extends Controller
     /**
      * Muestra la vista de pre-cierre con los cálculos del turno actual.
      */
+    /**
+     * Muestra la vista de pre-cierre con los cálculos del turno actual.
+     */
     public function create()
     {
         $user = Auth::user();
-        $now = Carbon::now();
 
         // Buscar el último cierre de este usuario para determinar el inicio del turno actual
         $ultimoCierre = CierreCaja::where('user_id', $user->id)
             ->orderBy('fecha_cierre', 'desc')
             ->first();
 
-        $inicioTurno = $ultimoCierre ? $ultimoCierre->fecha_cierre : Carbon::today(); // O inicio del día si no hay cierres previos
+        $inicioTurno = $ultimoCierre ? $ultimoCierre->fecha_cierre : Carbon::today();
 
-        // Calcular Ventas desde el inicio del turno
-        $ventas = Venta::where('user_id', $user->id)
-            ->where('created_at', '>=', $inicioTurno)
-            ->where('estado', 'completada') // Asumiendo 'completada' es el estado final
-            ->get();
+        // Obtener todos los pagos asociados a las ventas del usuario en el turno actual
+        $pagos = \App\Models\PagoVenta::whereHas('venta', function ($q) use ($user, $inicioTurno) {
+            $q->where('user_id', $user->id)
+                ->where('created_at', '>=', $inicioTurno);
+        })->with('moneda')->get();
 
-        // Calcular totales por método de pago (simplificado)
-        // Asume que Venta tiene campos o relación de pagos.
-        // Si no, iteramos sobre los pagos si existen, o usamos nueva lógica si se implementó.
-        // Por ahora, asumiremos una lógica simple basada en la estructura actual de Venta.
-
+        // Agrupar y Calcular Totales por Moneda y Método
+        $detalles = [];
         $ventasEfectivo = 0;
         $ventasOtros = 0;
 
-        foreach ($ventas as $venta) {
-            // Aquí deberíamos revisar la tabla de pagos (PagoVenta) si existe
-            // para ser precisos. Si no, usamos el total de la venta.
-            // Voy a usar una aproximación basada en el modelo Venta si tiene 'metodo_pago'
-            // O consultando sus pagos relacionados.
+        foreach ($pagos as $pago) {
+            $moneda = $pago->moneda ? $pago->moneda->codigo_moneda : 'USD';
+            $metodo = ucfirst($pago->tipo_pago);
+            $monto = $pago->monto;
 
-            foreach ($venta->pagos as $pago) {
-                // Asumimos que PagoVenta tiene 'metodo_pago_id' y 'monto'
-                // Necesitamos saber qué ID es efectivo. Asumiremos por nombre o código moneda.
-                // Ajustar según esquema real de PagoVenta.
-                // Si es USD cash o Moneda local cash -> efectivo
+            // Key única para agrupación
+            $key = $moneda . '_' . $metodo;
 
-                // TODO: Ajustar lógica exacta según modelos de Pago
-                $ventasEfectivo += $pago->monto; // Placeholder, refinar en paso siguiente
+            if (!isset($detalles[$key])) {
+                $detalles[$key] = [
+                    'moneda' => $moneda,
+                    'metodo' => $metodo,
+                    'monto' => 0,
+                    'cantidad_pagos' => 0
+                ];
             }
 
-            // Si no hay pagos detallados, sumamos total a efectivo por defecto o otros
-            if ($venta->pagos->isEmpty()) {
-                $ventasEfectivo += $venta->total;
+            $detalles[$key]['monto'] += $monto;
+            $detalles[$key]['cantidad_pagos']++;
+
+            // Clasificación General (Efectivo vs Otros) para el resumen simple
+            // Asumiendo que 'efectivo' es el keyword en tipo_pago
+            if (stripos($pago->tipo_pago, 'efectivo') !== false) {
+                // TODO: Si hay manejo de múltiples monedas, aquí deberíamos convertir a moneda base
+                // Si 'monto' ya está normalizado o es mixto, esto es una aproximación.
+                // Asumiremos que el valor contable principal usa el monto nominal si es la moneda base,
+                // o convertido si existiera. Por ahora sumamos directo (riesgo si hay mezclas).
+                $ventasEfectivo += $monto;
+            } else {
+                $ventasOtros += $monto;
             }
         }
 
-        // Totales Hardcoded temporalmente hasta refinar la lógica de pagos con el usuario
-        // Ojo: Esto es un placeholder para la estructura, luego implementamos la query exacta de pagos.
-        $ventasEfectivo = $ventas->sum('total');
-        $ventasOtros = 0;
+        // Re-indexar array para enviar al frontend
+        $detalles = array_values($detalles);
 
-        $gastos = 0; // TODO: Conectar con tabla de gastos/movimientos si existe
-        $devoluciones = 0; // TODO: Conectar con devoluciones
+        $gastos = 0; // Conectar con módulo de Gastos si existe
+        $devoluciones = 0; // Conectar con módulo de Devoluciones si existe
 
-        $saldoInicial = 0; // Debería venir de la caja base o del cierre anterior
+        $saldoInicial = 0; // Implementar lógica de fondo de caja si aplica
 
         $saldoEsperado = $saldoInicial + $ventasEfectivo - $gastos - $devoluciones;
 
         return Inertia::render('Cierres/Create', [
             'calculos' => [
-                'inicio_turno' => $inicioTurno->toDateTimeString(),
+                'inicio_turno' => $inicioTurno instanceof Carbon ? $inicioTurno->toDateTimeString() : $inicioTurno,
                 'saldo_inicial' => $saldoInicial,
                 'ventas_efectivo' => $ventasEfectivo,
                 'ventas_otros' => $ventasOtros,
                 'gastos' => $gastos,
                 'devoluciones' => $devoluciones,
                 'saldo_esperado' => $saldoEsperado,
+                'detalles' => $detalles // Nuevo campo con el desglose
             ]
         ]);
     }
@@ -136,7 +145,33 @@ class CierreCajaController extends Controller
             'saldo_contado' => 'required|numeric',
             'observaciones' => 'nullable|string',
             'fecha_apertura' => 'required|date',
+            // 'detalles' no es obligatorio validarlo estrictamente si confiamos, pero idealmente sí
         ]);
+
+        // Recalcular detalles para persistencia segura (mismo lógica que create)
+        $inicioTurno = Carbon::parse($validated['fecha_apertura']);
+        $user = Auth::user();
+
+        $pagos = \App\Models\PagoVenta::whereHas('venta', function ($q) use ($user, $inicioTurno) {
+            $q->where('user_id', $user->id)
+                ->where('created_at', '>=', $inicioTurno);
+        })->with('moneda')->get();
+
+        $detalles = [];
+        foreach ($pagos as $pago) {
+            $moneda = $pago->moneda ? $pago->moneda->codigo_moneda : 'USD';
+            $metodo = ucfirst($pago->tipo_pago);
+            $monto = $pago->monto;
+            $key = $moneda . '_' . $metodo;
+
+            if (!isset($detalles[$key])) {
+                $detalles[$key] = ['moneda' => $moneda, 'metodo' => $metodo, 'monto' => 0, 'cantidad_pagos' => 0];
+            }
+            $detalles[$key]['monto'] += $monto;
+            $detalles[$key]['cantidad_pagos']++;
+        }
+        $detalles = array_values($detalles);
+
 
         $saldoEsperado = $validated['saldo_inicial'] + $validated['ventas_efectivo'] - $validated['total_gastos'] - $validated['total_devoluciones'];
         $diferencia = $validated['saldo_contado'] - $saldoEsperado;
@@ -145,7 +180,7 @@ class CierreCajaController extends Controller
         try {
             $cierre = CierreCaja::create([
                 'user_id' => Auth::id(),
-                'revisor_id' => Auth::id(), // Auto-aprobación inicial si el vendedor confirma
+                'revisor_id' => Auth::id(),
                 'fecha_apertura' => $validated['fecha_apertura'],
                 'fecha_cierre' => now(),
                 'saldo_inicial' => $validated['saldo_inicial'],
@@ -157,11 +192,10 @@ class CierreCajaController extends Controller
                 'saldo_contado' => $validated['saldo_contado'],
                 'diferencia' => $diferencia,
                 'observaciones' => $validated['observaciones'],
-                'estado' => 'pendiente', // Por defecto pendiente, o 'aprobado' si se permite auto-check
+                'estado' => 'pendiente',
+                'detalles' => $detalles, // Guardamos el JSON
             ]);
 
-            // Si la diferencia es pequeña, aprobamos automáticamente o si el usuario "Aprueba" su propio cierre
-            // Según requerimiento: "vendedores tienen derecho aprobar su respectivo cierre"
             $cierre->update(['estado' => 'aprobado']);
 
             DB::commit();
