@@ -759,8 +759,8 @@ class VentaController extends Controller
         $validated = $request->validate([
             'nombre' => 'required|string|max:100',
             'apellidos' => 'required|string|max:100',
-            'carnet_identidad' => 'nullable|string|size:11|regex:/^\d+$/', // Opcional y exactamente 11 dígitos si se llena
-            'direccion_residencia' => 'required|string|max:500',
+            'carnet_identidad' => 'nullable|string|size:11|regex:/^\d+$/',
+            'direccion_residencia' => 'nullable|string|max:500', // Modificado a nullable
             'telefono_contacto' => 'nullable|string|max:20',
             'parentesco_cliente' => 'nullable|string|max:100',
             'observaciones' => 'nullable|string|max:500',

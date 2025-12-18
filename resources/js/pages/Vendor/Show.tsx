@@ -588,7 +588,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                                             </div>
 
                                             <div className="space-y-2">
-                                                <Label htmlFor="carnet_identidad">Carnet de Identidad *</Label>
+                                                <Label htmlFor="carnet_identidad">Carnet de Identidad</Label>
                                                 <Input
                                                     id="carnet_identidad"
                                                     value={formDestinatario.carnet_identidad}
@@ -608,7 +608,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                                             </div>
 
                                             <div className="space-y-2 md:col-span-2">
-                                                <Label htmlFor="direccion_residencia">Dirección de Residencia *</Label>
+                                                <Label htmlFor="direccion_residencia">Dirección de Residencia</Label>
                                                 <Textarea
                                                     id="direccion_residencia"
                                                     value={formDestinatario.direccion_residencia}
@@ -663,13 +663,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                                             <AlertDialogAction
                                                 onClick={handleGuardarDestinatario}
                                                 className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
-                                                disabled={
-                                                    isSavingDestinatario ||
-                                                    !formDestinatario.nombre ||
-                                                    !formDestinatario.apellidos ||
-                                                    !formDestinatario.carnet_identidad ||
-                                                    !formDestinatario.direccion_residencia
-                                                }
+                                                disabled={isSavingDestinatario || !formDestinatario.nombre || !formDestinatario.apellidos}
                                             >
                                                 {isSavingDestinatario ? (
                                                     <div className="flex items-center gap-2">
