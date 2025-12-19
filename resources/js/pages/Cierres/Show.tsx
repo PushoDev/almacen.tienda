@@ -21,7 +21,6 @@ interface Cierre {
     saldo_contado: string;
     diferencia: string;
     estado: string;
-    estado: string;
     observaciones: string | null;
     detalles: Array<{ moneda: string; metodo: string; monto: number; cantidad_pagos: number }> | null;
     usuario: { name: string };
@@ -32,7 +31,7 @@ interface Props extends PageProps {
     cierre: Cierre;
 }
 
-export default function Show({ auth, cierre }: Props) {
+export default function Show({ cierre }: Props) {
     const breadcrumbs: BreadcrumbItem[] = [
         {
             title: 'Cierres de Caja',
@@ -67,16 +66,20 @@ export default function Show({ auth, cierre }: Props) {
     const statusInfo = getStatusInfo(cierre.estado);
 
     // Helper para castear detalles si vienen como string JSON o ya objeto
-    const convertDetalles = (detalles: any) => {
+    const convertDetalles = (detalles: Cierre['detalles']) => {
         if (!detalles) return [];
+        let parsed: any[] = [];
         if (typeof detalles === 'string') {
             try {
-                return JSON.parse(detalles);
-            } catch (e) {
+                parsed = JSON.parse(detalles);
+            } catch {
                 return [];
             }
+        } else {
+            parsed = detalles;
         }
-        return detalles;
+        // Aseguramos que sea un array (por si viene como objeto asociativo)
+        return Array.isArray(parsed) ? parsed : Object.values(parsed || {});
     };
 
     return (
@@ -89,7 +92,7 @@ export default function Show({ auth, cierre }: Props) {
                         {/* Contenido principal */}
                         <HeadingSmall
                             title={`Detalle de Cierre #${cierre.id}`}
-                            description={`Vendedor: ${cierre.usuario.name} • ${new Date(cierre.fecha_cierre).toLocaleString()}`}
+                            description={`Vendedor: ${cierre.usuario?.name || 'Sistema'} • ${new Date(cierre.fecha_cierre).toLocaleString()}`}
                         />
                         {/* Ícono semitransparente */}
                         <ComputerIcon
@@ -150,7 +153,7 @@ export default function Show({ auth, cierre }: Props) {
                                     </CardContent>
                                 </Card>
 
-                                {/ * Desglose de Pagos * /}
+                                {/* Desglose de Pagos */}
                                 {cierre.detalles && convertDetalles(cierre.detalles).length > 0 && (
                                     <Card className="overflow-hidden">
                                         <CardHeader className="bg-muted/20 pb-4">
@@ -164,12 +167,14 @@ export default function Show({ auth, cierre }: Props) {
                                                     <div>Moneda</div>
                                                     <div className="text-right">Monto</div>
                                                 </div>
-                                                {convertDetalles(cierre.detalles).map((detalle: any, idx: number) => (
+                                                {convertDetalles(cierre.detalles).map((detalle, idx: number) => (
                                                     <div key={idx} className="hover:bg-muted/5 grid grid-cols-3 gap-4 p-3">
-                                                        <div className="capitalize">{detalle.metodo}</div>
+                                                        <div className="capitalize">
+                                                            {typeof detalle.metodo === 'string' ? detalle.metodo : JSON.stringify(detalle.metodo)}
+                                                        </div>
                                                         <div>
                                                             <Badge variant="outline" className="font-mono text-xs">
-                                                                {detalle.moneda}
+                                                                {typeof detalle.moneda === 'string' ? detalle.moneda : JSON.stringify(detalle.moneda)}
                                                             </Badge>
                                                         </div>
                                                         <div className="text-right font-medium">${Number(detalle.monto).toFixed(2)}</div>
