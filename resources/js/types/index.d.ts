@@ -32,7 +32,15 @@ export interface SharedData {
     auth: Auth;
     ziggy: Config & { location: string };
     sidebarOpen: boolean;
+    flash: {
+        success?: string;
+        error?: string;
+    };
     [key: string]: unknown;
+}
+
+export interface PageProps extends SharedData {
+    errors: Record<string, string>;
 }
 
 export interface User {
@@ -133,6 +141,9 @@ export interface ProductoProps {
     imagen_url?: string;
     barcode_image_url?: string;
     precio_venta?: number;
+    precio_venta_actualizado?: number;
+    activo: boolean;
+    descripcion_producto?: string;
     ganancia?: number;
     stock_bajo: boolean;
     created_at?: string;
@@ -326,6 +337,16 @@ export interface ProductoPorAlmacenRefCharts {
 }
 
 // Interface para la Logistica
+// Interface para la Logistica
+export interface BalanceMoneda {
+    codigo: string;
+    nombre: string;
+    simbolo: string;
+    saldo: number;
+    tasa: number;
+    principal: boolean | number;
+}
+
 export interface LogisticaProps {
     totalCategorias: number;
     categoriasActivas: number;
@@ -344,23 +365,17 @@ export interface LogisticaProps {
     productosTop: ProductosMasCompradosRef[];
     comprasPorProveedor: CompraPorProveedorChartRef[];
     productosPorAlmacen: ProductoPorAlmacenRefCharts[];
-    // Monto por moneda
-    montoUSD: number;
-    montoEUR: number;
-    montoMLC: number;
-    montoCUP: number;
-    // Tasa de Cambio General
-    tasaCambioGeneral: number;
-    calculoCup: number;
-    // DisponibleCaja
+
+    // Balances Dinámicos
+    balances: BalanceMoneda[];
+
+    // Deudas y totales
     sumaDsiponible: number;
     deudaClienteFisico: number;
     clientesFisicos: number;
-    // Capital Dashboard
-    capital: number;
-    // TasaMLC
-    tasaMLC: number;
-    calcTasaMLC: number;
+
+    // Permissions
+    canViewFinance?: boolean;
 }
 
 // Interface para Productos por Almacén (Detalles)

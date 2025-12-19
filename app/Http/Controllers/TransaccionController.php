@@ -51,6 +51,7 @@ class TransaccionController extends Controller
             'proveedores' => $proveedores,
             'monedasActivas' => $monedasActivas,
             'tasaCambioActual' => $monedaCUP ? $monedaCUP->tasa_cambio : 0,
+            'userRole' => auth()->user()->role ?? 'vendedor',
         ]);
     }
 

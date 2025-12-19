@@ -88,6 +88,12 @@ interface CuentaPago {
     moneda: MonedaPago | null;
 }
 
+// Cliente destino para pagos
+interface ClienteDestino {
+    id: number;
+    nombre: string;
+}
+
 interface Pago {
     metodo: string;
     moneda: MonedaPago | null;
@@ -95,8 +101,9 @@ interface Pago {
     via: string | null;
     tasa_cambio: number;
     monto_equivalente: number;
-    cuenta: CuentaPago;
+    cuenta: CuentaPago | null; // Cambiado a nullable
     referencia?: string | null;
+    cliente_destino?: ClienteDestino | null; // Agregado opcional
 }
 
 interface Cliente {
@@ -581,7 +588,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                                             </div>
 
                                             <div className="space-y-2">
-                                                <Label htmlFor="carnet_identidad">Carnet de Identidad *</Label>
+                                                <Label htmlFor="carnet_identidad">Carnet de Identidad</Label>
                                                 <Input
                                                     id="carnet_identidad"
                                                     value={formDestinatario.carnet_identidad}
@@ -601,7 +608,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                                             </div>
 
                                             <div className="space-y-2 md:col-span-2">
-                                                <Label htmlFor="direccion_residencia">Dirección de Residencia *</Label>
+                                                <Label htmlFor="direccion_residencia">Dirección de Residencia</Label>
                                                 <Textarea
                                                     id="direccion_residencia"
                                                     value={formDestinatario.direccion_residencia}
@@ -656,13 +663,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                                             <AlertDialogAction
                                                 onClick={handleGuardarDestinatario}
                                                 className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
-                                                disabled={
-                                                    isSavingDestinatario ||
-                                                    !formDestinatario.nombre ||
-                                                    !formDestinatario.apellidos ||
-                                                    !formDestinatario.carnet_identidad ||
-                                                    !formDestinatario.direccion_residencia
-                                                }
+                                                disabled={isSavingDestinatario || !formDestinatario.nombre || !formDestinatario.apellidos}
                                             >
                                                 {isSavingDestinatario ? (
                                                     <div className="flex items-center gap-2">
@@ -841,7 +842,12 @@ export default function ResultadoCarrito({ venta }: Props) {
                                                                 {Number(pago.tasa_cambio)?.toFixed(2) || '0.00'}
                                                             </p>
                                                             <p>
-                                                                <span className="font-medium">Cuenta:</span> {pago.cuenta.nombre}
+                                                                <span className="font-medium">Destino:</span>{' '}
+                                                                {pago.cliente_destino?.nombre
+                                                                    ? `Cliente: ${pago.cliente_destino.nombre}`
+                                                                    : pago.cuenta?.nombre
+                                                                      ? `${pago.cuenta.nombre} (${pago.cuenta.moneda?.nombre || 'Sin moneda'})`
+                                                                      : 'No especificado'}
                                                             </p>
                                                             {pago.via && (
                                                                 <p>
@@ -1506,7 +1512,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                             currentVenta.pagos.map((pago, index) => {
                                 console.log(`📄 Procesando pago ${index}:`, pago);
                                 const simboloMonedaPago = getCurrencySymbol(pago.moneda);
-                                const simboloMonedaCuenta = getCurrencySymbol(pago.cuenta.moneda);
+                                const simboloMonedaCuenta = getCurrencySymbol(pago.cuenta?.moneda || null);
 
                                 return (
                                     <div key={index} className="bg-muted mb-4 rounded-md p-3 last:mb-0">
@@ -1532,9 +1538,13 @@ export default function ResultadoCarrito({ venta }: Props) {
                                                 <p className="text-sm">{pago.tasa_cambio}</p>
                                             </div>
                                             <div>
-                                                <p className="text-sm font-medium">Cuenta:</p>
+                                                <p className="text-sm font-medium">Destino:</p>
                                                 <p className="text-sm">
-                                                    {pago.cuenta.nombre} ({pago.cuenta.moneda?.nombre || simboloMonedaCuenta})
+                                                    {pago.cliente_destino?.nombre
+                                                        ? `Cliente: ${pago.cliente_destino.nombre}`
+                                                        : pago.cuenta?.nombre
+                                                          ? `${pago.cuenta.nombre} (${pago.cuenta.moneda?.nombre || simboloMonedaCuenta})`
+                                                          : 'No especificado'}
                                                 </p>
                                             </div>
                                             {pago.via && (

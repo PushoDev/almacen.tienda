@@ -13,6 +13,7 @@ use App\Models\Producto;
 use App\Models\Proveedor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
 
 class CompraController extends Controller
@@ -487,6 +488,63 @@ class CompraController extends Controller
         return response()->json([
             'message' => 'Almacén creado exitosamente.',
             'almacen' => $almacen
+        ], 201);
+    }
+
+    /**
+     * Store a newly created proveedor for use during compra process.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function storeProveedor(Request $request)
+    {
+        // Validación de datos
+        $validator = Validator::make($request->all(), [
+            'nombre_proveedor' => 'required|string|unique:proveedors,nombre_proveedor',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        // Crear el proveedor
+        $proveedor = Proveedor::create([
+            'nombre_proveedor' => $request->nombre_proveedor,
+            'saldo_proveedor' => 0,
+        ]);
+
+        return response()->json([
+            'message' => 'Proveedor creado exitosamente.',
+            'proveedor' => $proveedor
+        ], 201);
+    }
+
+    /**
+     * Store a newly created categoria for use during compra process.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function storeCategoria(Request $request)
+    {
+        // Validación de datos
+        $validator = Validator::make($request->all(), [
+            'nombre_categoria' => 'required|string|unique:categorias,nombre_categoria',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        // Crear la categoría
+        $categoria = Categoria::create([
+            'nombre_categoria' => $request->nombre_categoria,
+        ]);
+
+        return response()->json([
+            'message' => 'Categoría creada exitosamente.',
+            'categoria' => $categoria
         ], 201);
     }
 }

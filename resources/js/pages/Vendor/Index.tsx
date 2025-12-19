@@ -1,3 +1,4 @@
+import HeadingSmall from '@/components/heading-small';
 import {
     AlertDialog,
     AlertDialogCancel,
@@ -11,14 +12,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -108,7 +102,8 @@ interface Payment {
     via?: string;
     exchangeRate: number;
     amountInUsd: number;
-    cuenta_id: string;
+    cuenta_id?: string | null;
+    cliente_id?: string | null;
     referencia?: string;
     moneda_info?: {
         codigo: string;
@@ -170,6 +165,7 @@ export default function PuntoVentaOficial({
         amount: string;
         exchangeRate: string;
         cuenta_id: string;
+        cliente_id: string;
         referencia: string;
     }>({
         method: '',
@@ -178,10 +174,13 @@ export default function PuntoVentaOficial({
         amount: '',
         exchangeRate: '',
         cuenta_id: '',
+        cliente_id: '',
         referencia: '',
     });
     const [cuentasFiltradas, setCuentasFiltradas] = useState<Cuenta[]>([]);
     const [cargandoCuentas, setCargandoCuentas] = useState<boolean>(false);
+    const [clientesFisicos, setClientesFisicos] = useState<Cliente[]>([]);
+    const [cargandoClientesFisicos, setCargandoClientesFisicos] = useState<boolean>(false);
     const [conversionCalculada, setConversionCalculada] = useState<{
         montoOriginal: number;
         montoUSD: number;
@@ -189,10 +188,8 @@ export default function PuntoVentaOficial({
         monedaSimbolo: string;
     } | null>(null);
 
-    // Estado para el modal de crear cliente
     const [isCrearClienteDialogOpen, setIsCrearClienteDialogOpen] = useState(false);
     const [clienteErrors, setClienteErrors] = useState<Record<string, string>>({});
-
 
     const currencies = useMemo(() => {
         console.log('Monedas disponibles:', monedas);
@@ -268,6 +265,22 @@ export default function PuntoVentaOficial({
         }
     };
 
+    const cargarClientesFisicos = async () => {
+        setCargandoClientesFisicos(true);
+        try {
+            console.log('Cargando clientes físicos...');
+            const response = await axios.get(route('ventas.getClientesFisicosParaPago'));
+            console.log('Clientes físicos cargados:', response.data);
+            setClientesFisicos(response.data);
+        } catch (error) {
+            console.error('Error al cargar clientes físicos:', error);
+            toast.error('Error al cargar clientes físicos');
+            setClientesFisicos([]);
+        } finally {
+            setCargandoClientesFisicos(false);
+        }
+    };
+
     const cargarCuentasFiltradas = async (monedaId: string) => {
         if (!monedaId) {
             console.log('No hay moneda ID, limpiando cuentas filtradas');
@@ -326,6 +339,7 @@ export default function PuntoVentaOficial({
     useEffect(() => {
         cargarAlmacenes();
         cargarClientes();
+        cargarClientesFisicos();
     }, []);
 
     const handleAlmacenChange = (value: string) => {
@@ -348,6 +362,7 @@ export default function PuntoVentaOficial({
             moneda_id: monedaId,
             exchangeRate: selectedCurrency ? selectedCurrency.exchangeRate.toString() : '',
             cuenta_id: '',
+            cliente_id: '',
         });
         cargarCuentasFiltradas(monedaId);
     };
@@ -488,6 +503,7 @@ export default function PuntoVentaOficial({
     const handleAddPayment = () => {
         console.log('Intentando agregar pago:', currentPayment);
         console.log('Cuentas filtradas disponibles:', cuentasFiltradas);
+
         if (
             !currentPayment.method ||
             !currentPayment.moneda_id ||
@@ -495,7 +511,7 @@ export default function PuntoVentaOficial({
             (currentPayment.method === 'transferencia' && !currentPayment.referencia) ||
             !currentPayment.amount ||
             parseFloat(currentPayment.amount) <= 0 ||
-            !currentPayment.cuenta_id ||
+            (!currentPayment.cuenta_id && !currentPayment.cliente_id) ||
             !currentPayment.exchangeRate ||
             parseFloat(currentPayment.exchangeRate) <= 0
         ) {
@@ -507,26 +523,30 @@ export default function PuntoVentaOficial({
                 amount: currentPayment.amount,
                 exchangeRate: currentPayment.exchangeRate,
                 cuenta_id: currentPayment.cuenta_id,
+                cliente_id: currentPayment.cliente_id,
             });
             toast.warning('Por favor, complete todos los campos del pago y asegure un monto y tasa de cambio válidos.');
             return;
         }
-        const selectedAccount = cuentasFiltradas.find((c) => c.id.toString() === currentPayment.cuenta_id);
+
         const selectedCurrency = currencies.find((c) => c.id === currentPayment.moneda_id);
-        console.log('Cuenta seleccionada:', selectedAccount);
         console.log('Moneda seleccionada:', selectedCurrency);
-        if (!selectedAccount || !selectedCurrency) {
-            toast.error('Error en la selección de cuenta o moneda');
+
+        if (!selectedCurrency) {
+            toast.error('Error en la selección de moneda');
             return;
         }
+
         const amount = parseFloat(currentPayment.amount);
         const exchangeRate = parseFloat(currentPayment.exchangeRate);
         const amountInUsd = convertToUsd(amount, exchangeRate);
         console.log(`Monto: ${amount}, Tasa: ${exchangeRate}, USD: ${amountInUsd}`);
+
         if (amountInUsd === 0 || isNaN(amountInUsd)) {
             toast.error('El monto en USD no puede ser cero o no es válido. Revise la tasa de cambio.');
             return;
         }
+
         const newPayment: Payment = {
             id: crypto.randomUUID(),
             method: currentPayment.method,
@@ -535,7 +555,8 @@ export default function PuntoVentaOficial({
             via: currentPayment.method === 'transferencia' ? currentPayment.via : undefined,
             exchangeRate: exchangeRate,
             amountInUsd: amountInUsd,
-            cuenta_id: currentPayment.cuenta_id,
+            cuenta_id: currentPayment.cuenta_id || null,
+            cliente_id: currentPayment.cliente_id || null,
             referencia: currentPayment.method === 'transferencia' ? currentPayment.referencia : undefined,
             moneda_info: {
                 codigo: selectedCurrency.code,
@@ -543,6 +564,7 @@ export default function PuntoVentaOficial({
                 simbolo: selectedCurrency.symbol,
             },
         };
+
         console.log('Nuevo pago agregado:', newPayment);
         setPayments([...payments, newPayment]);
         setCurrentPayment({
@@ -552,6 +574,7 @@ export default function PuntoVentaOficial({
             amount: '',
             exchangeRate: '',
             cuenta_id: '',
+            cliente_id: '',
             referencia: '',
         });
         setCuentasFiltradas([]);
@@ -595,6 +618,7 @@ export default function PuntoVentaOficial({
             toast.error('Debe agregar al menos un método de pago para completar la venta.');
             return;
         }
+
         const datosVenta = {
             almacen_id: almacenSeleccionado,
             cliente_id: clienteSeleccionado || null,
@@ -612,17 +636,21 @@ export default function PuntoVentaOficial({
                 via: p.via,
                 tasa_cambio: p.exchangeRate,
                 monto_equivalente: p.amountInUsd,
-                cuenta_id: p.cuenta_id,
+                cuenta_id: p.cuenta_id || null,
+                cliente_id: p.cliente_id || null,
                 referencia: p.referencia,
             })),
             moneda_principal_id: monedaPrincipal?.id,
             tasa_cambio_principal: tasaCambioPrincipal,
         };
+
         console.log('Datos de venta a enviar:', datosVenta);
+
         try {
             setProcesandoVenta(true);
             const response = await axios.post(route('ventas.procesar'), datosVenta);
             console.log('Respuesta del servidor:', response.data);
+
             if (response.data.success) {
                 toast.success('✅ Venta creada correctamente. Stock reservado pendiente de aprobación.');
                 setCarrito([]);
@@ -665,7 +693,6 @@ export default function PuntoVentaOficial({
 
     const selectedCurrencyInfo = currentPayment.moneda_id ? getCurrencyInfo(currentPayment.moneda_id) : null;
 
-    // 🆕 COMPONENTE DE CREACIÓN DE CLIENTE
     const CrearClienteDialogContent = () => {
         const [localCliente, setLocalCliente] = useState({
             nombre_cliente: '',
@@ -745,7 +772,6 @@ export default function PuntoVentaOficial({
             setLocalErrors({});
             setIsCrearClienteDialogOpen(false);
         };
-
         return (
             <DialogContent className="sm:max-w-lg">
                 <DialogHeader>
@@ -834,21 +860,17 @@ export default function PuntoVentaOficial({
             <div className="bg-background min-h-screen">
                 <div className="mx-auto flex h-full max-w-[1600px] flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
                     {/* Header de Lovable */}
-                    <header className="from-primary to-primary/80 relative overflow-hidden rounded-xl bg-gradient-to-r p-6 shadow-lg">
-                        <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="space-y-1">
-                                <h1 className="text-primary-foreground text-2xl font-bold tracking-tight sm:text-3xl">Punto de Venta</h1>
-                                <p className="text-primary/70 text-sm">Gestión integral de ventas y transacciones</p>
-                            </div>
-                            <Badge
-                                variant="secondary"
-                                className="bg-primary/20 text-primary-foreground w-fit border-0 px-3 py-1.5 text-xs font-medium"
-                            >
-                                {meta.role_usuario === 'admin' ? 'Administrador' : 'Vendedor'}
-                            </Badge>
-                        </div>
-                        <ShoppingBag size={120} className="text-primary-foreground/10 pointer-events-none absolute -right-6 -bottom-6" />
-                    </header>
+                    <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                        <HeadingSmall
+                            title="Punto de Venta"
+                            description="Lugar donde se realizan la entas de los Productos disponibles en La Glorieta Tienda"
+                        />
+                        <ShoppingBag
+                            size={70}
+                            color="#f59e0b"
+                            className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
+                        />
+                    </div>
 
                     {/* Info usuario */}
                     <div className="flex items-center justify-between text-sm text-gray-600">
@@ -924,7 +946,7 @@ export default function PuntoVentaOficial({
                                                     </ScrollArea>
                                                     <Separator className="my-1" />
                                                     <div
-                                                        className="flex cursor-pointer items-center gap-2 p-2 text-sm text-blue-600 hover:bg-accent"
+                                                        className="hover:bg-accent flex cursor-pointer items-center gap-2 p-2 text-sm text-blue-600"
                                                         onClick={() => setIsCrearClienteDialogOpen(true)}
                                                     >
                                                         <PlusCircle className="h-4 w-4" />
@@ -1045,7 +1067,11 @@ export default function PuntoVentaOficial({
                                                                         <p className="text-muted-foreground mb-0.5 text-xs">Precio</p>
                                                                         {producto.precio_venta && producto.precio_venta > 0 ? (
                                                                             <p className="text-success text-xl font-bold">
-                                                                                ${producto.precio_venta.toFixed(2)}
+                                                                                $
+                                                                                {Number(producto.precio_venta).toLocaleString('es-ES', {
+                                                                                    minimumFractionDigits: 2,
+                                                                                    maximumFractionDigits: 2,
+                                                                                })}
                                                                             </p>
                                                                         ) : (
                                                                             <p className="text-destructive text-sm font-medium">Sin precio</p>
@@ -1171,7 +1197,13 @@ export default function PuntoVentaOficial({
                                                                 min="0"
                                                                 step="0.01"
                                                             />
-                                                            <p className="mt-1 text-sm font-medium text-emerald-600">${item.subtotal.toFixed(2)}</p>
+                                                            <p className="mt-1 text-sm font-medium text-emerald-600">
+                                                                $
+                                                                {Number(item.subtotal).toLocaleString('es-ES', {
+                                                                    minimumFractionDigits: 2,
+                                                                    maximumFractionDigits: 2,
+                                                                })}
+                                                            </p>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1197,7 +1229,13 @@ export default function PuntoVentaOficial({
                                             <div className="space-y-3">
                                                 <div className="flex items-center justify-between">
                                                     <span className="font-medium">Total:</span>
-                                                    <span className="text-xl font-bold text-emerald-600">${calcularTotal.toFixed(2)}</span>
+                                                    <span className="text-xl font-bold text-emerald-600">
+                                                        $
+                                                        {Number(calcularTotal).toLocaleString('es-ES', {
+                                                            minimumFractionDigits: 2,
+                                                            maximumFractionDigits: 2,
+                                                        })}
+                                                    </span>
                                                 </div>
                                                 <AlertDialog>
                                                     <AlertDialogTrigger asChild>
@@ -1226,13 +1264,21 @@ export default function PuntoVentaOficial({
                                                                         <div>
                                                                             <p className="text-muted-foreground mb-0.5">Total</p>
                                                                             <p className="text-primary text-sm font-bold">
-                                                                                ${calcularTotal.toFixed(2)}
+                                                                                $
+                                                                                {Number(calcularTotal).toLocaleString('es-ES', {
+                                                                                    minimumFractionDigits: 2,
+                                                                                    maximumFractionDigits: 2,
+                                                                                })}
                                                                             </p>
                                                                         </div>
                                                                         <div>
                                                                             <p className="text-muted-foreground mb-0.5">Pagado</p>
                                                                             <p className="text-sm font-bold text-green-600">
-                                                                                ${totalPaid.toFixed(2)}
+                                                                                $
+                                                                                {Number(totalPaid).toLocaleString('es-ES', {
+                                                                                    minimumFractionDigits: 2,
+                                                                                    maximumFractionDigits: 2,
+                                                                                })}
                                                                             </p>
                                                                         </div>
                                                                         <div>
@@ -1240,7 +1286,11 @@ export default function PuntoVentaOficial({
                                                                             <p
                                                                                 className={`text-sm font-bold ${remainingInUsd > 0.01 ? 'text-red-600' : 'text-green-600'}`}
                                                                             >
-                                                                                ${Math.max(0, remainingInUsd).toFixed(2)}
+                                                                                $
+                                                                                {Number(Math.max(0, remainingInUsd)).toLocaleString('es-ES', {
+                                                                                    minimumFractionDigits: 2,
+                                                                                    maximumFractionDigits: 2,
+                                                                                })}
                                                                             </p>
                                                                         </div>
                                                                     </div>
@@ -1318,38 +1368,82 @@ export default function PuntoVentaOficial({
                                                                             />
                                                                         </div>
                                                                         <div className="space-y-2">
-                                                                            <Label>Cuenta Destino</Label>
+                                                                            <Label>Destino del Pago</Label>
+
                                                                             <Select
-                                                                                value={currentPayment.cuenta_id}
+                                                                                value={
+                                                                                    currentPayment.cuenta_id
+                                                                                        ? `cuenta_${currentPayment.cuenta_id}`
+                                                                                        : currentPayment.cliente_id
+                                                                                          ? `cliente_${currentPayment.cliente_id}`
+                                                                                          : ''
+                                                                                }
                                                                                 onValueChange={(value) => {
-                                                                                    console.log('Cuenta seleccionada:', value);
-                                                                                    setCurrentPayment({ ...currentPayment, cuenta_id: value });
+                                                                                    if (value.startsWith('cuenta_')) {
+                                                                                        setCurrentPayment({
+                                                                                            ...currentPayment,
+                                                                                            cuenta_id: value.replace('cuenta_', ''),
+                                                                                            cliente_id: '',
+                                                                                        });
+                                                                                    } else if (value.startsWith('cliente_')) {
+                                                                                        setCurrentPayment({
+                                                                                            ...currentPayment,
+                                                                                            cliente_id: value.replace('cliente_', ''),
+                                                                                            cuenta_id: '',
+                                                                                        });
+                                                                                    }
                                                                                 }}
-                                                                                disabled={!currentPayment.moneda_id || cargandoCuentas}
                                                                             >
                                                                                 <SelectTrigger>
-                                                                                    <SelectValue
-                                                                                        placeholder={
-                                                                                            cargandoCuentas
-                                                                                                ? 'Cargando cuentas...'
-                                                                                                : cuentasFiltradas.length === 0
-                                                                                                  ? 'No hay cuentas disponibles'
-                                                                                                  : 'Seleccione cuenta'
-                                                                                        }
-                                                                                    />
+                                                                                    <SelectValue placeholder="Seleccione destino" />
                                                                                 </SelectTrigger>
+
                                                                                 <SelectContent>
-                                                                                    {cuentasFiltradas.map((account) => (
-                                                                                        <SelectItem key={account.id} value={account.id.toString()}>
-                                                                                            {account.nombre_cuenta}
-                                                                                            {account.moneda
-                                                                                                ? ` (${account.moneda.codigo})`
-                                                                                                : ` (${account.tipo_moneda})`}
-                                                                                            {account.saldo_actual !== undefined
-                                                                                                ? ` - $${account.saldo_actual}`
-                                                                                                : ''}
-                                                                                        </SelectItem>
-                                                                                    ))}
+                                                                                    {cuentasFiltradas.length > 0 && (
+                                                                                        <>
+                                                                                            <div className="px-2 py-1.5 text-xs font-semibold text-gray-500">
+                                                                                                🏦 CUENTAS
+                                                                                            </div>
+                                                                                            {cuentasFiltradas.map((account) => (
+                                                                                                <SelectItem
+                                                                                                    key={`cuenta_${account.id}`}
+                                                                                                    value={`cuenta_${account.id}`}
+                                                                                                >
+                                                                                                    🏦 {account.nombre_cuenta}
+                                                                                                </SelectItem>
+                                                                                            ))}
+                                                                                        </>
+                                                                                    )}
+
+                                                                                    {selectedCurrencyInfo?.code === 'USD' && (
+                                                                                        <>
+                                                                                            {cuentasFiltradas.length > 0 && (
+                                                                                                <Separator className="my-1" />
+                                                                                            )}
+                                                                                            <div className="px-2 py-1.5 text-xs font-semibold text-gray-500">
+                                                                                                👤 CLIENTES FÍSICOS
+                                                                                            </div>
+
+                                                                                            {cargandoClientesFisicos ? (
+                                                                                                <div className="px-2 py-3 text-center text-sm text-gray-500">
+                                                                                                    Cargando clientes...
+                                                                                                </div>
+                                                                                            ) : clientesFisicos.length === 0 ? (
+                                                                                                <div className="px-2 py-3 text-center text-sm text-gray-500">
+                                                                                                    No hay clientes físicos
+                                                                                                </div>
+                                                                                            ) : (
+                                                                                                clientesFisicos.map((cliente) => (
+                                                                                                    <SelectItem
+                                                                                                        key={`cliente_${cliente.id}`}
+                                                                                                        value={`cliente_${cliente.id}`}
+                                                                                                    >
+                                                                                                        👤 {cliente.nombre_cliente}
+                                                                                                    </SelectItem>
+                                                                                                ))
+                                                                                            )}
+                                                                                        </>
+                                                                                    )}
                                                                                 </SelectContent>
                                                                             </Select>
                                                                         </div>
@@ -1419,10 +1513,23 @@ export default function PuntoVentaOficial({
                                                                                 {conversionCalculada && (
                                                                                     <div className="rounded-lg bg-green-50 p-2 text-center">
                                                                                         <p className="text-sm font-medium text-green-700">
-                                                                                            {conversionCalculada.montoOriginal.toFixed(2)}{' '}
+                                                                                            {Number(conversionCalculada.montoOriginal).toLocaleString(
+                                                                                                'es-ES',
+                                                                                                {
+                                                                                                    minimumFractionDigits: 2,
+                                                                                                    maximumFractionDigits: 2,
+                                                                                                },
+                                                                                            )}{' '}
                                                                                             {conversionCalculada.monedaSimbolo} ={' '}
                                                                                             <span className="font-bold">
-                                                                                                {conversionCalculada.montoUSD.toFixed(2)} USD
+                                                                                                {Number(conversionCalculada.montoUSD).toLocaleString(
+                                                                                                    'es-ES',
+                                                                                                    {
+                                                                                                        minimumFractionDigits: 2,
+                                                                                                        maximumFractionDigits: 2,
+                                                                                                    },
+                                                                                                )}{' '}
+                                                                                                USD
                                                                                             </span>
                                                                                         </p>
                                                                                         <p className="mt-1 text-xs text-green-600">
@@ -1443,7 +1550,7 @@ export default function PuntoVentaOficial({
                                                                                             !currentPayment.referencia) ||
                                                                                         !currentPayment.amount ||
                                                                                         parseFloat(currentPayment.amount) <= 0 ||
-                                                                                        !currentPayment.cuenta_id
+                                                                                        (!currentPayment.cuenta_id && !currentPayment.cliente_id)
                                                                                     }
                                                                                     className="h-12 w-full"
                                                                                 >
@@ -1471,11 +1578,20 @@ export default function PuntoVentaOficial({
                                                                                                 : 'Efectivo'}
                                                                                         </p>
                                                                                         <p className="text-sm text-gray-500">
-                                                                                            {payment.amount.toFixed(2)} {payment.moneda_info?.simbolo}
+                                                                                            {Number(payment.amount).toLocaleString('es-ES', {
+                                                                                                minimumFractionDigits: 2,
+                                                                                                maximumFractionDigits: 2,
+                                                                                            })}{' '}
+                                                                                            {payment.moneda_info?.simbolo}
                                                                                             {payment.referencia && ` - Ref: ${payment.referencia}`}
                                                                                         </p>
                                                                                         <p className="text-sm text-green-600">
-                                                                                            = ${payment.amountInUsd.toFixed(2)} USD
+                                                                                            = $
+                                                                                            {Number(payment.amountInUsd).toLocaleString('es-ES', {
+                                                                                                minimumFractionDigits: 2,
+                                                                                                maximumFractionDigits: 2,
+                                                                                            })}{' '}
+                                                                                            USD
                                                                                         </p>
                                                                                     </div>
                                                                                     <Button
@@ -1497,13 +1613,23 @@ export default function PuntoVentaOficial({
                                                             <div className="flex items-center justify-between">
                                                                 <span className="font-medium">Total a pagar:</span>
                                                                 <span className="text-lg font-bold text-emerald-600">
-                                                                    ${calcularTotal.toFixed(2)} USD
+                                                                    $
+                                                                    {Number(calcularTotal).toLocaleString('es-ES', {
+                                                                        minimumFractionDigits: 2,
+                                                                        maximumFractionDigits: 2,
+                                                                    })}{' '}
+                                                                    USD
                                                                 </span>
                                                             </div>
                                                             <div className="flex items-center justify-between">
                                                                 <span className="font-medium">Pagado:</span>
                                                                 <span className="text-lg font-bold text-emerald-600">
-                                                                    ${totalPaid.toFixed(2)} USD
+                                                                    $
+                                                                    {Number(totalPaid).toLocaleString('es-ES', {
+                                                                        minimumFractionDigits: 2,
+                                                                        maximumFractionDigits: 2,
+                                                                    })}{' '}
+                                                                    USD
                                                                 </span>
                                                             </div>
                                                             <div className="flex items-center justify-between border-t pt-2">
@@ -1511,7 +1637,12 @@ export default function PuntoVentaOficial({
                                                                 <span
                                                                     className={`text-lg font-bold ${remainingInUsd > 0.01 ? 'text-red-600' : 'text-emerald-600'}`}
                                                                 >
-                                                                    ${remainingInUsd.toFixed(2)} USD
+                                                                    $
+                                                                    {Number(remainingInUsd).toLocaleString('es-ES', {
+                                                                        minimumFractionDigits: 2,
+                                                                        maximumFractionDigits: 2,
+                                                                    })}{' '}
+                                                                    USD
                                                                 </span>
                                                             </div>
                                                         </div>

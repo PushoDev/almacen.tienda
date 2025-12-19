@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\VentaController;
+use App\Http\Controllers\CierreCajaController; // Importar nuevo controlador
 use App\Http\Controllers\CompraController; // Asegúrate de importar el controlador de Compras
 use Illuminate\Support\Facades\Route;
 
@@ -12,8 +13,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/punto-venta', [VentaController::class, 'index'])->name('punto-venta.index');
     Route::get('/ventas/listado', [VentaController::class, 'listadoVentas'])->name('ventas.listado');
     Route::get('/ventas/{id}/show', [VentaController::class, 'show'])->name('ventas.show');
-    Route::get('/vendor/cierres', [VentaController::class, 'cierres'])->name('ventas.cierres');
-    Route::get('/vendor/cierres/show', [VentaController::class, 'showCierreDetalle'])->name('ventas.cierres.show');
+    // Modificar estas rutas para usar el nuevo controlador
+    Route::get('/vendor/cierres', [CierreCajaController::class, 'index'])->name('ventas.cierres');
+    Route::get('/vendor/cierres/crear', [CierreCajaController::class, 'create'])->name('ventas.cierres.create');
+    Route::post('/vendor/cierres', [CierreCajaController::class, 'store'])->name('ventas.cierres.store');
+    Route::get('/vendor/cierres/{id}', [CierreCajaController::class, 'show'])->name('ventas.cierres.show');
+    Route::post('/vendor/cierres/{id}/aprobar', [CierreCajaController::class, 'aprobar'])->name('ventas.cierres.aprobar');
     Route::get('/ventas/reporte-diario', [VentaController::class, 'showReporteDiarioView'])->name('ventas.reporte.diario');
 
     // ========================================================================
@@ -24,10 +29,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/ventas/clientes/store', [VentaController::class, 'storeClienteForVenta'])->name('ventas.cliente.store');
     Route::get('/ventas/almacenes', [VentaController::class, 'getAlmacenes'])->name('ventas.getAlmacenes');
     Route::get('/ventas/almacenes/{id}/productos', [VentaController::class, 'getProductosPorAlmacen'])->name('ventas.getProductosPorAlmacen');
-    Route::get('/ventas/clientes', [VentaController::class, 'getClientes'])->name('ventas.getClientes');
     Route::get('/ventas/cuentas', [VentaController::class, 'getCuentas'])->name('ventas.getCuentas');
     Route::get('/ventas/cuentas/filtradas', [VentaController::class, 'getCuentasFiltradas'])->name('ventas.getCuentasFiltradas');
     Route::get('/ventas/monedas', [VentaController::class, 'getMonedas'])->name('ventas.getMonedas');
+
+    Route::get('/ventas/clientes', [VentaController::class, 'getClientes'])->name('ventas.getClientes');
+    // ✅ NUEVA RUTA PARA CLIENTES FÍSICOS EN PAGOS
+    Route::get('/ventas/clientes-fisicos-pago', [VentaController::class, 'getClientesFisicosParaPago'])->name('ventas.getClientesFisicosParaPago');
 
     // ========================================================================
     // PROCESAMIENTO DE VENTAS

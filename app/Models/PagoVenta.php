@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class PagoVenta extends Model
 {
@@ -13,11 +12,12 @@ class PagoVenta extends Model
     protected $fillable = [
         'venta_id',
         'tipo_pago',
-        'moneda_id', // CAMBIO: Reemplaza tipo_moneda
+        'moneda_id',
         'cuenta_id',
+        'cliente_id',
         'via_pago',
         'monto',
-        'tasa_cambio_aplicada', // CAMBIO: Nombre más descriptivo
+        'tasa_cambio_aplicada',
         'monto_equivalente',
         'referencia'
     ];
@@ -36,6 +36,11 @@ class PagoVenta extends Model
     public function cuenta()
     {
         return $this->belongsTo(Cuenta::class);
+    }
+
+    public function cliente()
+    {
+        return $this->belongsTo(Cliente::class);
     }
 
     // NUEVA: Relación con moneda

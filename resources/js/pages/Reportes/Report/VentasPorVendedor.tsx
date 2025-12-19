@@ -4,8 +4,7 @@ import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import { User, DollarSign } from 'lucide-react';
-import React from 'react';
+import { User } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -22,6 +21,8 @@ interface VentaPorVendedor {
     vendedor: string;
     total_ventas: number;
     monto_total_vendido: number;
+    ganancia_operativa: number;
+    diferencia_cambiaria: number;
 }
 
 interface VentasPorVendedorPageProps {
@@ -35,10 +36,7 @@ export default function VentasPorVendedorPage({ ventas }: VentasPorVendedorPageP
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
-                    <HeadingSmall
-                        title="Reporte de Ventas por Vendedor"
-                        description="Rendimiento de ventas acumulado por cada vendedor."
-                    />
+                    <HeadingSmall title="Reporte de Ventas por Vendedor" description="Análisis de rendimiento, ventas y rentabilidad por vendedor." />
                     <User
                         size={70}
                         color="#22d3ee"
@@ -51,7 +49,7 @@ export default function VentasPorVendedorPage({ ventas }: VentasPorVendedorPageP
                 <div className="grid grid-cols-1 gap-4 px-4 lg:px-6">
                     <Card className="w-full">
                         <CardHeader>
-                            <CardTitle>Rendimiento de Vendedores</CardTitle>
+                            <CardTitle>Rendimiento Financiero por Vendedor</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <div className="overflow-x-auto">
@@ -59,25 +57,44 @@ export default function VentasPorVendedorPage({ ventas }: VentasPorVendedorPageP
                                     <thead>
                                         <tr>
                                             <th className="px-4 py-2 text-left text-sm font-semibold">Vendedor</th>
-                                            <th className="px-4 py-2 text-left text-sm font-semibold">Total de Ventas Realizadas</th>
-                                            <th className="px-4 py-2 text-left text-sm font-semibold">Monto Total Vendido</th>
+                                            <th className="px-4 py-2 text-left text-sm font-semibold"># Ventas</th>
+                                            <th className="px-4 py-2 text-left text-sm font-semibold">Total Vendido</th>
+                                            <th className="px-4 py-2 text-left text-sm font-semibold text-blue-400">G. Operativa</th>
+                                            <th className="px-4 py-2 text-left text-sm font-semibold text-orange-400">Dif. Cambiaria</th>
+                                            <th className="px-4 py-2 text-left text-sm font-semibold text-green-500">G. Real Total</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-700">
                                         {ventas.length === 0 ? (
                                             <tr>
-                                                <td colSpan={3} className="py-4 text-center text-gray-500">
+                                                <td colSpan={6} className="py-4 text-center text-gray-500">
                                                     No se encontraron registros de ventas.
                                                 </td>
                                             </tr>
                                         ) : (
-                                            ventas.map((venta, index) => (
-                                                <tr key={index}>
-                                                    <td className="px-4 py-2 text-sm">{venta.vendedor}</td>
-                                                    <td className="px-4 py-2 text-sm">{venta.total_ventas}</td>
-                                                    <td className="px-4 py-2 text-sm">${parseFloat(venta.monto_total_vendido.toString()).toFixed(2)}</td>
-                                                </tr>
-                                            ))
+                                            ventas.map((venta, index) => {
+                                                const gananciaReal =
+                                                    parseFloat(venta.ganancia_operativa.toString()) +
+                                                    parseFloat(venta.diferencia_cambiaria.toString());
+                                                return (
+                                                    <tr key={index} className="hover:bg-gray-50/5">
+                                                        <td className="px-4 py-2 text-sm font-medium">{venta.vendedor}</td>
+                                                        <td className="px-4 py-2 text-sm">{venta.total_ventas}</td>
+                                                        <td className="px-4 py-2 text-sm">
+                                                            ${parseFloat(venta.monto_total_vendido.toString()).toFixed(2)}
+                                                        </td>
+                                                        <td className="px-4 py-2 text-sm text-blue-400">
+                                                            ${parseFloat(venta.ganancia_operativa.toString()).toFixed(2)}
+                                                        </td>
+                                                        <td
+                                                            className={`px-4 py-2 text-sm ${venta.diferencia_cambiaria >= 0 ? 'text-green-400' : 'text-red-400'}`}
+                                                        >
+                                                            ${parseFloat(venta.diferencia_cambiaria.toString()).toFixed(2)}
+                                                        </td>
+                                                        <td className="px-4 py-2 text-sm font-bold text-green-500">${gananciaReal.toFixed(2)}</td>
+                                                    </tr>
+                                                );
+                                            })
                                         )}
                                     </tbody>
                                 </table>

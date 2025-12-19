@@ -55,7 +55,7 @@ class ProductoController extends Controller
         $sortDirection = $request->get('sort_direction', 'asc');
 
         if (in_array($sortField, ['nombre_producto', 'marca_producto', 'codigo_producto', 'precio_compra_producto', 'cantidad_total'])) {
-             // El ordenamiento por cantidad_total requiere una lógica especial si no es una columna directa
+            // El ordenamiento por cantidad_total requiere una lógica especial si no es una columna directa
             if ($sortField === 'cantidad_total') {
                 // Asumiendo que `cantidad_total` es un accesor, necesitamos ordenar por la columna real o una subconsulta
                 // Por simplicidad aquí, si `cantidad_total` no es una columna real, este orden no funcionará como se espera sin SQL más complejo.
@@ -70,7 +70,7 @@ class ProductoController extends Controller
         // Esto asume que `stock_bajo` se puede determinar en la consulta (ej. a través de un scope)
         if ($request->has('stock_bajo') && $request->stock_bajo) {
             // Suponiendo que tienes un scope en tu modelo Producto: scopeStockBajo($query)
-            $query->stockBajo(); 
+            $query->stockBajo();
         }
 
         // Paginación
@@ -93,6 +93,9 @@ class ProductoController extends Controller
                 'imagen_url' => $producto->imagen_url,
                 'barcode_image_url' => $producto->barcode_image_url,
                 'precio_venta' => $producto->vendedores->first()->pivot->precio_venta ?? null,
+                'precio_venta_actualizado' => (float) $producto->precio_venta_actualizado,
+                'activo' => (bool) $producto->activo,
+                'descripcion_producto' => $producto->descripcion_producto,
                 'stock_bajo' => $producto->stock_bajo,
                 'created_at' => $producto->created_at?->toISOString(),
                 'updated_at' => $producto->updated_at?->toISOString(),
@@ -139,8 +142,11 @@ class ProductoController extends Controller
                 'imagen_url' => $producto->imagen_url,
                 'barcode_image_url' => $producto->barcode_image_url,
                 'precio_venta' => $precioVenta,
+                'precio_venta_actualizado' => (float) $producto->precio_venta_actualizado,
+                'activo' => (bool) $producto->activo,
+                'descripcion_producto' => $producto->descripcion_producto,
                 'ganancia' => $ganancia,
-                'stock_bajo' => $producto->stock_bajo, // ✅ Accessor del modelo (ya actualizado)
+                'stock_bajo' => $producto->stock_bajo,
                 'almacenes' => $producto->almacenes->map(fn($almacen) => [
                     'id' => $almacen->id,
                     'nombre_almacen' => $almacen->nombre_almacen,
@@ -175,6 +181,9 @@ class ProductoController extends Controller
                 'codigo_producto' => $producto->codigo_producto,
                 'categoria_id' => $producto->categoria_id,
                 'precio_compra_producto' => (float) $producto->precio_compra_producto,
+                'precio_venta_actualizado' => (float) $producto->precio_venta_actualizado,
+                'activo' => (bool) $producto->activo,
+                'descripcion_producto' => $producto->descripcion_producto,
                 'imagen_url' => $producto->imagen_url,
                 'barcode_image_url' => $producto->barcode_image_url,
                 'cantidad_total' => $producto->cantidad_total,
@@ -202,6 +211,9 @@ class ProductoController extends Controller
             ],
             'categoria_id' => ['required', 'exists:categorias,id'],
             'precio_compra_producto' => ['required', 'numeric', 'min:0'],
+            'precio_venta_actualizado' => ['nullable', 'numeric', 'min:0'],
+            'activo' => ['nullable', 'boolean'],
+            'descripcion_producto' => ['nullable', 'string'],
             'imagen_producto' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'],
         ]);
 
@@ -221,6 +233,14 @@ class ProductoController extends Controller
             $updateData = array_merge($validatedData, [
                 'imagen_producto' => $imagenPath,
             ]);
+
+            // ✅ Restringir campos de ecommerce solo a admin/moderador
+            $user = Auth::user();
+            if ($user->role !== 'admin' && $user->role !== 'moderador') {
+                unset($updateData['precio_venta_actualizado']);
+                unset($updateData['activo']);
+                unset($updateData['descripcion_producto']);
+            }
 
             $producto->update($updateData);
 

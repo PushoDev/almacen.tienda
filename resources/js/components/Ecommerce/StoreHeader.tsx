@@ -6,10 +6,12 @@ interface Store {
     nombre_almacen: string;
     ciudad_almacen: string;
     provincia_almacen: string;
+    telefono_almacen: string;
+    correo_almacen?: string;
 }
 
 interface StoreHeaderProps {
-    store?: Store;
+    store: Store | null;
     onChangeStore: () => void;
     isLoading?: boolean;
 }

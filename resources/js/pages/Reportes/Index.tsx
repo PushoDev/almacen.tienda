@@ -7,8 +7,9 @@ import { ChartsReportePage } from '@/layouts/charts/ChartReportesGral';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import {
-    AreaChart,
+    AlertTriangle,
     Archive,
+    AreaChart,
     Boxes,
     CalendarClock,
     DollarSign,
@@ -16,7 +17,6 @@ import {
     History,
     Landmark,
     LibraryBig,
-    AlertTriangle,
     ShoppingBasket,
     TrendingUp,
     Users,
@@ -143,7 +143,9 @@ const reportesFinanzasOtros: ReportCardProps[] = [
 ];
 
 const ReportCard: React.FC<ReportCardProps> = ({ title, href, icon: Icon, colors }) => (
-    <div className={`border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br ${colors}`}>
+    <div
+        className={`border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br ${colors}`}
+    >
         <div className="absolute inset-0 flex items-center justify-center opacity-10">
             <Icon className="h-48 w-48 text-white" />
         </div>
@@ -152,10 +154,12 @@ const ReportCard: React.FC<ReportCardProps> = ({ title, href, icon: Icon, colors
                 <Icon className="h-8 w-8 animate-pulse text-white" />
             </div>
             <div className="flex h-full flex-col items-end justify-center space-y-2">
-                <span className="text-lg text-white text-right">{title}</span>
+                <span className="text-right text-lg text-white">{title}</span>
             </div>
             <Link href={href}>
-                <button className={`absolute right-4 bottom-4 ms-2 rounded-md px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer bg-black/20 hover:bg-white/90 hover:text-black`}>
+                <button
+                    className={`absolute right-4 bottom-4 ms-2 rounded-md bg-black/20 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white/90 hover:text-black`}
+                >
                     Ver más ...
                 </button>
             </Link>

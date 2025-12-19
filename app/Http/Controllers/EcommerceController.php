@@ -90,7 +90,6 @@ class EcommerceController extends Controller
         'productos.precio_venta_actualizado',
         'productos.imagen_producto'
       )
-      ->with('almacen_producto')
       ->paginate(12);
 
     return response()->json($productos);

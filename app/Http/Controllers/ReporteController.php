@@ -471,7 +471,9 @@ class ReporteController extends Controller
             ->select(
                 'users.name as vendedor',
                 DB::raw('COUNT(ventas.id) as total_ventas'),
-                DB::raw('SUM(ventas.total) as monto_total_vendido')
+                DB::raw('SUM(ventas.total) as monto_total_vendido'),
+                DB::raw('SUM(ventas.total_ganancia) as ganancia_operativa'),
+                DB::raw('SUM(ventas.monto_diferencia_cambiaria) as diferencia_cambiaria')
             )
             ->where('ventas.estado', 'completada')
             ->groupBy('users.id', 'users.name')
@@ -484,11 +486,90 @@ class ReporteController extends Controller
     }
 
     /**
-     * Reporte de Ganancias.
+     * Resumen de KPIs de Ventas y Compras (Dashboard).
+     * Reemplaza y expande la lógica de VentaController::getVentasReporte
+     */
+    public function kpiResumen(Request $request)
+    {
+        $request->validate([
+            'periodo' => 'required|in:diario,semanal,mensual',
+        ]);
+
+        $user = auth()->user();
+        $periodo = $request->input('periodo');
+
+        // --- VENTAS ---
+        $ventasQuery = Venta::query()->where('estado', 'completada');
+
+        if ($user->role !== 'admin') {
+            $ventasQuery->where('user_id', $user->id);
+        }
+
+        $this->aplicarFiltroFecha($ventasQuery, $periodo, 'created_at');
+
+        $ventasReporte = $ventasQuery->select(
+            DB::raw('SUM(total) as total_vendido'),
+            DB::raw('COUNT(id) as cantidad_ventas'),
+            DB::raw('SUM(total_ganancia) as ganancia_producto'),
+            DB::raw('SUM(monto_diferencia_cambiaria) as ganancia_cambiaria')
+        )->first();
+
+        // Calcular ganancia real total
+        $totalGananciaVentas = ($ventasReporte->ganancia_producto ?? 0) + ($ventasReporte->ganancia_cambiaria ?? 0);
+
+        // --- COMPRAS ---
+        // (Solo admin suele ver compras, o restringir según permisos)
+        $comprasReporte = null;
+        if ($user->role === 'admin') {
+            $comprasQuery = Compra::query();
+            $this->aplicarFiltroFecha($comprasQuery, $periodo, 'fecha_compra');
+
+            $comprasReporte = $comprasQuery->select(
+                DB::raw('SUM(total_compra) as total_comprado'),
+                DB::raw('COUNT(id) as cantidad_compras')
+            )->first();
+        }
+
+        return response()->json([
+            'ventas' => [
+                'total_vendido' => (float) ($ventasReporte->total_vendido ?? 0),
+                'cantidad_ventas' => (int) ($ventasReporte->cantidad_ventas ?? 0),
+                'ganancia_operativa' => (float) ($ventasReporte->ganancia_producto ?? 0),
+                'ganancia_cambiaria' => (float) ($ventasReporte->ganancia_cambiaria ?? 0),
+                'ganancia_total' => (float) $totalGananciaVentas,
+            ],
+            'compras' => $comprasReporte ? [
+                'total_comprado' => (float) ($comprasReporte->total_comprado ?? 0),
+                'cantidad_compras' => (int) ($comprasReporte->cantidad_compras ?? 0),
+            ] : null,
+        ]);
+    }
+
+    /**
+     * Helper para filtrar por fecha
+     */
+    private function aplicarFiltroFecha($query, $periodo, $columna)
+    {
+        switch ($periodo) {
+            case 'diario':
+                $query->whereDate($columna, Carbon::today());
+                break;
+            case 'semanal':
+                $query->whereBetween($columna, [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]);
+                break;
+            case 'mensual':
+                $query->whereMonth($columna, Carbon::now()->month)->whereYear($columna, Carbon::now()->year);
+                break;
+        }
+    }
+
+    /**
+     * Reporte de Ganancias (Optimizado).
+     * Ahora utiliza los totales calculados en la tabla ventas.
      */
     public function reporteGanancias(Request $request)
     {
-        $query = Venta::with(['detalles.producto', 'usuario'])
+        $query = Venta::with(['usuario'])
             ->where('estado', 'completada');
 
         if ($request->filled('start_date')) {
@@ -499,25 +580,38 @@ class ReporteController extends Controller
             $query->whereDate('created_at', '<=', $request->end_date);
         }
 
+        if ($request->filled('user_id')) {
+            $query->where('user_id', $request->user_id);
+        }
+
         $ventas = $query->orderByDesc('created_at')->get()->map(function ($venta) {
-            $ganancia_total = 0;
-            foreach ($venta->detalles as $detalle) {
-                $ganancia_total += ($detalle->precio_venta - $detalle->costo_unitario) * $detalle->cantidad;
-            }
+            // Ganancia Real = Ganancia Producto + Diferencia Cambiaria
+            $ganancia_real = ($venta->total_ganancia ?? 0) + ($venta->monto_diferencia_cambiaria ?? 0);
+
             return [
                 'id' => $venta->id,
                 'fecha' => $venta->created_at->format('Y-m-d H:i'),
                 'vendedor' => $venta->usuario->name,
-                'total_venta' => $venta->total,
-                'ganancia_total' => $ganancia_total,
+                'total_venta' => (float) $venta->total,
+                'ganancia_producto' => (float) $venta->total_ganancia,
+                'diferencia_cambiaria' => (float) $venta->monto_diferencia_cambiaria,
+                'ganancia_total' => (float) $ganancia_real,
             ];
         });
 
+        // Totales generales para el pie del reporte
+        $totales = [
+            'venta' => $ventas->sum('total_venta'),
+            'ganancia' => $ventas->sum('ganancia_total'),
+            'diferencia_cambiaria' => $ventas->sum('diferencia_cambiaria')
+        ];
+
         return Inertia::render('Reportes/Report/ReporteGanancias', [
             'ventas' => $ventas,
+            'totales' => $totales,
+            'usuarios' => DB::table('users')->select('id', 'name')->get(),
         ]);
     }
-
     /**
      * Reporte de productos con stock bajo.
      */

@@ -13,6 +13,9 @@ use Inertia\Inertia;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Notification;
+use App\Notifications\MovimientoStockNotification;
+use App\Models\User;
 
 class MovimientosController extends Controller
 {
@@ -167,6 +170,14 @@ class MovimientosController extends Controller
 
             DB::commit();
 
+            // Notificar Admins
+            try {
+                $admins = User::whereIn('role', ['admin', 'moderador'])->get();
+                Notification::send($admins, new MovimientoStockNotification($movimiento, "Nuevo movimiento creado #{$movimiento->id}"));
+            } catch (\Exception $e) {
+                \Log::error('Error notif movimiento store: ' . $e->getMessage());
+            }
+
             return redirect()->route('movimientos.index')
                 ->with('success', 'Movimiento creado exitosamente. Haz clic en enviar cuando esté listo para despachar.');
         } catch (\Exception $e) {
@@ -244,6 +255,14 @@ class MovimientosController extends Controller
             ]);
 
             DB::commit();
+
+            // Notificar Admins
+            try {
+                $admins = User::whereIn('role', ['admin', 'moderador'])->get();
+                Notification::send($admins, new MovimientoStockNotification($movimiento, "Movimiento #{$movimiento->id} enviado"));
+            } catch (\Exception $e) {
+                \Log::error('Error notif movimiento enviar: ' . $e->getMessage());
+            }
 
             return redirect()->route('movimientos.index')
                 ->with('success', 'Movimiento despachado y en tránsito.');
@@ -370,6 +389,14 @@ class MovimientosController extends Controller
 
             DB::commit();
 
+            // Notificar Admins
+            try {
+                $admins = User::whereIn('role', ['admin', 'moderador'])->get();
+                Notification::send($admins, new MovimientoStockNotification($movimiento, "Movimiento #{$movimiento->id} recibido ({$nuevoEstado})"));
+            } catch (\Exception $e) {
+                \Log::error('Error notif movimiento recibir: ' . $e->getMessage());
+            }
+
             return redirect()->route('movimientos.index')
                 ->with('success', 'Movimiento recibido exitosamente.');
         } catch (\Exception $e) {
@@ -431,6 +458,14 @@ class MovimientosController extends Controller
             ]);
 
             DB::commit();
+
+             // Notificar Admins
+             try {
+                $admins = User::whereIn('role', ['admin', 'moderador'])->get();
+                Notification::send($admins, new MovimientoStockNotification($movimiento, "Movimiento #{$movimiento->id} RECHAZADO"));
+            } catch (\Exception $e) {
+                \Log::error('Error notif movimiento rechazar: ' . $e->getMessage());
+            }
 
             return redirect()->route('movimientos.index')
                 ->with('success', 'Movimiento rechazado. Stock liberado.');

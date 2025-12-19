@@ -48,6 +48,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard/monedas', [ReporteController::class, 'getMonedas'])->name('dashboard.monedas');
 
     /**
+     * Notificaciones
+     */
+    Route::get('/notifications', [App\Http\Controllers\NotificationController::class, 'index'])->name('notifications.index');
+    Route::get('/notifications/history', [App\Http\Controllers\NotificationController::class, 'history'])->name('notifications.history');
+    Route::post('/notifications/{id}/read', [App\Http\Controllers\NotificationController::class, 'markAsRead'])->name('notifications.markAsRead');
+    Route::post('/notifications/mark-all-read', [App\Http\Controllers\NotificationController::class, 'markAllAsRead'])->name('notifications.markAllAsRead');
+
+    /**
      * Rutas Principales
      */
     // Empleados
