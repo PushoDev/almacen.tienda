@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
+use App\Notifications\CierreCajaNotification;
 
 class CierreCajaController extends Controller
 {
@@ -199,6 +201,15 @@ class CierreCajaController extends Controller
             $cierre->update(['estado' => 'aprobado']);
 
             DB::commit();
+
+            // Notificar Admins y Moderadores
+            try {
+                $admins = User::whereIn('role', ['admin', 'moderador'])->get();
+                Notification::send($admins, new CierreCajaNotification($cierre));
+            } catch (\Exception $e) {
+                \Log::error('Error enviando notificación de cierre: ' . $e->getMessage());
+            }
+
             return redirect()->route('ventas.cierres')->with('success', 'Cierre realizado con éxito.');
         } catch (\Exception $e) {
             DB::rollBack();

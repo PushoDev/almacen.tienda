@@ -18,6 +18,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Notification;
+use App\Notifications\VentaCreadaNotification;
 use Inertia\Inertia;
 
 class VentaController extends Controller
@@ -722,6 +724,14 @@ class VentaController extends Controller
             }
 
             DB::commit();
+
+            // Notificar a Admins y Moderadores
+            try {
+                $admins = User::whereIn('role', ['admin', 'moderador'])->get();
+                Notification::send($admins, new VentaCreadaNotification($venta));
+            } catch (\Exception $e) {
+                \Log::error('Error enviando notificación de venta: ' . $e->getMessage());
+            }
 
             return response()->json([
                 'success' => true,
