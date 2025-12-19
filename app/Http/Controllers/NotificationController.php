@@ -51,4 +51,18 @@ class NotificationController extends Controller
 
         return response()->json(['success' => true]);
     }
+    /**
+     * View all notifications (history) with pagination.
+     */
+    public function history()
+    {
+        $user = Auth::user();
+
+        // Ensure we only retrieve the authenticated user's notifications
+        $notifications = $user->notifications()->paginate(20);
+
+        return Inertia::render('Notifications/Index', [
+            'notifications' => $notifications
+        ]);
+    }
 }

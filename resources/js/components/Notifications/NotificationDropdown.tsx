@@ -9,6 +9,7 @@ import {
     DropdownMenuTrigger,
 } from '@/Components/ui/dropdown-menu';
 import { ScrollArea } from '@/Components/ui/scroll-area';
+import { Link } from '@inertiajs/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Bell, Check } from 'lucide-react';
 import React from 'react';
@@ -78,9 +79,12 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
                 </ScrollArea>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                    <div className="text-muted-foreground hover:text-primary w-full cursor-pointer p-2 text-center text-xs">
+                    <Link
+                        href={route('notifications.history')}
+                        className="text-muted-foreground hover:text-primary block w-full cursor-pointer p-2 text-center text-xs"
+                    >
                         Ver todas las notificaciones
-                    </div>
+                    </Link>
                 </DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>
