@@ -65,6 +65,7 @@ interface Props {
     proveedores: Proveedor[];
     tasaCambioActual: number;
     monedasActivas: Moneda[];
+    userRole: 'admin' | 'moderador' | 'vendedor';
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -86,7 +87,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function Transacciones({ compras, cuentas, clientes, proveedores, tasaCambioActual, monedasActivas }: Props) {
+export default function Transacciones({ compras, cuentas, clientes, proveedores, tasaCambioActual, monedasActivas, userRole }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Transacciones" />
@@ -107,15 +108,17 @@ export default function Transacciones({ compras, cuentas, clientes, proveedores,
 
                 {/* Opciones de Transacciones */}
                 <Tabs defaultValue="movimientos" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2">
+                    <TabsList className={`grid w-full ${userRole === 'admin' || userRole === 'moderador' ? 'grid-cols-2' : 'grid-cols-1'}`}>
                         <TabsTrigger value="movimientos" className="flex items-center gap-2">
                             <Repeat className="h-4 w-4" />
                             Movimientos Financieros
                         </TabsTrigger>
-                        <TabsTrigger value="costos" className="flex items-center gap-2">
-                            <Banknote className="h-4 w-4" />
-                            Distribuir Costos
-                        </TabsTrigger>
+                        {userRole === 'admin' && (
+                            <TabsTrigger value="costos" className="flex items-center gap-2">
+                                <Banknote className="h-4 w-4" />
+                                Distribuir Costos
+                            </TabsTrigger>
+                        )}
                     </TabsList>
 
                     {/* ✅ Pestaña Movimientos - Actualizada con proveedores */}
@@ -123,10 +126,17 @@ export default function Transacciones({ compras, cuentas, clientes, proveedores,
                         <Movimientos cuentas={cuentas} clientes={clientes} proveedores={proveedores} monedasActivas={monedasActivas} />
                     </TabsContent>
 
-                    {/* ✅ Pestaña Distribuir Costos */}
-                    <TabsContent value="costos" className="space-y-4">
-                        <CostosAdicionales compras={compras} cuentas={cuentas} tasaCambioActual={tasaCambioActual} monedasActivas={monedasActivas} />
-                    </TabsContent>
+                    {/* ✅ Pestaña Distribuir Costos - Solo Admin y Moderador */}
+                    {(userRole === 'admin' || userRole === 'moderador') && (
+                        <TabsContent value="costos" className="space-y-4">
+                            <CostosAdicionales
+                                compras={compras}
+                                cuentas={cuentas}
+                                tasaCambioActual={tasaCambioActual}
+                                monedasActivas={monedasActivas}
+                            />
+                        </TabsContent>
+                    )}
                 </Tabs>
             </div>
         </AppLayout>

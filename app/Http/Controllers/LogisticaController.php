@@ -40,44 +40,71 @@ class LogisticaController extends Controller
 
     private function calculateInversionTotal()
     {
-        return DB::table('productos')
-            ->select(DB::raw('SUM(precio_compra_producto * cantidad_producto) as total_inversion'))
+        return DB::table('almacen_producto')
+            ->join('productos', 'almacen_producto.producto_id', '=', 'productos.id')
+            ->select(DB::raw('SUM(productos.precio_compra_producto * almacen_producto.cantidad) as total_inversion'))
             ->value('total_inversion');
     }
 
-    // Cuentas por Moneda
-    private function getMontoUSD()
+    // Cuentas por Moneda (Dinámico)
+    private function getBalancesPorMoneda()
     {
-        return DB::table('cuentas')
-            ->where('tipo_moneda', 'USD')
-            ->whereIn('tipo_cuenta', ['permanentes', 'temporales'])
-            ->sum('saldo_cuenta');
+        $monedas = DB::table('monedas')->where('estado', true)->get();
+        $balances = [];
+
+        foreach ($monedas as $moneda) {
+            $saldo = DB::table('cuentas')
+                ->where('moneda_id', $moneda->id)
+                ->whereIn('tipo_cuenta', ['permanentes', 'temporales'])
+                ->sum('saldo_cuenta');
+
+            $balances[] = [
+                'codigo' => $moneda->codigo_moneda,
+                'nombre' => $moneda->nombre_moneda,
+                'simbolo' => $moneda->simbolo_moneda,
+                'saldo' => $saldo,
+                'tasa' => $moneda->tasa_cambio,
+                'principal' => $moneda->principal,
+            ];
+        }
+
+        return $balances;
     }
 
-    private function getMontoEUR()
+    private function calculateTotalInvertidoGlobal($balances, $inversionTotal)
     {
-        return DB::table('cuentas')
-            ->where('tipo_moneda', 'EUR')
-            ->whereIn('tipo_cuenta', ['permanentes', 'temporales'])
-            ->sum('saldo_cuenta');
+        // Calcular todo convertido a moneda principal (asumiendo USD/Principal como base 1)
+        // Si la moneda principal tiene tasa 1, y las demas tienen su tasa relativa.
+        // Total = Suma(Saldo / Tasa) + Inversion
+
+        $totalCuentasBase = 0;
+        foreach ($balances as $balance) {
+            // Evitar division por cero
+            $tasa = $balance['tasa'] > 0 ? $balance['tasa'] : 1;
+            // Si la tasa es "Cuantos X hacen 1 Principal" -> Saldo / Tasa
+            // Si la tasa es "Cuantos Principal hacen 1 X" -> Saldo * Tasa
+            // Asumiré estandar: Tasa de cambio respecto a la principal. 
+            // Asumiré estandar: Tasa de cambio respecto a la principal.
+            // E.g. Principal (USD) = 1. CUP = 320.
+            // Entonces 320 CUP = 1 USD. -> Saldo / Tasa.
+
+            $totalCuentasBase += ($balance['saldo'] / $tasa);
+        }
+        return $totalCuentasBase + ($inversionTotal ?? 0);
     }
 
-    private function getMontoMLC()
+    private function tasaCambioGeneral()
     {
-        return DB::table('cuentas')
-            ->where('tipo_moneda', 'MLC')
-            ->whereIn('tipo_cuenta', ['permanentes', 'temporales'])
-            ->sum('saldo_cuenta');
+        return DB::table('tasa_cambios')->sum('tasa');
     }
 
-    private function getMontoCUP()
+    private function getTasaMlcTemp()
     {
-        return DB::table('cuentas')
-            ->where('tipo_moneda', 'CUP')
-            ->whereIn('tipo_cuenta', ['permanentes', 'temporales'])
-            ->sum('saldo_cuenta');
+        return DB::table('tasamlc_temp')->sum('tasa_mlc');
     }
 
+
+    // Métodos Restaurados
     private function countCuentas()
     {
         return DB::table('cuentas')->count();
@@ -86,13 +113,6 @@ class LogisticaController extends Controller
     private function sumSaldoCuentas()
     {
         return DB::table('cuentas')->sum('saldo_cuenta');
-    }
-
-    private function calculateMontoGeneralInvertido()
-    {
-        $saldoCuentas = $this->sumSaldoCuentas();
-        $inversionTotal = $this->calculateInversionTotal();
-        return ($saldoCuentas ?? 0) + ($inversionTotal ?? 0);
     }
 
     private function sumDeudaPendientesSaldo()
@@ -120,16 +140,6 @@ class LogisticaController extends Controller
         return DB::table('clientes')
             ->where('tipo_cliente', 'fisico')
             ->count();
-    }
-
-    private function tasaCambioGeneral()
-    {
-        return DB::table('tasa_cambios')->sum('tasa');
-    }
-
-    private function getTasaMlcTemp()
-    {
-        return DB::table('tasamlc_temp')->sum('tasa_mlc');
     }
 
     private function getGastosMensuales()
@@ -188,42 +198,104 @@ class LogisticaController extends Controller
             ->get();
     }
 
+    // Métodos privados para vendedores
+    private function countProductosVendedor($userId)
+    {
+        return DB::table('producto_vendedors')
+            ->where('user_id', $userId)
+            ->distinct('producto_id')
+            ->count('producto_id');
+    }
+
+    private function sumUnidadesProductosVendedor($userId)
+    {
+        return DB::table('almacen_producto')
+            ->join('producto_vendedors', function ($join) use ($userId) {
+                $join->on('almacen_producto.producto_id', '=', 'producto_vendedors.producto_id')
+                    ->on('almacen_producto.almacen_id', '=', 'producto_vendedors.almacen_id')
+                    ->where('producto_vendedors.user_id', '=', $userId);
+            })
+            ->sum('almacen_producto.cantidad');
+    }
+
+    private function countCategoriasVendedor($userId)
+    {
+        return DB::table('producto_vendedors')
+            ->join('productos', 'producto_vendedors.producto_id', '=', 'productos.id')
+            ->where('producto_vendedors.user_id', $userId)
+            ->distinct('productos.categoria_id')
+            ->count('productos.categoria_id');
+    }
+
     /**
      * Display a listing of the resource.
      */
     public function index()
     {
-        // Obtener todos los datos necesarios
+        $user = \Illuminate\Support\Facades\Auth::user();
+        $isVendor = $user->role !== 'admin' && $user->role !== 'moderador';
+        $canViewFinance = !$isVendor;
+
+        // Datos básicos (filtrados si es vendedor)
+        $totalProductos = $isVendor ? $this->countProductosVendedor($user->id) : $this->countProductos();
+        $totalUnidades = $isVendor ? $this->sumUnidadesProductosVendedor($user->id) : $this->sumUnidadesProductos();
+        $totalCategorias = $isVendor ? $this->countCategoriasVendedor($user->id) : $this->countCategorias();
+
+        // Datos comunes (o restringidos)
+        $categoriasActivas = $isVendor ? 0 : $this->countCategoriasActivas();
+        $totalProveedores = $isVendor ? 0 : $this->countProveedores();
+        $totalClientes = $isVendor ? 0 : $this->countClientes();
+
+        // Datos financieros (Solo si no es vendedor)
+        $inversionTotal = $canViewFinance ? $this->calculateInversionTotal() : 0;
+        $totalCuentas = $canViewFinance ? $this->countCuentas() : 0;
+        $saldoCuentas = $canViewFinance ? $this->sumSaldoCuentas() : 0;
+
+        // Balances Dinámicos
+        $balances = $canViewFinance ? $this->getBalancesPorMoneda() : [];
+
+        // Calcular suma disponible (aprox en moneda principal)
+        $sumaDsiponible = $canViewFinance ? $this->calculateTotalInvertidoGlobal($balances, 0) : 0; // Solo cuentas
+        $montoGeneralInvertido = $canViewFinance ? ($sumaDsiponible + $inversionTotal) : 0;
+
+        // Deudas
+        $deudaClienteFisico = $canViewFinance ? $this->sumDeudaClienteFisico() : 0;
+        $clientesFisicos = $canViewFinance ? $this->countClientesFisicos() : 0;
+        $deudaPendientes = $canViewFinance ? $this->countDeudaPendientes() : 0;
+        $deudaPendientesSaldo = $canViewFinance ? $this->sumDeudaPendientesSaldo() : 0;
+
         return Inertia::render('Logistica/Index', [
-            'totalCategorias' => $this->countCategorias() ?? 0,
-            'categoriasActivas' => $this->countCategoriasActivas() ?? 0,
-            'totalProveedores' => $this->countProveedores() ?? 0,
-            'totalClientes' => $this->countClientes() ?? 0,
-            'totalProductos' => $this->countProductos() ?? 0,
-            'totalUnidades' => $this->sumUnidadesProductos() ?? 0,
-            'inversionTotal' => $this->calculateInversionTotal() ?? 0,
-            'totalCuentas' => $this->countCuentas() ?? 0,
-            'montoUSD' => $this->getMontoUSD() ?? 0, // Monto en USD
-            'montoEUR' => $this->getMontoEUR() ?? 0, // Monto en EUR
-            'montoMLC' => $this->getMontoMLC() ?? 0, // Monto en MLC
-            'montoCUP' => $this->getMontoCUP() ?? 0, // Monto en CUP
-            'tasaCambioGeneral' => $this->tasaCambioGeneral() ?? 0, // Tasa Cambio
-            'calculoCup' => $this->getMontoCUP() / ($this->tasaCambioGeneral() ?: 1) ?? 0, // Valor Tasa de Cambio del Cup
-            // Suma General Disponible Caja
-            'sumaDsiponible' => ($this->getMontoCUP() / ($this->tasaCambioGeneral() ?: 1)) + ($this->getMontoMLC() / ($this->getTasaMlcTemp() ?: 1)) + $this->getMontoUSD() + $this->getMontoEUR(),
-            // Deudas con Clientes fisicos
-            'deudaClienteFisico' => $this->sumDeudaClienteFisico() ?? 0,
-            'clientesFisicos' => $this->countClientesFisicos() ?? 0, // Contar Clientes Fisicos
-            'saldoCuentas' => $this->sumSaldoCuentas() ?? 0,
-            'deudaPendientes' => $this->countDeudaPendientes() ?? 0,
-            'deudaPendietesSaldo' => $this->sumDeudaPendientesSaldo() ?? 0,
-            'montoGeneralInvertido' => $this->calculateMontoGeneralInvertido() ?? 0,
-            'gastosMensuales' => $this->getGastosMensuales() ?? [],
-            'productosTop' => $this->getProductosTop() ?? [],
-            'comprasPorProveedor' => $this->getComprasPorProveedor() ?? [],
-            'productosPorAlmacen' => $this->getProductosPorAlmacen() ?? [],
-            'tasaMLC' => $this->getTasaMlcTemp() ?? 0,
-            'calcTasaMLC' => $this->getMontoMLC() / ($this->getTasaMlcTemp() ?: 1),
+            'canViewFinance' => $canViewFinance,
+
+            // Datos Estructurales
+            'totalCategorias' => $totalCategorias ?? 0,
+            'categoriasActivas' => $categoriasActivas ?? 0,
+            'totalProveedores' => $totalProveedores ?? 0,
+            'totalClientes' => $totalClientes ?? 0,
+            'totalProductos' => $totalProductos ?? 0,
+            'totalUnidades' => $totalUnidades ?? 0,
+
+            // Datos Financieros Agregados
+            'inversionTotal' => $inversionTotal ?? 0,
+            'totalCuentas' => $totalCuentas ?? 0,
+            'saldoCuentas' => $saldoCuentas ?? 0,
+            'sumaDsiponible' => $sumaDsiponible,
+            'montoGeneralInvertido' => $montoGeneralInvertido,
+
+            // Deudas
+            'deudaClienteFisico' => $deudaClienteFisico ?? 0,
+            'clientesFisicos' => $clientesFisicos ?? 0,
+            'deudaPendientes' => $deudaPendientes ?? 0,
+            'deudaPendietesSaldo' => $deudaPendientesSaldo ?? 0,
+
+            // Balances por Moneda (Nuevo)
+            'balances' => $balances,
+
+            // Charts
+            'gastosMensuales' => $canViewFinance ? ($this->getGastosMensuales() ?? []) : [],
+            'productosTop' => $canViewFinance ? ($this->getProductosTop() ?? []) : [],
+            'comprasPorProveedor' => $canViewFinance ? ($this->getComprasPorProveedor() ?? []) : [],
+            'productosPorAlmacen' => $canViewFinance ? ($this->getProductosPorAlmacen() ?? []) : [],
         ]);
     }
 }

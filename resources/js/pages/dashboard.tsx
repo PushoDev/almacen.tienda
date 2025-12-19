@@ -96,7 +96,17 @@ interface EstadoFinanciero {
     usuarios: Usuario[];
 }
 
-export default function Dashboard({ userRole, montosPorMoneda, totalCapital, comparaciones }: { userRole: 'admin' | 'moderador' | 'vendedor', montosPorMoneda?: MontoPorMoneda[], totalCapital?: number, comparaciones?: ComparacionMensual[] }) {
+export default function Dashboard({
+    userRole,
+    montosPorMoneda,
+    totalCapital,
+    comparaciones,
+}: {
+    userRole: 'admin' | 'moderador' | 'vendedor';
+    montosPorMoneda?: MontoPorMoneda[];
+    totalCapital?: number;
+    comparaciones?: ComparacionMensual[];
+}) {
     const [timeRange, setTimeRange] = React.useState('90d');
     const [chartData, setChartData] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -223,40 +233,42 @@ export default function Dashboard({ userRole, montosPorMoneda, totalCapital, com
 
                 {/* Opciones */}
                 <div className="animate__animated animate__flipInX grid auto-rows-min gap-4 md:grid-cols-4">
-                    {/* Widget de Compra - Todos */}
-                    <div>
-                        <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-red-800 to-red-400">
-                            <CursorProvider>
-                                <CursorFollow>
-                                    <div className="rounded-lg bg-red-500 px-2 py-1 text-sm text-white shadow-lg">Comprar Nuevos Productos</div>
-                                </CursorFollow>
-                            </CursorProvider>
-                            {/* Ícono de fondo transparente */}
-                            <div id="compra-producto" className="absolute inset-0 flex items-center justify-center opacity-10">
-                                <ShoppingBagIcon className="h-48 w-48 text-white" />
-                            </div>
-                            {/* Contenido principal */}
-                            <div className="relative z-10 h-full p-6">
-                                {/* Ícono en la esquina superior izquierda */}
-                                <div className="absolute top-4 left-4">
-                                    <LucideBaggageClaim className="h-8 w-8 text-white" />
+                    {/* Widget de Compra - Solo Admin y Moderador */}
+                    {(userRole === 'admin' || userRole === 'moderador') && (
+                        <div>
+                            <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-red-800 to-red-400">
+                                <CursorProvider>
+                                    <CursorFollow>
+                                        <div className="rounded-lg bg-red-500 px-2 py-1 text-sm text-white shadow-lg">Comprar Nuevos Productos</div>
+                                    </CursorFollow>
+                                </CursorProvider>
+                                {/* Ícono de fondo transparente */}
+                                <div id="compra-producto" className="absolute inset-0 flex items-center justify-center opacity-10">
+                                    <ShoppingBagIcon className="h-48 w-48 text-white" />
                                 </div>
-                                {/* Textos alineados a la derecha */}
-                                <div className="flex h-full flex-col items-end justify-center space-y-2">
-                                    <h3 className="font-sans text-4xl font-bold text-white">Comprar</h3>
+                                {/* Contenido principal */}
+                                <div className="relative z-10 h-full p-6">
+                                    {/* Ícono en la esquina superior izquierda */}
+                                    <div className="absolute top-4 left-4">
+                                        <LucideBaggageClaim className="h-8 w-8 text-white" />
+                                    </div>
+                                    {/* Textos alineados a la derecha */}
+                                    <div className="flex h-full flex-col items-end justify-center space-y-2">
+                                        <h3 className="font-sans text-4xl font-bold text-white">Comprar</h3>
+                                    </div>
+                                    {/* Link */}
+                                    <Link href={route('comprar.index')}>
+                                        <button className="absolute right-4 bottom-4 ms-2 rounded-md bg-red-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-red-800">
+                                            Acceder a Compra
+                                        </button>
+                                    </Link>
                                 </div>
-                                {/* Link */}
-                                <Link href={route('comprar.index')}>
-                                    <button className="absolute right-4 bottom-4 ms-2 rounded-md bg-red-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-red-800">
-                                        Acceder a Compra
-                                    </button>
-                                </Link>
-                            </div>
 
-                            {/* Patrón de fondo adicional */}
-                            <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
+                                {/* Patrón de fondo adicional */}
+                                <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
+                            </div>
                         </div>
-                    </div>
+                    )}
 
                     {/* Widget de Venta - Todos */}
                     <div>
@@ -378,9 +390,7 @@ export default function Dashboard({ userRole, montosPorMoneda, totalCapital, com
                                     <DollarSign className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                                     Tabla 1: Mis Montos por Moneda
                                 </CardTitle>
-                                <CardDescription>
-                                    Montos asignados a tus cuentas por moneda
-                                </CardDescription>
+                                <CardDescription>Montos asignados a tus cuentas por moneda</CardDescription>
                             </CardHeader>
                             <CardContent>
                                 <Table>
@@ -393,28 +403,30 @@ export default function Dashboard({ userRole, montosPorMoneda, totalCapital, com
                                     <TableBody>
                                         {montosPorMoneda && montosPorMoneda.length > 0 ? (
                                             montosPorMoneda.map((item, index) => (
-                                                <TableRow key={index} className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50 hover:bg-sidebar/10 dark:hover:bg-sidebar/20 transition-colors">
+                                                <TableRow
+                                                    key={index}
+                                                    className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50 hover:bg-sidebar/10 dark:hover:bg-sidebar/20 transition-colors"
+                                                >
                                                     <TableCell className="font-medium">
                                                         <div className="flex items-center gap-3">
                                                             <Badge variant="secondary" className="capitalize">
                                                                 {item.descripcion}
                                                             </Badge>
-                                                            <span className="text-sm text-muted-foreground font-mono">
-                                                                {item.simbolo}
-                                                            </span>
+                                                            <span className="text-muted-foreground font-mono text-sm">{item.simbolo}</span>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="text-right font-medium">
                                                         {item.monto.toLocaleString('es-ES', {
                                                             minimumFractionDigits: 2,
                                                             maximumFractionDigits: 6,
-                                                        })} {item.simbolo}
+                                                        })}{' '}
+                                                        {item.simbolo}
                                                     </TableCell>
                                                 </TableRow>
                                             ))
                                         ) : (
                                             <TableRow className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50">
-                                                <TableCell colSpan={2} className="text-center text-gray-500 py-8 dark:text-gray-400">
+                                                <TableCell colSpan={2} className="py-8 text-center text-gray-500 dark:text-gray-400">
                                                     No tienes cuentas asignadas o no hay montos disponibles
                                                 </TableCell>
                                             </TableRow>
@@ -422,13 +434,14 @@ export default function Dashboard({ userRole, montosPorMoneda, totalCapital, com
                                     </TableBody>
                                 </Table>
                                 {totalCapital !== undefined && montosPorMoneda && montosPorMoneda.length > 0 && (
-                                    <div className="mt-4 flex justify-between border-t border-sidebar-border dark:border-sidebar-border pt-2 font-semibold">
+                                    <div className="border-sidebar-border dark:border-sidebar-border mt-4 flex justify-between border-t pt-2 font-semibold">
                                         <span>Total Capital (USD):</span>
                                         <span>
                                             {totalCapital.toLocaleString('es-ES', {
                                                 minimumFractionDigits: 2,
                                                 maximumFractionDigits: 2,
-                                            })} USD
+                                            })}{' '}
+                                            USD
                                         </span>
                                     </div>
                                 )}
@@ -444,9 +457,7 @@ export default function Dashboard({ userRole, montosPorMoneda, totalCapital, com
                                     <TrendingUp className="h-5 w-5 text-green-600 dark:text-green-400" />
                                     Tabla 2: Comparación Mensual
                                 </CardTitle>
-                                <CardDescription>
-                                    Comparación entre el mes actual y el mes anterior
-                                </CardDescription>
+                                <CardDescription>Comparación entre el mes actual y el mes anterior</CardDescription>
                             </CardHeader>
                             <CardContent>
                                 <Table>
@@ -463,14 +474,13 @@ export default function Dashboard({ userRole, montosPorMoneda, totalCapital, com
                                     <TableBody>
                                         {comparaciones && comparaciones.length > 0 ? (
                                             comparaciones.map((comparacion, index) => (
-                                                <TableRow key={index} className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50 hover:bg-sidebar/10 dark:hover:bg-sidebar/20 transition-colors">
-                                                    <TableCell className="font-medium">
-                                                        {comparacion.moneda}
-                                                    </TableCell>
+                                                <TableRow
+                                                    key={index}
+                                                    className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50 hover:bg-sidebar/10 dark:hover:bg-sidebar/20 transition-colors"
+                                                >
+                                                    <TableCell className="font-medium">{comparacion.moneda}</TableCell>
                                                     <TableCell>
-                                                        <Badge variant="secondary">
-                                                            {comparacion.simbolo_moneda}
-                                                        </Badge>
+                                                        <Badge variant="secondary">{comparacion.simbolo_moneda}</Badge>
                                                     </TableCell>
                                                     <TableCell className="text-right">
                                                         {comparacion.monto_anterior.toLocaleString('es-ES', {
@@ -485,7 +495,13 @@ export default function Dashboard({ userRole, montosPorMoneda, totalCapital, com
                                                         })}
                                                     </TableCell>
                                                     <TableCell className="text-right">
-                                                        <span className={comparacion.es_positivo ? 'text-green-600 dark:text-green-400 font-medium' : 'text-red-600 dark:text-red-400 font-medium'}>
+                                                        <span
+                                                            className={
+                                                                comparacion.es_positivo
+                                                                    ? 'font-medium text-green-600 dark:text-green-400'
+                                                                    : 'font-medium text-red-600 dark:text-red-400'
+                                                            }
+                                                        >
                                                             {comparacion.diferencia >= 0 ? '+' : ''}
                                                             {comparacion.diferencia.toLocaleString('es-ES', {
                                                                 minimumFractionDigits: 2,
@@ -494,7 +510,13 @@ export default function Dashboard({ userRole, montosPorMoneda, totalCapital, com
                                                         </span>
                                                     </TableCell>
                                                     <TableCell className="text-right">
-                                                        <span className={comparacion.es_positivo ? 'text-green-600 dark:text-green-400 font-medium' : 'text-red-600 dark:text-red-400 font-medium'}>
+                                                        <span
+                                                            className={
+                                                                comparacion.es_positivo
+                                                                    ? 'font-medium text-green-600 dark:text-green-400'
+                                                                    : 'font-medium text-red-600 dark:text-red-400'
+                                                            }
+                                                        >
                                                             {comparacion.porcentaje_cambio >= 0 ? '+' : ''}
                                                             {comparacion.porcentaje_cambio.toFixed(2)}%
                                                         </span>
@@ -503,7 +525,7 @@ export default function Dashboard({ userRole, montosPorMoneda, totalCapital, com
                                             ))
                                         ) : (
                                             <TableRow className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50">
-                                                <TableCell colSpan={6} className="text-center text-gray-500 py-8 dark:text-gray-400">
+                                                <TableCell colSpan={6} className="py-8 text-center text-gray-500 dark:text-gray-400">
                                                     No hay datos históricos disponibles para comparar
                                                 </TableCell>
                                             </TableRow>
@@ -744,13 +766,23 @@ export default function Dashboard({ userRole, montosPorMoneda, totalCapital, com
                                             {estadosFinancieros.map((estado) => {
                                                 // Determinar color basado en el nombre de la cuenta o el tipo
                                                 const getColorClass = () => {
-                                                    if (estado.nombre_cuenta.toLowerCase().includes('efectivo') || estado.nombre_cuenta.toLowerCase().includes('cash')) {
+                                                    if (
+                                                        estado.nombre_cuenta.toLowerCase().includes('efectivo') ||
+                                                        estado.nombre_cuenta.toLowerCase().includes('cash')
+                                                    ) {
                                                         return 'bg-amber-100 dark:bg-amber-900/50';
                                                     } else if (estado.nombre_cuenta.toLowerCase().includes('banco')) {
                                                         return 'bg-blue-100 dark:bg-blue-900/50';
-                                                    } else if (estado.nombre_cuenta.toLowerCase().includes('tarjeta') || estado.nombre_cuenta.toLowerCase().includes('card')) {
+                                                    } else if (
+                                                        estado.nombre_cuenta.toLowerCase().includes('tarjeta') ||
+                                                        estado.nombre_cuenta.toLowerCase().includes('card')
+                                                    ) {
                                                         return 'bg-green-100 dark:bg-green-900/50';
-                                                    } else if (estado.nombre_cuenta.toLowerCase().includes('digital') || estado.nombre_cuenta.toLowerCase().includes('paypal') || estado.nombre_cuenta.toLowerCase().includes('zelle')) {
+                                                    } else if (
+                                                        estado.nombre_cuenta.toLowerCase().includes('digital') ||
+                                                        estado.nombre_cuenta.toLowerCase().includes('paypal') ||
+                                                        estado.nombre_cuenta.toLowerCase().includes('zelle')
+                                                    ) {
                                                         return 'bg-purple-100 dark:bg-purple-900/50';
                                                     } else if (estado.tipo_cuenta === 'permanentes') {
                                                         return 'bg-sky-100 dark:bg-sky-900/50';
@@ -762,7 +794,10 @@ export default function Dashboard({ userRole, montosPorMoneda, totalCapital, com
                                                 };
 
                                                 return (
-                                                    <TableRow key={estado.cuenta_id} className={`border-b-sidebar-border/50 dark:border-b-sidebar-border/50 hover:bg-sidebar/10 dark:hover:bg-sidebar/20 transition-colors ${getColorClass()}`}>
+                                                    <TableRow
+                                                        key={estado.cuenta_id}
+                                                        className={`border-b-sidebar-border/50 dark:border-b-sidebar-border/50 hover:bg-sidebar/10 dark:hover:bg-sidebar/20 transition-colors ${getColorClass()}`}
+                                                    >
                                                         <TableCell className="font-medium">
                                                             <div className="flex items-center gap-2">
                                                                 <span className="font-semibold">{estado.nombre_cuenta}</span>
@@ -777,7 +812,7 @@ export default function Dashboard({ userRole, montosPorMoneda, totalCapital, com
                                                         <TableCell>
                                                             <div className="flex items-center gap-2">
                                                                 <span className="font-mono font-bold">{estado.moneda.simbolo_moneda}</span>
-                                                                <span className="text-sm text-muted-foreground">{estado.moneda.codigo_moneda}</span>
+                                                                <span className="text-muted-foreground text-sm">{estado.moneda.codigo_moneda}</span>
                                                             </div>
                                                         </TableCell>
                                                         <TableCell className="text-right font-medium">
@@ -787,11 +822,16 @@ export default function Dashboard({ userRole, montosPorMoneda, totalCapital, com
                                                             })}
                                                         </TableCell>
                                                         <TableCell>
-                                                            <Badge variant="outline" className={estado.tipo_cuenta === 'permanentes'
-                                                                ? 'border-blue-300 text-blue-800 dark:text-blue-300'
-                                                                : estado.tipo_cuenta === 'temporales'
-                                                                    ? 'border-green-300 text-green-800 dark:text-green-300'
-                                                                    : 'border-red-300 text-red-800 dark:text-red-300'}>
+                                                            <Badge
+                                                                variant="outline"
+                                                                className={
+                                                                    estado.tipo_cuenta === 'permanentes'
+                                                                        ? 'border-blue-300 text-blue-800 dark:text-blue-300'
+                                                                        : estado.tipo_cuenta === 'temporales'
+                                                                          ? 'border-green-300 text-green-800 dark:text-green-300'
+                                                                          : 'border-red-300 text-red-800 dark:text-red-300'
+                                                                }
+                                                            >
                                                                 {estado.tipo_cuenta}
                                                             </Badge>
                                                         </TableCell>
@@ -825,10 +865,14 @@ export default function Dashboard({ userRole, montosPorMoneda, totalCapital, com
                                                             )}
                                                         </TableCell>
                                                         <TableCell>
-                                                            <Badge variant={estado.estado_cuenta ? "default" : "secondary"}
-                                                                className={estado.estado_cuenta
-                                                                    ? 'bg-green-500/10 text-green-700 dark:text-green-300 border-green-500/30'
-                                                                    : 'bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/30'}>
+                                                            <Badge
+                                                                variant={estado.estado_cuenta ? 'default' : 'secondary'}
+                                                                className={
+                                                                    estado.estado_cuenta
+                                                                        ? 'border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-300'
+                                                                        : 'border-gray-500/30 bg-gray-500/10 text-gray-600 dark:text-gray-400'
+                                                                }
+                                                            >
                                                                 {estado.estado_cuenta ? 'Activa' : 'Inactiva'}
                                                             </Badge>
                                                         </TableCell>

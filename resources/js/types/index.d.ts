@@ -334,6 +334,16 @@ export interface ProductoPorAlmacenRefCharts {
 }
 
 // Interface para la Logistica
+// Interface para la Logistica
+export interface BalanceMoneda {
+    codigo: string;
+    nombre: string;
+    simbolo: string;
+    saldo: number;
+    tasa: number;
+    principal: boolean | number;
+}
+
 export interface LogisticaProps {
     totalCategorias: number;
     categoriasActivas: number;
@@ -352,23 +362,17 @@ export interface LogisticaProps {
     productosTop: ProductosMasCompradosRef[];
     comprasPorProveedor: CompraPorProveedorChartRef[];
     productosPorAlmacen: ProductoPorAlmacenRefCharts[];
-    // Monto por moneda
-    montoUSD: number;
-    montoEUR: number;
-    montoMLC: number;
-    montoCUP: number;
-    // Tasa de Cambio General
-    tasaCambioGeneral: number;
-    calculoCup: number;
-    // DisponibleCaja
+
+    // Balances Dinámicos
+    balances: BalanceMoneda[];
+
+    // Deudas y totales
     sumaDsiponible: number;
     deudaClienteFisico: number;
     clientesFisicos: number;
-    // Capital Dashboard
-    capital: number;
-    // TasaMLC
-    tasaMLC: number;
-    calcTasaMLC: number;
+
+    // Permissions
+    canViewFinance?: boolean;
 }
 
 // Interface para Productos por Almacén (Detalles)

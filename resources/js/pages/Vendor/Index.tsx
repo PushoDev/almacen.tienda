@@ -1067,7 +1067,11 @@ export default function PuntoVentaOficial({
                                                                         <p className="text-muted-foreground mb-0.5 text-xs">Precio</p>
                                                                         {producto.precio_venta && producto.precio_venta > 0 ? (
                                                                             <p className="text-success text-xl font-bold">
-                                                                                ${producto.precio_venta.toFixed(2)}
+                                                                                $
+                                                                                {Number(producto.precio_venta).toLocaleString('es-ES', {
+                                                                                    minimumFractionDigits: 2,
+                                                                                    maximumFractionDigits: 2,
+                                                                                })}
                                                                             </p>
                                                                         ) : (
                                                                             <p className="text-destructive text-sm font-medium">Sin precio</p>
@@ -1193,7 +1197,13 @@ export default function PuntoVentaOficial({
                                                                 min="0"
                                                                 step="0.01"
                                                             />
-                                                            <p className="mt-1 text-sm font-medium text-emerald-600">${item.subtotal.toFixed(2)}</p>
+                                                            <p className="mt-1 text-sm font-medium text-emerald-600">
+                                                                $
+                                                                {Number(item.subtotal).toLocaleString('es-ES', {
+                                                                    minimumFractionDigits: 2,
+                                                                    maximumFractionDigits: 2,
+                                                                })}
+                                                            </p>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1219,7 +1229,13 @@ export default function PuntoVentaOficial({
                                             <div className="space-y-3">
                                                 <div className="flex items-center justify-between">
                                                     <span className="font-medium">Total:</span>
-                                                    <span className="text-xl font-bold text-emerald-600">${calcularTotal.toFixed(2)}</span>
+                                                    <span className="text-xl font-bold text-emerald-600">
+                                                        $
+                                                        {Number(calcularTotal).toLocaleString('es-ES', {
+                                                            minimumFractionDigits: 2,
+                                                            maximumFractionDigits: 2,
+                                                        })}
+                                                    </span>
                                                 </div>
                                                 <AlertDialog>
                                                     <AlertDialogTrigger asChild>
@@ -1248,13 +1264,21 @@ export default function PuntoVentaOficial({
                                                                         <div>
                                                                             <p className="text-muted-foreground mb-0.5">Total</p>
                                                                             <p className="text-primary text-sm font-bold">
-                                                                                ${calcularTotal.toFixed(2)}
+                                                                                $
+                                                                                {Number(calcularTotal).toLocaleString('es-ES', {
+                                                                                    minimumFractionDigits: 2,
+                                                                                    maximumFractionDigits: 2,
+                                                                                })}
                                                                             </p>
                                                                         </div>
                                                                         <div>
                                                                             <p className="text-muted-foreground mb-0.5">Pagado</p>
                                                                             <p className="text-sm font-bold text-green-600">
-                                                                                ${totalPaid.toFixed(2)}
+                                                                                $
+                                                                                {Number(totalPaid).toLocaleString('es-ES', {
+                                                                                    minimumFractionDigits: 2,
+                                                                                    maximumFractionDigits: 2,
+                                                                                })}
                                                                             </p>
                                                                         </div>
                                                                         <div>
@@ -1262,7 +1286,11 @@ export default function PuntoVentaOficial({
                                                                             <p
                                                                                 className={`text-sm font-bold ${remainingInUsd > 0.01 ? 'text-red-600' : 'text-green-600'}`}
                                                                             >
-                                                                                ${Math.max(0, remainingInUsd).toFixed(2)}
+                                                                                $
+                                                                                {Number(Math.max(0, remainingInUsd)).toLocaleString('es-ES', {
+                                                                                    minimumFractionDigits: 2,
+                                                                                    maximumFractionDigits: 2,
+                                                                                })}
                                                                             </p>
                                                                         </div>
                                                                     </div>
@@ -1485,10 +1513,23 @@ export default function PuntoVentaOficial({
                                                                                 {conversionCalculada && (
                                                                                     <div className="rounded-lg bg-green-50 p-2 text-center">
                                                                                         <p className="text-sm font-medium text-green-700">
-                                                                                            {conversionCalculada.montoOriginal.toFixed(2)}{' '}
+                                                                                            {Number(conversionCalculada.montoOriginal).toLocaleString(
+                                                                                                'es-ES',
+                                                                                                {
+                                                                                                    minimumFractionDigits: 2,
+                                                                                                    maximumFractionDigits: 2,
+                                                                                                },
+                                                                                            )}{' '}
                                                                                             {conversionCalculada.monedaSimbolo} ={' '}
                                                                                             <span className="font-bold">
-                                                                                                {conversionCalculada.montoUSD.toFixed(2)} USD
+                                                                                                {Number(conversionCalculada.montoUSD).toLocaleString(
+                                                                                                    'es-ES',
+                                                                                                    {
+                                                                                                        minimumFractionDigits: 2,
+                                                                                                        maximumFractionDigits: 2,
+                                                                                                    },
+                                                                                                )}{' '}
+                                                                                                USD
                                                                                             </span>
                                                                                         </p>
                                                                                         <p className="mt-1 text-xs text-green-600">
@@ -1537,11 +1578,20 @@ export default function PuntoVentaOficial({
                                                                                                 : 'Efectivo'}
                                                                                         </p>
                                                                                         <p className="text-sm text-gray-500">
-                                                                                            {payment.amount.toFixed(2)} {payment.moneda_info?.simbolo}
+                                                                                            {Number(payment.amount).toLocaleString('es-ES', {
+                                                                                                minimumFractionDigits: 2,
+                                                                                                maximumFractionDigits: 2,
+                                                                                            })}{' '}
+                                                                                            {payment.moneda_info?.simbolo}
                                                                                             {payment.referencia && ` - Ref: ${payment.referencia}`}
                                                                                         </p>
                                                                                         <p className="text-sm text-green-600">
-                                                                                            = ${payment.amountInUsd.toFixed(2)} USD
+                                                                                            = $
+                                                                                            {Number(payment.amountInUsd).toLocaleString('es-ES', {
+                                                                                                minimumFractionDigits: 2,
+                                                                                                maximumFractionDigits: 2,
+                                                                                            })}{' '}
+                                                                                            USD
                                                                                         </p>
                                                                                     </div>
                                                                                     <Button
@@ -1563,13 +1613,23 @@ export default function PuntoVentaOficial({
                                                             <div className="flex items-center justify-between">
                                                                 <span className="font-medium">Total a pagar:</span>
                                                                 <span className="text-lg font-bold text-emerald-600">
-                                                                    ${calcularTotal.toFixed(2)} USD
+                                                                    $
+                                                                    {Number(calcularTotal).toLocaleString('es-ES', {
+                                                                        minimumFractionDigits: 2,
+                                                                        maximumFractionDigits: 2,
+                                                                    })}{' '}
+                                                                    USD
                                                                 </span>
                                                             </div>
                                                             <div className="flex items-center justify-between">
                                                                 <span className="font-medium">Pagado:</span>
                                                                 <span className="text-lg font-bold text-emerald-600">
-                                                                    ${totalPaid.toFixed(2)} USD
+                                                                    $
+                                                                    {Number(totalPaid).toLocaleString('es-ES', {
+                                                                        minimumFractionDigits: 2,
+                                                                        maximumFractionDigits: 2,
+                                                                    })}{' '}
+                                                                    USD
                                                                 </span>
                                                             </div>
                                                             <div className="flex items-center justify-between border-t pt-2">
@@ -1577,7 +1637,12 @@ export default function PuntoVentaOficial({
                                                                 <span
                                                                     className={`text-lg font-bold ${remainingInUsd > 0.01 ? 'text-red-600' : 'text-emerald-600'}`}
                                                                 >
-                                                                    ${remainingInUsd.toFixed(2)} USD
+                                                                    $
+                                                                    {Number(remainingInUsd).toLocaleString('es-ES', {
+                                                                        minimumFractionDigits: 2,
+                                                                        maximumFractionDigits: 2,
+                                                                    })}{' '}
+                                                                    USD
                                                                 </span>
                                                             </div>
                                                         </div>
