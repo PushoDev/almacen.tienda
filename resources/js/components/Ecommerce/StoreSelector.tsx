@@ -14,7 +14,7 @@ interface Store {
 interface StoreSelectorProps {
     isOpen: boolean;
     onClose: () => void;
-    onSelectStore: (storeId: number) => void;
+    onSelectStore: (store: Store) => void;
     selectedStoreId?: number;
 }
 
@@ -55,7 +55,10 @@ export default function StoreSelector({ isOpen, onClose, onSelectStore, selected
             });
 
             if (response.ok) {
-                onSelectStore(storeId);
+                const store = stores.find((s) => s.id === storeId);
+                if (store) {
+                    onSelectStore(store);
+                }
                 setTimeout(onClose, 300);
             }
         } catch (error) {

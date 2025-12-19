@@ -4,9 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
-import { CategoriasProps, ProductoProps, type BreadcrumbItem } from '@/types';
-import { Head, useForm } from '@inertiajs/react';
+import { CategoriasProps, ProductoProps, SharedData, type BreadcrumbItem } from '@/types';
+import { Head, useForm, usePage } from '@inertiajs/react';
 import { FileBox, Package, QrCode, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { toast, Toaster } from 'sonner';
@@ -18,6 +20,9 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function EditarProductosPage({ producto, categorias }: { producto: ProductoProps; categorias: CategoriasProps[] }) {
+    const { auth } = usePage<SharedData>().props;
+    const isPrivileged = auth.user.role === 'admin' || auth.user.role === 'moderador';
+
     const { data, setData, post, errors, processing } = useForm({
         _method: 'put',
         nombre_producto: producto.nombre_producto,
@@ -27,6 +32,9 @@ export default function EditarProductosPage({ producto, categorias }: { producto
         codigo_producto: producto.codigo_producto || '',
         categoria_id: producto.categoria_id.toString(),
         precio_compra_producto: producto.precio_compra_producto,
+        precio_venta_actualizado: producto.precio_venta_actualizado || 0,
+        activo: producto.activo,
+        descripcion_producto: producto.descripcion_producto || '',
         imagen_producto: null as File | null,
     });
 
@@ -263,6 +271,59 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                                             </div>
                                         )}
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Configuración Ecommerce */}
+                        <div className="mt-6 border-t pt-6">
+                            <h3 className="mb-4 text-lg font-semibold text-blue-600">Configuración Ecommerce</h3>
+                            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                                <div className="space-y-4">
+                                    <div>
+                                        <Label htmlFor="precio_venta_actualizado">Precio de Venta Sugerido (Ecommerce)</Label>
+                                        <Input
+                                            id="precio_venta_actualizado"
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            disabled={!isPrivileged}
+                                            value={data.precio_venta_actualizado}
+                                            onChange={(e) => setData('precio_venta_actualizado', parseFloat(e.target.value) || 0)}
+                                            placeholder="0.00"
+                                            className="mt-1"
+                                        />
+                                        <InputError message={errors.precio_venta_actualizado} />
+                                        <p className="mt-1 text-xs text-gray-500">Este es el precio que se mostrará en el catálogo online.</p>
+                                    </div>
+
+                                    <div className="flex items-center space-x-2 rounded-lg border p-4">
+                                        <Switch
+                                            id="activo"
+                                            disabled={!isPrivileged}
+                                            checked={data.activo}
+                                            onCheckedChange={(checked) => setData('activo', checked)}
+                                        />
+                                        <div className="grid gap-1.5 leading-none">
+                                            <Label htmlFor="activo" className="cursor-pointer font-semibold">
+                                                Producto Activo en Ecommerce
+                                            </Label>
+                                            <p className="text-muted-foreground text-sm">Si está desactivado, no aparecerá en el catálogo.</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <Label htmlFor="descripcion_producto">Descripción del Producto (Catálogo)</Label>
+                                    <Textarea
+                                        id="descripcion_producto"
+                                        disabled={!isPrivileged}
+                                        value={data.descripcion_producto}
+                                        onChange={(e) => setData('descripcion_producto', e.target.value)}
+                                        placeholder="Ingrese una descripción detallada para los clientes..."
+                                        className="mt-1 min-h-[120px]"
+                                    />
+                                    <InputError message={errors.descripcion_producto} />
                                 </div>
                             </div>
                         </div>

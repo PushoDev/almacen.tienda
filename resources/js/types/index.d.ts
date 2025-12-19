@@ -141,6 +141,9 @@ export interface ProductoProps {
     imagen_url?: string;
     barcode_image_url?: string;
     precio_venta?: number;
+    precio_venta_actualizado?: number;
+    activo: boolean;
+    descripcion_producto?: string;
     ganancia?: number;
     stock_bajo: boolean;
     created_at?: string;
