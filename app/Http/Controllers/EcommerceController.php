@@ -89,6 +89,7 @@ class EcommerceController extends Controller
             $vendedorId = $userResponsable ? $userResponsable->id : 0;
 
             $productos = Producto::join('almacen_producto', 'productos.id', '=', 'almacen_producto.producto_id')
+                ->join('categorias', 'productos.categoria_id', '=', 'categorias.id')
                 ->where('almacen_producto.almacen_id', (int)$almacenId)
                 ->where('productos.activo', true)
                 ->leftJoin('producto_vendedors', function ($join) use ($almacenId, $vendedorId) {
@@ -101,10 +102,11 @@ class EcommerceController extends Controller
                     'productos.nombre_producto',
                     'productos.descripcion_producto',
                     'productos.imagen_producto',
+                    'categorias.nombre_categoria',
                     'almacen_producto.cantidad as stock_actual',
                     DB::raw('COALESCE(producto_vendedors.precio_venta, 0.00) as precio_venta_actualizado')
                 )
-                ->paginate(12);
+                ->paginate(50);
 
             return response()->json($productos);
         } catch (\Exception $e) {
@@ -123,10 +125,12 @@ class EcommerceController extends Controller
     {
         $almacenId = session('almacen_seleccionado');
         $almacen = $almacenId ? Almacen::find($almacenId) : null;
+        $categorias = \App\Models\Categoria::where('activar_categoria', true)->get();
 
         return Inertia::render('Ecommerce/Index', [
             'almacenSeleccionado' => $almacen,
-            'hasSelection' => (bool) $almacenId
+            'hasSelection' => (bool) $almacenId,
+            'categorias' => $categorias
         ]);
     }
 }
