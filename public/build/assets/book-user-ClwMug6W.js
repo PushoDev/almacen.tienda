@@ -1,5 +1,0 @@
-<<<<<<<< HEAD:public/build/assets/book-user-ClwMug6W.js
-import{c as o}from"./createLucideIcon-C4FkCDeW.js";const c=[["path",{d:"M15 13a3 3 0 1 0-6 0",key:"10j68g"}],["path",{d:"M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20",key:"k3hazp"}],["circle",{cx:"12",cy:"8",r:"2",key:"1822b1"}]],a=o("book-user",c);export{a as B};
-========
-import{c as o}from"./createLucideIcon-B9JXi_vC.js";const c=[["path",{d:"M15 13a3 3 0 1 0-6 0",key:"10j68g"}],["path",{d:"M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20",key:"k3hazp"}],["circle",{cx:"12",cy:"8",r:"2",key:"1822b1"}]],a=o("book-user",c);export{a as B};
->>>>>>>> ventas/tasas-temporales:public/build/assets/book-user-CY5QatHi.js

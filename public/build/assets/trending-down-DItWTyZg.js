@@ -1,5 +1,0 @@
-<<<<<<<< HEAD:public/build/assets/trending-down-DItWTyZg.js
-import{c as n}from"./createLucideIcon-C4FkCDeW.js";const o=[["path",{d:"M16 17h6v-6",key:"t6n2it"}],["path",{d:"m22 17-8.5-8.5-5 5L2 7",key:"x473p"}]],e=n("trending-down",o);export{e as T};
-========
-import{c as n}from"./createLucideIcon-B9JXi_vC.js";const o=[["path",{d:"M16 17h6v-6",key:"t6n2it"}],["path",{d:"m22 17-8.5-8.5-5 5L2 7",key:"x473p"}]],e=n("trending-down",o);export{e as T};
->>>>>>>> ventas/tasas-temporales:public/build/assets/trending-down-9BD03y4D.js
