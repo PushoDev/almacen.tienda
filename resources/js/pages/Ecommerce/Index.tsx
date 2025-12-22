@@ -145,18 +145,20 @@ export default function EcommerceIndex() {
                                                 {/* Price */}
                                                 <div className="mt-4 flex items-end justify-between">
                                                     <div>
-                                                        <span className="text-2xl font-bold text-blue-600">${product.precio_venta_actualizado}</span>
-                                                        {product.pivot?.cantidad !== undefined && (
+                                                        <span className="text-2xl font-bold text-blue-600">
+                                                            ${Number(product.precio_venta_actualizado).toFixed(2)}
+                                                        </span>
+                                                        {product.stock_actual !== undefined && (
                                                             <div className="mt-1 text-xs text-slate-500">
                                                                 Stock:{' '}
                                                                 <span
                                                                     className={
-                                                                        product.pivot.cantidad > 0
+                                                                        product.stock_actual > 0
                                                                             ? 'font-semibold text-green-600'
                                                                             : 'font-semibold text-red-600'
                                                                     }
                                                                 >
-                                                                    {product.pivot.cantidad > 0 ? product.pivot.cantidad : 'Agotado'}
+                                                                    {product.stock_actual > 0 ? product.stock_actual : 'Agotado'}
                                                                 </span>
                                                             </div>
                                                         )}

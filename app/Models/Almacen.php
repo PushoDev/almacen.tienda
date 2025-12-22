@@ -35,8 +35,7 @@ class Almacen extends Model
     public function usuarios()
     {
         return $this->belongsToMany(User::class, 'user_almacens')
-            ->using(UserAlmacen::class)
-            ->withTimestamps();
+            ->using(UserAlmacen::class);
     }
 
     // Relación: Productos en el almacén
