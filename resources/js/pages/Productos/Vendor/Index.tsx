@@ -251,7 +251,9 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                     </p>
                     <p>
                         Rol actual:{' '}
-                        <span className="text-primary font-sans font-medium">{meta.role_usuario === 'admin' ? 'Administrador' : 'Vendedor'}</span>
+                        <span className="text-primary font-sans font-medium">
+                            {meta.role_usuario === 'admin' ? 'Administrador' : meta.role_usuario === 'moderador' ? 'Moderador' : 'Vendedor'}
+                        </span>
                     </p>
                 </div>
                 {/* Tabla de Productos agrupados por Almacén (sin cambios) */}

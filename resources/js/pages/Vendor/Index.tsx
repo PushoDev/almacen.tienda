@@ -876,7 +876,9 @@ export default function PuntoVentaOficial({
                     <div className="flex items-center justify-between text-sm text-gray-600">
                         <p>
                             Rol Actual del Vendedor:{' '}
-                            <span className="text-primary font-medium">{meta.role_usuario === 'admin' ? 'Administrador' : 'Vendedor'}</span>
+                            <span className="text-primary font-medium">
+                                {meta.role_usuario === 'admin' ? 'Administrador' : meta.role_usuario === 'moderador' ? 'Moderador' : 'Vendedor'}
+                            </span>
                         </p>
                         <div className="flex items-center gap-2">
                             <Link href={route('ventas.cierres')}>

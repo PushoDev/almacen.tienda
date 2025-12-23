@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Notification;
 use App\Notifications\VentaCreadaNotification;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\Log;
 
 class VentaController extends Controller
 {
@@ -101,7 +102,7 @@ class VentaController extends Controller
 
         $almacenes = in_array($user->role, ['admin', 'moderador'])
             ? Almacen::select('id', 'nombre_almacen')->get()
-            : $user->almacenes()->select('id', 'nombre_almacen')->get();
+            : ($user ? $user->almacenes()->select('id', 'nombre_almacen')->get() : collect());
 
         return response()->json($almacenes);
     }
@@ -889,8 +890,8 @@ class VentaController extends Controller
         $query = Venta::with(['cliente', 'almacen', 'usuario', 'pagos', 'moneda', 'destinatario', 'monedaCobro'])
             ->withCount('detalles');
 
-        // Filtrar por usuario (excepto admin)
-        if ($user->role !== 'admin') {
+        // Filtrar por usuario (excepto admin y moderador)
+        if (!in_array($user->role, ['admin', 'moderador'])) {
             $query->where('user_id', $user->id);
         }
 
@@ -964,9 +965,9 @@ class VentaController extends Controller
             });
 
         // Obtener almacenes para filtros
-        $almacenes = $user->role === 'admin'
+        $almacenes = in_array($user->role, ['admin', 'moderador'])
             ? Almacen::select('id', 'nombre_almacen')->get()
-            : $user->almacenes()->select('id', 'nombre_almacen')->get();
+            : ($user ? $user->almacenes()->select('id', 'nombre_almacen')->get() : collect());
 
         return Inertia::render('Vendor/Listado', [
             'ventas' => $ventas,
