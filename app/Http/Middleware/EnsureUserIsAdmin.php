@@ -18,7 +18,7 @@ class EnsureUserIsAdmin
     {
         // return $next($request);
         // Verificar si el usuario está autenticado y su rol es 'admin'
-        if (Auth::check() && Auth::user()->role === 'admin') {
+        if (Auth::check() && in_array(Auth::user()->role, ['admin', 'moderador'])) {
             return $next($request);
         }
 

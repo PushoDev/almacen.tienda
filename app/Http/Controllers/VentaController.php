@@ -99,7 +99,7 @@ class VentaController extends Controller
             return response()->json(['error' => 'Usuario no autenticado'], 401);
         }
 
-        $almacenes = $user->role === 'admin'
+        $almacenes = in_array($user->role, ['admin', 'moderador'])
             ? Almacen::select('id', 'nombre_almacen')->get()
             : $user->almacenes()->select('id', 'nombre_almacen')->get();
 
@@ -117,7 +117,7 @@ class VentaController extends Controller
         }
 
         // Validación de acceso al almacén (solo para no-admins)
-        if ($user->role !== 'admin' && !$user->almacenes->contains('id', $id)) {
+        if (!in_array($user->role, ['admin', 'moderador']) && !$user->almacenes->contains('id', $id)) {
             return response()->json(['error' => 'Acceso denegado al almacén'], 403);
         }
 
@@ -181,7 +181,7 @@ class VentaController extends Controller
         $query = Cuenta::with('moneda')
             ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta');
 
-        if ($user->role !== 'admin') {
+        if (!in_array($user->role, ['admin', 'moderador'])) {
             $query->whereHas('users', function ($q) use ($user) {
                 $q->where('user_id', $user->id);
             });
@@ -246,7 +246,7 @@ class VentaController extends Controller
             ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta');
 
         // Filtrar por usuario si no es admin
-        if ($user->role !== 'admin') {
+        if (!in_array($user->role, ['admin', 'moderador'])) {
             $query->whereHas('users', function ($q) use ($user) {
                 $q->where('user_id', $user->id);
             });
@@ -315,7 +315,7 @@ class VentaController extends Controller
         $query = Venta::query()->where('estado', 'completada');
 
         // Filtrar por rol de usuario
-        if ($user->role !== 'admin') {
+        if (!in_array($user->role, ['admin', 'moderador'])) {
             $query->where('user_id', $user->id);
         }
 
@@ -377,7 +377,7 @@ class VentaController extends Controller
         $cuentasQuery = Cuenta::with('moneda')
             ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta');
 
-        if ($user->role !== 'admin') {
+        if (!in_array($user->role, ['admin', 'moderador'])) {
             $cuentasQuery->whereHas('users', function ($q) use ($user) {
                 $q->where('user_id', $user->id);
             });
@@ -398,7 +398,7 @@ class VentaController extends Controller
         return Inertia::render('Vendor/Index', [
             'meta' => [
                 'role_usuario' => $user->role,
-                'almacenes_usuario' => $user->role === 'admin'
+                'almacenes_usuario' => in_array($user->role, ['admin', 'moderador'])
                     ? Almacen::select('id', 'nombre_almacen')->get()->map(fn($a) => ['id' => (string)$a->id, 'nombre' => $a->nombre_almacen])
                     : $user->almacenes->map(fn($a) => ['id' => (string)$a->id, 'nombre' => $a->nombre_almacen]),
                 'cuentas_usuario' => $cuentas,
@@ -600,7 +600,7 @@ class VentaController extends Controller
                 throw new \Exception('Usuario no autenticado');
             }
 
-            if ($user->role !== 'admin' && !$user->almacenes->contains('id', $validatedData['almacen_id'])) {
+            if (!in_array($user->role, ['admin', 'moderador']) && !$user->almacenes->contains('id', $validatedData['almacen_id'])) {
                 throw new \Exception('No tienes acceso a este almacén');
             }
             $total_ganancia = 0;
@@ -641,7 +641,7 @@ class VentaController extends Controller
             foreach ($validatedData['pagos'] as $pago) {
                 if (!empty($pago['cuenta_id'])) {
                     $cuenta = Cuenta::find($pago['cuenta_id']);
-                    if ($user->role !== 'admin' && !$user->cuentas->contains('id', $pago['cuenta_id'])) {
+                    if (!in_array($user->role, ['admin', 'moderador']) && !$user->cuentas->contains('id', $pago['cuenta_id'])) {
                         throw new \Exception('No tienes acceso a la cuenta seleccionada');
                     }
                 }

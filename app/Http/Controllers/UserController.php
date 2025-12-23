@@ -63,13 +63,13 @@ class UserController extends Controller
             'role' => $validated['role'],
         ]);
 
-        // Asignar almacenes
-        if (!empty($validated['almacenes'])) {
+        // Asignar almacenes (solo si no es admin/moderador)
+        if (!in_array($validated['role'], ['admin', 'moderador']) && !empty($validated['almacenes'])) {
             $user->almacenes()->sync($validated['almacenes']);
         }
 
-        // Asignar cuentas
-        if (!empty($validated['cuentas'])) {
+        // Asignar cuentas (solo si no es admin/moderador)
+        if (!in_array($validated['role'], ['admin', 'moderador']) && !empty($validated['cuentas'])) {
             $user->cuentas()->sync($validated['cuentas']);
         }
 
@@ -129,11 +129,19 @@ class UserController extends Controller
             'password' => $validated['password'] ? Hash::make($validated['password']) : $user->password,
         ]);
 
-        // Actualizar almacenes
-        $user->almacenes()->sync($validated['almacenes'] ?? []);
+        // Actualizar almacenes (solo si no es admin/moderador)
+        if (!in_array($validated['role'], ['admin', 'moderador'])) {
+            $user->almacenes()->sync($validated['almacenes'] ?? []);
+        } else {
+            $user->almacenes()->detach();
+        }
 
-        // Actualizar cuentas
-        $user->cuentas()->sync($validated['cuentas'] ?? []);
+        // Actualizar cuentas (solo si no es admin/moderador)
+        if (!in_array($validated['role'], ['admin', 'moderador'])) {
+            $user->cuentas()->sync($validated['cuentas'] ?? []);
+        } else {
+            $user->cuentas()->detach();
+        }
 
         return redirect()->route('empleados.index');
     }
