@@ -104,7 +104,10 @@ class CategoriaController extends Controller
      */
     public function destroy(Categoria $categoria)
     {
+        if (auth()->user()->role !== 'admin') {
+            return redirect()->back()->with('error', 'ud no tiene acceso para esta acción');
+        }
         $categoria->delete();
-        return redirect()->route('categorias.index');
+        return redirect()->route('categorias.index')->with('success', 'Categoría eliminada exitosamente.');
     }
 }

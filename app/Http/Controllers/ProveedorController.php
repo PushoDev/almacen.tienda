@@ -161,6 +161,9 @@ class ProveedorController extends Controller
      */
     public function destroy(Proveedor $proveedor)
     {
+        if (auth()->user()->role !== 'admin') {
+            return redirect()->back()->with('error', 'ud no tiene acceso para esta acción');
+        }
         $proveedor->delete();
         return redirect()->route('proveedores.index')->with('success', 'Proveedor eliminado exitosamente.');
     }

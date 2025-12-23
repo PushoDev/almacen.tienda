@@ -216,6 +216,9 @@ class CuentaController extends Controller
      */
     public function destroy(Cuenta $cuenta)
     {
+        if (auth()->user()->role !== 'admin') {
+            return redirect()->back()->with('error', 'ud no tiene acceso para esta acción');
+        }
         $cuenta->delete();
         return redirect()->route('cuentas.index')->with('success', 'Cuenta eliminada exitosamente.');
     }
