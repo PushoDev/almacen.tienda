@@ -455,26 +455,25 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaConMoneda[] })
                                                         </Tooltip>
                                                     </TooltipProvider>
                                                     <AlertDialogContent>
-                                                            <AlertDialogHeader>
-                                                                <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
-                                                                <AlertDialogDescription>
-                                                                    Esta acción eliminará permanentemente la cuenta "{cuenta.nombre_cuenta}". Esta
-                                                                    acción no se puede deshacer.
-                                                                </AlertDialogDescription>
-                                                            </AlertDialogHeader>
-                                                            <AlertDialogFooter>
-                                                                <AlertDialogCancel className="cursor-pointer">Cancelar</AlertDialogCancel>
-                                                                <AlertDialogAction
-                                                                    onClick={() => deleteCuenta(cuenta.id)}
-                                                                    className="cursor-pointer bg-red-600 hover:bg-red-700"
-                                                                >
-                                                                    Eliminar
-                                                                </AlertDialogAction>
-                                                            </AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
-                                                </div>
-                                            )}
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                Esta acción eliminará permanentemente la cuenta "{cuenta.nombre_cuenta}". Esta acción
+                                                                no se puede deshacer.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel className="cursor-pointer">Cancelar</AlertDialogCancel>
+                                                            <AlertDialogAction
+                                                                onClick={() => deleteCuenta(cuenta.id)}
+                                                                className="cursor-pointer bg-red-600 hover:bg-red-700"
+                                                            >
+                                                                Eliminar
+                                                            </AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 ))}
