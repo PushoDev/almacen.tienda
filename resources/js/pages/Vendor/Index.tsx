@@ -513,7 +513,6 @@ export default function PuntoVentaOficial({
             !currentPayment.method ||
             !currentPayment.moneda_id ||
             (currentPayment.method === 'transferencia' && !currentPayment.via) ||
-            (currentPayment.method === 'transferencia' && !currentPayment.referencia) ||
             !currentPayment.amount ||
             parseFloat(currentPayment.amount) <= 0 ||
             (!currentPayment.cuenta_id && !currentPayment.cliente_id) ||
@@ -1035,7 +1034,7 @@ export default function PuntoVentaOficial({
                                                                     <Button
                                                                         variant="secondary"
                                                                         size="icon"
-                                                                        className="h-12 w-12 rounded-full shadow-lg transition-transform hover:scale-110"
+                                                                        className="h-12 w-12 cursor-pointer rounded-full shadow-lg transition-transform hover:scale-110"
                                                                         title="Vista Rápida"
                                                                         onClick={(e) => {
                                                                             e.stopPropagation();
@@ -1495,24 +1494,7 @@ export default function PuntoVentaOficial({
                                                                             </div>
                                                                         )}
                                                                     </div>
-                                                                    {currentPayment.method === 'transferencia' && (
-                                                                        <div className="space-y-2">
-                                                                            <Label>Referencia / Número de Operación</Label>
-                                                                            <Input
-                                                                                value={currentPayment.referencia}
-                                                                                onChange={(e) => {
-                                                                                    console.log('Referencia cambiada:', e.target.value);
-                                                                                    setCurrentPayment({
-                                                                                        ...currentPayment,
-                                                                                        referencia: e.target.value,
-                                                                                    });
-                                                                                }}
-                                                                                placeholder="Ingrese el número de referencia"
-                                                                                required
-                                                                                className="h-10"
-                                                                            />
-                                                                        </div>
-                                                                    )}
+
                                                                     <div className="space-y-2">
                                                                         <Label>Monto a Pagar</Label>
                                                                         <div className="grid gap-4 md:grid-cols-4">
@@ -1568,8 +1550,6 @@ export default function PuntoVentaOficial({
                                                                                         !currentPayment.moneda_id ||
                                                                                         (currentPayment.method === 'transferencia' &&
                                                                                             !currentPayment.via) ||
-                                                                                        (currentPayment.method === 'transferencia' &&
-                                                                                            !currentPayment.referencia) ||
                                                                                         !currentPayment.amount ||
                                                                                         parseFloat(currentPayment.amount) <= 0 ||
                                                                                         (!currentPayment.cuenta_id && !currentPayment.cliente_id)

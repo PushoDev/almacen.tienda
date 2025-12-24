@@ -575,7 +575,7 @@ class VentaController extends Controller
             // ✅ CAMBIO 1: Hacer nullable cuenta_id y agregar cliente_id
             'pagos.*.cuenta_id' => 'nullable|exists:cuentas,id',
             'pagos.*.cliente_id' => 'nullable|exists:clientes,id',
-            'pagos.*.referencia' => 'nullable|string|required_if:pagos.*.metodo,transferencia',
+            'pagos.*.referencia' => 'nullable|string',
             'moneda_principal_id' => 'required|exists:monedas,id',
             'tasa_cambio_principal' => 'required|numeric|min:0.0001',
             'tasa_aplicada_venta' => 'nullable|numeric|min:0.0001',
