@@ -16,8 +16,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
-import { ProveedorProps, type BreadcrumbItem } from '@/types';
-import { Head, Link, router } from '@inertiajs/react';
+import { ProveedorProps, type BreadcrumbItem, type PageProps } from '@/types';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     AlertCircle,
     ArrowDownCircle,
@@ -53,6 +53,9 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function ProveedoresPage({ proveedores }: { proveedores: ProveedorProps[] }) {
+    const { props } = usePage<PageProps>();
+    const isAdmin = props.auth?.user?.role === 'admin';
+
     // Eliminar Proveedor
     const deleteProveedor = (id: number) => {
         router.delete(route('proveedores.destroy', { proveedor: id }), {
@@ -339,6 +342,12 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                                                             variant="ghost"
                                                             className="hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white"
                                                             title="Eliminar proveedor"
+                                                            onClick={(e) => {
+                                                                if (!isAdmin) {
+                                                                    e.preventDefault();
+                                                                    toast.error('ud no tiene acceso para esta acción');
+                                                                }
+                                                            }}
                                                         >
                                                             <Trash2 size={16} />
                                                         </Button>
