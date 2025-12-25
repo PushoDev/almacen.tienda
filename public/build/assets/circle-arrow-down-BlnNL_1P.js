@@ -1,5 +1,0 @@
-<<<<<<<< HEAD:public/build/assets/circle-arrow-down-BlnNL_1P.js
-import{c}from"./createLucideIcon-BgpvJBVF.js";const o=[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"M12 8v8",key:"napkw2"}],["path",{d:"m8 12 4 4 4-4",key:"k98ssh"}]],e=c("circle-arrow-down",o);export{e as C};
-========
-import{c}from"./createLucideIcon-BT9EmzJg.js";const o=[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"M12 8v8",key:"napkw2"}],["path",{d:"m8 12 4 4 4-4",key:"k98ssh"}]],e=c("circle-arrow-down",o);export{e as C};
->>>>>>>> ventas/tasas-temporales:public/build/assets/circle-arrow-down-5lazNizL.js
