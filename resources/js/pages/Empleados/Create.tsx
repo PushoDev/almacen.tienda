@@ -38,7 +38,7 @@ export default function CreateEmpleadoPage({ almacenes, cuentas }: { almacenes: 
         name: '',
         email: '',
         password: '',
-        role: 'vendedor', // Por defecto, el rol es "vendedor"
+        role: 'vendedor' as 'admin' | 'moderador' | 'vendedor', // Tipo explícito para el rol
         almacenes: [] as number[], // IDs de los almacenes seleccionados
         cuentas: [] as number[], // IDs de las cuentas seleccionadas
     });
@@ -122,82 +122,87 @@ export default function CreateEmpleadoPage({ almacenes, cuentas }: { almacenes: 
                             {/* Campo Rol del Empleado */}
                             <div>
                                 <Label htmlFor="role">Rol del Empleado</Label>
-                                <Select value={data.role} onValueChange={(value) => setData('role', value as 'admin' | 'vendedor')}>
+                                <Select value={data.role} onValueChange={(value) => setData('role', value as 'admin' | 'moderador' | 'vendedor')}>
                                     <SelectTrigger>
                                         <SelectValue placeholder="Seleccione un rol" />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="admin">Administrador</SelectItem>
+                                        <SelectItem value="moderador">Moderador</SelectItem>
                                         <SelectItem value="vendedor">Vendedor</SelectItem>
                                     </SelectContent>
                                 </Select>
                                 <InputError message={errors.role} />
                             </div>
 
-                            {/* Campo Almacenes Asignados */}
-                            <div>
-                                <Label>Almacenes Asignados</Label>
-                                <div className="mt-2 space-y-2">
-                                    {almacenes.map((almacen) => (
-                                        <div key={almacen.id} className="flex items-center space-x-2">
+                            {/* Campo Almacenes Asignados (Oculto para Admin/Moderador) */}
+                            {data.role !== 'admin' && data.role !== 'moderador' && (
+                                <div>
+                                    <Label>Almacenes Asignados</Label>
+                                    <div className="mt-2 space-y-2">
+                                        {almacenes.map((almacen) => (
+                                            <div key={almacen.id} className="flex items-center space-x-2">
+                                                <Checkbox
+                                                    id={`almacen-${almacen.id}`}
+                                                    checked={data.almacenes.includes(almacen.id)}
+                                                    onCheckedChange={(checked) => {
+                                                        if (checked) {
+                                                            setData('almacenes', [...data.almacenes, almacen.id]);
+                                                        } else {
+                                                            setData(
+                                                                'almacenes',
+                                                                data.almacenes.filter((id) => id !== almacen.id),
+                                                            );
+                                                        }
+                                                    }}
+                                                />
+                                                <Label htmlFor={`almacen-${almacen.id}`}>{almacen.nombre_almacen}</Label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <InputError message={errors.almacenes} />
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Sección de Cuentas (Oculto para Admin/Moderador) */}
+                    {data.role !== 'admin' && data.role !== 'moderador' && (
+                        <div className="border-t border-gray-200 pt-6">
+                            <h3 className="mb-4 text-lg font-semibold">Cuentas Monetarias Asignadas</h3>
+                            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                                {cuentas.length > 0 ? (
+                                    cuentas.map((cuenta) => (
+                                        <div key={cuenta.id} className="flex items-center space-x-2 rounded-lg border border-gray-200 p-3">
                                             <Checkbox
-                                                id={`almacen-${almacen.id}`}
-                                                checked={data.almacenes.includes(almacen.id)}
+                                                id={`cuenta-${cuenta.id}`}
+                                                checked={data.cuentas.includes(cuenta.id)}
                                                 onCheckedChange={(checked) => {
                                                     if (checked) {
-                                                        setData('almacenes', [...data.almacenes, almacen.id]);
+                                                        setData('cuentas', [...data.cuentas, cuenta.id]);
                                                     } else {
                                                         setData(
-                                                            'almacenes',
-                                                            data.almacenes.filter((id) => id !== almacen.id),
+                                                            'cuentas',
+                                                            data.cuentas.filter((id) => id !== cuenta.id),
                                                         );
                                                     }
                                                 }}
                                             />
-                                            <Label htmlFor={`almacen-${almacen.id}`}>{almacen.nombre_almacen}</Label>
+                                            <Label htmlFor={`cuenta-${cuenta.id}`} className="flex-1 cursor-pointer">
+                                                <div>
+                                                    <div className="font-medium">{cuenta.nombre_cuenta}</div>
+                                                    <div className="text-sm text-gray-500">{cuenta.tipo_moneda}</div>
+                                                </div>
+                                            </Label>
                                         </div>
-                                    ))}
-                                </div>
-                                <InputError message={errors.almacenes} />
+                                    ))
+                                ) : (
+                                    <div className="col-span-full text-center text-gray-500">No hay cuentas disponibles</div>
+                                )}
                             </div>
+                            <InputError message={errors.cuentas} />
                         </div>
-                    </div>
-
-                    {/* Sección de Cuentas */}
-                    <div className="border-t border-gray-200 pt-6">
-                        <h3 className="mb-4 text-lg font-semibold">Cuentas Monetarias Asignadas</h3>
-                        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                            {cuentas.length > 0 ? (
-                                cuentas.map((cuenta) => (
-                                    <div key={cuenta.id} className="flex items-center space-x-2 rounded-lg border border-gray-200 p-3">
-                                        <Checkbox
-                                            id={`cuenta-${cuenta.id}`}
-                                            checked={data.cuentas.includes(cuenta.id)}
-                                            onCheckedChange={(checked) => {
-                                                if (checked) {
-                                                    setData('cuentas', [...data.cuentas, cuenta.id]);
-                                                } else {
-                                                    setData(
-                                                        'cuentas',
-                                                        data.cuentas.filter((id) => id !== cuenta.id),
-                                                    );
-                                                }
-                                            }}
-                                        />
-                                        <Label htmlFor={`cuenta-${cuenta.id}`} className="flex-1 cursor-pointer">
-                                            <div>
-                                                <div className="font-medium">{cuenta.nombre_cuenta}</div>
-                                                <div className="text-sm text-gray-500">{cuenta.tipo_moneda}</div>
-                                            </div>
-                                        </Label>
-                                    </div>
-                                ))
-                            ) : (
-                                <div className="col-span-full text-center text-gray-500">No hay cuentas disponibles</div>
-                            )}
-                        </div>
-                        <InputError message={errors.cuentas} />
-                    </div>
+                    )}
 
                     {/* Botón Enviar */}
                     <div className="flex justify-end">

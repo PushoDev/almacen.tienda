@@ -15,8 +15,8 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
-import { CategoriasProps, type BreadcrumbItem } from '@/types';
-import { Head, Link, router } from '@inertiajs/react';
+import { CategoriasProps, type BreadcrumbItem, type PageProps } from '@/types';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { CheckIcon, Edit3, FileText, Info, ListCheck, MessageCircleWarningIcon, MessageSquareDiff, Sheet, Tag, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast, Toaster } from 'sonner';
@@ -33,11 +33,24 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function CategoriasPage({ categorias }: { categorias: CategoriasProps[] }) {
+    const { props } = usePage<PageProps>();
+    const isAdmin = props.auth?.user?.role === 'admin';
+
     // Eliminar Categoría
     const deleteCategoria = (id: number) => {
+        if (!isAdmin) {
+            toast.error('ud no tiene acceso para esta acción');
+            return;
+        }
+
         router.delete(route('categorias.destroy', { categoria: id }), {
-            onSuccess: () => {
-                toast.success('Categoría eliminada correctamente');
+            onSuccess: (page) => {
+                const flash = page.props.flash as any;
+                if (flash.error) {
+                    toast.error(flash.error);
+                } else {
+                    toast.success('Categoría eliminada correctamente');
+                }
             },
             onError: () => {
                 toast.error('Error en el proceso, inténtelo nuevamente');
@@ -161,6 +174,12 @@ export default function CategoriasPage({ categorias }: { categorias: CategoriasP
                                                 <Button
                                                     variant="ghost"
                                                     className="hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white"
+                                                    onClick={(e) => {
+                                                        if (!isAdmin) {
+                                                            e.preventDefault();
+                                                            toast.error('ud no tiene acceso para esta acción');
+                                                        }
+                                                    }}
                                                 >
                                                     <Trash2 />
                                                 </Button>

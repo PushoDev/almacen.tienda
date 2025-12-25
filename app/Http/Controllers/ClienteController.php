@@ -152,6 +152,10 @@ class ClienteController extends Controller
      */
     public function destroy(Cliente $cliente)
     {
+        if (auth()->user()->role !== 'admin') {
+            return redirect()->back()->with('error', 'ud no tiene acceso para esta acción');
+        }
+
         $cliente->delete();
 
         return redirect()->route('clientes.index')->with('success', 'Cliente eliminado exitosamente.');

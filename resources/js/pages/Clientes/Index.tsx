@@ -10,7 +10,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
+import { Badge } from '@/Components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -19,8 +19,8 @@ import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
-import { ClienteProps, type BreadcrumbItem } from '@/types';
-import { Head, Link, router } from '@inertiajs/react';
+import { ClienteProps, type BreadcrumbItem, type PageProps } from '@/types';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     AlertCircle,
     ArrowDownCircle,
@@ -58,6 +58,9 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function ClientesPage({ clientes }: { clientes: ClienteProps[] }) {
+    const { props } = usePage<PageProps>();
+    const isAdmin = props.auth?.user?.role === 'admin';
+
     const deleteCliente = (id: number) => {
         router.delete(route('clientes.destroy', { cliente: id }), {
             onSuccess: () => {
@@ -517,6 +520,12 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                                                                 variant="ghost"
                                                                                 size="sm"
                                                                                 className="h-8 w-8 cursor-pointer p-0 text-red-600 hover:text-red-700"
+                                                                                onClick={(e) => {
+                                                                                    if (!isAdmin) {
+                                                                                        e.preventDefault();
+                                                                                        toast.error('ud no tiene acceso para esta acción');
+                                                                                    }
+                                                                                }}
                                                                             >
                                                                                 <Trash2 size={14} />
                                                                             </Button>

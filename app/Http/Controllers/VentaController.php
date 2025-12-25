@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Notification;
 use App\Notifications\VentaCreadaNotification;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\Log;
 
 class VentaController extends Controller
 {
@@ -99,9 +100,9 @@ class VentaController extends Controller
             return response()->json(['error' => 'Usuario no autenticado'], 401);
         }
 
-        $almacenes = $user->role === 'admin'
+        $almacenes = in_array($user->role, ['admin', 'moderador'])
             ? Almacen::select('id', 'nombre_almacen')->get()
-            : $user->almacenes()->select('id', 'nombre_almacen')->get();
+            : ($user ? $user->almacenes()->select('id', 'nombre_almacen')->get() : collect());
 
         return response()->json($almacenes);
     }
@@ -117,7 +118,7 @@ class VentaController extends Controller
         }
 
         // Validación de acceso al almacén (solo para no-admins)
-        if ($user->role !== 'admin' && !$user->almacenes->contains('id', $id)) {
+        if (!in_array($user->role, ['admin', 'moderador']) && !$user->almacenes->contains('id', $id)) {
             return response()->json(['error' => 'Acceso denegado al almacén'], 403);
         }
 
@@ -144,6 +145,8 @@ class VentaController extends Controller
                     'id' => $producto->id,
                     'nombre_producto' => $producto->nombre_producto,
                     'marca_producto' => $producto->marca_producto,
+                    'modelo_producto' => $producto->modelo_producto,
+                    'capacidad_producto' => $producto->capacidad_producto,
                     'categoria_nombre' => $producto->categoria?->nombre_categoria ?? 'Sin categoría',
                     'precio_compra_producto' => $producto->precio_compra_producto,
                     'stock_disponible' => $almacen?->pivot->cantidad ?? 0,
@@ -181,7 +184,7 @@ class VentaController extends Controller
         $query = Cuenta::with('moneda')
             ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta');
 
-        if ($user->role !== 'admin') {
+        if (!in_array($user->role, ['admin', 'moderador'])) {
             $query->whereHas('users', function ($q) use ($user) {
                 $q->where('user_id', $user->id);
             });
@@ -246,7 +249,7 @@ class VentaController extends Controller
             ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta');
 
         // Filtrar por usuario si no es admin
-        if ($user->role !== 'admin') {
+        if (!in_array($user->role, ['admin', 'moderador'])) {
             $query->whereHas('users', function ($q) use ($user) {
                 $q->where('user_id', $user->id);
             });
@@ -315,7 +318,7 @@ class VentaController extends Controller
         $query = Venta::query()->where('estado', 'completada');
 
         // Filtrar por rol de usuario
-        if ($user->role !== 'admin') {
+        if (!in_array($user->role, ['admin', 'moderador'])) {
             $query->where('user_id', $user->id);
         }
 
@@ -377,7 +380,7 @@ class VentaController extends Controller
         $cuentasQuery = Cuenta::with('moneda')
             ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta');
 
-        if ($user->role !== 'admin') {
+        if (!in_array($user->role, ['admin', 'moderador'])) {
             $cuentasQuery->whereHas('users', function ($q) use ($user) {
                 $q->where('user_id', $user->id);
             });
@@ -398,7 +401,7 @@ class VentaController extends Controller
         return Inertia::render('Vendor/Index', [
             'meta' => [
                 'role_usuario' => $user->role,
-                'almacenes_usuario' => $user->role === 'admin'
+                'almacenes_usuario' => in_array($user->role, ['admin', 'moderador'])
                     ? Almacen::select('id', 'nombre_almacen')->get()->map(fn($a) => ['id' => (string)$a->id, 'nombre' => $a->nombre_almacen])
                     : $user->almacenes->map(fn($a) => ['id' => (string)$a->id, 'nombre' => $a->nombre_almacen]),
                 'cuentas_usuario' => $cuentas,
@@ -572,7 +575,7 @@ class VentaController extends Controller
             // ✅ CAMBIO 1: Hacer nullable cuenta_id y agregar cliente_id
             'pagos.*.cuenta_id' => 'nullable|exists:cuentas,id',
             'pagos.*.cliente_id' => 'nullable|exists:clientes,id',
-            'pagos.*.referencia' => 'nullable|string|required_if:pagos.*.metodo,transferencia',
+            'pagos.*.referencia' => 'nullable|string',
             'moneda_principal_id' => 'required|exists:monedas,id',
             'tasa_cambio_principal' => 'required|numeric|min:0.0001',
             'tasa_aplicada_venta' => 'nullable|numeric|min:0.0001',
@@ -600,7 +603,7 @@ class VentaController extends Controller
                 throw new \Exception('Usuario no autenticado');
             }
 
-            if ($user->role !== 'admin' && !$user->almacenes->contains('id', $validatedData['almacen_id'])) {
+            if (!in_array($user->role, ['admin', 'moderador']) && !$user->almacenes->contains('id', $validatedData['almacen_id'])) {
                 throw new \Exception('No tienes acceso a este almacén');
             }
             $total_ganancia = 0;
@@ -641,7 +644,7 @@ class VentaController extends Controller
             foreach ($validatedData['pagos'] as $pago) {
                 if (!empty($pago['cuenta_id'])) {
                     $cuenta = Cuenta::find($pago['cuenta_id']);
-                    if ($user->role !== 'admin' && !$user->cuentas->contains('id', $pago['cuenta_id'])) {
+                    if (!in_array($user->role, ['admin', 'moderador']) && !$user->cuentas->contains('id', $pago['cuenta_id'])) {
                         throw new \Exception('No tienes acceso a la cuenta seleccionada');
                     }
                 }
@@ -889,8 +892,8 @@ class VentaController extends Controller
         $query = Venta::with(['cliente', 'almacen', 'usuario', 'pagos', 'moneda', 'destinatario', 'monedaCobro'])
             ->withCount('detalles');
 
-        // Filtrar por usuario (excepto admin)
-        if ($user->role !== 'admin') {
+        // Filtrar por usuario (excepto admin y moderador)
+        if (!in_array($user->role, ['admin', 'moderador'])) {
             $query->where('user_id', $user->id);
         }
 
@@ -964,9 +967,9 @@ class VentaController extends Controller
             });
 
         // Obtener almacenes para filtros
-        $almacenes = $user->role === 'admin'
+        $almacenes = in_array($user->role, ['admin', 'moderador'])
             ? Almacen::select('id', 'nombre_almacen')->get()
-            : $user->almacenes()->select('id', 'nombre_almacen')->get();
+            : ($user ? $user->almacenes()->select('id', 'nombre_almacen')->get() : collect());
 
         return Inertia::render('Vendor/Listado', [
             'ventas' => $ventas,

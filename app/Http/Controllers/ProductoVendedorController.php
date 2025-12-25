@@ -22,7 +22,7 @@ class ProductoVendedorController extends Controller
 
         $almacenesQuery = Almacen::query();
 
-        if ($user->role !== 'admin') {
+        if (!in_array($user->role, ['admin', 'moderador'])) {
             $almacenesIds = $user->almacenes->pluck('id');
             $almacenesQuery->whereIn('id', $almacenesIds);
         }
@@ -56,6 +56,8 @@ class ProductoVendedorController extends Controller
                     'id' => $producto->id,
                     'nombre_producto' => $producto->nombre_producto,
                     'marca_producto' => $producto->marca_producto,
+                    'modelo_producto' => $producto->modelo_producto,
+                    'capacidad_producto' => $producto->capacidad_producto,
                     'categoria' => $producto->categoria->nombre_categoria ?? 'Sin categoría',
                     'precio_compra' => $producto->precio_compra_producto,
                     'stock_almacen' => $stockAlmacen,
@@ -100,7 +102,7 @@ class ProductoVendedorController extends Controller
         $precioVenta = round($validated['precio_venta'], 2);
         $ganancia = round($precioVenta - $producto->precio_compra_producto, 2);
 
-        if ($user->role !== 'admin' && !$user->almacenes->contains($almacenId)) {
+        if (!in_array($user->role, ['admin', 'moderador']) && !$user->almacenes->contains($almacenId)) {
             return response()->json([
                 'error' => 'No tienes acceso a este almacén.',
             ], 403);

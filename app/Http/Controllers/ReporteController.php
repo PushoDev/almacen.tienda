@@ -501,7 +501,7 @@ class ReporteController extends Controller
         // --- VENTAS ---
         $ventasQuery = Venta::query()->where('estado', 'completada');
 
-        if ($user->role !== 'admin') {
+        if (!in_array($user->role, ['admin', 'moderador'])) {
             $ventasQuery->where('user_id', $user->id);
         }
 
@@ -520,7 +520,7 @@ class ReporteController extends Controller
         // --- COMPRAS ---
         // (Solo admin suele ver compras, o restringir según permisos)
         $comprasReporte = null;
-        if ($user->role === 'admin') {
+        if (in_array($user->role, ['admin', 'moderador'])) {
             $comprasQuery = Compra::query();
             $this->aplicarFiltroFecha($comprasQuery, $periodo, 'fecha_compra');
 

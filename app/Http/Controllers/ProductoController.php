@@ -260,6 +260,10 @@ class ProductoController extends Controller
      */
     public function destroy(Producto $producto)
     {
+        if (auth()->user()->role !== 'admin') {
+            return redirect()->back()->with('error', 'ud no tiene acceso para esta acción');
+        }
+
         DB::beginTransaction();
         try {
             // Eliminar imagen del producto si no es la default

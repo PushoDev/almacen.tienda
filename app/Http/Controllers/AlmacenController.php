@@ -15,14 +15,14 @@ class AlmacenController extends Controller
      */
     public function index()
     {
-        $almacenes = Auth::user()->role === 'admin'
+        $almacenes = in_array(Auth::user()->role, ['admin', 'moderador'])
             ? Almacen::withCount('productos')->get()
             : Auth::user()->almacenes()->withCount('productos')->get();
 
         return Inertia::render('Almacenes/index', [
             'almacenes' => $almacenes,
             'permisos' => [
-                'crear' => Auth::user()->role === 'admin'
+                'crear' => in_array(Auth::user()->role, ['admin', 'moderador'])
             ]
         ]);
     }

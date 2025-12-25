@@ -15,7 +15,9 @@ class CuentaController extends Controller
      */
     public function index()
     {
-        $cuentas = Cuenta::with('moneda')->get(); // Cargar la relación con moneda
+        $cuentas = in_array(auth()->user()->role, ['admin', 'moderador'])
+            ? Cuenta::with('moneda')->get()
+            : auth()->user()->cuentas()->with('moneda')->get(); // Cargar la relación con moneda y filtrar por usuario si es vendedor
 
         return Inertia::render('Cuentas/Index', [
             'cuentas' => $cuentas->map(function ($cuenta) {
@@ -214,6 +216,9 @@ class CuentaController extends Controller
      */
     public function destroy(Cuenta $cuenta)
     {
+        if (auth()->user()->role !== 'admin') {
+            return redirect()->back()->with('error', 'ud no tiene acceso para esta acción');
+        }
         $cuenta->delete();
         return redirect()->route('cuentas.index')->with('success', 'Cuenta eliminada exitosamente.');
     }

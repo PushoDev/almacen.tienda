@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
   "_AreaChart-DSmtbgqI.js": {
     "file": "assets/AreaChart-DSmtbgqI.js",
     "name": "AreaChart",
@@ -101,6 +102,110 @@
   },
   "_app-logo-icon-DLLo35kt.js": {
     "file": "assets/app-logo-icon-DLLo35kt.js",
+=======
+  "_AreaChart-D5liKtR9.js": {
+    "file": "assets/AreaChart-D5liKtR9.js",
+    "name": "AreaChart",
+    "imports": [
+      "resources/js/app.tsx",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_chart-Cz2VIrrc.js",
+      "_CartesianChart-C3tXm7UN.js"
+    ]
+  },
+  "_BarChart-C-TEK5tu.js": {
+    "file": "assets/BarChart-C-TEK5tu.js",
+    "name": "BarChart",
+    "imports": [
+      "_chart-Cz2VIrrc.js",
+      "resources/js/app.tsx",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_tooltipContext-CYC5hstS.js",
+      "_CartesianChart-C3tXm7UN.js"
+    ]
+  },
+  "_CartesianChart-C3tXm7UN.js": {
+    "file": "assets/CartesianChart-C3tXm7UN.js",
+    "name": "CartesianChart",
+    "imports": [
+      "resources/js/app.tsx",
+      "_chart-Cz2VIrrc.js",
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_CartesianGrid-Xs6dufED.js": {
+    "file": "assets/CartesianGrid-Xs6dufED.js",
+    "name": "CartesianGrid",
+    "imports": [
+      "resources/js/app.tsx",
+      "_chart-Cz2VIrrc.js",
+      "_CartesianChart-C3tXm7UN.js"
+    ]
+  },
+  "_Combination-eBkSrgAs.js": {
+    "file": "assets/Combination-eBkSrgAs.js",
+    "name": "Combination",
+    "imports": [
+      "resources/js/app.tsx",
+      "_index-CZbz9K4b.js",
+      "_index-BGBHT7Hv.js"
+    ]
+  },
+  "_PieChart-CADKQnrx.js": {
+    "file": "assets/PieChart-CADKQnrx.js",
+    "name": "PieChart",
+    "imports": [
+      "resources/js/app.tsx",
+      "_chart-Cz2VIrrc.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_tooltipContext-CYC5hstS.js"
+    ]
+  },
+  "_accordion-3heiHUoB.js": {
+    "file": "assets/accordion-3heiHUoB.js",
+    "name": "accordion",
+    "imports": [
+      "resources/js/app.tsx",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_index-BGBHT7Hv.js",
+      "_proxy-DQuR3cjM.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_chevron-down-C7VKRoni.js"
+    ]
+  },
+  "_alert-DVlyq1fq.js": {
+    "file": "assets/alert-DVlyq1fq.js",
+    "name": "alert",
+    "imports": [
+      "resources/js/app.tsx",
+      "_index-X9nOMuEy.js",
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_alert-dialog-CBvRsM4A.js": {
+    "file": "assets/alert-dialog-CBvRsM4A.js",
+    "name": "alert-dialog",
+    "imports": [
+      "resources/js/app.tsx",
+      "_index-CZbz9K4b.js",
+      "_index-BGBHT7Hv.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_button-CHP9xHZG.js"
+    ]
+  },
+  "_app-layout-B1zc1n1V.js": {
+    "file": "assets/app-layout-B1zc1n1V.js",
+    "name": "app-layout",
+    "imports": [
+      "resources/js/app.tsx",
+      "_app-sidebar-layout-BY_eDgjo.js"
+    ]
+  },
+  "_app-logo-icon-XN1q-dsK.js": {
+    "file": "assets/app-logo-icon-XN1q-dsK.js",
+>>>>>>> ventas/tasas-temporales
     "name": "app-logo-icon",
     "imports": [
       "resources/js/app.tsx"
@@ -109,6 +214,7 @@
       "assets/logo-BJ2PxAIj.png"
     ]
   },
+<<<<<<< HEAD
   "_app-sidebar-layout-Bb26aI8U.js": {
     "file": "assets/app-sidebar-layout-Bb26aI8U.js",
     "name": "app-sidebar-layout",
@@ -339,11 +445,244 @@
   },
   "_createLucideIcon-BgpvJBVF.js": {
     "file": "assets/createLucideIcon-BgpvJBVF.js",
+=======
+  "_app-sidebar-layout-BY_eDgjo.js": {
+    "file": "assets/app-sidebar-layout-BY_eDgjo.js",
+    "name": "app-sidebar-layout",
+    "imports": [
+      "resources/js/app.tsx",
+      "_index-X9nOMuEy.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_index-BGBHT7Hv.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ]
+  },
+  "_archive-D-uZUtS5.js": {
+    "file": "assets/archive-D-uZUtS5.js",
+    "name": "archive",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_arrow-left-Eb1txooS.js": {
+    "file": "assets/arrow-left-Eb1txooS.js",
+    "name": "arrow-left",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_arrow-right-C_BYwQxU.js": {
+    "file": "assets/arrow-right-C_BYwQxU.js",
+    "name": "arrow-right",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_auth-layout-BJrO17rK.js": {
+    "file": "assets/auth-layout-BJrO17rK.js",
+    "name": "auth-layout",
+    "imports": [
+      "resources/js/app.tsx",
+      "_app-logo-icon-XN1q-dsK.js"
+    ]
+  },
+  "_badge-Cyqjs09m.js": {
+    "file": "assets/badge-Cyqjs09m.js",
+    "name": "badge",
+    "imports": [
+      "resources/js/app.tsx",
+      "_index-X9nOMuEy.js",
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_banknote-BZDev0yK.js": {
+    "file": "assets/banknote-BZDev0yK.js",
+    "name": "banknote",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_book-user-BRkKbL2K.js": {
+    "file": "assets/book-user-BRkKbL2K.js",
+    "name": "book-user",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_boxes-C4ThtFo0.js": {
+    "file": "assets/boxes-C4ThtFo0.js",
+    "name": "boxes",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_building-0ofvyPO7.js": {
+    "file": "assets/building-0ofvyPO7.js",
+    "name": "building",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_button-CHP9xHZG.js": {
+    "file": "assets/button-CHP9xHZG.js",
+    "name": "button",
+    "imports": [
+      "resources/js/app.tsx",
+      "_index-X9nOMuEy.js",
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_calendar-CBn_hLXB.js": {
+    "file": "assets/calendar-CBn_hLXB.js",
+    "name": "calendar",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_calendar-C_03h6hX.js": {
+    "file": "assets/calendar-C_03h6hX.js",
+    "name": "calendar",
+    "imports": [
+      "resources/js/app.tsx",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_button-CHP9xHZG.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_chevron-down-C7VKRoni.js"
+    ]
+  },
+  "_calendar-clock-BofHSmTC.js": {
+    "file": "assets/calendar-clock-BofHSmTC.js",
+    "name": "calendar-clock",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_card-CKJiSflu.js": {
+    "file": "assets/card-CKJiSflu.js",
+    "name": "card",
+    "imports": [
+      "resources/js/app.tsx",
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_chart-Cz2VIrrc.js": {
+    "file": "assets/chart-Cz2VIrrc.js",
+    "name": "chart",
+    "imports": [
+      "resources/js/app.tsx",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-CRTbuFd_.js"
+    ]
+  },
+  "_chart-no-axes-column-increasing-DvHLzWxW.js": {
+    "file": "assets/chart-no-axes-column-increasing-DvHLzWxW.js",
+    "name": "chart-no-axes-column-increasing",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_check-QF3eLHSy.js": {
+    "file": "assets/check-QF3eLHSy.js",
+    "name": "check",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_checkbox-Ckm_MixW.js": {
+    "file": "assets/checkbox-Ckm_MixW.js",
+    "name": "checkbox",
+    "imports": [
+      "resources/js/app.tsx",
+      "_index-BGBHT7Hv.js",
+      "_index-CZbz9K4b.js",
+      "_index-BvWQzC-g.js",
+      "_proxy-DQuR3cjM.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_check-QF3eLHSy.js"
+    ]
+  },
+  "_chevron-down-C7VKRoni.js": {
+    "file": "assets/chevron-down-C7VKRoni.js",
+    "name": "chevron-down",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_circle-alert-Bm_9_OXq.js": {
+    "file": "assets/circle-alert-Bm_9_OXq.js",
+    "name": "circle-alert",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_circle-arrow-down-5lazNizL.js": {
+    "file": "assets/circle-arrow-down-5lazNizL.js",
+    "name": "circle-arrow-down",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_circle-check-Bjr_7ZGP.js": {
+    "file": "assets/circle-check-Bjr_7ZGP.js",
+    "name": "circle-check",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_circle-plus-BV2fCdC9.js": {
+    "file": "assets/circle-plus-BV2fCdC9.js",
+    "name": "circle-plus",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_circle-x-Ur0lIpLe.js": {
+    "file": "assets/circle-x-Ur0lIpLe.js",
+    "name": "circle-x",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_clock-FJx6Tsrw.js": {
+    "file": "assets/clock-FJx6Tsrw.js",
+    "name": "clock",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_coins-BzpCoRsL.js": {
+    "file": "assets/coins-BzpCoRsL.js",
+    "name": "coins",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_computer-BquVrfSB.js": {
+    "file": "assets/computer-BquVrfSB.js",
+    "name": "computer",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_createLucideIcon-BT9EmzJg.js": {
+    "file": "assets/createLucideIcon-BT9EmzJg.js",
+>>>>>>> ventas/tasas-temporales
     "name": "createLucideIcon",
     "imports": [
       "resources/js/app.tsx"
     ]
   },
+<<<<<<< HEAD
   "_credit-card-B2UPtAG4.js": {
     "file": "assets/credit-card-B2UPtAG4.js",
     "name": "credit-card",
@@ -416,11 +755,86 @@
   },
   "_heading-small-D_0v_wpR.js": {
     "file": "assets/heading-small-D_0v_wpR.js",
+=======
+  "_credit-card-DCy1PpVp.js": {
+    "file": "assets/credit-card-DCy1PpVp.js",
+    "name": "credit-card",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_cursor-BhDD5Yjt.js": {
+    "file": "assets/cursor-BhDD5Yjt.js",
+    "name": "cursor",
+    "imports": [
+      "resources/js/app.tsx",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_scroll-B5hnrIvv.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_proxy-DQuR3cjM.js"
+    ]
+  },
+  "_dialog-BLF0yrmn.js": {
+    "file": "assets/dialog-BLF0yrmn.js",
+    "name": "dialog",
+    "imports": [
+      "resources/js/app.tsx",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_x-BDZNoDhO.js"
+    ]
+  },
+  "_dollar-sign-BOV3h1Hu.js": {
+    "file": "assets/dollar-sign-BOV3h1Hu.js",
+    "name": "dollar-sign",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_eye-CttA2jiv.js": {
+    "file": "assets/eye-CttA2jiv.js",
+    "name": "eye",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_file-box-CtsDyt26.js": {
+    "file": "assets/file-box-CtsDyt26.js",
+    "name": "file-box",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_funnel-BbhdReZM.js": {
+    "file": "assets/funnel-BbhdReZM.js",
+    "name": "funnel",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_handshake-CeUug0QQ.js": {
+    "file": "assets/handshake-CeUug0QQ.js",
+    "name": "handshake",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_hash-CFZCt5Hj.js": {
+    "file": "assets/hash-CFZCt5Hj.js",
+    "name": "hash",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_heading-small-G6sd1hZd.js": {
+    "file": "assets/heading-small-G6sd1hZd.js",
+>>>>>>> ventas/tasas-temporales
     "name": "heading-small",
     "imports": [
       "resources/js/app.tsx"
     ]
   },
+<<<<<<< HEAD
   "_history-BoNqrtEq.js": {
     "file": "assets/history-BoNqrtEq.js",
     "name": "history",
@@ -452,11 +866,37 @@
   },
   "_index-BukcVp6d.js": {
     "file": "assets/index-BukcVp6d.js",
+=======
+  "_history-DBlSDQQL.js": {
+    "file": "assets/history-DBlSDQQL.js",
+    "name": "history",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_house-DYtF5WMz.js": {
+    "file": "assets/house-DYtF5WMz.js",
+    "name": "house",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_id-card-gQNM_dVN.js": {
+    "file": "assets/id-card-gQNM_dVN.js",
+    "name": "id-card",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_index-BGBHT7Hv.js": {
+    "file": "assets/index-BGBHT7Hv.js",
+>>>>>>> ventas/tasas-temporales
     "name": "index",
     "imports": [
       "resources/js/app.tsx"
     ]
   },
+<<<<<<< HEAD
   "_index-CRkOV7sv.js": {
     "file": "assets/index-CRkOV7sv.js",
     "name": "index",
@@ -468,11 +908,16 @@
   },
   "_index-D2GbZYO5.js": {
     "file": "assets/index-D2GbZYO5.js",
+=======
+  "_index-BvWQzC-g.js": {
+    "file": "assets/index-BvWQzC-g.js",
+>>>>>>> ventas/tasas-temporales
     "name": "index",
     "imports": [
       "resources/js/app.tsx"
     ]
   },
+<<<<<<< HEAD
   "_index-DXpW0lto.js": {
     "file": "assets/index-DXpW0lto.js",
     "name": "index",
@@ -485,11 +930,16 @@
   },
   "_index-DYF7QprV.js": {
     "file": "assets/index-DYF7QprV.js",
+=======
+  "_index-CRTbuFd_.js": {
+    "file": "assets/index-CRTbuFd_.js",
+>>>>>>> ventas/tasas-temporales
     "name": "index",
     "imports": [
       "resources/js/app.tsx"
     ]
   },
+<<<<<<< HEAD
   "_info-Bs9AspGk.js": {
     "file": "assets/info-Bs9AspGk.js",
     "name": "info",
@@ -515,6 +965,60 @@
   },
   "_jspdf.es.min-B7CXr_LZ.js": {
     "file": "assets/jspdf.es.min-B7CXr_LZ.js",
+=======
+  "_index-CZbz9K4b.js": {
+    "file": "assets/index-CZbz9K4b.js",
+    "name": "index",
+    "imports": [
+      "resources/js/app.tsx",
+      "_index-BGBHT7Hv.js"
+    ]
+  },
+  "_index-X9nOMuEy.js": {
+    "file": "assets/index-X9nOMuEy.js",
+    "name": "index",
+    "imports": [
+      "resources/js/app.tsx",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_index-sYi7w4zv.js": {
+    "file": "assets/index-sYi7w4zv.js",
+    "name": "index",
+    "imports": [
+      "resources/js/app.tsx",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_index-BGBHT7Hv.js"
+    ]
+  },
+  "_info-BXCarPHB.js": {
+    "file": "assets/info-BXCarPHB.js",
+    "name": "info",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_input-B48v9S1o.js": {
+    "file": "assets/input-B48v9S1o.js",
+    "name": "input",
+    "imports": [
+      "resources/js/app.tsx",
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_input-error-CLqYq_n6.js": {
+    "file": "assets/input-error-CLqYq_n6.js",
+    "name": "input-error",
+    "imports": [
+      "resources/js/app.tsx",
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_jspdf.es.min-BlClYC3f.js": {
+    "file": "assets/jspdf.es.min-BlClYC3f.js",
+>>>>>>> ventas/tasas-temporales
     "name": "jspdf.es.min",
     "isDynamicEntry": true,
     "imports": [
@@ -526,6 +1030,7 @@
       "node_modules/canvg/lib/index.es.js"
     ]
   },
+<<<<<<< HEAD
   "_label-DUdypUyX.js": {
     "file": "assets/label-DUdypUyX.js",
     "name": "label",
@@ -627,11 +1132,115 @@
   },
   "_placeholder-pattern-DeoOV-2P.js": {
     "file": "assets/placeholder-pattern-DeoOV-2P.js",
+=======
+  "_label-B7HAx3I-.js": {
+    "file": "assets/label-B7HAx3I-.js",
+    "name": "label",
+    "imports": [
+      "resources/js/app.tsx",
+      "_index-X9nOMuEy.js",
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_layout-FzjFk5OV.js": {
+    "file": "assets/layout-FzjFk5OV.js",
+    "name": "layout",
+    "imports": [
+      "resources/js/app.tsx",
+      "_button-CHP9xHZG.js",
+      "_separator-va2nwBxh.js",
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_list-check-BPoikcMc.js": {
+    "file": "assets/list-check-BPoikcMc.js",
+    "name": "list-check",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_loader-circle-DLzECX42.js": {
+    "file": "assets/loader-circle-DLzECX42.js",
+    "name": "loader-circle",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_mail-xdS-yvd2.js": {
+    "file": "assets/mail-xdS-yvd2.js",
+    "name": "mail",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_map-pin-BcEVDdY8.js": {
+    "file": "assets/map-pin-BcEVDdY8.js",
+    "name": "map-pin",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_minus-BbL4WILs.js": {
+    "file": "assets/minus-BbL4WILs.js",
+    "name": "minus",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_package-2-BN2ammDB.js": {
+    "file": "assets/package-2-BN2ammDB.js",
+    "name": "package-2",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_package-NnwdEohU.js": {
+    "file": "assets/package-NnwdEohU.js",
+    "name": "package",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_pen-B0FKbKNm.js": {
+    "file": "assets/pen-B0FKbKNm.js",
+    "name": "pen",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_pen-line-2U_5aaIa.js": {
+    "file": "assets/pen-line-2U_5aaIa.js",
+    "name": "pen-line",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_phone-B0I0tY62.js": {
+    "file": "assets/phone-B0I0tY62.js",
+    "name": "phone",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_pin-list-DPnMq5_r.js": {
+    "file": "assets/pin-list-DPnMq5_r.js",
+    "name": "pin-list",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js",
+      "resources/js/app.tsx",
+      "_proxy-DQuR3cjM.js",
+      "_app-sidebar-layout-BY_eDgjo.js"
+    ]
+  },
+  "_placeholder-pattern-DfznfVDB.js": {
+    "file": "assets/placeholder-pattern-DfznfVDB.js",
+>>>>>>> ventas/tasas-temporales
     "name": "placeholder-pattern",
     "imports": [
       "resources/js/app.tsx"
     ]
   },
+<<<<<<< HEAD
   "_plus-CXR6dX2D.js": {
     "file": "assets/plus-CXR6dX2D.js",
     "name": "plus",
@@ -805,11 +1414,187 @@
   },
   "_transition-jaL9tcze.js": {
     "file": "assets/transition-jaL9tcze.js",
+=======
+  "_plus-DawLczYP.js": {
+    "file": "assets/plus-DawLczYP.js",
+    "name": "plus",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_proxy-DQuR3cjM.js": {
+    "file": "assets/proxy-DQuR3cjM.js",
+    "name": "proxy",
+    "imports": [
+      "resources/js/app.tsx",
+      "_index-BGBHT7Hv.js",
+      "_index-CZbz9K4b.js"
+    ]
+  },
+  "_qr-code-BpJqClz0.js": {
+    "file": "assets/qr-code-BpJqClz0.js",
+    "name": "qr-code",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_refresh-cw-C-uM31p6.js": {
+    "file": "assets/refresh-cw-C-uM31p6.js",
+    "name": "refresh-cw",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_save-7lo2vfZp.js": {
+    "file": "assets/save-7lo2vfZp.js",
+    "name": "save",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_scroll-B5hnrIvv.js": {
+    "file": "assets/scroll-B5hnrIvv.js",
+    "name": "scroll",
+    "imports": [
+      "resources/js/app.tsx",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_proxy-DQuR3cjM.js"
+    ]
+  },
+  "_search-DJ8c5QnU.js": {
+    "file": "assets/search-DJ8c5QnU.js",
+    "name": "search",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_select-BCSCVofo.js": {
+    "file": "assets/select-BCSCVofo.js",
+    "name": "select",
+    "imports": [
+      "resources/js/app.tsx",
+      "_Combination-eBkSrgAs.js",
+      "_index-CZbz9K4b.js",
+      "_index-BGBHT7Hv.js",
+      "_index-BvWQzC-g.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_chevron-down-C7VKRoni.js",
+      "_check-QF3eLHSy.js"
+    ]
+  },
+  "_separator-va2nwBxh.js": {
+    "file": "assets/separator-va2nwBxh.js",
+    "name": "separator",
+    "imports": [
+      "resources/js/app.tsx",
+      "_index-X9nOMuEy.js",
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_sheet-4S5cOfT1.js": {
+    "file": "assets/sheet-4S5cOfT1.js",
+    "name": "sheet",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_shopping-bag-BRoDkoN-.js": {
+    "file": "assets/shopping-bag-BRoDkoN-.js",
+    "name": "shopping-bag",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_sonner-D6qCho1Y.js": {
+    "file": "assets/sonner-D6qCho1Y.js",
+    "name": "sonner",
+    "imports": [
+      "resources/js/app.tsx",
+      "_app-sidebar-layout-BY_eDgjo.js"
+    ]
+  },
+  "_square-pen-v_SDXSO9.js": {
+    "file": "assets/square-pen-v_SDXSO9.js",
+    "name": "square-pen",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_star-BZWw_Z4W.js": {
+    "file": "assets/star-BZWw_Z4W.js",
+    "name": "star",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_switch-DNloci0k.js": {
+    "file": "assets/switch-DNloci0k.js",
+    "name": "switch",
+    "imports": [
+      "resources/js/app.tsx",
+      "_index-CZbz9K4b.js",
+      "_index-BGBHT7Hv.js",
+      "_index-BvWQzC-g.js",
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_table-BaxLE6gm.js": {
+    "file": "assets/table-BaxLE6gm.js",
+    "name": "table",
+    "imports": [
+      "resources/js/app.tsx",
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_tabs-BXrLo7g7.js": {
+    "file": "assets/tabs-BXrLo7g7.js",
+    "name": "tabs",
+    "imports": [
+      "resources/js/app.tsx",
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_tag-B21OybwK.js": {
+    "file": "assets/tag-B21OybwK.js",
+    "name": "tag",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_text-link-hCziqdzy.js": {
+    "file": "assets/text-link-hCziqdzy.js",
+    "name": "text-link",
+    "imports": [
+      "resources/js/app.tsx",
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_textarea-C-kakFEl.js": {
+    "file": "assets/textarea-C-kakFEl.js",
+    "name": "textarea",
+    "imports": [
+      "resources/js/app.tsx",
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_tooltipContext-CYC5hstS.js": {
+    "file": "assets/tooltipContext-CYC5hstS.js",
+    "name": "tooltipContext",
+    "imports": [
+      "resources/js/app.tsx",
+      "_chart-Cz2VIrrc.js",
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_transition-Do3lVg0w.js": {
+    "file": "assets/transition-Do3lVg0w.js",
+>>>>>>> ventas/tasas-temporales
     "name": "transition",
     "imports": [
       "resources/js/app.tsx"
     ]
   },
+<<<<<<< HEAD
   "_trash-2-BGOeN_pW.js": {
     "file": "assets/trash-2-BGOeN_pW.js",
     "name": "trash-2",
@@ -882,15 +1667,96 @@
   },
   "node_modules/canvg/lib/index.es.js": {
     "file": "assets/index.es-BOUedRxq.js",
+=======
+  "_trash-2-OjVnZh5x.js": {
+    "file": "assets/trash-2-OjVnZh5x.js",
+    "name": "trash-2",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_trending-down-CtT1_Xgt.js": {
+    "file": "assets/trending-down-CtT1_Xgt.js",
+    "name": "trending-down",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_trending-up-CRLIAz2D.js": {
+    "file": "assets/trending-up-CRLIAz2D.js",
+    "name": "trending-up",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_triangle-alert-DebwAZXb.js": {
+    "file": "assets/triangle-alert-DebwAZXb.js",
+    "name": "triangle-alert",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_user-0YYr2zHs.js": {
+    "file": "assets/user-0YYr2zHs.js",
+    "name": "user",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_user-check-Bvoezg2j.js": {
+    "file": "assets/user-check-Bvoezg2j.js",
+    "name": "user-check",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_user-cog-BGgM3Xts.js": {
+    "file": "assets/user-cog-BGgM3Xts.js",
+    "name": "user-cog",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_wallet-9n-h82lT.js": {
+    "file": "assets/wallet-9n-h82lT.js",
+    "name": "wallet",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_warehouse-CTIfAn6j.js": {
+    "file": "assets/warehouse-CTIfAn6j.js",
+    "name": "warehouse",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "_x-BDZNoDhO.js": {
+    "file": "assets/x-BDZNoDhO.js",
+    "name": "x",
+    "imports": [
+      "_createLucideIcon-BT9EmzJg.js"
+    ]
+  },
+  "node_modules/canvg/lib/index.es.js": {
+    "file": "assets/index.es-C00y4UNt.js",
+>>>>>>> ventas/tasas-temporales
     "name": "index.es",
     "src": "node_modules/canvg/lib/index.es.js",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_jspdf.es.min-B7CXr_LZ.js"
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_jspdf.es.min-BlClYC3f.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
@@ -915,7 +1781,11 @@
     "isDynamicEntry": true
   },
   "resources/css/app.css": {
+<<<<<<< HEAD
     "file": "assets/app-BUBJlKle.css",
+=======
+    "file": "assets/app-BY6RATed.css",
+>>>>>>> ventas/tasas-temporales
     "src": "resources/css/app.css",
     "isEntry": true,
     "name": "app",
@@ -928,7 +1798,11 @@
     "src": "resources/imgs/auth.jpg"
   },
   "resources/js/app.tsx": {
+<<<<<<< HEAD
     "file": "assets/app-BQlth0-A.js",
+=======
+    "file": "assets/app-aQ3SvozF.js",
+>>>>>>> ventas/tasas-temporales
     "name": "app",
     "src": "resources/js/app.tsx",
     "isEntry": true,
@@ -1031,7 +1905,11 @@
     ],
     "css": [
       "assets/app-DmuyVQv5.css",
+<<<<<<< HEAD
       "assets/app-BUBJlKle.css"
+=======
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
@@ -1042,12 +1920,17 @@
     "src": "resources/js/assets/logo.png"
   },
   "resources/js/pages/Almacenes/Create.tsx": {
+<<<<<<< HEAD
     "file": "assets/Create-CmPTYPC7.js",
+=======
+    "file": "assets/Create-nGvv8VzS.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Create",
     "src": "resources/js/pages/Almacenes/Create.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_input-error-DE4sTX5a.js",
       "_button-CNh02bx_.js",
@@ -1084,18 +1967,61 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_input-error-CLqYq_n6.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_select-BCSCVofo.js",
+      "_separator-va2nwBxh.js",
+      "_textarea-C-kakFEl.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_warehouse-CTIfAn6j.js",
+      "_building-0ofvyPO7.js",
+      "_phone-B0I0tY62.js",
+      "_mail-xdS-yvd2.js",
+      "_map-pin-BcEVDdY8.js",
+      "_user-0YYr2zHs.js",
+      "_id-card-gQNM_dVN.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_Combination-eBkSrgAs.js",
+      "_index-CZbz9K4b.js",
+      "_index-BvWQzC-g.js",
+      "_chevron-down-C7VKRoni.js",
+      "_check-QF3eLHSy.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Almacenes/Edit.tsx": {
+<<<<<<< HEAD
     "file": "assets/Edit-C0eRotLQ.js",
+=======
+    "file": "assets/Edit-3PdyUk1g.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Edit",
     "src": "resources/js/pages/Almacenes/Edit.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_input-error-DE4sTX5a.js",
       "_button-CNh02bx_.js",
@@ -1132,18 +2058,61 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_input-error-CLqYq_n6.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_select-BCSCVofo.js",
+      "_separator-va2nwBxh.js",
+      "_textarea-C-kakFEl.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_warehouse-CTIfAn6j.js",
+      "_building-0ofvyPO7.js",
+      "_phone-B0I0tY62.js",
+      "_mail-xdS-yvd2.js",
+      "_map-pin-BcEVDdY8.js",
+      "_user-0YYr2zHs.js",
+      "_id-card-gQNM_dVN.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_Combination-eBkSrgAs.js",
+      "_index-CZbz9K4b.js",
+      "_index-BvWQzC-g.js",
+      "_chevron-down-C7VKRoni.js",
+      "_check-QF3eLHSy.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Almacenes/Show.tsx": {
+<<<<<<< HEAD
     "file": "assets/Show-brOES2Pv.js",
+=======
+    "file": "assets/Show-DgKYZDxJ.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Show",
     "src": "resources/js/pages/Almacenes/Show.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_badge-BHZgGN9Y.js",
       "_button-CNh02bx_.js",
@@ -1177,18 +2146,58 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_input-B48v9S1o.js",
+      "_separator-va2nwBxh.js",
+      "_table-BaxLE6gm.js",
+      "_app-layout-B1zc1n1V.js",
+      "_warehouse-CTIfAn6j.js",
+      "_package-NnwdEohU.js",
+      "_pen-B0FKbKNm.js",
+      "_phone-B0I0tY62.js",
+      "_mail-xdS-yvd2.js",
+      "_map-pin-BcEVDdY8.js",
+      "_calendar-CBn_hLXB.js",
+      "_user-0YYr2zHs.js",
+      "_id-card-gQNM_dVN.js",
+      "_search-DJ8c5QnU.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Almacenes/index.tsx": {
+<<<<<<< HEAD
     "file": "assets/index-DmbYb2Vj.js",
+=======
+    "file": "assets/index-BG6qYtad.js",
+>>>>>>> ventas/tasas-temporales
     "name": "index",
     "src": "resources/js/pages/Almacenes/index.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_alert-dialog-B-IvdNSU.js",
       "_button-CNh02bx_.js",
@@ -1222,18 +2231,58 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_alert-dialog-CBvRsM4A.js",
+      "_button-CHP9xHZG.js",
+      "_separator-va2nwBxh.js",
+      "_table-BaxLE6gm.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_app-layout-B1zc1n1V.js",
+      "_warehouse-CTIfAn6j.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_sheet-4S5cOfT1.js",
+      "_phone-B0I0tY62.js",
+      "_mail-xdS-yvd2.js",
+      "_map-pin-BcEVDdY8.js",
+      "_eye-CttA2jiv.js",
+      "_pen-line-2U_5aaIa.js",
+      "_trash-2-OjVnZh5x.js",
+      "_user-0YYr2zHs.js",
+      "_id-card-gQNM_dVN.js",
+      "_index-CZbz9K4b.js",
+      "_index-BGBHT7Hv.js",
+      "_index-X9nOMuEy.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Categorias/Create.tsx": {
+<<<<<<< HEAD
     "file": "assets/Create-DSVjDEQA.js",
+=======
+    "file": "assets/Create-BtJ4DqeR.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Create",
     "src": "resources/js/pages/Categorias/Create.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_input-error-DE4sTX5a.js",
       "_button-CNh02bx_.js",
@@ -1259,18 +2308,50 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_input-error-CLqYq_n6.js",
+      "_button-CHP9xHZG.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_textarea-C-kakFEl.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_list-check-BPoikcMc.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Categorias/Edit.tsx": {
+<<<<<<< HEAD
     "file": "assets/Edit-prvmO7Rk.js",
+=======
+    "file": "assets/Edit-D7OXCRnY.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Edit",
     "src": "resources/js/pages/Categorias/Edit.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_input-error-DE4sTX5a.js",
       "_button-CNh02bx_.js",
@@ -1296,18 +2377,50 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_input-error-CLqYq_n6.js",
+      "_button-CHP9xHZG.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_textarea-C-kakFEl.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_list-check-BPoikcMc.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Categorias/Show.tsx": {
+<<<<<<< HEAD
     "file": "assets/Show-CaCL3Azf.js",
+=======
+    "file": "assets/Show-DMGe2DLz.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Show",
     "src": "resources/js/pages/Categorias/Show.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_placeholder-pattern-DeoOV-2P.js",
       "_app-layout-BbL479dr.js",
       "_app-sidebar-layout-Bb26aI8U.js",
@@ -1328,18 +2441,45 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_placeholder-pattern-DfznfVDB.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Categorias/index.tsx": {
+<<<<<<< HEAD
     "file": "assets/index-yhQVLZ8S.js",
+=======
+    "file": "assets/index-B9bhQeFM.js",
+>>>>>>> ventas/tasas-temporales
     "name": "index",
     "src": "resources/js/pages/Categorias/index.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_alert-dialog-B-IvdNSU.js",
       "_badge-BHZgGN9Y.js",
@@ -1369,18 +2509,54 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_alert-dialog-CBvRsM4A.js",
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_separator-va2nwBxh.js",
+      "_table-BaxLE6gm.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_list-check-BPoikcMc.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_sheet-4S5cOfT1.js",
+      "_tag-B21OybwK.js",
+      "_info-BXCarPHB.js",
+      "_check-QF3eLHSy.js",
+      "_pen-line-2U_5aaIa.js",
+      "_trash-2-OjVnZh5x.js",
+      "_index-CZbz9K4b.js",
+      "_index-BGBHT7Hv.js",
+      "_index-X9nOMuEy.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Cierres/Create.tsx": {
+<<<<<<< HEAD
     "file": "assets/Create-d_BrRvyu.js",
+=======
+    "file": "assets/Create-D9rnsV-x.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Create",
     "src": "resources/js/pages/Cierres/Create.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_button-CNh02bx_.js",
       "_card-Dv9klA2h.js",
@@ -1409,18 +2585,53 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_separator-va2nwBxh.js",
+      "_textarea-C-kakFEl.js",
+      "_app-layout-B1zc1n1V.js",
+      "_computer-BquVrfSB.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_save-7lo2vfZp.js",
+      "_circle-alert-Bm_9_OXq.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Cierres/Index.tsx": {
+<<<<<<< HEAD
     "file": "assets/Index-DiGuoDvO.js",
+=======
+    "file": "assets/Index-Byysw-Lk.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Index",
     "src": "resources/js/pages/Cierres/Index.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_badge-BHZgGN9Y.js",
       "_button-CNh02bx_.js",
@@ -1450,18 +2661,54 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_input-B48v9S1o.js",
+      "_select-BCSCVofo.js",
+      "_table-BaxLE6gm.js",
+      "_app-layout-B1zc1n1V.js",
+      "_computer-BquVrfSB.js",
+      "_plus-DawLczYP.js",
+      "_funnel-BbhdReZM.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_Combination-eBkSrgAs.js",
+      "_index-CZbz9K4b.js",
+      "_index-BvWQzC-g.js",
+      "_chevron-down-C7VKRoni.js",
+      "_check-QF3eLHSy.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Cierres/Show.tsx": {
+<<<<<<< HEAD
     "file": "assets/Show-CckMP2TZ.js",
+=======
+    "file": "assets/Show-CzN5Hh23.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Show",
     "src": "resources/js/pages/Cierres/Show.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_badge-BHZgGN9Y.js",
       "_button-CNh02bx_.js",
@@ -1490,18 +2737,53 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_separator-va2nwBxh.js",
+      "_app-layout-B1zc1n1V.js",
+      "_computer-BquVrfSB.js",
+      "_arrow-left-Eb1txooS.js",
+      "_triangle-alert-DebwAZXb.js",
+      "_clock-FJx6Tsrw.js",
+      "_circle-x-Ur0lIpLe.js",
+      "_circle-check-Bjr_7ZGP.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Clientes/Create.tsx": {
+<<<<<<< HEAD
     "file": "assets/Create-BxKyuscZ.js",
+=======
+    "file": "assets/Create-562o6MqT.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Create",
     "src": "resources/js/pages/Clientes/Create.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_input-error-DE4sTX5a.js",
       "_badge-BHZgGN9Y.js",
@@ -1540,18 +2822,63 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_input-error-CLqYq_n6.js",
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_select-BCSCVofo.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_app-layout-B1zc1n1V.js",
+      "_user-0YYr2zHs.js",
+      "_info-BXCarPHB.js",
+      "_user-check-Bvoezg2j.js",
+      "_user-cog-BGgM3Xts.js",
+      "_phone-B0I0tY62.js",
+      "_circle-alert-Bm_9_OXq.js",
+      "_dollar-sign-BOV3h1Hu.js",
+      "_house-DYtF5WMz.js",
+      "_map-pin-BcEVDdY8.js",
+      "_arrow-left-Eb1txooS.js",
+      "_save-7lo2vfZp.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_Combination-eBkSrgAs.js",
+      "_index-CZbz9K4b.js",
+      "_index-BvWQzC-g.js",
+      "_chevron-down-C7VKRoni.js",
+      "_check-QF3eLHSy.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Clientes/Edit.tsx": {
+<<<<<<< HEAD
     "file": "assets/Edit-CsB1t1E4.js",
+=======
+    "file": "assets/Edit-Agiv7eLr.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Edit",
     "src": "resources/js/pages/Clientes/Edit.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_input-error-DE4sTX5a.js",
       "_badge-BHZgGN9Y.js",
@@ -1592,18 +2919,65 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_input-error-CLqYq_n6.js",
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_select-BCSCVofo.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_app-layout-B1zc1n1V.js",
+      "_user-0YYr2zHs.js",
+      "_calendar-CBn_hLXB.js",
+      "_info-BXCarPHB.js",
+      "_user-check-Bvoezg2j.js",
+      "_user-cog-BGgM3Xts.js",
+      "_phone-B0I0tY62.js",
+      "_circle-alert-Bm_9_OXq.js",
+      "_dollar-sign-BOV3h1Hu.js",
+      "_house-DYtF5WMz.js",
+      "_map-pin-BcEVDdY8.js",
+      "_arrow-left-Eb1txooS.js",
+      "_save-7lo2vfZp.js",
+      "_history-DBlSDQQL.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_Combination-eBkSrgAs.js",
+      "_index-CZbz9K4b.js",
+      "_index-BvWQzC-g.js",
+      "_chevron-down-C7VKRoni.js",
+      "_check-QF3eLHSy.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Clientes/Index.tsx": {
+<<<<<<< HEAD
     "file": "assets/Index-BJ5KU-b6.js",
+=======
+    "file": "assets/Index-06rQhyuV.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Index",
     "src": "resources/js/pages/Clientes/Index.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_alert-dialog-B-IvdNSU.js",
       "_badge-BHZgGN9Y.js",
@@ -1644,18 +3018,65 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_alert-dialog-CBvRsM4A.js",
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_input-B48v9S1o.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_separator-va2nwBxh.js",
+      "_table-BaxLE6gm.js",
+      "_app-layout-B1zc1n1V.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_x-BDZNoDhO.js",
+      "_trending-up-CRLIAz2D.js",
+      "_trending-down-CtT1_Xgt.js",
+      "_dollar-sign-BOV3h1Hu.js",
+      "_search-DJ8c5QnU.js",
+      "_sheet-4S5cOfT1.js",
+      "_user-0YYr2zHs.js",
+      "_phone-B0I0tY62.js",
+      "_map-pin-BcEVDdY8.js",
+      "_house-DYtF5WMz.js",
+      "_eye-CttA2jiv.js",
+      "_pen-line-2U_5aaIa.js",
+      "_trash-2-OjVnZh5x.js",
+      "_minus-BbL4WILs.js",
+      "_circle-arrow-down-5lazNizL.js",
+      "_circle-alert-Bm_9_OXq.js",
+      "_index-CZbz9K4b.js",
+      "_index-BGBHT7Hv.js",
+      "_index-X9nOMuEy.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Clientes/Show.tsx": {
+<<<<<<< HEAD
     "file": "assets/Show-B1GrRFJT.js",
+=======
+    "file": "assets/Show-kJ9oHr01.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Show",
     "src": "resources/js/pages/Clientes/Show.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_badge-BHZgGN9Y.js",
       "_button-CNh02bx_.js",
@@ -1695,18 +3116,64 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_table-BaxLE6gm.js",
+      "_tabs-BXrLo7g7.js",
+      "_app-layout-B1zc1n1V.js",
+      "_pen-line-2U_5aaIa.js",
+      "_arrow-left-Eb1txooS.js",
+      "_user-0YYr2zHs.js",
+      "_building-0ofvyPO7.js",
+      "_phone-B0I0tY62.js",
+      "_map-pin-BcEVDdY8.js",
+      "_house-DYtF5WMz.js",
+      "_dollar-sign-BOV3h1Hu.js",
+      "_x-BDZNoDhO.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_circle-alert-Bm_9_OXq.js",
+      "_package-NnwdEohU.js",
+      "_calendar-CBn_hLXB.js",
+      "_credit-card-DCy1PpVp.js",
+      "_eye-CttA2jiv.js",
+      "_trending-up-CRLIAz2D.js",
+      "_trending-down-CtT1_Xgt.js",
+      "_history-DBlSDQQL.js",
+      "_circle-arrow-down-5lazNizL.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Comprar/Index.tsx": {
+<<<<<<< HEAD
     "file": "assets/Index-CA1RBFQA.js",
+=======
+    "file": "assets/Index-Drl00SFE.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Index",
     "src": "resources/js/pages/Comprar/Index.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_input-error-DE4sTX5a.js",
       "_alert-dialog-B-IvdNSU.js",
@@ -1753,18 +3220,71 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_input-error-CLqYq_n6.js",
+      "_alert-dialog-CBvRsM4A.js",
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_calendar-C_03h6hX.js",
+      "_card-CKJiSflu.js",
+      "_dialog-BLF0yrmn.js",
+      "_index-X9nOMuEy.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_label-B7HAx3I-.js",
+      "_separator-va2nwBxh.js",
+      "_input-B48v9S1o.js",
+      "_index-CZbz9K4b.js",
+      "_index-BGBHT7Hv.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_select-BCSCVofo.js",
+      "_sonner-D6qCho1Y.js",
+      "_table-BaxLE6gm.js",
+      "_app-layout-B1zc1n1V.js",
+      "_loader-circle-DLzECX42.js",
+      "_textarea-C-kakFEl.js",
+      "_calendar-CBn_hLXB.js",
+      "_circle-plus-BV2fCdC9.js",
+      "_warehouse-CTIfAn6j.js",
+      "_plus-DawLczYP.js",
+      "_x-BDZNoDhO.js",
+      "_pen-B0FKbKNm.js",
+      "_trash-2-OjVnZh5x.js",
+      "_credit-card-DCy1PpVp.js",
+      "_dollar-sign-BOV3h1Hu.js",
+      "_wallet-9n-h82lT.js",
+      "_phone-B0I0tY62.js",
+      "_info-BXCarPHB.js",
+      "_chevron-down-C7VKRoni.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_check-QF3eLHSy.js",
+      "_index-BvWQzC-g.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Comprar/Show.tsx": {
+<<<<<<< HEAD
     "file": "assets/Show-J41uwLwp.js",
+=======
+    "file": "assets/Show-DNZVVoz1.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Show",
     "src": "resources/js/pages/Comprar/Show.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_badge-BHZgGN9Y.js",
       "_button-CNh02bx_.js",
       "_card-Dv9klA2h.js",
@@ -1789,18 +3309,49 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_separator-va2nwBxh.js",
+      "_table-BaxLE6gm.js",
+      "_app-layout-B1zc1n1V.js",
+      "_circle-check-Bjr_7ZGP.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_calendar-CBn_hLXB.js",
+      "_package-NnwdEohU.js",
+      "_x-BDZNoDhO.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Crud/Create.tsx": {
+<<<<<<< HEAD
     "file": "assets/Create-TinwNr-B.js",
+=======
+    "file": "assets/Create-BIryP6Zp.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Create",
     "src": "resources/js/pages/Crud/Create.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_placeholder-pattern-DeoOV-2P.js",
       "_app-layout-BbL479dr.js",
       "_app-sidebar-layout-Bb26aI8U.js",
@@ -1821,18 +3372,45 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_placeholder-pattern-DfznfVDB.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Crud/Edit.tsx": {
+<<<<<<< HEAD
     "file": "assets/Edit-TinwNr-B.js",
+=======
+    "file": "assets/Edit-BIryP6Zp.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Edit",
     "src": "resources/js/pages/Crud/Edit.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_placeholder-pattern-DeoOV-2P.js",
       "_app-layout-BbL479dr.js",
       "_app-sidebar-layout-Bb26aI8U.js",
@@ -1853,18 +3431,45 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_placeholder-pattern-DfznfVDB.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Crud/Index.tsx": {
+<<<<<<< HEAD
     "file": "assets/Index-93vz-rJ_.js",
+=======
+    "file": "assets/Index-BPqlTRDd.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Index",
     "src": "resources/js/pages/Crud/Index.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_pin-list-CZ_DkPdu.js",
       "_button-CNh02bx_.js",
       "_placeholder-pattern-DeoOV-2P.js",
@@ -1889,18 +3494,49 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_pin-list-DPnMq5_r.js",
+      "_button-CHP9xHZG.js",
+      "_placeholder-pattern-DfznfVDB.js",
+      "_scroll-B5hnrIvv.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_sheet-4S5cOfT1.js",
+      "_triangle-alert-DebwAZXb.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_proxy-DQuR3cjM.js",
+      "_index-BGBHT7Hv.js",
+      "_index-CZbz9K4b.js",
+      "_index-X9nOMuEy.js",
+      "_Combination-eBkSrgAs.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Crud/Show.tsx": {
+<<<<<<< HEAD
     "file": "assets/Show-CTv4C6gx.js",
+=======
+    "file": "assets/Show-xkI-Fz97.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Show",
     "src": "resources/js/pages/Crud/Show.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_placeholder-pattern-DeoOV-2P.js",
       "_app-layout-BbL479dr.js",
       "_app-sidebar-layout-Bb26aI8U.js",
@@ -1921,18 +3557,45 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_placeholder-pattern-DfznfVDB.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Cuentas/Create.tsx": {
+<<<<<<< HEAD
     "file": "assets/Create-C37zGaQI.js",
+=======
+    "file": "assets/Create-Cq9Mnz1X.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Create",
     "src": "resources/js/pages/Cuentas/Create.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_input-error-DE4sTX5a.js",
       "_button-CNh02bx_.js",
@@ -1961,18 +3624,53 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_input-error-CLqYq_n6.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_select-BCSCVofo.js",
+      "_textarea-C-kakFEl.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_Combination-eBkSrgAs.js",
+      "_index-CZbz9K4b.js",
+      "_index-BvWQzC-g.js",
+      "_chevron-down-C7VKRoni.js",
+      "_check-QF3eLHSy.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Cuentas/Edit.tsx": {
+<<<<<<< HEAD
     "file": "assets/Edit-DhFK2aYe.js",
+=======
+    "file": "assets/Edit-DPG_W_4S.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Edit",
     "src": "resources/js/pages/Cuentas/Edit.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_input-error-DE4sTX5a.js",
       "_button-CNh02bx_.js",
       "_card-Dv9klA2h.js",
@@ -2001,18 +3699,53 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_input-error-CLqYq_n6.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_select-BCSCVofo.js",
+      "_textarea-C-kakFEl.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_banknote-BZDev0yK.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_Combination-eBkSrgAs.js",
+      "_index-CZbz9K4b.js",
+      "_index-BvWQzC-g.js",
+      "_chevron-down-C7VKRoni.js",
+      "_check-QF3eLHSy.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Cuentas/Index.tsx": {
+<<<<<<< HEAD
     "file": "assets/Index-Bhx2v53K.js",
+=======
+    "file": "assets/Index-DJ8jcADx.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Index",
     "src": "resources/js/pages/Cuentas/Index.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_alert-dialog-B-IvdNSU.js",
       "_badge-BHZgGN9Y.js",
@@ -2048,18 +3781,60 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_alert-dialog-CBvRsM4A.js",
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_input-B48v9S1o.js",
+      "_select-BCSCVofo.js",
+      "_table-BaxLE6gm.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_app-layout-B1zc1n1V.js",
+      "_wallet-9n-h82lT.js",
+      "_credit-card-DCy1PpVp.js",
+      "_coins-BzpCoRsL.js",
+      "_search-DJ8c5QnU.js",
+      "_plus-DawLczYP.js",
+      "_eye-CttA2jiv.js",
+      "_pen-line-2U_5aaIa.js",
+      "_trash-2-OjVnZh5x.js",
+      "_index-CZbz9K4b.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_Combination-eBkSrgAs.js",
+      "_index-BvWQzC-g.js",
+      "_chevron-down-C7VKRoni.js",
+      "_check-QF3eLHSy.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Cuentas/Show.tsx": {
+<<<<<<< HEAD
     "file": "assets/Show-DaPVwkTt.js",
+=======
+    "file": "assets/Show-DWTx5x8F.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Show",
     "src": "resources/js/pages/Cuentas/Show.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_badge-BHZgGN9Y.js",
       "_button-CNh02bx_.js",
@@ -2087,18 +3862,52 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_separator-va2nwBxh.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_coins-BzpCoRsL.js",
+      "_wallet-9n-h82lT.js",
+      "_calendar-CBn_hLXB.js",
+      "_pen-line-2U_5aaIa.js",
+      "_arrow-left-Eb1txooS.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Ecommerce/Index.tsx": {
+<<<<<<< HEAD
     "file": "assets/Index-DkRMbmB-.js",
+=======
+    "file": "assets/Index-DGDFGXLg.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Index",
     "src": "resources/js/pages/Ecommerce/Index.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_x-Br8TaWgT.js",
       "_package-BuJmZ46R.js",
       "_star-Duw8uGL6.js",
@@ -2112,18 +3921,38 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_x-BDZNoDhO.js",
+      "_package-NnwdEohU.js",
+      "_star-BZWw_Z4W.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_map-pin-BcEVDdY8.js",
+      "_chevron-down-C7VKRoni.js",
+      "_phone-B0I0tY62.js",
+      "_search-DJ8c5QnU.js",
+      "_user-0YYr2zHs.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Empleados/Create.tsx": {
+<<<<<<< HEAD
     "file": "assets/Create-DlUGQrwF.js",
+=======
+    "file": "assets/Create-D71_yKt6.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Create",
     "src": "resources/js/pages/Empleados/Create.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_input-error-DE4sTX5a.js",
       "_button-CNh02bx_.js",
@@ -2152,18 +3981,53 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_input-error-CLqYq_n6.js",
+      "_button-CHP9xHZG.js",
+      "_checkbox-Ckm_MixW.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_select-BCSCVofo.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_book-user-BRkKbL2K.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_index-CZbz9K4b.js",
+      "_index-BvWQzC-g.js",
+      "_proxy-DQuR3cjM.js",
+      "_check-QF3eLHSy.js",
+      "_Combination-eBkSrgAs.js",
+      "_chevron-down-C7VKRoni.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Empleados/Edit.tsx": {
+<<<<<<< HEAD
     "file": "assets/Edit-CoNp0j0W.js",
+=======
+    "file": "assets/Edit-DBbCWun7.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Edit",
     "src": "resources/js/pages/Empleados/Edit.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_input-error-DE4sTX5a.js",
       "_button-CNh02bx_.js",
@@ -2192,18 +4056,53 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_input-error-CLqYq_n6.js",
+      "_button-CHP9xHZG.js",
+      "_checkbox-Ckm_MixW.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_select-BCSCVofo.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_book-user-BRkKbL2K.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_index-CZbz9K4b.js",
+      "_index-BvWQzC-g.js",
+      "_proxy-DQuR3cjM.js",
+      "_check-QF3eLHSy.js",
+      "_Combination-eBkSrgAs.js",
+      "_chevron-down-C7VKRoni.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Empleados/Index.tsx": {
+<<<<<<< HEAD
     "file": "assets/Index-TEr-B0Gp.js",
+=======
+    "file": "assets/Index-BsfZY0tC.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Index",
     "src": "resources/js/pages/Empleados/Index.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_alert-dialog-B-IvdNSU.js",
       "_button-CNh02bx_.js",
@@ -2234,18 +4133,55 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_alert-dialog-CBvRsM4A.js",
+      "_button-CHP9xHZG.js",
+      "_separator-va2nwBxh.js",
+      "_table-BaxLE6gm.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_book-user-BRkKbL2K.js",
+      "_pen-B0FKbKNm.js",
+      "_sheet-4S5cOfT1.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_mail-xdS-yvd2.js",
+      "_warehouse-CTIfAn6j.js",
+      "_dollar-sign-BOV3h1Hu.js",
+      "_trash-2-OjVnZh5x.js",
+      "_index-CZbz9K4b.js",
+      "_index-BGBHT7Hv.js",
+      "_index-X9nOMuEy.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Empleados/Show.tsx": {
+<<<<<<< HEAD
     "file": "assets/Show-BDL1vNRi.js",
+=======
+    "file": "assets/Show-eNbQDyGl.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Show",
     "src": "resources/js/pages/Empleados/Show.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_placeholder-pattern-DeoOV-2P.js",
       "_app-layout-BbL479dr.js",
       "_app-sidebar-layout-Bb26aI8U.js",
@@ -2266,18 +4202,45 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_placeholder-pattern-DfznfVDB.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Logistica/Create.tsx": {
+<<<<<<< HEAD
     "file": "assets/Create-BDL1vNRi.js",
+=======
+    "file": "assets/Create-eNbQDyGl.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Create",
     "src": "resources/js/pages/Logistica/Create.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_placeholder-pattern-DeoOV-2P.js",
       "_app-layout-BbL479dr.js",
       "_app-sidebar-layout-Bb26aI8U.js",
@@ -2298,18 +4261,45 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_placeholder-pattern-DfznfVDB.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Logistica/Edit.tsx": {
+<<<<<<< HEAD
     "file": "assets/Edit-BDL1vNRi.js",
+=======
+    "file": "assets/Edit-eNbQDyGl.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Edit",
     "src": "resources/js/pages/Logistica/Edit.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_placeholder-pattern-DeoOV-2P.js",
       "_app-layout-BbL479dr.js",
       "_app-sidebar-layout-Bb26aI8U.js",
@@ -2330,26 +4320,60 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_placeholder-pattern-DfznfVDB.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Logistica/Index.tsx": {
+<<<<<<< HEAD
     "file": "assets/Index-CuAgZx41.js",
+=======
+    "file": "assets/Index-BZJygaoW.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Index",
     "src": "resources/js/pages/Logistica/Index.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_placeholder-pattern-DeoOV-2P.js",
       "_separator-CER7NkbK.js",
       "_app-layout-BbL479dr.js",
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_placeholder-pattern-DfznfVDB.js",
+      "_separator-va2nwBxh.js",
+      "_app-layout-B1zc1n1V.js",
+>>>>>>> ventas/tasas-temporales
       "resources/js/pages/Logistica/layout/ComprasPorProveedorChart.tsx",
       "resources/js/pages/Logistica/layout/GastosMensualesChart.tsx",
       "resources/js/pages/Logistica/layout/ProductosMasCompradosPie.tsx",
       "resources/js/pages/Logistica/layout/ProductosPorAlmacen.tsx",
+<<<<<<< HEAD
       "_scroll-Wg2DM_qX.js",
       "_proxy-CBNdS2dJ.js",
       "_badge-BHZgGN9Y.js",
@@ -2385,18 +4409,60 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_scroll-B5hnrIvv.js",
+      "_proxy-DQuR3cjM.js",
+      "_badge-Cyqjs09m.js",
+      "_calendar-C_03h6hX.js",
+      "_card-CKJiSflu.js",
+      "_cursor-BhDD5Yjt.js",
+      "_chart-Cz2VIrrc.js",
+      "_select-BCSCVofo.js",
+      "_AreaChart-D5liKtR9.js",
+      "_CartesianGrid-Xs6dufED.js",
+      "_CartesianChart-C3tXm7UN.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_trending-up-CRLIAz2D.js",
+      "_trending-down-CtT1_Xgt.js",
+      "_package-NnwdEohU.js",
+      "_handshake-CeUug0QQ.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_check-QF3eLHSy.js",
+      "_PieChart-CADKQnrx.js",
+      "_tooltipContext-CYC5hstS.js",
+      "_BarChart-C-TEK5tu.js",
+      "_chevron-down-C7VKRoni.js",
+      "_index-BvWQzC-g.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Logistica/Show.tsx": {
+<<<<<<< HEAD
     "file": "assets/Show-DTj2XZkW.js",
+=======
+    "file": "assets/Show-DLkPdcDo.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Show",
     "src": "resources/js/pages/Logistica/Show.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_placeholder-pattern-DeoOV-2P.js",
       "_app-layout-BbL479dr.js",
       "_app-sidebar-layout-Bb26aI8U.js",
@@ -2417,18 +4483,45 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_placeholder-pattern-DfznfVDB.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Logistica/layout/ComprasPorProveedorChart.tsx": {
+<<<<<<< HEAD
     "file": "assets/ComprasPorProveedorChart-gUE_fMya.js",
+=======
+    "file": "assets/ComprasPorProveedorChart-Cj3OQuH-.js",
+>>>>>>> ventas/tasas-temporales
     "name": "ComprasPorProveedorChart",
     "src": "resources/js/pages/Logistica/layout/ComprasPorProveedorChart.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_card-Dv9klA2h.js",
       "_chart-hp9iK53S.js",
       "_PieChart-DnTWPRE1.js",
@@ -2439,18 +4532,35 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_card-CKJiSflu.js",
+      "_chart-Cz2VIrrc.js",
+      "_PieChart-CADKQnrx.js",
+      "_trending-up-CRLIAz2D.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-CRTbuFd_.js",
+      "_tooltipContext-CYC5hstS.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Logistica/layout/ComprasVentas.tsx": {
+<<<<<<< HEAD
     "file": "assets/ComprasVentas-Bqguggby.js",
+=======
+    "file": "assets/ComprasVentas-DUOYzCUZ.js",
+>>>>>>> ventas/tasas-temporales
     "name": "ComprasVentas",
     "src": "resources/js/pages/Logistica/layout/ComprasVentas.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_card-Dv9klA2h.js",
       "_chart-hp9iK53S.js",
       "_select-DJEJ_vH8.js",
@@ -2468,18 +4578,42 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_card-CKJiSflu.js",
+      "_chart-Cz2VIrrc.js",
+      "_select-BCSCVofo.js",
+      "_AreaChart-D5liKtR9.js",
+      "_CartesianGrid-Xs6dufED.js",
+      "_CartesianChart-C3tXm7UN.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-CRTbuFd_.js",
+      "_Combination-eBkSrgAs.js",
+      "_index-CZbz9K4b.js",
+      "_index-BGBHT7Hv.js",
+      "_index-BvWQzC-g.js",
+      "_chevron-down-C7VKRoni.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Logistica/layout/GastosMensualesChart.tsx": {
+<<<<<<< HEAD
     "file": "assets/GastosMensualesChart-NGShsCBl.js",
+=======
+    "file": "assets/GastosMensualesChart-BlWSoCd-.js",
+>>>>>>> ventas/tasas-temporales
     "name": "GastosMensualesChart",
     "src": "resources/js/pages/Logistica/layout/GastosMensualesChart.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_card-Dv9klA2h.js",
       "_chart-hp9iK53S.js",
       "_BarChart-CfuWqupT.js",
@@ -2491,18 +4625,36 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_card-CKJiSflu.js",
+      "_chart-Cz2VIrrc.js",
+      "_BarChart-C-TEK5tu.js",
+      "_CartesianChart-C3tXm7UN.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_trending-up-CRLIAz2D.js",
+      "_index-CRTbuFd_.js",
+      "_tooltipContext-CYC5hstS.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Logistica/layout/ProductosMasCompradosPie.tsx": {
+<<<<<<< HEAD
     "file": "assets/ProductosMasCompradosPie-DYSWcLVz.js",
+=======
+    "file": "assets/ProductosMasCompradosPie-D8023QlY.js",
+>>>>>>> ventas/tasas-temporales
     "name": "ProductosMasCompradosPie",
     "src": "resources/js/pages/Logistica/layout/ProductosMasCompradosPie.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_card-Dv9klA2h.js",
       "_chart-hp9iK53S.js",
       "_PieChart-DnTWPRE1.js",
@@ -2513,18 +4665,35 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_card-CKJiSflu.js",
+      "_chart-Cz2VIrrc.js",
+      "_PieChart-CADKQnrx.js",
+      "_trending-up-CRLIAz2D.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-CRTbuFd_.js",
+      "_tooltipContext-CYC5hstS.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Logistica/layout/ProductosPorAlmacen.tsx": {
+<<<<<<< HEAD
     "file": "assets/ProductosPorAlmacen-CcHcup9F.js",
+=======
+    "file": "assets/ProductosPorAlmacen-Ch1pN5-U.js",
+>>>>>>> ventas/tasas-temporales
     "name": "ProductosPorAlmacen",
     "src": "resources/js/pages/Logistica/layout/ProductosPorAlmacen.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_card-Dv9klA2h.js",
       "_chart-hp9iK53S.js",
       "_select-DJEJ_vH8.js",
@@ -2541,18 +4710,41 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_card-CKJiSflu.js",
+      "_chart-Cz2VIrrc.js",
+      "_select-BCSCVofo.js",
+      "_PieChart-CADKQnrx.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-CRTbuFd_.js",
+      "_Combination-eBkSrgAs.js",
+      "_index-CZbz9K4b.js",
+      "_index-BGBHT7Hv.js",
+      "_index-BvWQzC-g.js",
+      "_chevron-down-C7VKRoni.js",
+      "_check-QF3eLHSy.js",
+      "_tooltipContext-CYC5hstS.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Monedas/Create.tsx": {
+<<<<<<< HEAD
     "file": "assets/Create-sgkmJPB5.js",
+=======
+    "file": "assets/Create-BiaN8Nk7.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Create",
     "src": "resources/js/pages/Monedas/Create.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_alert-BumQTRGS.js",
       "_button-CNh02bx_.js",
@@ -2582,18 +4774,54 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_alert-DVlyq1fq.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_scroll-B5hnrIvv.js",
+      "_switch-DNloci0k.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_coins-BzpCoRsL.js",
+      "_save-7lo2vfZp.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_proxy-DQuR3cjM.js",
+      "_index-CZbz9K4b.js",
+      "_index-BvWQzC-g.js",
+      "_Combination-eBkSrgAs.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Monedas/Edit.tsx": {
+<<<<<<< HEAD
     "file": "assets/Edit-BuA-ouzG.js",
+=======
+    "file": "assets/Edit-CuUJZRP8.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Edit",
     "src": "resources/js/pages/Monedas/Edit.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_alert-BumQTRGS.js",
       "_button-CNh02bx_.js",
@@ -2624,18 +4852,55 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_alert-DVlyq1fq.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_scroll-B5hnrIvv.js",
+      "_switch-DNloci0k.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_arrow-left-Eb1txooS.js",
+      "_coins-BzpCoRsL.js",
+      "_save-7lo2vfZp.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_proxy-DQuR3cjM.js",
+      "_index-CZbz9K4b.js",
+      "_index-BvWQzC-g.js",
+      "_Combination-eBkSrgAs.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Monedas/Index.tsx": {
+<<<<<<< HEAD
     "file": "assets/Index-BM378Lkw.js",
+=======
+    "file": "assets/Index-tEyXAkql.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Index",
     "src": "resources/js/pages/Monedas/Index.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_alert-dialog-B-IvdNSU.js",
       "_badge-BHZgGN9Y.js",
@@ -2667,18 +4932,56 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_alert-dialog-CBvRsM4A.js",
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_scroll-B5hnrIvv.js",
+      "_table-BaxLE6gm.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_app-layout-B1zc1n1V.js",
+      "_coins-BzpCoRsL.js",
+      "_plus-DawLczYP.js",
+      "_star-BZWw_Z4W.js",
+      "_eye-CttA2jiv.js",
+      "_square-pen-v_SDXSO9.js",
+      "_refresh-cw-C-uM31p6.js",
+      "_trash-2-OjVnZh5x.js",
+      "_index-CZbz9K4b.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_proxy-DQuR3cjM.js",
+      "_Combination-eBkSrgAs.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Monedas/Show.tsx": {
+<<<<<<< HEAD
     "file": "assets/Show-BCQb0ZgY.js",
+=======
+    "file": "assets/Show-ui6URObT.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Show",
     "src": "resources/js/pages/Monedas/Show.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_badge-BHZgGN9Y.js",
       "_button-CNh02bx_.js",
@@ -2711,18 +5014,57 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_scroll-B5hnrIvv.js",
+      "_separator-va2nwBxh.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_coins-BzpCoRsL.js",
+      "_arrow-left-Eb1txooS.js",
+      "_square-pen-v_SDXSO9.js",
+      "_hash-CFZCt5Hj.js",
+      "_tag-B21OybwK.js",
+      "_dollar-sign-BOV3h1Hu.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_circle-x-Ur0lIpLe.js",
+      "_star-BZWw_Z4W.js",
+      "_calendar-CBn_hLXB.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_proxy-DQuR3cjM.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Movimientos/Index.tsx": {
+<<<<<<< HEAD
     "file": "assets/Index-D8r3kmr4.js",
+=======
+    "file": "assets/Index-DuFHMdNn.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Index",
     "src": "resources/js/pages/Movimientos/Index.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_alert-dialog-B-IvdNSU.js",
       "_button-CNh02bx_.js",
@@ -2756,18 +5098,58 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_alert-dialog-CBvRsM4A.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_select-BCSCVofo.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_package-NnwdEohU.js",
+      "_clock-FJx6Tsrw.js",
+      "_circle-check-Bjr_7ZGP.js",
+      "_trending-up-CRLIAz2D.js",
+      "_circle-alert-Bm_9_OXq.js",
+      "_circle-x-Ur0lIpLe.js",
+      "_eye-CttA2jiv.js",
+      "_index-CZbz9K4b.js",
+      "_index-BGBHT7Hv.js",
+      "_index-X9nOMuEy.js",
+      "_Combination-eBkSrgAs.js",
+      "_index-BvWQzC-g.js",
+      "_chevron-down-C7VKRoni.js",
+      "_check-QF3eLHSy.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_badge-Cyqjs09m.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Notifications/Index.tsx": {
+<<<<<<< HEAD
     "file": "assets/Index-C1-3V-0y.js",
+=======
+    "file": "assets/Index-B6ObIl0P.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Index",
     "src": "resources/js/pages/Notifications/Index.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_badge-BHZgGN9Y.js",
       "_button-CNh02bx_.js",
@@ -2791,18 +5173,48 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_table-BaxLE6gm.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_arrow-left-Eb1txooS.js",
+      "_arrow-right-C_BYwQxU.js",
+      "_x-BDZNoDhO.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Productos/Edit.tsx": {
+<<<<<<< HEAD
     "file": "assets/Edit-B8gQEIGS.js",
+=======
+    "file": "assets/Edit-DhmeeX-2.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Edit",
     "src": "resources/js/pages/Productos/Edit.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_input-error-DE4sTX5a.js",
       "_button-CNh02bx_.js",
@@ -2834,18 +5246,56 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_input-error-CLqYq_n6.js",
+      "_button-CHP9xHZG.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_select-BCSCVofo.js",
+      "_switch-DNloci0k.js",
+      "_textarea-C-kakFEl.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_file-box-CtsDyt26.js",
+      "_package-NnwdEohU.js",
+      "_qr-code-BpJqClz0.js",
+      "_refresh-cw-C-uM31p6.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_Combination-eBkSrgAs.js",
+      "_index-CZbz9K4b.js",
+      "_index-BvWQzC-g.js",
+      "_chevron-down-C7VKRoni.js",
+      "_check-QF3eLHSy.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_badge-Cyqjs09m.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Productos/Index.tsx": {
+<<<<<<< HEAD
     "file": "assets/Index-BoRIG0Um.js",
+=======
+    "file": "assets/Index-CaRS40iO.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Index",
     "src": "resources/js/pages/Productos/Index.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_alert-dialog-B-IvdNSU.js",
       "_badge-BHZgGN9Y.js",
@@ -2881,18 +5331,60 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_alert-dialog-CBvRsM4A.js",
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_separator-va2nwBxh.js",
+      "_table-BaxLE6gm.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_package-2-BN2ammDB.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_triangle-alert-DebwAZXb.js",
+      "_dollar-sign-BOV3h1Hu.js",
+      "_funnel-BbhdReZM.js",
+      "_search-DJ8c5QnU.js",
+      "_package-NnwdEohU.js",
+      "_qr-code-BpJqClz0.js",
+      "_wallet-9n-h82lT.js",
+      "_hash-CFZCt5Hj.js",
+      "_eye-CttA2jiv.js",
+      "_pen-line-2U_5aaIa.js",
+      "_refresh-cw-C-uM31p6.js",
+      "_trash-2-OjVnZh5x.js",
+      "_index-CZbz9K4b.js",
+      "_index-BGBHT7Hv.js",
+      "_index-X9nOMuEy.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Productos/Show.tsx": {
+<<<<<<< HEAD
     "file": "assets/Show-jbyXdMu-.js",
+=======
+    "file": "assets/Show-DhBbvzdw.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Show",
     "src": "resources/js/pages/Productos/Show.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_accordion-CLmE39kp.js",
       "_badge-BHZgGN9Y.js",
@@ -2924,18 +5416,56 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_accordion-3heiHUoB.js",
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_separator-va2nwBxh.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_package-2-BN2ammDB.js",
+      "_refresh-cw-C-uM31p6.js",
+      "_pen-B0FKbKNm.js",
+      "_triangle-alert-DebwAZXb.js",
+      "_qr-code-BpJqClz0.js",
+      "_calendar-CBn_hLXB.js",
+      "_warehouse-CTIfAn6j.js",
+      "_index-CZbz9K4b.js",
+      "_index-BGBHT7Hv.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_chevron-down-C7VKRoni.js",
+      "_index-X9nOMuEy.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Productos/Vendor/Create.tsx": {
+<<<<<<< HEAD
     "file": "assets/Create-D7xtJc0P.js",
+=======
+    "file": "assets/Create-Dw6-uzI8.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Create",
     "src": "resources/js/pages/Productos/Vendor/Create.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_placeholder-pattern-DeoOV-2P.js",
       "_app-layout-BbL479dr.js",
       "_app-sidebar-layout-Bb26aI8U.js",
@@ -2956,18 +5486,45 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_placeholder-pattern-DfznfVDB.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Productos/Vendor/Edit.tsx": {
+<<<<<<< HEAD
     "file": "assets/Edit-D7xtJc0P.js",
+=======
+    "file": "assets/Edit-Dw6-uzI8.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Edit",
     "src": "resources/js/pages/Productos/Vendor/Edit.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_placeholder-pattern-DeoOV-2P.js",
       "_app-layout-BbL479dr.js",
       "_app-sidebar-layout-Bb26aI8U.js",
@@ -2988,18 +5545,45 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_placeholder-pattern-DfznfVDB.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Productos/Vendor/Index.tsx": {
+<<<<<<< HEAD
     "file": "assets/Index-CI8fj94Q.js",
+=======
+    "file": "assets/Index-BA9ntUZK.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Index",
     "src": "resources/js/pages/Productos/Vendor/Index.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_alert-dialog-B-IvdNSU.js",
       "_badge-BHZgGN9Y.js",
@@ -3031,18 +5615,55 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_alert-dialog-CBvRsM4A.js",
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_select-BCSCVofo.js",
+      "_separator-va2nwBxh.js",
+      "_table-BaxLE6gm.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_app-layout-B1zc1n1V.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_warehouse-CTIfAn6j.js",
+      "_sheet-4S5cOfT1.js",
+      "_index-CZbz9K4b.js",
+      "_index-BGBHT7Hv.js",
+      "_index-X9nOMuEy.js",
+      "_Combination-eBkSrgAs.js",
+      "_index-BvWQzC-g.js",
+      "_chevron-down-C7VKRoni.js",
+      "_check-QF3eLHSy.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Productos/Vendor/Show.tsx": {
+<<<<<<< HEAD
     "file": "assets/Show-Dud3Zf-C.js",
+=======
+    "file": "assets/Show-BuCsu7pM.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Show",
     "src": "resources/js/pages/Productos/Vendor/Show.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_placeholder-pattern-DeoOV-2P.js",
       "_app-layout-BbL479dr.js",
       "_app-sidebar-layout-Bb26aI8U.js",
@@ -3063,18 +5684,45 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_placeholder-pattern-DfznfVDB.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Productos/Vendor/muestra.tsx": {
+<<<<<<< HEAD
     "file": "assets/muestra-DdGNJe0Y.js",
+=======
+    "file": "assets/muestra-DR-FtQDY.js",
+>>>>>>> ventas/tasas-temporales
     "name": "muestra",
     "src": "resources/js/pages/Productos/Vendor/muestra.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_alert-dialog-B-IvdNSU.js",
       "_button-CNh02bx_.js",
@@ -3103,18 +5751,53 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_alert-dialog-CBvRsM4A.js",
+      "_button-CHP9xHZG.js",
+      "_separator-va2nwBxh.js",
+      "_table-BaxLE6gm.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_shopping-bag-BRoDkoN-.js",
+      "_sheet-4S5cOfT1.js",
+      "_eye-CttA2jiv.js",
+      "_pen-line-2U_5aaIa.js",
+      "_trash-2-OjVnZh5x.js",
+      "_index-CZbz9K4b.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Proveedores/Create.tsx": {
+<<<<<<< HEAD
     "file": "assets/Create-D6h93aq-.js",
+=======
+    "file": "assets/Create-DcuLlCPv.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Create",
     "src": "resources/js/pages/Proveedores/Create.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_input-error-DE4sTX5a.js",
       "_button-CNh02bx_.js",
@@ -3140,18 +5823,50 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_input-error-CLqYq_n6.js",
+      "_button-CHP9xHZG.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_textarea-C-kakFEl.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_list-check-BPoikcMc.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Proveedores/Edit.tsx": {
+<<<<<<< HEAD
     "file": "assets/Edit-BY6izW2-.js",
+=======
+    "file": "assets/Edit-BXSCiaus.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Edit",
     "src": "resources/js/pages/Proveedores/Edit.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_input-error-DE4sTX5a.js",
       "_button-CNh02bx_.js",
@@ -3178,18 +5893,51 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_input-error-CLqYq_n6.js",
+      "_button-CHP9xHZG.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_textarea-C-kakFEl.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_list-check-BPoikcMc.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_eye-CttA2jiv.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Proveedores/Show.tsx": {
+<<<<<<< HEAD
     "file": "assets/Show-BVVC2z-3.js",
+=======
+    "file": "assets/Show-d8G4hx2k.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Show",
     "src": "resources/js/pages/Proveedores/Show.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_badge-BHZgGN9Y.js",
       "_button-CNh02bx_.js",
@@ -3227,18 +5975,62 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_separator-va2nwBxh.js",
+      "_table-BaxLE6gm.js",
+      "_tabs-BXrLo7g7.js",
+      "_app-layout-B1zc1n1V.js",
+      "_handshake-CeUug0QQ.js",
+      "_arrow-left-Eb1txooS.js",
+      "_building-0ofvyPO7.js",
+      "_phone-B0I0tY62.js",
+      "_mail-xdS-yvd2.js",
+      "_map-pin-BcEVDdY8.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_dollar-sign-BOV3h1Hu.js",
+      "_package-NnwdEohU.js",
+      "_credit-card-DCy1PpVp.js",
+      "_history-DBlSDQQL.js",
+      "_calendar-CBn_hLXB.js",
+      "_eye-CttA2jiv.js",
+      "_trending-down-CtT1_Xgt.js",
+      "_trending-up-CRLIAz2D.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Proveedores/index.tsx": {
+<<<<<<< HEAD
     "file": "assets/index-CHst7zwE.js",
+=======
+    "file": "assets/index-BO7Rgb6j.js",
+>>>>>>> ventas/tasas-temporales
     "name": "index",
     "src": "resources/js/pages/Proveedores/index.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_alert-dialog-B-IvdNSU.js",
       "_badge-BHZgGN9Y.js",
@@ -3277,18 +6069,63 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_alert-dialog-CBvRsM4A.js",
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_separator-va2nwBxh.js",
+      "_table-BaxLE6gm.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_handshake-CeUug0QQ.js",
+      "_x-BDZNoDhO.js",
+      "_trending-down-CtT1_Xgt.js",
+      "_trending-up-CRLIAz2D.js",
+      "_dollar-sign-BOV3h1Hu.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_sheet-4S5cOfT1.js",
+      "_building-0ofvyPO7.js",
+      "_phone-B0I0tY62.js",
+      "_mail-xdS-yvd2.js",
+      "_map-pin-BcEVDdY8.js",
+      "_circle-arrow-down-5lazNizL.js",
+      "_circle-alert-Bm_9_OXq.js",
+      "_eye-CttA2jiv.js",
+      "_pen-line-2U_5aaIa.js",
+      "_trash-2-OjVnZh5x.js",
+      "_index-CZbz9K4b.js",
+      "_index-BGBHT7Hv.js",
+      "_index-X9nOMuEy.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Remesas/Create.tsx": {
+<<<<<<< HEAD
     "file": "assets/Create-DGvwekAJ.js",
+=======
+    "file": "assets/Create-CWbBGlBB.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Create",
     "src": "resources/js/pages/Remesas/Create.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_placeholder-pattern-DeoOV-2P.js",
       "_app-layout-BbL479dr.js",
       "_app-sidebar-layout-Bb26aI8U.js",
@@ -3309,18 +6146,45 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_placeholder-pattern-DfznfVDB.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Remesas/Edit.tsx": {
+<<<<<<< HEAD
     "file": "assets/Edit-DGvwekAJ.js",
+=======
+    "file": "assets/Edit-CWbBGlBB.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Edit",
     "src": "resources/js/pages/Remesas/Edit.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_placeholder-pattern-DeoOV-2P.js",
       "_app-layout-BbL479dr.js",
       "_app-sidebar-layout-Bb26aI8U.js",
@@ -3341,18 +6205,45 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_placeholder-pattern-DfznfVDB.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Remesas/Index.tsx": {
+<<<<<<< HEAD
     "file": "assets/Index-C37C13Ro.js",
+=======
+    "file": "assets/Index-uoeBvX8b.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Index",
     "src": "resources/js/pages/Remesas/Index.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_pin-list-CZ_DkPdu.js",
       "_button-CNh02bx_.js",
       "_placeholder-pattern-DeoOV-2P.js",
@@ -3377,18 +6268,49 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_pin-list-DPnMq5_r.js",
+      "_button-CHP9xHZG.js",
+      "_placeholder-pattern-DfznfVDB.js",
+      "_scroll-B5hnrIvv.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_sheet-4S5cOfT1.js",
+      "_triangle-alert-DebwAZXb.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_proxy-DQuR3cjM.js",
+      "_index-BGBHT7Hv.js",
+      "_index-CZbz9K4b.js",
+      "_index-X9nOMuEy.js",
+      "_Combination-eBkSrgAs.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Remesas/Show.tsx": {
+<<<<<<< HEAD
     "file": "assets/Show-C7siNfXd.js",
+=======
+    "file": "assets/Show-C3QKWcsN.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Show",
     "src": "resources/js/pages/Remesas/Show.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_placeholder-pattern-DeoOV-2P.js",
       "_app-layout-BbL479dr.js",
       "_app-sidebar-layout-Bb26aI8U.js",
@@ -3409,18 +6331,45 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_placeholder-pattern-DfznfVDB.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Reportes/Index.tsx": {
+<<<<<<< HEAD
     "file": "assets/Index-VofhbdVp.js",
+=======
+    "file": "assets/Index-DbcayNo2.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Index",
     "src": "resources/js/pages/Reportes/Index.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_placeholder-pattern-DeoOV-2P.js",
       "_scroll-Wg2DM_qX.js",
@@ -3458,18 +6407,62 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_placeholder-pattern-DfznfVDB.js",
+      "_scroll-B5hnrIvv.js",
+      "_separator-va2nwBxh.js",
+      "_app-layout-B1zc1n1V.js",
+      "_card-CKJiSflu.js",
+      "_chart-Cz2VIrrc.js",
+      "_BarChart-C-TEK5tu.js",
+      "_CartesianGrid-Xs6dufED.js",
+      "_CartesianChart-C3tXm7UN.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_calendar-clock-BofHSmTC.js",
+      "_boxes-C4ThtFo0.js",
+      "_file-box-CtsDyt26.js",
+      "_triangle-alert-DebwAZXb.js",
+      "_archive-D-uZUtS5.js",
+      "_trending-up-CRLIAz2D.js",
+      "_x-BDZNoDhO.js",
+      "_dollar-sign-BOV3h1Hu.js",
+      "_history-DBlSDQQL.js",
+      "_proxy-DQuR3cjM.js",
+      "_index-BGBHT7Hv.js",
+      "_index-CZbz9K4b.js",
+      "_index-X9nOMuEy.js",
+      "_index-CRTbuFd_.js",
+      "_tooltipContext-CYC5hstS.js",
+      "_button-CHP9xHZG.js",
+      "_Combination-eBkSrgAs.js",
+      "_index-sYi7w4zv.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Reportes/Report/BalanceGastosMensauales.tsx": {
+<<<<<<< HEAD
     "file": "assets/BalanceGastosMensauales-O4OSpUl2.js",
+=======
+    "file": "assets/BalanceGastosMensauales-Ct2GejFJ.js",
+>>>>>>> ventas/tasas-temporales
     "name": "BalanceGastosMensauales",
     "src": "resources/js/pages/Reportes/Report/BalanceGastosMensauales.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_card-Dv9klA2h.js",
       "_separator-CER7NkbK.js",
@@ -3492,18 +6485,47 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_card-CKJiSflu.js",
+      "_separator-va2nwBxh.js",
+      "_app-layout-B1zc1n1V.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Reportes/Report/CompraPorPeriodo.tsx": {
+<<<<<<< HEAD
     "file": "assets/CompraPorPeriodo-7BCOkNkP.js",
+=======
+    "file": "assets/CompraPorPeriodo-BH1EsGvP.js",
+>>>>>>> ventas/tasas-temporales
     "name": "CompraPorPeriodo",
     "src": "resources/js/pages/Reportes/Report/CompraPorPeriodo.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_card-Dv9klA2h.js",
       "_separator-CER7NkbK.js",
@@ -3527,18 +6549,48 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_card-CKJiSflu.js",
+      "_separator-va2nwBxh.js",
+      "_app-layout-B1zc1n1V.js",
+      "_calendar-clock-BofHSmTC.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Reportes/Report/ComprasPorProveedor.tsx": {
+<<<<<<< HEAD
     "file": "assets/ComprasPorProveedor-BTdnPvcn.js",
+=======
+    "file": "assets/ComprasPorProveedor-6nxwbw3k.js",
+>>>>>>> ventas/tasas-temporales
     "name": "ComprasPorProveedor",
     "src": "resources/js/pages/Reportes/Report/ComprasPorProveedor.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_card-Dv9klA2h.js",
       "_separator-CER7NkbK.js",
@@ -3561,18 +6613,47 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_card-CKJiSflu.js",
+      "_separator-va2nwBxh.js",
+      "_app-layout-B1zc1n1V.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Reportes/Report/HistorialPrecios.tsx": {
+<<<<<<< HEAD
     "file": "assets/HistorialPrecios-BYMFObW6.js",
+=======
+    "file": "assets/HistorialPrecios-CkgtF6rh.js",
+>>>>>>> ventas/tasas-temporales
     "name": "HistorialPrecios",
     "src": "resources/js/pages/Reportes/Report/HistorialPrecios.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_separator-CER7NkbK.js",
       "_app-layout-BbL479dr.js",
@@ -3595,18 +6676,47 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_separator-va2nwBxh.js",
+      "_app-layout-B1zc1n1V.js",
+      "_calendar-clock-BofHSmTC.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Reportes/Report/InventarioDetalladoPorAlmacen.tsx": {
+<<<<<<< HEAD
     "file": "assets/InventarioDetalladoPorAlmacen-9xz14eyF.js",
+=======
+    "file": "assets/InventarioDetalladoPorAlmacen-B0DUR8ki.js",
+>>>>>>> ventas/tasas-temporales
     "name": "InventarioDetalladoPorAlmacen",
     "src": "resources/js/pages/Reportes/Report/InventarioDetalladoPorAlmacen.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_separator-CER7NkbK.js",
       "_app-layout-BbL479dr.js",
       "_heading-small-D_0v_wpR.js",
@@ -3630,18 +6740,48 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_separator-va2nwBxh.js",
+      "_app-layout-B1zc1n1V.js",
+      "_heading-small-G6sd1hZd.js",
+      "_accordion-3heiHUoB.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js",
+      "_chevron-down-C7VKRoni.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Reportes/Report/InventarioPorAlmacen.tsx": {
+<<<<<<< HEAD
     "file": "assets/InventarioPorAlmacen-Diudh_ba.js",
+=======
+    "file": "assets/InventarioPorAlmacen-CthiRJin.js",
+>>>>>>> ventas/tasas-temporales
     "name": "InventarioPorAlmacen",
     "src": "resources/js/pages/Reportes/Report/InventarioPorAlmacen.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_card-Dv9klA2h.js",
       "_separator-CER7NkbK.js",
@@ -3664,18 +6804,47 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_card-CKJiSflu.js",
+      "_separator-va2nwBxh.js",
+      "_app-layout-B1zc1n1V.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Reportes/Report/MovimientosFinancieros.tsx": {
+<<<<<<< HEAD
     "file": "assets/MovimientosFinancieros-CrzTxH-s.js",
+=======
+    "file": "assets/MovimientosFinancieros-BzqstYCE.js",
+>>>>>>> ventas/tasas-temporales
     "name": "MovimientosFinancieros",
     "src": "resources/js/pages/Reportes/Report/MovimientosFinancieros.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_card-Dv9klA2h.js",
       "_separator-CER7NkbK.js",
@@ -3698,18 +6867,47 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_card-CKJiSflu.js",
+      "_separator-va2nwBxh.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Reportes/Report/ProductosMasComprados.tsx": {
+<<<<<<< HEAD
     "file": "assets/ProductosMasComprados-BVbI0Ytn.js",
+=======
+    "file": "assets/ProductosMasComprados-B0-prtv6.js",
+>>>>>>> ventas/tasas-temporales
     "name": "ProductosMasComprados",
     "src": "resources/js/pages/Reportes/Report/ProductosMasComprados.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_card-Dv9klA2h.js",
       "_separator-CER7NkbK.js",
@@ -3732,18 +6930,47 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_card-CKJiSflu.js",
+      "_separator-va2nwBxh.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Reportes/Report/ReporteGanancias.tsx": {
+<<<<<<< HEAD
     "file": "assets/ReporteGanancias-tzEciGH6.js",
+=======
+    "file": "assets/ReporteGanancias-B1p7kYCF.js",
+>>>>>>> ventas/tasas-temporales
     "name": "ReporteGanancias",
     "src": "resources/js/pages/Reportes/Report/ReporteGanancias.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_card-Dv9klA2h.js",
       "_separator-CER7NkbK.js",
@@ -3767,18 +6994,48 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_card-CKJiSflu.js",
+      "_separator-va2nwBxh.js",
+      "_app-layout-B1zc1n1V.js",
+      "_dollar-sign-BOV3h1Hu.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Reportes/Report/ReporteStockBajo.tsx": {
+<<<<<<< HEAD
     "file": "assets/ReporteStockBajo-BVkDbcyk.js",
+=======
+    "file": "assets/ReporteStockBajo-PQZq5y2Y.js",
+>>>>>>> ventas/tasas-temporales
     "name": "ReporteStockBajo",
     "src": "resources/js/pages/Reportes/Report/ReporteStockBajo.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_card-Dv9klA2h.js",
       "_separator-CER7NkbK.js",
@@ -3802,18 +7059,48 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_card-CKJiSflu.js",
+      "_separator-va2nwBxh.js",
+      "_app-layout-B1zc1n1V.js",
+      "_triangle-alert-DebwAZXb.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Reportes/Report/ValorInventario.tsx": {
+<<<<<<< HEAD
     "file": "assets/ValorInventario-Bhe5CNjm.js",
+=======
+    "file": "assets/ValorInventario-C-IS8at5.js",
+>>>>>>> ventas/tasas-temporales
     "name": "ValorInventario",
     "src": "resources/js/pages/Reportes/Report/ValorInventario.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_card-Dv9klA2h.js",
       "_separator-CER7NkbK.js",
@@ -3837,18 +7124,48 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_card-CKJiSflu.js",
+      "_separator-va2nwBxh.js",
+      "_app-layout-B1zc1n1V.js",
+      "_archive-D-uZUtS5.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Reportes/Report/VentasPorPeriodo.tsx": {
+<<<<<<< HEAD
     "file": "assets/VentasPorPeriodo-D4H4DxCs.js",
+=======
+    "file": "assets/VentasPorPeriodo-6QOtrfOV.js",
+>>>>>>> ventas/tasas-temporales
     "name": "VentasPorPeriodo",
     "src": "resources/js/pages/Reportes/Report/VentasPorPeriodo.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_card-Dv9klA2h.js",
       "_separator-CER7NkbK.js",
@@ -3871,18 +7188,47 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_card-CKJiSflu.js",
+      "_separator-va2nwBxh.js",
+      "_app-layout-B1zc1n1V.js",
+      "_x-BDZNoDhO.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Reportes/Report/VentasPorVendedor.tsx": {
+<<<<<<< HEAD
     "file": "assets/VentasPorVendedor-Cmu4fP6z.js",
+=======
+    "file": "assets/VentasPorVendedor-c1mYNKnJ.js",
+>>>>>>> ventas/tasas-temporales
     "name": "VentasPorVendedor",
     "src": "resources/js/pages/Reportes/Report/VentasPorVendedor.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_card-Dv9klA2h.js",
       "_separator-CER7NkbK.js",
@@ -3906,18 +7252,48 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_card-CKJiSflu.js",
+      "_separator-va2nwBxh.js",
+      "_app-layout-B1zc1n1V.js",
+      "_user-0YYr2zHs.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Transacciones/CambiarCostoManual.tsx": {
+<<<<<<< HEAD
     "file": "assets/CambiarCostoManual-BTENMq0C.js",
+=======
+    "file": "assets/CambiarCostoManual-COHr-DSx.js",
+>>>>>>> ventas/tasas-temporales
     "name": "CambiarCostoManual",
     "src": "resources/js/pages/Transacciones/CambiarCostoManual.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_button-CNh02bx_.js",
       "_input-1T5vY_bi.js",
@@ -3949,18 +7325,56 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_button-CHP9xHZG.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_select-BCSCVofo.js",
+      "_separator-va2nwBxh.js",
+      "_table-BaxLE6gm.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_banknote-BZDev0yK.js",
+      "_wallet-9n-h82lT.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_dollar-sign-BOV3h1Hu.js",
+      "_circle-alert-Bm_9_OXq.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_Combination-eBkSrgAs.js",
+      "_index-CZbz9K4b.js",
+      "_index-BvWQzC-g.js",
+      "_chevron-down-C7VKRoni.js",
+      "_check-QF3eLHSy.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Transacciones/Index.tsx": {
+<<<<<<< HEAD
     "file": "assets/Index-rJqeXeki.js",
+=======
+    "file": "assets/Index-KKgE6gjL.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Index",
     "src": "resources/js/pages/Transacciones/Index.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_separator-CER7NkbK.js",
       "_tabs-PpgzmhhN.js",
@@ -3999,18 +7413,63 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_separator-va2nwBxh.js",
+      "_tabs-BXrLo7g7.js",
+      "_app-layout-B1zc1n1V.js",
+      "resources/js/pages/Transacciones/layouts/CostosAdicionales.tsx",
+      "resources/js/pages/Transacciones/layouts/Movimientos.tsx",
+      "_banknote-BZDev0yK.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_table-BaxLE6gm.js",
+      "_package-NnwdEohU.js",
+      "_calendar-CBn_hLXB.js",
+      "_dollar-sign-BOV3h1Hu.js",
+      "_arrow-right-C_BYwQxU.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_select-BCSCVofo.js",
+      "_Combination-eBkSrgAs.js",
+      "_index-CZbz9K4b.js",
+      "_index-BvWQzC-g.js",
+      "_chevron-down-C7VKRoni.js",
+      "_check-QF3eLHSy.js",
+      "_textarea-C-kakFEl.js",
+      "_index-sYi7w4zv.js",
+      "_user-0YYr2zHs.js",
+      "_building-0ofvyPO7.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Transacciones/layouts/CostosAdicionales.tsx": {
+<<<<<<< HEAD
     "file": "assets/CostosAdicionales-J9FHATJ9.js",
+=======
+    "file": "assets/CostosAdicionales-Bo8ThhEW.js",
+>>>>>>> ventas/tasas-temporales
     "name": "CostosAdicionales",
     "src": "resources/js/pages/Transacciones/layouts/CostosAdicionales.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_badge-BHZgGN9Y.js",
       "_button-CNh02bx_.js",
       "_card-Dv9klA2h.js",
@@ -4025,18 +7484,39 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_table-BaxLE6gm.js",
+      "_package-NnwdEohU.js",
+      "_calendar-CBn_hLXB.js",
+      "_dollar-sign-BOV3h1Hu.js",
+      "_arrow-right-C_BYwQxU.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Transacciones/layouts/Movimientos.tsx": {
+<<<<<<< HEAD
     "file": "assets/Movimientos-DzVCwOTC.js",
+=======
+    "file": "assets/Movimientos-C4s_k84f.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Movimientos",
     "src": "resources/js/pages/Transacciones/layouts/Movimientos.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_button-CNh02bx_.js",
       "_card-Dv9klA2h.js",
       "_input-1T5vY_bi.js",
@@ -4059,18 +7539,47 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_select-BCSCVofo.js",
+      "_tabs-BXrLo7g7.js",
+      "_textarea-C-kakFEl.js",
+      "_index-CZbz9K4b.js",
+      "_index-sYi7w4zv.js",
+      "_Combination-eBkSrgAs.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_dollar-sign-BOV3h1Hu.js",
+      "_user-0YYr2zHs.js",
+      "_building-0ofvyPO7.js",
+      "_index-BGBHT7Hv.js",
+      "_index-BvWQzC-g.js",
+      "_chevron-down-C7VKRoni.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Vendor/Cierre.tsx": {
+<<<<<<< HEAD
     "file": "assets/Cierre-pw3PGBNa.js",
+=======
+    "file": "assets/Cierre-D9x_aswt.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Cierre",
     "src": "resources/js/pages/Vendor/Cierre.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_button-CNh02bx_.js",
       "_card-Dv9klA2h.js",
       "_input-1T5vY_bi.js",
@@ -4101,18 +7610,55 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_select-BCSCVofo.js",
+      "_table-BaxLE6gm.js",
+      "_app-layout-B1zc1n1V.js",
+      "_chart-no-axes-column-increasing-DvHLzWxW.js",
+      "_search-DJ8c5QnU.js",
+      "_circle-x-Ur0lIpLe.js",
+      "_x-BDZNoDhO.js",
+      "_eye-CttA2jiv.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_Combination-eBkSrgAs.js",
+      "_index-CZbz9K4b.js",
+      "_index-BvWQzC-g.js",
+      "_chevron-down-C7VKRoni.js",
+      "_check-QF3eLHSy.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_proxy-DQuR3cjM.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Vendor/DetalleCierre.tsx": {
+<<<<<<< HEAD
     "file": "assets/DetalleCierre-B8KuiviQ.js",
+=======
+    "file": "assets/DetalleCierre-B7fR4R0_.js",
+>>>>>>> ventas/tasas-temporales
     "name": "DetalleCierre",
     "src": "resources/js/pages/Vendor/DetalleCierre.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_badge-BHZgGN9Y.js",
       "_card-Dv9klA2h.js",
       "_table-BzYxK9XW.js",
@@ -4140,18 +7686,52 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_badge-Cyqjs09m.js",
+      "_card-CKJiSflu.js",
+      "_table-BaxLE6gm.js",
+      "_app-layout-B1zc1n1V.js",
+      "_chart-no-axes-column-increasing-DvHLzWxW.js",
+      "_dollar-sign-BOV3h1Hu.js",
+      "_x-BDZNoDhO.js",
+      "_hash-CFZCt5Hj.js",
+      "_user-0YYr2zHs.js",
+      "_calendar-CBn_hLXB.js",
+      "_eye-CttA2jiv.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Vendor/Index.tsx": {
+<<<<<<< HEAD
     "file": "assets/Index-SjmNAptj.js",
+=======
+    "file": "assets/Index-DNGsW-xc.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Index",
     "src": "resources/js/pages/Vendor/Index.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_alert-dialog-B-IvdNSU.js",
       "_badge-BHZgGN9Y.js",
@@ -4193,18 +7773,66 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_alert-dialog-CBvRsM4A.js",
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_dialog-BLF0yrmn.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_select-BCSCVofo.js",
+      "_separator-va2nwBxh.js",
+      "_sonner-D6qCho1Y.js",
+      "_app-layout-B1zc1n1V.js",
+      "_shopping-bag-BRoDkoN-.js",
+      "_chart-no-axes-column-increasing-DvHLzWxW.js",
+      "_eye-CttA2jiv.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_circle-plus-BV2fCdC9.js",
+      "_search-DJ8c5QnU.js",
+      "_x-BDZNoDhO.js",
+      "_boxes-C4ThtFo0.js",
+      "_plus-DawLczYP.js",
+      "_trash-2-OjVnZh5x.js",
+      "_minus-BbL4WILs.js",
+      "_info-BXCarPHB.js",
+      "_dollar-sign-BOV3h1Hu.js",
+      "_index-CZbz9K4b.js",
+      "_index-BGBHT7Hv.js",
+      "_index-X9nOMuEy.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_check-QF3eLHSy.js",
+      "_index-BvWQzC-g.js",
+      "_chevron-down-C7VKRoni.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Vendor/Listado.tsx": {
+<<<<<<< HEAD
     "file": "assets/Listado-CB2Gs0Jp.js",
+=======
+    "file": "assets/Listado-BN6sPsKv.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Listado",
     "src": "resources/js/pages/Vendor/Listado.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_badge-BHZgGN9Y.js",
       "_button-CNh02bx_.js",
       "_card-Dv9klA2h.js",
@@ -4235,18 +7863,55 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_badge-Cyqjs09m.js",
+      "_button-CHP9xHZG.js",
+      "_card-CKJiSflu.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_select-BCSCVofo.js",
+      "_table-BaxLE6gm.js",
+      "_app-layout-B1zc1n1V.js",
+      "_x-BDZNoDhO.js",
+      "_search-DJ8c5QnU.js",
+      "_circle-x-Ur0lIpLe.js",
+      "_eye-CttA2jiv.js",
+      "_clock-FJx6Tsrw.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_Combination-eBkSrgAs.js",
+      "_index-CZbz9K4b.js",
+      "_index-BvWQzC-g.js",
+      "_chevron-down-C7VKRoni.js",
+      "_check-QF3eLHSy.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_proxy-DQuR3cjM.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/Vendor/Show.tsx": {
+<<<<<<< HEAD
     "file": "assets/Show-DLrH9LrZ.js",
+=======
+    "file": "assets/Show-Cby5tmMx.js",
+>>>>>>> ventas/tasas-temporales
     "name": "Show",
     "src": "resources/js/pages/Vendor/Show.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_app-logo-icon-DLLo35kt.js",
       "_heading-small-D_0v_wpR.js",
       "_alert-dialog-B-IvdNSU.js",
@@ -4287,18 +7952,65 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_app-logo-icon-XN1q-dsK.js",
+      "_heading-small-G6sd1hZd.js",
+      "_alert-dialog-CBvRsM4A.js",
+      "_button-CHP9xHZG.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_separator-va2nwBxh.js",
+      "_textarea-C-kakFEl.js",
+      "_app-layout-B1zc1n1V.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_shopping-bag-BRoDkoN-.js",
+      "_dollar-sign-BOV3h1Hu.js",
+      "_x-BDZNoDhO.js",
+      "_square-pen-v_SDXSO9.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_circle-x-Ur0lIpLe.js",
+      "_user-0YYr2zHs.js",
+      "_id-card-gQNM_dVN.js",
+      "_phone-B0I0tY62.js",
+      "_map-pin-BcEVDdY8.js",
+      "_calendar-CBn_hLXB.js",
+      "_user-check-Bvoezg2j.js",
+      "_package-NnwdEohU.js",
+      "_credit-card-DCy1PpVp.js",
+      "_index-CZbz9K4b.js",
+      "_index-BGBHT7Hv.js",
+      "_index-X9nOMuEy.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "dynamicImports": [
+      "_jspdf.es.min-BlClYC3f.js",
+      "node_modules/jspdf-autotable/dist/jspdf.plugin.autotable.mjs"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/auth/confirm-password.tsx": {
+<<<<<<< HEAD
     "file": "assets/confirm-password-CgNxsqq4.js",
+=======
+    "file": "assets/confirm-password-D_DLzubr.js",
+>>>>>>> ventas/tasas-temporales
     "name": "confirm-password",
     "src": "resources/js/pages/auth/confirm-password.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_input-error-DE4sTX5a.js",
       "_button-CNh02bx_.js",
       "_input-1T5vY_bi.js",
@@ -4312,18 +8024,38 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_input-error-CLqYq_n6.js",
+      "_button-CHP9xHZG.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_auth-layout-BJrO17rK.js",
+      "_loader-circle-DLzECX42.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_app-logo-icon-XN1q-dsK.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/auth/forgot-password.tsx": {
+<<<<<<< HEAD
     "file": "assets/forgot-password-CaDssYuc.js",
+=======
+    "file": "assets/forgot-password-kWdgppBO.js",
+>>>>>>> ventas/tasas-temporales
     "name": "forgot-password",
     "src": "resources/js/pages/auth/forgot-password.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_input-error-DE4sTX5a.js",
       "_text-link-9JauNtig.js",
       "_button-CNh02bx_.js",
@@ -4338,18 +8070,39 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_input-error-CLqYq_n6.js",
+      "_text-link-hCziqdzy.js",
+      "_button-CHP9xHZG.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_auth-layout-BJrO17rK.js",
+      "_loader-circle-DLzECX42.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_app-logo-icon-XN1q-dsK.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/auth/login.tsx": {
+<<<<<<< HEAD
     "file": "assets/login-CX3zVXKo.js",
+=======
+    "file": "assets/login-7jnUX_rt.js",
+>>>>>>> ventas/tasas-temporales
     "name": "login",
     "src": "resources/js/pages/auth/login.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_index-CRkOV7sv.js",
       "_createLucideIcon-BgpvJBVF.js",
       "_proxy-CBNdS2dJ.js",
@@ -4368,18 +8121,43 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_index-X9nOMuEy.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_proxy-DQuR3cjM.js",
+      "_input-error-CLqYq_n6.js",
+      "_text-link-hCziqdzy.js",
+      "_checkbox-Ckm_MixW.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_auth-layout-BJrO17rK.js",
+      "_loader-circle-DLzECX42.js",
+      "_index-BGBHT7Hv.js",
+      "_index-CZbz9K4b.js",
+      "_index-BvWQzC-g.js",
+      "_check-QF3eLHSy.js",
+      "_app-logo-icon-XN1q-dsK.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/auth/register.tsx": {
+<<<<<<< HEAD
     "file": "assets/register-B4GW3En6.js",
+=======
+    "file": "assets/register-DGknc28I.js",
+>>>>>>> ventas/tasas-temporales
     "name": "register",
     "src": "resources/js/pages/auth/register.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_input-error-DE4sTX5a.js",
       "_text-link-9JauNtig.js",
       "_button-CNh02bx_.js",
@@ -4394,18 +8172,39 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_input-error-CLqYq_n6.js",
+      "_text-link-hCziqdzy.js",
+      "_button-CHP9xHZG.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_auth-layout-BJrO17rK.js",
+      "_loader-circle-DLzECX42.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_app-logo-icon-XN1q-dsK.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/auth/reset-password.tsx": {
+<<<<<<< HEAD
     "file": "assets/reset-password-Bhoxyj61.js",
+=======
+    "file": "assets/reset-password-CljyNG2J.js",
+>>>>>>> ventas/tasas-temporales
     "name": "reset-password",
     "src": "resources/js/pages/auth/reset-password.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_input-error-DE4sTX5a.js",
       "_button-CNh02bx_.js",
       "_input-1T5vY_bi.js",
@@ -4419,18 +8218,38 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_input-error-CLqYq_n6.js",
+      "_button-CHP9xHZG.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_auth-layout-BJrO17rK.js",
+      "_loader-circle-DLzECX42.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_app-logo-icon-XN1q-dsK.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/auth/verify-email.tsx": {
+<<<<<<< HEAD
     "file": "assets/verify-email-O7RzmLBj.js",
+=======
+    "file": "assets/verify-email-XodoeqAC.js",
+>>>>>>> ventas/tasas-temporales
     "name": "verify-email",
     "src": "resources/js/pages/auth/verify-email.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_text-link-9JauNtig.js",
       "_button-CNh02bx_.js",
       "_auth-layout-DmIfl6-c.js",
@@ -4442,18 +8261,36 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_text-link-hCziqdzy.js",
+      "_button-CHP9xHZG.js",
+      "_auth-layout-BJrO17rK.js",
+      "_loader-circle-DLzECX42.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_app-logo-icon-XN1q-dsK.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/dashboard.tsx": {
+<<<<<<< HEAD
     "file": "assets/dashboard-B-bw9oI2.js",
+=======
+    "file": "assets/dashboard-DjYdEZjA.js",
+>>>>>>> ventas/tasas-temporales
     "name": "dashboard",
     "src": "resources/js/pages/dashboard.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_badge-BHZgGN9Y.js",
       "_cursor-BKumzuFC.js",
@@ -4492,18 +8329,63 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_badge-Cyqjs09m.js",
+      "_cursor-BhDD5Yjt.js",
+      "_placeholder-pattern-DfznfVDB.js",
+      "_scroll-B5hnrIvv.js",
+      "_separator-va2nwBxh.js",
+      "_sonner-D6qCho1Y.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_app-layout-B1zc1n1V.js",
+      "_card-CKJiSflu.js",
+      "_chart-Cz2VIrrc.js",
+      "_select-BCSCVofo.js",
+      "_table-BaxLE6gm.js",
+      "_computer-BquVrfSB.js",
+      "_shopping-bag-BRoDkoN-.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_dollar-sign-BOV3h1Hu.js",
+      "_trending-up-CRLIAz2D.js",
+      "_AreaChart-D5liKtR9.js",
+      "_CartesianGrid-Xs6dufED.js",
+      "_CartesianChart-C3tXm7UN.js",
+      "_x-BDZNoDhO.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_proxy-DQuR3cjM.js",
+      "_index-CZbz9K4b.js",
+      "_button-CHP9xHZG.js",
+      "_Combination-eBkSrgAs.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_check-QF3eLHSy.js",
+      "_index-BvWQzC-g.js",
+      "_chevron-down-C7VKRoni.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/errors/NotFoundPage.tsx": {
+<<<<<<< HEAD
     "file": "assets/NotFoundPage-DGzdf95x.js",
+=======
+    "file": "assets/NotFoundPage-BeVHeycA.js",
+>>>>>>> ventas/tasas-temporales
     "name": "NotFoundPage",
     "src": "resources/js/pages/errors/NotFoundPage.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_heading-small-D_0v_wpR.js",
       "_placeholder-pattern-DeoOV-2P.js",
       "_app-layout-BbL479dr.js",
@@ -4525,18 +8407,46 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_heading-small-G6sd1hZd.js",
+      "_placeholder-pattern-DfznfVDB.js",
+      "_app-layout-B1zc1n1V.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/settings/appearance.tsx": {
+<<<<<<< HEAD
     "file": "assets/appearance-CC4jrrZA.js",
+=======
+    "file": "assets/appearance-p_BiUbfv.js",
+>>>>>>> ventas/tasas-temporales
     "name": "appearance",
     "src": "resources/js/pages/settings/appearance.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_createLucideIcon-BgpvJBVF.js",
       "_heading-small-D_0v_wpR.js",
       "_app-layout-BbL479dr.js",
@@ -4559,18 +8469,47 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_createLucideIcon-BT9EmzJg.js",
+      "_heading-small-G6sd1hZd.js",
+      "_app-layout-B1zc1n1V.js",
+      "_layout-FzjFk5OV.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_button-CHP9xHZG.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js",
+      "_separator-va2nwBxh.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/settings/password.tsx": {
+<<<<<<< HEAD
     "file": "assets/password-CQ6wHL94.js",
+=======
+    "file": "assets/password-B4-OVZIN.js",
+>>>>>>> ventas/tasas-temporales
     "name": "password",
     "src": "resources/js/pages/settings/password.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_input-error-DE4sTX5a.js",
       "_app-layout-BbL479dr.js",
       "_layout-DBkI81y2.js",
@@ -4597,18 +8536,51 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_input-error-CLqYq_n6.js",
+      "_app-layout-B1zc1n1V.js",
+      "_layout-FzjFk5OV.js",
+      "_heading-small-G6sd1hZd.js",
+      "_button-CHP9xHZG.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_transition-Do3lVg0w.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js",
+      "_separator-va2nwBxh.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
     ]
   },
   "resources/js/pages/settings/profile.tsx": {
+<<<<<<< HEAD
     "file": "assets/profile-BlQgSrrv.js",
+=======
+    "file": "assets/profile-bzOJp80X.js",
+>>>>>>> ventas/tasas-temporales
     "name": "profile",
     "src": "resources/js/pages/settings/profile.tsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.tsx",
+<<<<<<< HEAD
       "_input-error-DE4sTX5a.js",
       "_button-CNh02bx_.js",
       "_input-1T5vY_bi.js",
@@ -4636,6 +8608,35 @@
     ],
     "css": [
       "assets/app-BUBJlKle.css"
+=======
+      "_input-error-CLqYq_n6.js",
+      "_button-CHP9xHZG.js",
+      "_input-B48v9S1o.js",
+      "_label-B7HAx3I-.js",
+      "_heading-small-G6sd1hZd.js",
+      "_dialog-BLF0yrmn.js",
+      "_app-layout-B1zc1n1V.js",
+      "_layout-FzjFk5OV.js",
+      "_transition-Do3lVg0w.js",
+      "_createLucideIcon-BT9EmzJg.js",
+      "_index-X9nOMuEy.js",
+      "_index-BGBHT7Hv.js",
+      "_app-sidebar-layout-BY_eDgjo.js",
+      "_index-CZbz9K4b.js",
+      "_Combination-eBkSrgAs.js",
+      "_proxy-DQuR3cjM.js",
+      "_x-BDZNoDhO.js",
+      "_index-sYi7w4zv.js",
+      "_index-CRTbuFd_.js",
+      "_app-logo-icon-XN1q-dsK.js",
+      "_package-NnwdEohU.js",
+      "_badge-Cyqjs09m.js",
+      "_check-QF3eLHSy.js",
+      "_separator-va2nwBxh.js"
+    ],
+    "css": [
+      "assets/app-BY6RATed.css"
+>>>>>>> ventas/tasas-temporales
     ],
     "assets": [
       "assets/auth-DbeahUQb.jpg"
