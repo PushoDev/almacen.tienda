@@ -4,7 +4,6 @@ import {
     AlertDialogAction,
     AlertDialogCancel,
     AlertDialogContent,
-    AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
@@ -15,11 +14,12 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react'; // Importamos usePage
-import { BadgeDollarSign, FileText, Save, Sheet, Warehouse } from 'lucide-react';
+import { BadgeDollarSign, FileText, Sheet, Warehouse } from 'lucide-react';
 import { useState } from 'react';
 
 // Interfaces
@@ -285,7 +285,49 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                     <TableBody>
                                         {almacenGroup.productos.map((producto) => (
                                             <TableRow key={`${producto.id}-${producto.almacen_id}`}>
-                                                <TableCell className="font-medium">{producto.nombre_producto}</TableCell>
+                                                <TableCell className="font-medium">
+                                                    <TooltipProvider>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <span className="cursor-help decoration-gray-400 decoration-dashed underline-offset-4 hover:underline">
+                                                                    {producto.nombre_producto}
+                                                                </span>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent className="border-primary/20 max-w-xs p-4 shadow-xl">
+                                                                <div className="space-y-2">
+                                                                    <p className="text-primary text-base font-bold">{producto.nombre_producto}</p>
+                                                                    <Separator className="bg-border/50" />
+                                                                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                                                                        <span className="text-muted-foreground">Marca:</span>
+                                                                        <span className="font-medium">{producto.marca_producto}</span>
+
+                                                                        {producto.modelo_producto && (
+                                                                            <>
+                                                                                <span className="text-muted-foreground">Modelo:</span>
+                                                                                <span className="font-medium">{producto.modelo_producto}</span>
+                                                                            </>
+                                                                        )}
+
+                                                                        {producto.capacidad_producto && (
+                                                                            <>
+                                                                                <span className="text-muted-foreground">Capacidad:</span>
+                                                                                <span className="font-medium">{producto.capacidad_producto}</span>
+                                                                            </>
+                                                                        )}
+
+                                                                        <span className="text-muted-foreground">Categoría:</span>
+                                                                        <span className="font-medium">{producto.categoria}</span>
+
+                                                                        <span className="text-muted-foreground">P. Compra:</span>
+                                                                        <span className="font-medium text-amber-600">
+                                                                            {formatCurrency(producto.precio_compra)}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    </TooltipProvider>
+                                                </TableCell>
                                                 <TableCell>{producto.marca_producto}</TableCell>
                                                 <TableCell>{producto.modelo_producto || '-'}</TableCell>
                                                 <TableCell>{producto.capacidad_producto || '-'}</TableCell>
@@ -354,51 +396,86 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                 {/* AlertDialog de Precio (Modal) */}
                 {selectedProduct && (
                     <AlertDialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                        <AlertDialogContent>
-                            <AlertDialogHeader>
-                                <AlertDialogTitle>{isEditMode ? 'Editar Precio de Venta' : 'Agregar Precio de Venta'}</AlertDialogTitle>
+                        <AlertDialogContent className="overflow-hidden border-0 p-0 shadow-2xl sm:max-w-md">
+                            <div className="from-primary/10 to-primary/5 border-primary/10 border-b bg-linear-to-r p-6">
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle className="text-primary flex items-center gap-2 text-xl">
+                                        <BadgeDollarSign className="h-6 w-6" />
+                                        {isEditMode ? 'Actualizar Precio' : 'Asignar Nuevo Precio'}
+                                    </AlertDialogTitle>
+                                    <div className="text-muted-foreground mt-1 text-sm">Gestiona el valor comercial para este producto.</div>
+                                </AlertDialogHeader>
+                            </div>
 
-                                {/* ✅ CORRECCIÓN DE ANIDAMIENTO:
-                                  Reemplazamos AlertDialogDescription (que es un <p>) por un simple <div>
-                                  para evitar anidar <div> y <p> dentro de otro <p>.
-                                */}
-                                <div className="text-muted-foreground text-sm">
-                                    <div className="mb-4 space-y-2">
-                                        {/* Reemplazamos <p> por <div> */}
+                            <div className="space-y-6 p-6">
+                                <div className="bg-secondary/30 border-border/50 space-y-3 rounded-lg border p-4">
+                                    <div className="flex items-start justify-between">
                                         <div>
-                                            <span className="font-medium">Producto:</span> {selectedProduct.nombre_producto}
+                                            <p className="text-muted-foreground text-xs font-medium tracking-wider uppercase">Producto</p>
+                                            <p className="text-foreground mt-0.5 text-base font-semibold">{selectedProduct.nombre_producto}</p>
+                                        </div>
+                                        <Badge variant="outline" className="bg-background">
+                                            {selectedProduct.marca_producto}
+                                        </Badge>
+                                    </div>
+                                    <div className="border-border/50 flex gap-4 border-t pt-2">
+                                        <div>
+                                            <p className="text-muted-foreground text-xs">Costo Base</p>
+                                            <p className="font-medium text-amber-700">{formatCurrency(selectedProduct.precio_compra)}</p>
                                         </div>
                                         <div>
-                                            <span className="font-medium">Precio de Compra:</span> {formatCurrency(selectedProduct.precio_compra)}
-                                        </div>
-                                        {/* Selector de Almacén */}
-                                        <div className="space-y-1">
-                                            <Label htmlFor="almacen-select">Almacén</Label>
-                                            <Select
-                                                onValueChange={handleAlmacenChange}
-                                                defaultValue={selectedProduct.almacen_id.toString()}
-                                                disabled={isEditMode || availableAlmacenes.length <= 1}
+                                            <p className="text-muted-foreground text-xs">Ganancia Actual</p>
+                                            <p
+                                                className={cn(
+                                                    'font-medium',
+                                                    (selectedProduct.ganancia || 0) >= 0 ? 'text-success' : 'text-destructive',
+                                                )}
                                             >
-                                                <SelectTrigger id="almacen-select">
-                                                    <SelectValue placeholder="Seleccione un almacén" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {availableAlmacenes.map((almacen) => (
-                                                        <SelectItem key={almacen.id} value={almacen.id.toString()}>
-                                                            {almacen.nombre}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            {isEditMode && (
-                                                <div className="text-xs text-gray-500">
-                                                    El almacén no se puede cambiar al editar un precio existente.
-                                                </div>
-                                            )}
+                                                {formatCurrency(selectedProduct.ganancia)}
+                                            </p>
                                         </div>
-                                        {/* Campo de Precio */}
-                                        <div className="space-y-1 pt-2">
-                                            <Label htmlFor="new-price">{isEditMode ? 'Nuevo Precio de Venta' : 'Precio de Venta'}</Label>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4">
+                                    {/* Selector de Almacén */}
+                                    <div className="space-y-2">
+                                        <Label htmlFor="almacen-select" className="text-sm font-medium">
+                                            Almacén Destino
+                                        </Label>
+                                        <Select
+                                            onValueChange={handleAlmacenChange}
+                                            defaultValue={selectedProduct.almacen_id.toString()}
+                                            disabled={isEditMode || availableAlmacenes.length <= 1}
+                                        >
+                                            <SelectTrigger id="almacen-select" className="bg-background hover:bg-accent/50 h-10 transition-colors">
+                                                <div className="flex items-center gap-2">
+                                                    <Warehouse className="text-muted-foreground h-4 w-4" />
+                                                    <SelectValue placeholder="Seleccione un almacén" />
+                                                </div>
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {availableAlmacenes.map((almacen) => (
+                                                    <SelectItem key={almacen.id} value={almacen.id.toString()}>
+                                                        {almacen.nombre}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {isEditMode && (
+                                            <p className="text-muted-foreground ml-1 flex items-center gap-1 text-[10px]">
+                                                <span className="block h-1 w-1 rounded-full bg-amber-500"></span>
+                                                Almacén bloqueado en modo edición
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="new-price" className="text-sm font-medium">
+                                            Precio de Venta (USD)
+                                        </Label>
+                                        <div className="relative">
+                                            <span className="text-muted-foreground absolute top-1/2 left-3 -translate-y-1/2 font-semibold">$</span>
                                             <Input
                                                 id="new-price"
                                                 type="number"
@@ -406,32 +483,51 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                                 min="0.01"
                                                 value={newPrice}
                                                 onChange={(e) => setNewPrice(e.target.value)}
-                                                placeholder="Ej: 24.99"
+                                                className="bg-background border-input hover:border-primary/50 focus-visible:ring-primary/20 h-11 pl-7 text-lg font-semibold shadow-sm transition-all"
+                                                placeholder="0.00"
                                             />
-                                            <div className="mt-1 text-xs text-gray-500">Mínimo: $0.01</div>
-                                            {error && <div className="mt-1 text-sm text-red-500">{error}</div>}
                                         </div>
+                                        <div className="flex items-center justify-between px-1">
+                                            <p className="text-muted-foreground text-[10px]">
+                                                Mínimo sugerido: {formatCurrency(selectedProduct.precio_compra * 1.01)}
+                                            </p>
+                                            {newPrice && !isNaN(parseFloat(newPrice)) && (
+                                                <p
+                                                    className={cn(
+                                                        'text-xs font-medium',
+                                                        parseFloat(newPrice) - selectedProduct.precio_compra >= 0
+                                                            ? 'text-success'
+                                                            : 'text-destructive',
+                                                    )}
+                                                >
+                                                    Ganancia: {formatCurrency(parseFloat(newPrice) - selectedProduct.precio_compra)}
+                                                </p>
+                                            )}
+                                        </div>
+                                        {error && <p className="text-destructive animate-in slide-in-from-top-1 px-1 text-xs font-medium">{error}</p>}
                                     </div>
                                 </div>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                                <AlertDialogCancel onClick={() => setIsModalOpen(false)} disabled={isLoading}>
+                            </div>
+
+                            <div className="bg-muted/50 border-border/50 flex justify-end gap-3 border-t p-4">
+                                <AlertDialogCancel onClick={() => setIsModalOpen(false)} disabled={isLoading} className="h-9">
                                     Cancelar
                                 </AlertDialogCancel>
-                                <AlertDialogAction onClick={handleSubmit} className="bg-blue-600 hover:bg-blue-700" disabled={isLoading}>
+                                <AlertDialogAction
+                                    onClick={handleSubmit}
+                                    className="bg-primary hover:bg-primary/90 h-9 min-w-[120px] px-6"
+                                    disabled={isLoading}
+                                >
                                     {isLoading ? (
-                                        <span className="flex items-center">
-                                            <span className="mr-2 animate-spin">🔄</span>
-                                            Procesando...
+                                        <span className="flex items-center gap-2">
+                                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                            Guardando
                                         </span>
                                     ) : (
-                                        <span className="flex items-center">
-                                            <Save size={16} className="mr-2" />
-                                            {isEditMode ? 'Actualizar' : 'Agregar'}
-                                        </span>
+                                        <span>Confirmar</span>
                                     )}
                                 </AlertDialogAction>
-                            </AlertDialogFooter>
+                            </div>
                         </AlertDialogContent>
                     </AlertDialog>
                 )}
