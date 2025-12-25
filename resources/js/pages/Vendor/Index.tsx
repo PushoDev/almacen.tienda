@@ -1079,10 +1079,30 @@ export default function PuntoVentaOficial({
                                                                         </TooltipContent>
                                                                     </Tooltip>
                                                                 </TooltipProvider>
-                                                                <p className="text-muted-foreground mt-1.5 text-xs">
-                                                                    {producto.marca_producto || 'Sin marca'} •{' '}
-                                                                    {producto.categoria_nombre || 'Sin categoría'}
-                                                                </p>
+                                                                <div className="mt-2 space-y-1 text-xs">
+                                                                    <div className="text-muted-foreground flex gap-1">
+                                                                        <span className="font-semibold">Marca:</span>
+                                                                        <span className="text-foreground truncate">
+                                                                            {producto.marca_producto || 'N/A'}
+                                                                        </span>
+                                                                    </div>
+                                                                    {producto.modelo_producto && (
+                                                                        <div className="text-muted-foreground flex gap-1">
+                                                                            <span className="font-semibold">Modelo:</span>
+                                                                            <span className="text-foreground truncate">
+                                                                                {producto.modelo_producto}
+                                                                            </span>
+                                                                        </div>
+                                                                    )}
+                                                                    {producto.capacidad_producto && (
+                                                                        <div className="text-muted-foreground flex gap-1">
+                                                                            <span className="font-semibold">Capacidad:</span>
+                                                                            <span className="text-foreground truncate">
+                                                                                {producto.capacidad_producto}
+                                                                            </span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
                                                                 <div className="mt-4 flex items-end justify-between">
                                                                     <div>
                                                                         <p className="text-muted-foreground mb-0.5 text-xs">Precio</p>
