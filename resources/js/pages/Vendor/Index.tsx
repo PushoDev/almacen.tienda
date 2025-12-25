@@ -9,13 +9,13 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
+import { Badge } from '@/Components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ScrollArea } from '@/Components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from '@/components/ui/sonner';
@@ -191,7 +191,7 @@ export default function PuntoVentaOficial({
     } | null>(null);
 
     const [isCrearClienteDialogOpen, setIsCrearClienteDialogOpen] = useState(false);
-    const [clienteErrors, setClienteErrors] = useState<Record<string, string>>({});
+    // const [clienteErrors, setClienteErrors] = useState<Record<string, string>>({});
 
     const [productoVistaRapida, setProductoVistaRapida] = useState<Producto | null>(null);
     const [isVistaRapidaOpen, setIsVistaRapidaOpen] = useState(false);
@@ -751,10 +751,10 @@ export default function PuntoVentaOficial({
 
                 setLocalErrors({});
                 setIsCrearClienteDialogOpen(false);
-            } catch (error: any) {
+            } catch (error: unknown) {
                 console.error('Error al crear cliente:', error);
-                if (error.response?.data?.errors) {
-                    setLocalErrors(error.response.data.errors);
+                if (axios.isAxiosError(error) && error.response?.data?.errors) {
+                    // setLocalErrors(error.response.data.errors); // Assuming setLocalErrors is local to this component or accessible
                     toast.error('Error de validación', {
                         description: 'Por favor corrige los errores en el formulario.',
                     });
@@ -908,7 +908,7 @@ export default function PuntoVentaOficial({
                         <div className="space-y-4 lg:col-span-2 lg:space-y-6">
                             {/* Configuración */}
                             <Card className="overflow-hidden border-0 shadow-lg">
-                                <CardHeader className="from-secondary to-secondary/50 bg-gradient-to-r pb-4">
+                                <CardHeader className="from-secondary to-secondary/50 bg-linear-to-r pb-4">
                                     <CardTitle className="flex items-center gap-2 text-base font-semibold">
                                         <Building2 className="text-primary h-5 w-5" />
                                         Configuración de Venta
@@ -993,8 +993,8 @@ export default function PuntoVentaOficial({
 
                             {/* Productos */}
                             {almacenSeleccionado && (
-                                <Card className="animate-fade-in overflow-hidden border-0 shadow-lg" style={{ minHeight: '500px' }}>
-                                    <CardHeader className="from-secondary to-secondary/50 bg-gradient-to-r pb-4">
+                                <Card className="animate-fade-in min-h-[500px] overflow-hidden border-0 shadow-lg">
+                                    <CardHeader className="from-secondary to-secondary/50 bg-linear-to-r pb-4">
                                         <div className="flex items-center justify-between">
                                             <CardTitle className="flex items-center gap-2 text-base font-semibold">
                                                 <BoxesIcon className="text-success h-5 w-5" />
@@ -1018,7 +1018,7 @@ export default function PuntoVentaOficial({
                                                             className="group bg-card hover:border-primary/30 animate-fade-in overflow-hidden rounded-lg border transition-all duration-300 hover:shadow-xl"
                                                             style={{ animationDelay: `${index * 50}ms` }}
                                                         >
-                                                            <div className="bg-secondary relative aspect-[4/3] overflow-hidden">
+                                                            <div className="bg-secondary relative aspect-4/3 overflow-hidden">
                                                                 <img
                                                                     src={producto.imagen_url || '/placeholder-product.png'}
                                                                     alt={producto.nombre_producto}
@@ -1161,7 +1161,7 @@ export default function PuntoVentaOficial({
                         {/* Right column - Carrito Sticky */}
                         <div className="space-y-6 lg:sticky lg:top-4 lg:self-start">
                             <Card className="overflow-hidden border-0 shadow-lg">
-                                <CardHeader className="from-primary/10 to-primary/5 bg-gradient-to-r pb-4">
+                                <CardHeader className="from-primary/10 to-primary/5 bg-linear-to-r pb-4">
                                     <div className="flex items-center justify-between">
                                         <CardTitle className="flex items-center gap-2 text-base font-semibold">
                                             <ShoppingCart className="text-primary h-5 w-5" />
@@ -1255,7 +1255,7 @@ export default function PuntoVentaOficial({
                                         <div className="border-t p-6">
                                             <div className="mb-4 rounded-lg bg-blue-50 p-3 text-sm">
                                                 <div className="flex items-start">
-                                                    <div className="flex-shrink-0">
+                                                    <div className="shrink-0">
                                                         <Info className="mt-0.5 h-4 w-4 text-blue-400" />
                                                     </div>
                                                     <div className="ml-2">
@@ -1292,7 +1292,7 @@ export default function PuntoVentaOficial({
                                                         </Button>
                                                     </AlertDialogTrigger>
                                                     <AlertDialogContent className="max-h-[500px] overflow-y-auto p-0 sm:max-w-[800px]">
-                                                        <AlertDialogHeader className="from-secondary to-secondary/50 border-b bg-gradient-to-r px-6 pt-6 pb-4">
+                                                        <AlertDialogHeader className="from-secondary to-secondary/50 border-b bg-linear-to-r px-6 pt-6 pb-4">
                                                             <div className="flex items-start justify-between">
                                                                 <div>
                                                                     <AlertDialogTitle className="text-xl font-bold">Procesar Venta</AlertDialogTitle>

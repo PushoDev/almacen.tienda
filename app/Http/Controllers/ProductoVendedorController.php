@@ -56,6 +56,8 @@ class ProductoVendedorController extends Controller
                     'id' => $producto->id,
                     'nombre_producto' => $producto->nombre_producto,
                     'marca_producto' => $producto->marca_producto,
+                    'modelo_producto' => $producto->modelo_producto,
+                    'capacidad_producto' => $producto->capacidad_producto,
                     'categoria' => $producto->categoria->nombre_categoria ?? 'Sin categoría',
                     'precio_compra' => $producto->precio_compra_producto,
                     'stock_almacen' => $stockAlmacen,

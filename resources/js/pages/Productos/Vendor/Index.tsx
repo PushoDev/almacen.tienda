@@ -27,6 +27,8 @@ interface Producto {
     id: number;
     nombre_producto: string;
     marca_producto: string;
+    modelo_producto?: string;
+    capacidad_producto?: string;
     categoria: string;
     precio_compra: number;
     stock_almacen: number;
@@ -270,6 +272,8 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                         <TableRow className="bg-gray-100 hover:bg-gray-100 dark:bg-gray-900 dark:hover:bg-gray-900">
                                             <TableHead className="w-[200px]">Producto</TableHead>
                                             <TableHead>Marca</TableHead>
+                                            <TableHead>Modelo</TableHead>
+                                            <TableHead>Capacidad</TableHead>
                                             <TableHead>Categoría</TableHead>
                                             <TableHead>Precio Compra</TableHead>
                                             <TableHead>Stock</TableHead>
@@ -283,6 +287,8 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                             <TableRow key={`${producto.id}-${producto.almacen_id}`}>
                                                 <TableCell className="font-medium">{producto.nombre_producto}</TableCell>
                                                 <TableCell>{producto.marca_producto}</TableCell>
+                                                <TableCell>{producto.modelo_producto || '-'}</TableCell>
+                                                <TableCell>{producto.capacidad_producto || '-'}</TableCell>
                                                 <TableCell>{producto.categoria || 'Sin categoría'}</TableCell>
                                                 <TableCell>{formatCurrency(producto.precio_compra)}</TableCell>
                                                 <TableCell>
