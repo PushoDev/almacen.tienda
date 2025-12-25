@@ -295,7 +295,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                                             </TooltipTrigger>
                                                             <TooltipContent className="border-primary/20 max-w-xs p-4 shadow-xl">
                                                                 <div className="space-y-2">
-                                                                    <p className="text-primary text-base font-bold">{producto.nombre_producto}</p>
+                                                                    <p className="text-base font-bold text-white">{producto.nombre_producto}</p>
                                                                     <Separator className="bg-border/50" />
                                                                     <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                                                                         <span className="text-muted-foreground">Marca:</span>
@@ -319,7 +319,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                                                         <span className="font-medium">{producto.categoria}</span>
 
                                                                         <span className="text-muted-foreground">P. Compra:</span>
-                                                                        <span className="font-medium text-amber-600">
+                                                                        <span className="text-sidebar font-medium">
                                                                             {formatCurrency(producto.precio_compra)}
                                                                         </span>
                                                                     </div>

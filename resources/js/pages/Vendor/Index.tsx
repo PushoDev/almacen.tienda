@@ -9,13 +9,13 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Badge } from '@/Components/ui/badge';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/Components/ui/scroll-area';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from '@/components/ui/sonner';
@@ -180,7 +180,7 @@ export default function PuntoVentaOficial({
         referencia: '',
     });
     const [cuentasFiltradas, setCuentasFiltradas] = useState<Cuenta[]>([]);
-    const [cargandoCuentas, setCargandoCuentas] = useState<boolean>(false);
+
     const [clientesFisicos, setClientesFisicos] = useState<Cliente[]>([]);
     const [cargandoClientesFisicos, setCargandoClientesFisicos] = useState<boolean>(false);
     const [conversionCalculada, setConversionCalculada] = useState<{
@@ -191,7 +191,6 @@ export default function PuntoVentaOficial({
     } | null>(null);
 
     const [isCrearClienteDialogOpen, setIsCrearClienteDialogOpen] = useState(false);
-    // const [clienteErrors, setClienteErrors] = useState<Record<string, string>>({});
 
     const [productoVistaRapida, setProductoVistaRapida] = useState<Producto | null>(null);
     const [isVistaRapidaOpen, setIsVistaRapidaOpen] = useState(false);
