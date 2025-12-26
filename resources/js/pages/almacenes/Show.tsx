@@ -2,6 +2,7 @@ import HeadingSmall from '@/components/heading-small';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -26,15 +27,31 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function ShowAlmacenesPage({ almacen, productos }: { almacen: AlmacenProps; productos: ProductoPorAlmacenDetalleRef[] }) {
+interface ProductDetails extends ProductoPorAlmacenDetalleRef {
+    marca?: string;
+    modelo?: string;
+    capacidad?: string;
+    codigo?: string;
+    categoria?: string;
+    imagen_url?: string;
+}
+
+export default function ShowAlmacenesPage({ almacen, productos }: { almacen: AlmacenProps; productos: ProductDetails[] }) {
     // Estado para la búsqueda
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedProduct, setSelectedProduct] = useState<ProductDetails | null>(null);
+    const [showDialog, setShowDialog] = useState(false);
 
     // Filtrar productos basado en la búsqueda
     const filteredProductos = useMemo(() => {
         if (!searchTerm) return productos;
         return productos.filter((producto) => producto.nombre_producto.toLowerCase().includes(searchTerm.toLowerCase()));
     }, [productos, searchTerm]);
+
+    const handleProductClick = (producto: ProductDetails) => {
+        setSelectedProduct(producto);
+        setShowDialog(true);
+    };
 
     // Función para obtener el badge según el tipo de almacén
     const getBadge = (tipo: string) => {
@@ -371,6 +388,11 @@ export default function ShowAlmacenesPage({ almacen, productos }: { almacen: Alm
                                         <TableRow>
                                             <TableHead className="w-[80px]">ID</TableHead>
                                             <TableHead>Nombre del Producto</TableHead>
+                                            <TableHead>Marca</TableHead>
+                                            <TableHead>Modelo</TableHead>
+                                            <TableHead>Capacidad</TableHead>
+                                            <TableHead>Código</TableHead>
+                                            <TableHead>Categoría</TableHead>
                                             <TableHead className="w-[120px] text-right">Cantidad</TableHead>
                                             <TableHead className="w-[120px]">Estado</TableHead>
                                         </TableRow>
@@ -384,9 +406,20 @@ export default function ShowAlmacenesPage({ almacen, productos }: { almacen: Alm
                                                     <TableCell>
                                                         <div className="flex items-center gap-2">
                                                             <Package className="text-muted-foreground h-4 w-4" />
-                                                            {producto.nombre_producto}
+                                                            <Button
+                                                                variant="link"
+                                                                className="h-auto transform cursor-pointer p-0 text-base font-medium text-blue-600 underline-offset-4 hover:underline"
+                                                                onClick={() => handleProductClick(producto)}
+                                                            >
+                                                                {producto.nombre_producto}
+                                                            </Button>
                                                         </div>
                                                     </TableCell>
+                                                    <TableCell>{producto.marca || '-'}</TableCell>
+                                                    <TableCell>{producto.modelo || '-'}</TableCell>
+                                                    <TableCell>{producto.capacidad || '-'}</TableCell>
+                                                    <TableCell className="font-mono text-xs">{producto.codigo || '-'}</TableCell>
+                                                    <TableCell>{producto.categoria || '-'}</TableCell>
                                                     <TableCell className="text-right">
                                                         <span className={`text-lg font-semibold ${stockStatus.color}`}>
                                                             {producto.cantidad_total}
@@ -404,6 +437,52 @@ export default function ShowAlmacenesPage({ almacen, productos }: { almacen: Alm
                         )}
                     </CardContent>
                 </Card>
+
+                {/* Dialog de Detalles del Producto */}
+                <Dialog open={showDialog} onOpenChange={setShowDialog}>
+                    <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                            <DialogTitle>Detalles del Producto</DialogTitle>
+                        </DialogHeader>
+                        {selectedProduct && (
+                            <div className="flex flex-col gap-4">
+                                <div className="mx-auto flex h-48 w-48 items-center justify-center overflow-hidden rounded-lg border bg-gray-50 p-2">
+                                    <img
+                                        src={selectedProduct.imagen_url || '/placeholder.png'}
+                                        alt={selectedProduct.nombre_producto}
+                                        className="h-full w-full object-contain"
+                                    />
+                                </div>
+
+                                <div className="space-y-4">
+                                    <div className="text-center">
+                                        <h3 className="text-lg font-bold text-gray-900">{selectedProduct.nombre_producto}</h3>
+                                        <p className="text-sm text-gray-500">{selectedProduct.codigo || 'Sin código'}</p>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4 rounded-lg bg-gray-50 p-4 text-sm">
+                                        <div>
+                                            <p className="font-medium text-gray-500">Marca</p>
+                                            <p className="font-semibold text-gray-900">{selectedProduct.marca || 'N/A'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-gray-500">Modelo</p>
+                                            <p className="font-semibold text-gray-900">{selectedProduct.modelo || 'N/A'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-gray-500">Capacidad</p>
+                                            <p className="font-semibold text-gray-900">{selectedProduct.capacidad || 'N/A'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-gray-500">Stock en Almacén</p>
+                                            <p className="font-semibold text-blue-600">{selectedProduct.cantidad_total}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </DialogContent>
+                </Dialog>
             </div>
         </AppLayout>
     );

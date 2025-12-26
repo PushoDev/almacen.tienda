@@ -66,13 +66,29 @@ class Almacen extends Model
     {
         return DB::table('almacen_producto')
             ->join('productos', 'almacen_producto.producto_id', '=', 'productos.id')
+            ->leftJoin('categorias', 'productos.categoria_id', '=', 'categorias.id')
             ->where('almacen_producto.almacen_id', $this->id)
             ->select(
                 'productos.id',
                 'productos.nombre_producto as nombre',
+                'productos.marca_producto',
+                'productos.modelo_producto',
+                'productos.capacidad_producto',
+                'productos.codigo_producto',
+                'productos.imagen_producto',
+                'categorias.nombre_categoria as categoria',
                 DB::raw('SUM(almacen_producto.cantidad) as cantidad_total')
             )
-            ->groupBy('productos.id', 'productos.nombre_producto')
+            ->groupBy(
+                'productos.id',
+                'productos.nombre_producto',
+                'productos.marca_producto',
+                'productos.modelo_producto',
+                'productos.capacidad_producto',
+                'productos.codigo_producto',
+                'productos.imagen_producto',
+                'categorias.nombre_categoria'
+            )
             ->orderBy('productos.nombre_producto')
             ->get();
     }

@@ -75,13 +75,28 @@ class MovimientosController extends Controller
         }
 
         $productos = $almacen->productos()
-            ->select('productos.id', 'productos.nombre_producto', 'almacen_producto.cantidad', 'almacen_producto.cantidad_en_transito')
+            ->select(
+                'productos.id',
+                'productos.nombre_producto',
+                'productos.marca_producto',
+                'productos.modelo_producto',
+                'productos.capacidad_producto',
+                'productos.codigo_producto',
+                'productos.imagen_producto', // Necesario para el accessor
+                'almacen_producto.cantidad',
+                'almacen_producto.cantidad_en_transito'
+            )
             ->get()
             ->map(function ($producto) {
                 $disponible = $producto->pivot->cantidad - $producto->pivot->cantidad_en_transito;
                 return [
                     'id' => $producto->id,
                     'nombre' => $producto->nombre_producto,
+                    'marca' => $producto->marca_producto,
+                    'modelo' => $producto->modelo_producto,
+                    'capacidad' => $producto->capacidad_producto,
+                    'codigo' => $producto->codigo_producto,
+                    'imagen_url' => $producto->imagen_url, // Accessor del modelo
                     'stock_total' => $producto->pivot->cantidad,
                     'stock_en_transito' => $producto->pivot->cantidad_en_transito,
                     'stock_disponible' => max(0, $disponible),
@@ -459,8 +474,8 @@ class MovimientosController extends Controller
 
             DB::commit();
 
-             // Notificar Admins
-             try {
+            // Notificar Admins
+            try {
                 $admins = User::whereIn('role', ['admin', 'moderador'])->get();
                 Notification::send($admins, new MovimientoStockNotification($movimiento, "Movimiento #{$movimiento->id} RECHAZADO"));
             } catch (\Exception $e) {

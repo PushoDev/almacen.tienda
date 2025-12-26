@@ -27,6 +27,46 @@ Route::prefix('api/ecommerce')->group(function () {
     Route::get('/almacen/productos', [EcommerceController::class, 'getProductosAlmacen'])->name('api.ecommerce.productos');
 });
 
+// Route to fix storage link on shared hosting
+// Route to generate storage symlink
+Route::get('/storage-link', function () {
+    $target = storage_path('app/public');
+    $link = public_path('storage');
+
+    echo "Target: $target<br>";
+    echo "Link: $link<br><br>";
+
+    // Clean up existing link/folder
+    if (file_exists($link)) {
+        if (is_link($link)) {
+            echo "Found existing symlink. Removing...<br>";
+            @unlink($link);
+        } elseif (is_dir($link)) {
+            echo "Found existing DIRECTORY. Removing...<br>";
+            // Simple rmdir (only works if empty)
+            if (@rmdir($link)) {
+                echo "Directory removed.<br>";
+            } else {
+                echo "❌ Could not remove directory. It might not be empty.<br>";
+            }
+        } else {
+            echo "Found existing file. Removing...<br>";
+            @unlink($link);
+        }
+    }
+
+    try {
+        symlink($target, $link);
+        echo "✅ Symlink created successfully.";
+    } catch (\Exception $e) {
+        echo "❌ Error: " . $e->getMessage() . "<br>";
+        if (str_contains(php_uname(), 'Windows') && str_contains($e->getMessage(), 'Permission denied')) {
+            echo "<br>💡 <strong>Note for Windows (Local):</strong> You need to run the server/caja as Administrator to create symlinks, or enable Developer Mode in Windows settings.<br>";
+            echo "This usually works without issues on Linux/Production servers.";
+        }
+    }
+});
+
 // Sistema de Logistica
 Route::get('/sistema', function () {
     return Inertia::render('auth/login');

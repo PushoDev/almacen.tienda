@@ -83,9 +83,19 @@ class AlmacenController extends Controller
     public function show(Almacen $almacen)
     {
         $productos = $almacen->getProductosConCantidad()->map(function ($item) use ($almacen) {
+            $imagenUrl = $item->imagen_producto
+                ? asset('storage/' . $item->imagen_producto)
+                : asset('storage/productos/producto-default.png');
+
             return [
                 'producto_id' => $item->id,
                 'nombre_producto' => $item->nombre,
+                'marca' => $item->marca_producto,
+                'modelo' => $item->modelo_producto,
+                'capacidad' => $item->capacidad_producto,
+                'codigo' => $item->codigo_producto,
+                'categoria' => $item->categoria,
+                'imagen_url' => $imagenUrl,
                 'cantidad_total' => $item->cantidad_total,
                 'almacen_id' => $almacen->id,
                 'nombre_almacen' => $almacen->nombre_almacen,
