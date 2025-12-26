@@ -27,6 +27,28 @@ Route::prefix('api/ecommerce')->group(function () {
     Route::get('/almacen/productos', [EcommerceController::class, 'getProductosAlmacen'])->name('api.ecommerce.productos');
 });
 
+// Route to fix storage link on shared hosting
+// Route to generate storage symlink
+Route::get('/storage-link', function () {
+    $target = storage_path('app/public');
+    $link = public_path('storage');
+
+    echo "Target: $target<br>";
+    echo "Link: $link<br><br>";
+
+    if (file_exists($link)) {
+        echo "Link/Folder already exists. Removing...<br>";
+        @unlink($link);
+    }
+
+    try {
+        symlink($target, $link);
+        echo "✅ Symlink created successfully.";
+    } catch (\Exception $e) {
+        echo "❌ Error: " . $e->getMessage();
+    }
+});
+
 // Sistema de Logistica
 Route::get('/sistema', function () {
     return Inertia::render('auth/login');

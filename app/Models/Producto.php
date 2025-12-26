@@ -167,10 +167,6 @@ class Producto extends Model
             return null;
         }
 
-        if (!Storage::disk('public')->exists($this->barcode_image)) {
-            return null;
-        }
-
         return asset('storage/' . $this->barcode_image);
     }
 
@@ -227,10 +223,6 @@ class Producto extends Model
     public function getImagenUrlAttribute(): string
     {
         if (!$this->imagen_producto) {
-            return asset('storage/productos/producto-default.png');
-        }
-
-        if (!Storage::disk('public')->exists($this->imagen_producto)) {
             return asset('storage/productos/producto-default.png');
         }
 
