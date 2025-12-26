@@ -36,16 +36,34 @@ Route::get('/storage-link', function () {
     echo "Target: $target<br>";
     echo "Link: $link<br><br>";
 
+    // Clean up existing link/folder
     if (file_exists($link)) {
-        echo "Link/Folder already exists. Removing...<br>";
-        @unlink($link);
+        if (is_link($link)) {
+            echo "Found existing symlink. Removing...<br>";
+            @unlink($link);
+        } elseif (is_dir($link)) {
+            echo "Found existing DIRECTORY. Removing...<br>";
+            // Simple rmdir (only works if empty)
+            if (@rmdir($link)) {
+                echo "Directory removed.<br>";
+            } else {
+                echo "❌ Could not remove directory. It might not be empty.<br>";
+            }
+        } else {
+            echo "Found existing file. Removing...<br>";
+            @unlink($link);
+        }
     }
 
     try {
         symlink($target, $link);
         echo "✅ Symlink created successfully.";
     } catch (\Exception $e) {
-        echo "❌ Error: " . $e->getMessage();
+        echo "❌ Error: " . $e->getMessage() . "<br>";
+        if (str_contains(php_uname(), 'Windows') && str_contains($e->getMessage(), 'Permission denied')) {
+            echo "<br>💡 <strong>Note for Windows (Local):</strong> You need to run the server/caja as Administrator to create symlinks, or enable Developer Mode in Windows settings.<br>";
+            echo "This usually works without issues on Linux/Production servers.";
+        }
     }
 });
 

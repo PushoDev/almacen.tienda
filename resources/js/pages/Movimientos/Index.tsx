@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -67,6 +68,11 @@ interface ProductoConStock extends ProductoPorAlmacenDetalleRef {
     stock_total: number;
     stock_en_transito: number;
     stock_disponible: number;
+    marca?: string;
+    modelo?: string;
+    capacidad?: string;
+    codigo?: string;
+    imagen_url?: string;
 }
 
 interface MovimientoWithDetails extends Movimiento {
@@ -119,7 +125,10 @@ export default function MovimientosPage({
         recibir: false,
         enviar: false,
         rechazar: false,
+        producto: false,
     });
+
+    const [selectedProductDetails, setSelectedProductDetails] = useState<ProductoConStock | null>(null);
 
     const [dialogData, setDialogData] = useState({
         guia: '',
@@ -131,13 +140,9 @@ export default function MovimientosPage({
     const usuario = props.auth?.user as any;
     const isVendedor = usuario?.role === 'vendedor';
 
-    const almacenesOrigen = isVendedor && userAlmacenesIds.length > 0
-        ? almacenes.filter(a => userAlmacenesIds.includes(a.id))
-        : almacenes;
+    const almacenesOrigen = isVendedor && userAlmacenesIds.length > 0 ? almacenes.filter((a) => userAlmacenesIds.includes(a.id)) : almacenes;
 
-    const almacenesDestino = almacenOrigenId
-        ? almacenes.filter(a => a.id !== parseInt(almacenOrigenId))
-        : almacenes;
+    const almacenesDestino = almacenOrigenId ? almacenes.filter((a) => a.id !== parseInt(almacenOrigenId)) : almacenes;
 
     const handleAlmacenOrigenChange = (value: string) => {
         console.log('[Movimientos] Cambiando almacén origen a:', value);
@@ -358,6 +363,12 @@ export default function MovimientosPage({
         }));
     };
 
+    const handleProductClick = (producto: ProductoConStock) => {
+        console.log('[Movimientos] Viendo detalles de producto:', producto.id);
+        setSelectedProductDetails(producto);
+        setShowDialogs({ ...showDialogs, producto: true });
+    };
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Movimientos" />
@@ -441,7 +452,15 @@ export default function MovimientosPage({
                                         <tbody className="divide-y">
                                             {productosEmisor.map((producto) => (
                                                 <tr key={producto.id} className="transition-colors">
-                                                    <td className="px-6 py-4 font-medium">{producto.nombre}</td>
+                                                    <td className="px-6 py-4 font-medium">
+                                                        <Button
+                                                            variant="link"
+                                                            className="h-auto cursor-pointer p-0 font-medium text-blue-600 underline-offset-4 hover:underline"
+                                                            onClick={() => handleProductClick(producto)}
+                                                        >
+                                                            {producto.nombre}
+                                                        </Button>
+                                                    </td>
                                                     <td className="px-6 py-4">{producto.stock_total}</td>
                                                     <td className="px-6 py-4">
                                                         <span className="inline-flex items-center gap-1 font-medium text-orange-600">
@@ -527,10 +546,7 @@ export default function MovimientosPage({
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span className="font-semibold">
-                                                    {movimiento.detalles?.reduce(
-                                                        (total: number, detalle) => total + detalle.cantidad_solicitada,
-                                                        0,
-                                                    )}{' '}
+                                                    {movimiento.detalles?.reduce((total: number, detalle) => total + detalle.cantidad_solicitada, 0)}{' '}
                                                     unidades
                                                 </span>
                                             </td>
@@ -620,7 +636,7 @@ export default function MovimientosPage({
                                             .replace('&raquo;', '»')
                                             .replace('pagination.previous', '«')
                                             .replace('pagination.next', '»');
-                                        
+
                                         return (
                                             <Button
                                                 key={index}
@@ -796,16 +812,58 @@ export default function MovimientosPage({
 
                         <div className="flex justify-end gap-2">
                             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction
-                                onClick={handleRechazarConfirm}
-                                disabled={!dialogData.observaciones}
-                                className="bg-red-600 hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                                Rechazar
+                            <AlertDialogAction onClick={handleRechazarConfirm} className="bg-red-600 hover:bg-red-700">
+                                Confirmar Rechazo
                             </AlertDialogAction>
                         </div>
                     </AlertDialogContent>
                 </AlertDialog>
+
+                {/* Dialog - Detalles del Producto */}
+                <Dialog open={showDialogs.producto} onOpenChange={(open) => setShowDialogs({ ...showDialogs, producto: open })}>
+                    <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                            <DialogTitle>Detalles del Producto</DialogTitle>
+                        </DialogHeader>
+                        {selectedProductDetails && (
+                            <div className="flex flex-col gap-4">
+                                <div className="mx-auto flex h-48 w-48 items-center justify-center overflow-hidden rounded-lg border bg-gray-50 p-2">
+                                    <img
+                                        src={selectedProductDetails.imagen_url || '/placeholder.png'}
+                                        alt={selectedProductDetails.nombre}
+                                        className="h-full w-full object-contain"
+                                    />
+                                </div>
+
+                                <div className="space-y-4">
+                                    <div className="text-center">
+                                        <h3 className="text-lg font-bold text-gray-900">{selectedProductDetails.nombre}</h3>
+                                        <p className="text-sm text-gray-500">{selectedProductDetails.codigo}</p>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4 rounded-lg bg-gray-50 p-4 text-sm">
+                                        <div>
+                                            <p className="font-medium text-gray-500">Marca</p>
+                                            <p className="font-semibold text-gray-900">{selectedProductDetails.marca || 'N/A'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-gray-500">Modelo</p>
+                                            <p className="font-semibold text-gray-900">{selectedProductDetails.modelo || 'N/A'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-gray-500">Capacidad</p>
+                                            <p className="font-semibold text-gray-900">{selectedProductDetails.capacidad || 'N/A'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-gray-500">Stock Disponible</p>
+                                            <p className="font-semibold text-green-600">{selectedProductDetails.stock_disponible}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </DialogContent>
+                </Dialog>
             </div>
             <Toaster position="top-center" />
         </AppLayout>
