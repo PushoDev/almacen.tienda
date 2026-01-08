@@ -363,13 +363,13 @@ export default function Dashboard({
 
                                 {/* Textos alineados a la derecha */}
                                 <div className="flex h-full flex-col items-end justify-center space-y-2">
-                                    <h3 className="text-4xl font-bold text-white">Remesas</h3>
+                                    <h3 className="text-4xl font-bold text-white">$ 0.00</h3>
                                 </div>
 
                                 {/* Botón pequeño */}
                                 <Link href={route('remesas')}>
                                     <button className="absolute right-4 bottom-4 rounded-md bg-amber-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-amber-800">
-                                        Cuadre / Inventario
+                                        Planificar Cierres
                                     </button>
                                 </Link>
                             </div>
