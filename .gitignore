@@ -18,3 +18,9 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+/public/productos/*
+!/public/productos/.gitignore
+!/public/productos/producto-default.png
+/public/barcodes/*
+!/public/barcodes/.gitignore

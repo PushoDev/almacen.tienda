@@ -7,7 +7,6 @@ use App\Models\Categoria;
 use App\Models\Almacen;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use App\Exports\ProductoExport;
@@ -224,10 +223,13 @@ class ProductoController extends Controller
             // Manejar imagen de producto
             if ($request->hasFile('imagen_producto')) {
                 // Eliminar imagen anterior si no es la default
-                if ($imagenPath && $imagenPath !== 'productos/producto-default.png') {
-                    Storage::disk('public')->delete($imagenPath);
+                if ($imagenPath && $imagenPath !== 'productos/producto-default.png' && file_exists(public_path($imagenPath))) {
+                    unlink(public_path($imagenPath));
                 }
-                $imagenPath = $request->file('imagen_producto')->store('productos', 'public');
+
+                $filename = time() . '_' . $request->file('imagen_producto')->getClientOriginalName();
+                $request->file('imagen_producto')->move(public_path('productos'), $filename);
+                $imagenPath = 'productos/' . $filename;
             }
 
             $updateData = array_merge($validatedData, [
@@ -267,14 +269,13 @@ class ProductoController extends Controller
         DB::beginTransaction();
         try {
             // Eliminar imagen del producto si no es la default
-            if ($producto->imagen_producto && $producto->imagen_producto !== 'productos/producto-default.png') {
-                Storage::disk('public')->delete($producto->imagen_producto);
+            // Eliminar imagen del producto si no es la default
+            if ($producto->imagen_producto && $producto->imagen_producto !== 'productos/producto-default.png' && file_exists(public_path($producto->imagen_producto))) {
+                unlink(public_path($producto->imagen_producto));
             }
 
             // Eliminar imagen del código de barras
-            if ($producto->barcode_image) {
-                Storage::disk('public')->delete($producto->barcode_image);
-            }
+            $producto->eliminarBarcodeImage();
 
             // Eliminar relaciones
             $producto->almacenes()->detach();

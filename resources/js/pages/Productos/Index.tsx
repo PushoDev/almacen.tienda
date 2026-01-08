@@ -428,8 +428,7 @@ export default function ProductosPage({
                 onError: (errors: Record<string, string>) => {
                     console.error('Errores de importación:', errors);
 
-                    const errorMessage =
-                        errors.error || errors.file || errors.almacen_id || 'Ocurrió un error al importar los productos.';
+                    const errorMessage = errors.error || errors.file || errors.almacen_id || 'Ocurrió un error al importar los productos.';
 
                     toast.error('❌ Error en la importación', {
                         description: errorMessage,
@@ -472,8 +471,9 @@ export default function ProductosPage({
         if (searchTerm) params.search = searchTerm;
         if (selectedCategoria) params.categoria_id = selectedCategoria;
         if (soloStockBajo) params.stock_bajo = true;
-        if (sort.field) params.sort_field = sort.field;
-        if (sort.direction) params.sort_direction = sort.direction;
+        // Solo agregar parámetros de ordenamiento si son diferentes a los valores por defecto
+        if (sort.field && sort.field !== 'nombre_producto') params.sort_field = sort.field;
+        if (sort.direction && sort.direction !== 'asc') params.sort_direction = sort.direction;
 
         router.get(route('productos.index'), params, {
             preserveState: true,
@@ -484,18 +484,17 @@ export default function ProductosPage({
     // Cambiar ordenamiento
     const handleSort = (field: string) => {
         const direction = sort.field === field && sort.direction === 'asc' ? 'desc' : 'asc';
-        router.get(
-            route('productos.index'),
-            {
-                ...filters,
-                sort_field: field,
-                sort_direction: direction,
-            },
-            {
-                preserveState: true,
-                replace: true,
-            },
-        );
+        const params: Record<string, any> = {
+            ...filters,
+        };
+
+        if (field !== 'nombre_producto') params.sort_field = field;
+        if (direction !== 'asc') params.sort_direction = direction;
+
+        router.get(route('productos.index'), params, {
+            preserveState: true,
+            replace: true,
+        });
     };
 
     // Navegación de páginas
