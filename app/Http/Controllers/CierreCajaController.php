@@ -241,14 +241,11 @@ class CierreCajaController extends Controller
             // Ojo: Si va a una "Caja Física" (cuenta) también es efectivo disponible.
             // Simplificación actual: Si método contiene 'Efectivo', suma a efectivo.
             if (stripos($pago->tipo_pago, 'efectivo') !== false) {
-                $ventasEfectivo += $monto;
-                // NOTA: Esto suma montos mixtos si hay varias monedas.
-                // Idealmente deberíamos normalizar a Moneda Base para el total general numérica.
-                // Por ahora mantenemos el comportamiento anterior de sumar valor nominal para el "Total Efectivo"
-                // aunque sea incorrecto matemáticamente si hay USD y CUP mezclados.
-                // TODO: Hablar con usuario sobre "Total Efectivo" multifomoneda.
+                // FIXED: Usar monto_equivalente para sumar en la moneda base (USD)
+                // Esto evita sumar 100 USD + 1000 CUP como 1100.
+                $ventasEfectivo += $pago->monto_equivalente;
             } else {
-                $ventasOtros += $monto;
+                $ventasOtros += $pago->monto_equivalente;
             }
         }
 
