@@ -183,6 +183,7 @@ export default function PuntoVentaOficial({
 
     const [clientesFisicos, setClientesFisicos] = useState<Cliente[]>([]);
     const [cargandoClientesFisicos, setCargandoClientesFisicos] = useState<boolean>(false);
+    const [cargandoCuentas, setCargandoCuentas] = useState<boolean>(false);
     const [conversionCalculada, setConversionCalculada] = useState<{
         montoOriginal: number;
         montoUSD: number;
@@ -1444,14 +1445,20 @@ export default function PuntoVentaOficial({
                                                                                             <div className="px-2 py-1.5 text-xs font-semibold text-gray-500">
                                                                                                 🏦 CUENTAS
                                                                                             </div>
-                                                                                            {cuentasFiltradas.map((account) => (
-                                                                                                <SelectItem
-                                                                                                    key={`cuenta_${account.id}`}
-                                                                                                    value={`cuenta_${account.id}`}
-                                                                                                >
-                                                                                                    🏦 {account.nombre_cuenta}
-                                                                                                </SelectItem>
-                                                                                            ))}
+                                                                                            {cargandoCuentas ? (
+                                                                                                <div className="px-2 py-3 text-center text-sm text-gray-500">
+                                                                                                    Cargando cuentas...
+                                                                                                </div>
+                                                                                            ) : (
+                                                                                                cuentasFiltradas.map((account) => (
+                                                                                                    <SelectItem
+                                                                                                        key={`cuenta_${account.id}`}
+                                                                                                        value={`cuenta_${account.id}`}
+                                                                                                    >
+                                                                                                        🏦 {account.nombre_cuenta}
+                                                                                                    </SelectItem>
+                                                                                                ))
+                                                                                            )}
                                                                                         </>
                                                                                     )}
 
