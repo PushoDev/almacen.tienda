@@ -100,6 +100,8 @@ class CierreCajaController extends Controller
             'saldo_contado' => 'required|numeric',
             'observaciones' => 'nullable|string',
             'fecha_apertura' => 'required|date',
+            'arqueo_detalles' => 'nullable|array',
+            'confirmacion_transferencias' => 'nullable|array',
         ]);
 
         $inicioTurno = Carbon::parse($validated['fecha_apertura']);
@@ -128,7 +130,9 @@ class CierreCajaController extends Controller
                 'diferencia' => $diferencia,
                 'observaciones' => $validated['observaciones'],
                 'estado' => 'pendiente',
-                'detalles' => $calculos['detalles'], // Guardamos el desglose detallado
+                'detalles' => $calculos['detalles'], // Guardamos el desglose detallado del sistema
+                'arqueo_detalles' => $validated['arqueo_detalles'], // Guardamos el conteo manual de billetes
+                'confirmacion_transferencias' => $validated['confirmacion_transferencias'], // Guardamos IDs confirmados
             ]);
 
             $cierre->update(['estado' => 'aprobado']);
@@ -140,7 +144,7 @@ class CierreCajaController extends Controller
                 $admins = User::whereIn('role', ['admin', 'moderador'])->get();
                 Notification::send($admins, new CierreCajaNotification($cierre));
             } catch (\Exception $e) {
-                \Log::error('Error enviando notificación de cierre: ' . $e->getMessage());
+                \Illuminate\Support\Facades\Log::error('Error enviando notificación de cierre: ' . $e->getMessage());
             }
 
             return redirect()->route('ventas.cierres')->with('success', 'Cierre realizado con éxito.');
@@ -337,18 +341,17 @@ class CierreCajaController extends Controller
     {
         return [
             'moneda' => $codigo,
-            'tasa_cambio' => 1, // Default warning
+            'tasa_cambio' => 1,
             'ventas_efectivo' => 0,
             'ventas_transferencia' => 0,
             'ingresos_extra' => 0,
             'gastos' => 0,
             'transferencias_salientes' => 0,
-            'transferencias_entrantes' => 0,
             'saldo_calculado' => 0,
-            'items_ventas_efectivo' => [],
-            'items_ventas_transferencia' => [],
+            'items_ventas' => [],
             'items_gastos' => [],
             'items_ingresos' => [],
+            'items_transferencias' => [],
         ];
     }
 }
