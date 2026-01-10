@@ -1,265 +1,294 @@
 import HeadingSmall from '@/components/heading-small';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem, PageProps } from '@/types';
-import { Head, Link } from '@inertiajs/react';
-import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, ComputerIcon, XCircle } from 'lucide-react';
+import { Head } from '@inertiajs/react';
+import { ArrowDownCircle, ArrowUpCircle, Banknote, CheckCircle2, Clock, Receipt, User, Wallet, XCircle } from 'lucide-react';
+import { useMemo, useState } from 'react';
 
 interface Cierre {
     id: number;
+    user_id: number;
+    revisor_id: number;
+    fecha_apertura: string;
     fecha_cierre: string;
-    fecha_apertura: string | null;
-    saldo_inicial: string;
-    ventas_efectivo: string;
-    ventas_otros: string;
-    total_gastos: string;
-    total_devoluciones: string;
-    saldo_esperado: string;
-    saldo_contado: string;
-    diferencia: string;
-    estado: string;
+    saldo_inicial: number;
+    ventas_efectivo: number;
+    ventas_otros: number;
+    total_gastos: number;
+    total_devoluciones: number;
+    saldo_esperado: number;
+    saldo_contado: number;
+    diferencia: number;
     observaciones: string | null;
-    detalles: Array<{ moneda: string; metodo: string; monto: number; cantidad_pagos: number }> | null;
+    estado: string;
     usuario: { name: string };
-    revisor?: { name: string };
+    revisor: { name: string } | null;
+    confirmacion_transferencias: number[]; // IDs de transferencias que fueron confirmadas
+    detalles: Array<{
+        moneda: string;
+        tasa_cambio: number;
+        ventas_efectivo: number;
+        ventas_transferencia: number;
+        ingresos_extra: number;
+        gastos: number;
+        transferencias_salientes: number;
+        saldo_calculado: number;
+        items_ventas: Array<{
+            id: number;
+            monto: number;
+            tipo_pago: string;
+            cliente: string;
+            hora: string;
+            referencia?: string;
+        }>;
+        items_gastos: Array<{ desc: string; monto: number; hora: string }>;
+        items_ingresos: Array<{ desc: string; monto: number; hora: string }>;
+        items_transferencias: Array<{ id: number; desc: string; monto: number; hora: string }>;
+    }> | null;
 }
 
 interface Props extends PageProps {
     cierre: Cierre;
 }
 
+const breadcrumbs: BreadcrumbItem[] = [
+    { title: 'Cierres de Caja', href: '/vendor/cierres' },
+    { title: 'Detalle de Cierre', href: '#' },
+];
+
 export default function Show({ cierre }: Props) {
-    const breadcrumbs: BreadcrumbItem[] = [
-        {
-            title: 'Cierres de Caja',
-            href: '/vendor/cierres',
-        },
-        {
-            title: `Cierre #${cierre.id}`,
-            href: `/vendor/cierres/${cierre.id}`,
-        },
-    ];
+    const [selectedMoneda, setSelectedMoneda] = useState(cierre.detalles?.[0]?.moneda || 'CUP');
 
-    const getStatusInfo = (estado: string) => {
-        switch (estado) {
-            case 'aprobado':
-                return { badge: <Badge className="bg-green-600">Aprobado</Badge>, icon: <CheckCircle2 className="h-5 w-5 text-green-600" /> };
-            case 'rechazado':
-                return { badge: <Badge variant="destructive">Rechazado</Badge>, icon: <XCircle className="h-5 w-5 text-red-600" /> };
-            case 'pendiente':
-                return {
-                    badge: (
-                        <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
-                            Pendiente
-                        </Badge>
-                    ),
-                    icon: <Clock className="h-5 w-5 text-yellow-600" />,
-                };
-            default:
-                return { badge: <Badge variant="outline">{estado}</Badge>, icon: <AlertTriangle className="h-5 w-5 text-blue-600" /> };
-        }
-    };
-
-    const statusInfo = getStatusInfo(cierre.estado);
-
-    // Helper para castear detalles si vienen como string JSON o ya objeto
-    const convertDetalles = (detalles: Cierre['detalles']) => {
-        if (!detalles) return [];
-        let parsed: any[] = [];
-        if (typeof detalles === 'string') {
-            try {
-                parsed = JSON.parse(detalles);
-            } catch {
-                return [];
-            }
-        } else {
-            parsed = detalles;
-        }
-        // Aseguramos que sea un array (por si viene como objeto asociativo)
-        return Array.isArray(parsed) ? parsed : Object.values(parsed || {});
-    };
+    const activeDetalle = useMemo(
+        () => cierre.detalles?.find((d) => d.moneda === selectedMoneda) || cierre.detalles?.[0],
+        [selectedMoneda, cierre.detalles],
+    );
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={`Cierre #${cierre.id}`} />
 
-            <div className="bg-background flex h-screen w-full flex-col">
-                <main className="flex-1 overflow-y-auto p-4 md:p-8">
-                    <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
-                        {/* Contenido principal */}
-                        <HeadingSmall
-                            title={`Detalle de Cierre #${cierre.id}`}
-                            description={`Vendedor: ${cierre.usuario?.name || 'Sistema'} • ${new Date(cierre.fecha_cierre).toLocaleString()}`}
-                        />
-                        {/* Ícono semitransparente */}
-                        <ComputerIcon
-                            size={70}
-                            color="#d6d3d1"
-                            className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
-                        />
+            <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-6 p-4 md:p-6">
+                {/* Header Estándar (Estilo Productos/Clientes) */}
+                <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-6">
+                    <HeadingSmall
+                        title={`Reporte de Cierre #${cierre.id}`}
+                        description={`Auditoría detallada de movimientos realizados por ${cierre.usuario.name}.`}
+                    />
+                    <div className="absolute top-1/2 right-6 flex -translate-y-1/2 flex-col items-end gap-2">
+                        <Badge variant={cierre.estado === 'aprobado' ? 'default' : 'secondary'} className="px-4 uppercase">
+                            {cierre.estado}
+                        </Badge>
+                        <span className="text-muted-foreground flex items-center gap-1 font-mono text-[10px]">
+                            <Clock className="h-3 w-3" /> {new Date(cierre.fecha_cierre).toLocaleString()}
+                        </span>
                     </div>
+                </div>
 
-                    <div className="mb-4" />
-
-                    <div className="mx-auto max-w-5xl space-y-6">
-                        {/* Actions & Status Bar */}
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">{statusInfo.badge}</div>
-                            <Button variant="outline" size="sm" asChild>
-                                <Link href={route('ventas.cierres')}>
-                                    <ArrowLeft className="mr-2 h-4 w-4" /> Volver
-                                </Link>
-                            </Button>
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+                    {/* Detalles de Movimientos */}
+                    <div className="space-y-6 lg:col-span-8">
+                        {/* Selector de Moneda */}
+                        <div className="flex items-center justify-between gap-4">
+                            <h3 className="text-lg font-bold tracking-tight">Desglose por Moneda</h3>
+                            <div className="bg-muted flex rounded-lg p-1">
+                                {cierre.detalles?.map((d) => (
+                                    <Button
+                                        key={d.moneda}
+                                        variant={selectedMoneda === d.moneda ? 'default' : 'ghost'}
+                                        size="sm"
+                                        onClick={() => setSelectedMoneda(d.moneda)}
+                                        className="px-6 font-bold"
+                                    >
+                                        {d.moneda}
+                                    </Button>
+                                ))}
+                            </div>
                         </div>
 
-                        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-                            {/* Main Info */}
-                            <div className="space-y-6 md:col-span-2">
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle>Resumen Financiero</CardTitle>
-                                        <CardDescription>Detalle de movimientos y saldos del reporte.</CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="space-y-4">
-                                        <div className="flex items-center justify-between text-sm">
-                                            <span className="text-muted-foreground">Saldo Inicial</span>
-                                            <span className="font-medium">${Number(cierre.saldo_inicial).toFixed(2)}</span>
-                                        </div>
-                                        <Separator />
-                                        <div className="flex items-center justify-between text-sm">
-                                            <span className="text-muted-foreground">Ventas Efectivo</span>
-                                            <span className="font-medium text-green-600">+${Number(cierre.ventas_efectivo).toFixed(2)}</span>
-                                        </div>
-                                        <div className="flex items-center justify-between text-sm">
-                                            <span className="text-muted-foreground">Ventas Otros Medios</span>
-                                            <span className="font-medium text-blue-600">+${Number(cierre.ventas_otros).toFixed(2)}</span>
-                                        </div>
-                                        <div className="flex items-center justify-between text-sm">
-                                            <span className="text-muted-foreground">Total Gastos</span>
-                                            <span className="font-medium text-red-600">-${Number(cierre.total_gastos).toFixed(2)}</span>
-                                        </div>
-                                        <div className="flex items-center justify-between text-sm">
-                                            <span className="text-muted-foreground">Total Devoluciones</span>
-                                            <span className="font-medium text-red-600">-${Number(cierre.total_devoluciones).toFixed(2)}</span>
-                                        </div>
-                                        <Separator className="my-2" />
-                                        <div className="bg-muted/40 flex items-baseline justify-between rounded-lg p-4">
-                                            <span className="text-lg font-bold">Saldo Esperado</span>
-                                            <span className="text-xl font-bold">${Number(cierre.saldo_esperado).toFixed(2)}</span>
-                                        </div>
-                                    </CardContent>
-                                </Card>
+                        {/* Cards de Resumen */}
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                            <Card>
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="text-muted-foreground text-xs font-semibold uppercase">Efectivo Sistema</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="font-mono text-2xl font-bold">${Number(activeDetalle?.ventas_efectivo || 0).toFixed(2)}</div>
+                                </CardContent>
+                            </Card>
+                            <Card>
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="text-muted-foreground text-xs font-semibold uppercase">Transferencias Sistema</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="font-mono text-2xl font-bold">${Number(activeDetalle?.ventas_transferencia || 0).toFixed(2)}</div>
+                                </CardContent>
+                            </Card>
+                            <Card className="border-primary/20 bg-primary/5">
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="text-primary text-xs font-semibold uppercase">Saldo Esperado ({selectedMoneda})</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-primary font-mono text-2xl font-bold">
+                                        ${Number(activeDetalle?.saldo_calculado || 0).toFixed(2)}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
 
-                                {/* Desglose de Pagos */}
-                                {cierre.detalles && convertDetalles(cierre.detalles).length > 0 && (
-                                    <Card className="overflow-hidden">
-                                        <CardHeader className="bg-muted/20 pb-4">
-                                            <CardTitle className="text-base">Desglose de Métodos de Pago</CardTitle>
-                                            <CardDescription>Resumen detallado registrado.</CardDescription>
-                                        </CardHeader>
-                                        <CardContent className="p-0">
-                                            <div className="divide-y text-sm">
-                                                <div className="text-muted-foreground bg-muted/40 grid grid-cols-3 gap-4 p-3 font-medium">
-                                                    <div>Método</div>
-                                                    <div>Moneda</div>
-                                                    <div className="text-right">Monto</div>
-                                                </div>
-                                                {convertDetalles(cierre.detalles).map((detalle, idx: number) => (
-                                                    <div key={idx} className="hover:bg-muted/5 grid grid-cols-3 gap-4 p-3">
-                                                        <div className="capitalize">
-                                                            {typeof detalle.metodo === 'string' ? detalle.metodo : JSON.stringify(detalle.metodo)}
-                                                        </div>
-                                                        <div>
-                                                            <Badge variant="outline" className="font-mono text-xs">
-                                                                {typeof detalle.moneda === 'string' ? detalle.moneda : JSON.stringify(detalle.moneda)}
-                                                            </Badge>
-                                                        </div>
-                                                        <div className="text-right font-medium">${Number(detalle.monto).toFixed(2)}</div>
+                        {/* Listado de Ventas */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2 text-base">
+                                    <Receipt className="h-5 w-5" /> Detalle de Ventas ({selectedMoneda})
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="px-0">
+                                <div className="divide-y text-sm">
+                                    {activeDetalle?.items_ventas.map((v, i) => (
+                                        <div key={i} className="hover:bg-muted/30 flex items-center justify-between p-3">
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-muted-foreground font-mono text-[10px]">{v.hora}</span>
+                                                <span className="font-medium">{v.cliente}</span>
+                                                <Badge variant="outline" className="text-[9px] uppercase">
+                                                    {v.tipo_pago}
+                                                </Badge>
+                                            </div>
+                                            <span className="font-mono font-bold">${Number(v.monto).toFixed(2)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Movimientos Financieros */}
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                            <Card>
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="flex items-center gap-2 text-sm text-rose-600">
+                                        <ArrowDownCircle className="h-4 w-4" /> Egresos
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-3">
+                                    <div className="text-xl font-bold">-${Number(activeDetalle?.gastos || 0).toFixed(2)}</div>
+                                    <div className="space-y-1">
+                                        {activeDetalle?.items_gastos.map((g, i) => (
+                                            <div key={i} className="flex justify-between border-b border-dashed pb-1 text-[11px]">
+                                                <span className="text-muted-foreground max-w-25 truncate">{g.desc}</span>
+                                                <span className="font-mono">-${Number(g.monto).toFixed(2)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            <Card>
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="flex items-center gap-2 text-sm text-emerald-600">
+                                        <ArrowUpCircle className="h-4 w-4" /> Ingresos
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-3">
+                                    <div className="text-xl font-bold">+${Number(activeDetalle?.ingresos_extra || 0).toFixed(2)}</div>
+                                    <div className="space-y-1">
+                                        {activeDetalle?.items_ingresos.map((ing, i) => (
+                                            <div key={i} className="flex justify-between border-b border-dashed pb-1 text-[11px]">
+                                                <span className="text-muted-foreground max-w-25 truncate">{ing.desc}</span>
+                                                <span className="font-mono">+${Number(ing.monto).toFixed(2)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            <Card>
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="flex items-center gap-2 text-sm text-indigo-600">
+                                        <Banknote className="h-4 w-4" /> Giros Confirmados
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-3">
+                                    <div className="text-xl font-bold">-${Number(activeDetalle?.transferencias_salientes || 0).toFixed(2)}</div>
+                                    <div className="space-y-1">
+                                        {activeDetalle?.items_transferencias.map((t, i) => {
+                                            const confirmada = cierre.confirmacion_transferencias?.includes(t.id);
+                                            return (
+                                                <div key={i} className="flex items-center justify-between border-b border-dashed pb-1 text-[11px]">
+                                                    <div className="flex max-w-25 items-center gap-2 truncate">
+                                                        {confirmada ? (
+                                                            <CheckCircle2
+                                                                className="h-3 w-3 shrink-0 text-emerald-500"
+                                                                title="Confirmada en destino"
+                                                            />
+                                                        ) : (
+                                                            <XCircle className="text-muted-foreground h-3 w-3 shrink-0" title="No confirmada" />
+                                                        )}
+                                                        <span className="truncate">{t.desc}</span>
                                                     </div>
-                                                ))}
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                )}
-
-                                {cierre.observaciones && (
-                                    <Card>
-                                        <CardHeader>
-                                            <CardTitle className="text-lg">Observaciones</CardTitle>
-                                        </CardHeader>
-                                        <CardContent>
-                                            <p className="text-muted-foreground border-l-4 py-1 pl-4 text-sm italic">"{cierre.observaciones}"</p>
-                                        </CardContent>
-                                    </Card>
-                                )}
-                            </div>
-
-                            {/* Sidebar Info */}
-                            <div className="space-y-6">
-                                <Card
-                                    className={
-                                        Number(cierre.diferencia) === 0 ? 'border-green-200 bg-green-50/20' : 'border-destructive/20 bg-destructive/5'
-                                    }
-                                >
-                                    <CardHeader>
-                                        <CardTitle className="flex items-center gap-2 text-lg">{statusInfo.icon} Resultado</CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-4">
-                                        <div>
-                                            <span className="text-muted-foreground text-xs font-semibold uppercase">Saldo Contado</span>
-                                            <div className="mt-1 text-3xl font-bold tracking-tight">${Number(cierre.saldo_contado).toFixed(2)}</div>
-                                        </div>
-                                        <Separator />
-                                        <div>
-                                            <span className="text-muted-foreground text-xs font-semibold uppercase">Diferencia</span>
-                                            <div
-                                                className={`mt-1 text-xl font-bold ${Number(cierre.diferencia) !== 0 ? (Number(cierre.diferencia) > 0 ? 'text-blue-600' : 'text-red-600') : 'text-green-600'}`}
-                                            >
-                                                {Number(cierre.diferencia) > 0 ? '+' : ''}
-                                                {Number(cierre.diferencia).toFixed(2)}
-                                            </div>
-                                            <span className="text-muted-foreground text-xs">
-                                                {Number(cierre.diferencia) === 0
-                                                    ? 'Balance Exacto'
-                                                    : Number(cierre.diferencia) > 0
-                                                      ? 'Sobrante'
-                                                      : 'Faltante'}
-                                            </span>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle className="text-base">Detalles del Turno</CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3 text-sm">
-                                        <div className="grid grid-cols-2 gap-1">
-                                            <span className="text-muted-foreground text-xs">Apertura</span>
-                                            <span className="text-right text-xs font-medium">
-                                                {cierre.fecha_apertura ? new Date(cierre.fecha_apertura).toLocaleString() : '-'}
-                                            </span>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-1">
-                                            <span className="text-muted-foreground text-xs">Cierre</span>
-                                            <span className="text-right text-xs font-medium">{new Date(cierre.fecha_cierre).toLocaleString()}</span>
-                                        </div>
-                                        <Separator />
-                                        {cierre.revisor && (
-                                            <div className="pt-2">
-                                                <span className="text-muted-foreground block text-xs">Aprobado por</span>
-                                                <span className="font-medium">{cierre.revisor.name}</span>
-                                            </div>
-                                        )}
-                                    </CardContent>
-                                </Card>
-                            </div>
+                                                    <span className="font-mono">-${Number(t.monto).toFixed(2)}</span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </CardContent>
+                            </Card>
                         </div>
                     </div>
-                </main>
+
+                    {/* Resumen de Auditoría */}
+                    <div className="space-y-6 lg:col-span-4">
+                        <Card className="border-primary/20 relative overflow-hidden shadow-lg">
+                            <CardHeader className="bg-primary/5">
+                                <CardTitle className="text-primary flex items-center gap-2 font-bold">
+                                    <Wallet className="h-5 w-5" /> Auditoría Final
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-6 pt-4">
+                                <div className="space-y-3">
+                                    <div className="bg-muted/50 flex items-center justify-between rounded-lg border p-4">
+                                        <span className="text-muted-foreground text-xs font-bold uppercase">Saldo Contado:</span>
+                                        <span className="font-mono text-2xl font-black">${cierre.saldo_contado.toFixed(2)}</span>
+                                    </div>
+
+                                    <div
+                                        className={`flex items-center justify-between rounded-lg border p-4 ${cierre.diferencia === 0 ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700' : 'border-rose-500/20 bg-rose-500/10 text-rose-700'}`}
+                                    >
+                                        <div className="text-[10px] font-black tracking-wider uppercase">Diferencia Final</div>
+                                        <div className="font-mono text-xl font-bold">
+                                            {cierre.diferencia >= 0 ? '+' : ''}
+                                            {cierre.diferencia.toFixed(2)}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <Separator />
+
+                                <div className="space-y-4">
+                                    <div>
+                                        <h4 className="text-muted-foreground mb-2 text-[10px] font-black uppercase">Observaciones</h4>
+                                        <p className="bg-muted/30 text-muted-foreground rounded-lg border p-3 text-xs leading-relaxed italic">
+                                            {cierre.observaciones || 'Sin notas adicionales.'}
+                                        </p>
+                                    </div>
+
+                                    <div className="flex items-center gap-3 border-t pt-4">
+                                        <div className="bg-muted flex h-10 w-10 items-center justify-center rounded-full">
+                                            <User className="text-muted-foreground h-5 w-5" />
+                                        </div>
+                                        <div>
+                                            <div className="text-xs font-bold">{cierre.revisor?.name || 'Sistema (Auto)'}</div>
+                                            <div className="text-muted-foreground text-[9px] uppercase">Auditor Responsable</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </div>
             </div>
         </AppLayout>
     );

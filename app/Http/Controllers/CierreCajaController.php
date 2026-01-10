@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\CierreCaja;
 use App\Models\Venta;
 use App\Models\User;
+use App\Models\MovimientoFinanciero;
+use App\Models\Moneda;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
@@ -51,6 +53,7 @@ class CierreCajaController extends Controller
     /**
      * Muestra la vista de pre-cierre con los cálculos del turno actual.
      */
+
     /**
      * Muestra la vista de pre-cierre con los cálculos del turno actual.
      */
@@ -65,70 +68,20 @@ class CierreCajaController extends Controller
 
         $inicioTurno = $ultimoCierre ? $ultimoCierre->fecha_cierre : Carbon::today();
 
-        // Obtener todos los pagos asociados a las ventas del usuario en el turno actual
-        $pagos = \App\Models\PagoVenta::whereHas('venta', function ($q) use ($user, $inicioTurno) {
-            $q->where('user_id', $user->id)
-                ->where('created_at', '>=', $inicioTurno);
-        })->with('moneda')->get();
+        // Calcular detalles usando método compartido
+        $calculos = $this->obtenerDetallesCierre($user, $inicioTurno);
 
-        // Agrupar y Calcular Totales por Moneda y Método
-        $detalles = [];
-        $ventasEfectivo = 0;
-        $ventasOtros = 0;
-
-        foreach ($pagos as $pago) {
-            $moneda = $pago->moneda ? $pago->moneda->codigo_moneda : 'USD';
-            $metodo = ucfirst($pago->tipo_pago);
-            $monto = $pago->monto;
-
-            // Key única para agrupación
-            $key = $moneda . '_' . $metodo;
-
-            if (!isset($detalles[$key])) {
-                $detalles[$key] = [
-                    'moneda' => $moneda,
-                    'metodo' => $metodo,
-                    'monto' => 0,
-                    'cantidad_pagos' => 0
-                ];
-            }
-
-            $detalles[$key]['monto'] += $monto;
-            $detalles[$key]['cantidad_pagos']++;
-
-            // Clasificación General (Efectivo vs Otros) para el resumen simple
-            // Asumiendo que 'efectivo' es el keyword en tipo_pago
-            if (stripos($pago->tipo_pago, 'efectivo') !== false) {
-                // TODO: Si hay manejo de múltiples monedas, aquí deberíamos convertir a moneda base
-                // Si 'monto' ya está normalizado o es mixto, esto es una aproximación.
-                // Asumiremos que el valor contable principal usa el monto nominal si es la moneda base,
-                // o convertido si existiera. Por ahora sumamos directo (riesgo si hay mezclas).
-                $ventasEfectivo += $monto;
-            } else {
-                $ventasOtros += $monto;
-            }
-        }
-
-        // Re-indexar array para enviar al frontend
-        $detalles = array_values($detalles);
-
-        $gastos = 0; // Conectar con módulo de Gastos si existe
-        $devoluciones = 0; // Conectar con módulo de Devoluciones si existe
-
-        $saldoInicial = 0; // Implementar lógica de fondo de caja si aplica
-
-        $saldoEsperado = $saldoInicial + $ventasEfectivo - $gastos - $devoluciones;
-
+        // Preparar respuesta para Inertia
         return Inertia::render('Cierres/Create', [
             'calculos' => [
                 'inicio_turno' => $inicioTurno instanceof Carbon ? $inicioTurno->toDateTimeString() : $inicioTurno,
-                'saldo_inicial' => $saldoInicial,
-                'ventas_efectivo' => $ventasEfectivo,
-                'ventas_otros' => $ventasOtros,
-                'gastos' => $gastos,
-                'devoluciones' => $devoluciones,
-                'saldo_esperado' => $saldoEsperado,
-                'detalles' => $detalles // Nuevo campo con el desglose
+                'saldo_inicial' => 0, // Implementar saldo inicial real si existe lógica
+                'ventas_efectivo' => $calculos['ventas_efectivo'],
+                'ventas_otros' => $calculos['ventas_otros'],
+                'gastos' => 0, // Ya incluido en saldo_esperado_global
+                'devoluciones' => 0,
+                'saldo_esperado_global' => $calculos['saldo_esperado_global'], // Saldo calculado con ingresos extras, gastos, etc.
+                'detalles' => $calculos['detalles']
             ]
         ]);
     }
@@ -147,33 +100,15 @@ class CierreCajaController extends Controller
             'saldo_contado' => 'required|numeric',
             'observaciones' => 'nullable|string',
             'fecha_apertura' => 'required|date',
-            // 'detalles' no es obligatorio validarlo estrictamente si confiamos, pero idealmente sí
+            'arqueo_detalles' => 'nullable|array',
+            'confirmacion_transferencias' => 'nullable|array',
         ]);
 
-        // Recalcular detalles para persistencia segura (mismo lógica que create)
         $inicioTurno = Carbon::parse($validated['fecha_apertura']);
         $user = Auth::user();
 
-        $pagos = \App\Models\PagoVenta::whereHas('venta', function ($q) use ($user, $inicioTurno) {
-            $q->where('user_id', $user->id)
-                ->where('created_at', '>=', $inicioTurno);
-        })->with('moneda')->get();
-
-        $detalles = [];
-        foreach ($pagos as $pago) {
-            $moneda = $pago->moneda ? $pago->moneda->codigo_moneda : 'USD';
-            $metodo = ucfirst($pago->tipo_pago);
-            $monto = $pago->monto;
-            $key = $moneda . '_' . $metodo;
-
-            if (!isset($detalles[$key])) {
-                $detalles[$key] = ['moneda' => $moneda, 'metodo' => $metodo, 'monto' => 0, 'cantidad_pagos' => 0];
-            }
-            $detalles[$key]['monto'] += $monto;
-            $detalles[$key]['cantidad_pagos']++;
-        }
-        $detalles = array_values($detalles);
-
+        // Recalcular detalles para asegurar consistencia
+        $calculos = $this->obtenerDetallesCierre($user, $inicioTurno);
 
         $saldoEsperado = $validated['saldo_inicial'] + $validated['ventas_efectivo'] - $validated['total_gastos'] - $validated['total_devoluciones'];
         $diferencia = $validated['saldo_contado'] - $saldoEsperado;
@@ -195,7 +130,9 @@ class CierreCajaController extends Controller
                 'diferencia' => $diferencia,
                 'observaciones' => $validated['observaciones'],
                 'estado' => 'pendiente',
-                'detalles' => $detalles, // Guardamos el JSON
+                'detalles' => $calculos['detalles'], // Guardamos el desglose detallado del sistema
+                'arqueo_detalles' => $validated['arqueo_detalles'], // Guardamos el conteo manual de billetes
+                'confirmacion_transferencias' => $validated['confirmacion_transferencias'], // Guardamos IDs confirmados
             ]);
 
             $cierre->update(['estado' => 'aprobado']);
@@ -207,7 +144,7 @@ class CierreCajaController extends Controller
                 $admins = User::whereIn('role', ['admin', 'moderador'])->get();
                 Notification::send($admins, new CierreCajaNotification($cierre));
             } catch (\Exception $e) {
-                \Log::error('Error enviando notificación de cierre: ' . $e->getMessage());
+                \Illuminate\Support\Facades\Log::error('Error enviando notificación de cierre: ' . $e->getMessage());
             }
 
             return redirect()->route('ventas.cierres')->with('success', 'Cierre realizado con éxito.');
@@ -233,8 +170,6 @@ class CierreCajaController extends Controller
 
     public function aprobar(Request $request, $id)
     {
-        // Solo admin/moderador o el propio usuario (si la regla de negocio lo permite post-creacion,
-        // aunque normalmente se aprueba al cerrar. Dejamos esto para admins por ahora para flujo de revisión).
         $cierre = CierreCaja::findOrFail($id);
         $cierre->update([
             'estado' => 'aprobado',
@@ -242,5 +177,181 @@ class CierreCajaController extends Controller
         ]);
 
         return back()->with('success', 'Cierre aprobado.');
+    }
+
+    /**
+     * Método helper privado para calcular detalles de cierre.
+     * Centraliza la lógica para create y store.
+     */
+    private function obtenerDetallesCierre($user, $inicioTurno)
+    {
+        // 1. Obtener Pagos de Ventas (Ingresos por Venta)
+        $pagos = \App\Models\PagoVenta::whereHas('venta', function ($q) use ($user, $inicioTurno) {
+            // Filtrar ventas confirmadas/completadas si es necesario, pero usualmente 'pendiente' cuenta si ya pagaron.
+            // Asumiremos que todas las ventas registradas cuentan, o filtrar por estado si se requiere.
+            $q->where('user_id', $user->id)
+                ->where('created_at', '>=', $inicioTurno);
+        })->with(['moneda', 'cuenta', 'cliente', 'venta'])->get();
+
+        // 2. Obtener Movimientos Financieros (Gastos, Ingresos, Transferencias) del usuario
+        $movimientos = MovimientoFinanciero::where('user_id', $user->id)
+            ->where('fecha_operacion', '>=', $inicioTurno)
+            ->with(['tipoMovimiento', 'cuentaOrigen', 'cuentaDestino'])
+            ->get();
+
+        // Estructura para agrupar por Moneda
+        $resumenPorMoneda = [];
+
+        // Inicializar monedas activas
+        $monedas = Moneda::where('estado', true)->get();
+        foreach ($monedas as $moneda) {
+            $resumenPorMoneda[$moneda->codigo_moneda] = [
+                'moneda' => $moneda->codigo_moneda,
+                'tasa_cambio' => $moneda->tasa_cambio,
+                'ventas_efectivo' => 0,
+                'ventas_transferencia' => 0,
+                'ingresos_extra' => 0,
+                'gastos' => 0,
+                'transferencias_salientes' => 0,
+                'saldo_calculado' => 0,
+                // Detalles específicos para la UI solicitada
+                'items_ventas' => [],
+                'items_gastos' => [],
+                'items_ingresos' => [],
+                'items_transferencias' => [],
+            ];
+        }
+        // Asegurar que si hay monedas en pagos que no esten activas, se creen
+        // (Aunque el sistema no debería permitirlo, es defensivo)
+
+        // --- PROCESAR PAGOS DE VENTAS ---
+        foreach ($pagos as $pago) {
+            $codigo = $pago->moneda ? $pago->moneda->codigo_moneda : 'USD';
+            if (!isset($resumenPorMoneda[$codigo])) {
+                $resumenPorMoneda[$codigo] = $this->initMonedaStruct($codigo);
+            }
+
+            $itemVenta = [
+                'id' => $pago->venta_id,
+                'monto' => $pago->monto,
+                'tipo_pago' => $pago->tipo_pago,
+                'confirmada' => true, // En pagos realizados se asume confirmación inicial
+                'referencia' => $pago->referencia,
+                'cliente' => $pago->cliente ? $pago->cliente->nombre_cliente : 'Mostrador',
+                'hora' => $pago->created_at->format('H:i')
+            ];
+
+            // Clasificar Efectivo vs Transferencia
+            // Si el pago va a una Cuenta, revisar si la cuenta es 'Caja Física' (tipo efectivo) o Banco.
+            // Simplificación actual: Basado en 'tipo_pago' del registro.
+            if ($pago->tipo_pago === 'efectivo') {
+                $resumenPorMoneda[$codigo]['ventas_efectivo'] += $pago->monto;
+                $resumenPorMoneda[$codigo]['saldo_calculado'] += $pago->monto;
+            } else {
+                $resumenPorMoneda[$codigo]['ventas_transferencia'] += $pago->monto;
+                // Las transferencias NO suman al saldo físico de caja usualmente,
+                // pero SÍ suman al saldo contable del turno si el usuario es responsable de esa cuenta bancaria.
+                // IMPORTANTE: En tiendas, el cajero suele rendir solo el EFECTIVO.
+                // Las transferencias se confirman pero no se "entregan" físicamente.
+                // NO sumaremos transferencia al 'saldo_calculado' de la CAJA FÍSICA.
+                // Pero se mostrarán en el reporte.
+                $itemVenta['confirmada'] = !empty($pago->referencia);
+            }
+            $resumenPorMoneda[$codigo]['items_ventas'][] = $itemVenta;
+        }
+
+        // --- PROCESAR MOVIMIENTOS FINANCIEROS ---
+        foreach ($movimientos as $mov) {
+            $codigo = $mov->moneda ?? 'USD';
+            if (!isset($resumenPorMoneda[$codigo])) {
+                $resumenPorMoneda[$codigo] = $this->initMonedaStruct($codigo);
+            }
+
+            $item = [
+                'desc' => $mov->descripcion,
+                'monto' => $mov->monto,
+                'hora' => $mov->created_at->format('H:i'),
+                'origen' => $mov->cuentaOrigen ? $mov->cuentaOrigen->nombre_cuenta : 'Caja',
+                'destino' => $mov->cuentaDestino ? $mov->cuentaDestino->nombre_cuenta : 'Externo'
+            ];
+
+            // TIPO 1: GASTO
+            if ($mov->tipo_movimiento_id == 1) {
+                // Resta a la caja
+                $resumenPorMoneda[$codigo]['gastos'] += $mov->monto;
+                $resumenPorMoneda[$codigo]['saldo_calculado'] -= $mov->monto; // Gasto sale de caja
+                $resumenPorMoneda[$codigo]['items_gastos'][] = $item;
+            }
+            // TIPO 2: INGRESO
+            elseif ($mov->tipo_movimiento_id == 2) {
+                // Suma a la caja
+                $resumenPorMoneda[$codigo]['ingresos_extra'] += $mov->monto;
+                $resumenPorMoneda[$codigo]['saldo_calculado'] += $mov->monto;
+                $resumenPorMoneda[$codigo]['items_ingresos'][] = $item;
+            }
+            // TIPO 3: TRANSFERENCIA
+            elseif ($mov->tipo_movimiento_id == 3) {
+                // Si Origen es NULL (o cuenta de caja), es salida.
+                // Si Destino es NULL (o cuenta de caja), es entrada.
+                // Como filtramos por 'user_id' creador, asumimos que EL USUARIO inició la transferencia.
+                // Si es salida:
+                $resumenPorMoneda[$codigo]['transferencias_salientes'] += $mov->monto;
+                $resumenPorMoneda[$codigo]['saldo_calculado'] -= $mov->monto;
+                $resumenPorMoneda[$codigo]['items_transferencias'][] = $item;
+
+                // NOTA: Si hubiera transferencias ENTRANTES hechas por OTRO usuario hacia este usuario,
+                // no saldrían en esta query (user_id = auth).
+                // Eso requeriría una lógica más compleja de "Buzón de transferencias".
+                // Por ahora asumimos flujo simple.
+            }
+        }
+
+        // --- CALCULAR TOTALES GLOBALES (EQUIVALENTE USD) ---
+        $ventasEfectivoTotalUSD = 0;
+        $ventasOtrosTotalUSD = 0;
+        $saldoEsperadoTotalUSD = 0;
+
+        foreach ($resumenPorMoneda as $monedaData) {
+            $tasa = $monedaData['tasa_cambio'] > 0 ? $monedaData['tasa_cambio'] : 1;
+
+            // Convertir a USD (Moneda Base) - Asumiendo Tasa es X Moneda / 1 USD?
+            // O 1 Moneda = X USD?
+            // Revisando MonedaController: $totalCupDistribuir / $tasa_cambio = USD.
+            // Entonces Tasa es CUP por USD. (ej. 320).
+            // MontoBase = MontoMoneda / Tasa.
+
+            $ventasEfectivoTotalUSD += ($monedaData['ventas_efectivo'] / $tasa);
+            $ventasOtrosTotalUSD += ($monedaData['ventas_transferencia'] / $tasa);
+
+            // Saldo esperado incluye INGRESOS EXTRA y resta GASTOS y TRANSFERENCIAS
+            // Saldo Calculado en Moneda / Tasa
+            $saldoEsperadoTotalUSD += ($monedaData['saldo_calculado'] / $tasa);
+        }
+
+        return [
+            'detalles' => array_values($resumenPorMoneda), // Array para frontend
+            'ventas_efectivo' => round($ventasEfectivoTotalUSD, 2),
+            'ventas_otros' => round($ventasOtrosTotalUSD, 2),
+            // Pasamos el saldo calculo total para pre-llenar los campos
+            'saldo_esperado_global' => round($saldoEsperadoTotalUSD, 2)
+        ];
+    }
+
+    private function initMonedaStruct($codigo)
+    {
+        return [
+            'moneda' => $codigo,
+            'tasa_cambio' => 1,
+            'ventas_efectivo' => 0,
+            'ventas_transferencia' => 0,
+            'ingresos_extra' => 0,
+            'gastos' => 0,
+            'transferencias_salientes' => 0,
+            'saldo_calculado' => 0,
+            'items_ventas' => [],
+            'items_gastos' => [],
+            'items_ingresos' => [],
+            'items_transferencias' => [],
+        ];
     }
 }

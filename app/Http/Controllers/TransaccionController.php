@@ -342,6 +342,7 @@ class TransaccionController extends Controller
             $tasaCambioAplicada = $this->resolveTasaCambio($request);
 
             $movimientoData = [
+                'user_id' => auth()->id(),
                 'tipo_movimiento_id' => 1,
                 'monto' => $request->monto,
                 'moneda' => $request->moneda,
@@ -412,6 +413,7 @@ class TransaccionController extends Controller
             $tasaCambioAplicada = $this->resolveTasaCambio($request);
 
             $movimientoData = [
+                'user_id' => auth()->id(),
                 'tipo_movimiento_id' => 2,
                 'monto' => $request->monto,
                 'moneda' => $request->moneda,
@@ -537,6 +539,7 @@ class TransaccionController extends Controller
             }
 
             MovimientoFinanciero::create([
+                'user_id' => auth()->id(),
                 'tipo_movimiento_id' => 3,
                 'cuenta_origen_id' => $request->origen_tipo === 'cuenta' ? $origen->id : null,
                 'cliente_origen_id' => $request->origen_tipo === 'cliente' ? $origen->id : null,
@@ -611,6 +614,7 @@ class TransaccionController extends Controller
 
             // Registrar el movimiento financiero
             MovimientoFinanciero::create([
+                'user_id' => auth()->id(),
                 'tipo_movimiento_id' => 1,
                 'cuenta_origen_id' => $cuenta->id,
                 'cliente_origen_id' => null,

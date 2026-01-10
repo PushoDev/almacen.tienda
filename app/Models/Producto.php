@@ -126,9 +126,9 @@ class Producto extends Model
      */
     public static function generarImagenBarcode($codigo)
     {
-        $directory = 'barcodes';
-        if (!Storage::disk('public')->exists($directory)) {
-            Storage::disk('public')->makeDirectory($directory, 0755, true);
+        $directory = public_path('barcodes');
+        if (!file_exists($directory)) {
+            mkdir($directory, 0755, true);
         }
 
         if (empty($codigo)) {
@@ -147,15 +147,16 @@ class Producto extends Model
             throw new Exception('Error al decodificar la imagen del código de barras');
         }
 
-        $fileName = $directory . '/' . $codigo . '.png';
+        $fileName = $codigo . '.png';
+        $fullPath = $directory . '/' . $fileName;
 
-        $saved = Storage::disk('public')->put($fileName, $imageData);
+        $saved = file_put_contents($fullPath, $imageData);
 
-        if (!$saved) {
+        if ($saved === false) {
             throw new Exception('No se pudo guardar la imagen del código de barras en el almacenamiento');
         }
 
-        return $fileName;
+        return 'barcodes/' . $fileName;
     }
 
     /**
@@ -167,7 +168,7 @@ class Producto extends Model
             return null;
         }
 
-        return asset('storage/' . $this->barcode_image);
+        return asset($this->barcode_image);
     }
 
     /**
@@ -223,10 +224,10 @@ class Producto extends Model
     public function getImagenUrlAttribute(): string
     {
         if (!$this->imagen_producto) {
-            return asset('storage/productos/producto-default.png');
+            return asset('productos/producto-default.png');
         }
 
-        return asset('storage/' . $this->imagen_producto);
+        return asset($this->imagen_producto);
     }
 
     /**
@@ -253,7 +254,7 @@ class Producto extends Model
      */
     public function barcodeImageExists(): bool
     {
-        return $this->barcode_image && Storage::disk('public')->exists($this->barcode_image);
+        return $this->barcode_image && file_exists(public_path($this->barcode_image));
     }
 
     /**
@@ -261,9 +262,10 @@ class Producto extends Model
      */
     public function eliminarBarcodeImage(): bool
     {
-        if ($this->barcode_image && Storage::disk('public')->exists($this->barcode_image)) {
-            return Storage::disk('public')->delete($this->barcode_image);
+        if ($this->barcode_image && file_exists(public_path($this->barcode_image))) {
+            return unlink(public_path($this->barcode_image));
         }
         return false;
     }
 }
+

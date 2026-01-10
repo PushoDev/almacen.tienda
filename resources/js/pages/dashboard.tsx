@@ -367,7 +367,7 @@ export default function Dashboard({
                                 </div>
 
                                 {/* Botón pequeño */}
-                                <Link href={route('remesas')}>
+                                <Link href={route('ventas.cierres')}>
                                     <button className="absolute right-4 bottom-4 rounded-md bg-amber-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-amber-800">
                                         Planificar Cierres
                                     </button>
