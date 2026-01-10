@@ -13,6 +13,7 @@ class MovimientoFinanciero extends Model
     protected $table = 'movimientos_financieros';
 
     protected $fillable = [
+        'user_id',
         'tipo_movimiento_id',
         'cuenta_origen_id',
         'cliente_origen_id',
@@ -26,6 +27,11 @@ class MovimientoFinanciero extends Model
         'fecha_operacion',
         'estado',
     ];
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
 
     protected $casts = [
         'fecha_operacion' => 'datetime',
