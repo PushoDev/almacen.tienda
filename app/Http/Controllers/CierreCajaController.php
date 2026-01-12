@@ -9,6 +9,7 @@ use App\Models\MovimientoFinanciero;
 use App\Models\Moneda;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -162,9 +163,22 @@ class CierreCajaController extends Controller
         $cierre = CierreCaja::with(['usuario', 'revisor'])->findOrFail($id);
 
         // Seguridad: solo dueño o admin
-        if (Auth::user()->role !== 'admin' && Auth::user()->role !== 'moderador' && Auth::user()->id !== $cierre->user_id) {
+        $currentUser = Auth::user();
+        if ($currentUser->role !== 'admin' && $currentUser->role !== 'moderador' && $currentUser->id !== $cierre->user_id) {
+            Log::warning('Acceso denegado a cierre', [
+                'attempt_user_id' => $currentUser->id ?? null,
+                'attempt_user_role' => $currentUser->role ?? null,
+                'cierre_id' => $cierre->id,
+                'cierre_user_id' => $cierre->user_id,
+            ]);
             abort(403);
         }
+
+        Log::info('Mostrar cierre accedido', [
+            'user_id' => $currentUser->id ?? null,
+            'role' => $currentUser->role ?? null,
+            'cierre_id' => $cierre->id,
+        ]);
 
         return Inertia::render('Cierres/Show', [
             'cierre' => $cierre
