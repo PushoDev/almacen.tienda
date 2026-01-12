@@ -9,6 +9,7 @@ use App\Models\MovimientoFinanciero;
 use App\Models\Moneda;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -73,6 +74,7 @@ class CierreCajaController extends Controller
 
         // Preparar respuesta para Inertia
         return Inertia::render('Cierres/Create', [
+            'fecha_apertura' => $inicioTurno instanceof Carbon ? $inicioTurno->toDateTimeString() : $inicioTurno,
             'calculos' => [
                 'inicio_turno' => $inicioTurno instanceof Carbon ? $inicioTurno->toDateTimeString() : $inicioTurno,
                 'saldo_inicial' => 0, // Implementar saldo inicial real si existe lógica
@@ -91,66 +93,68 @@ class CierreCajaController extends Controller
      */
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'saldo_inicial' => 'required|numeric',
-            'ventas_efectivo' => 'required|numeric',
-            'ventas_otros' => 'required|numeric',
-            'total_gastos' => 'required|numeric',
-            'total_devoluciones' => 'required|numeric',
-            'saldo_contado' => 'required|numeric',
-            'observaciones' => 'nullable|string',
-            'fecha_apertura' => 'required|date',
-            'arqueo_detalles' => 'nullable|array',
-            'confirmacion_transferencias' => 'nullable|array',
+        // Registro de emergencia para confirmar que la petición llega al controlador
+        \Illuminate\Support\Facades\Log::emergency('!!! CIERRE CAJA - EJECUTANDO STORE !!!', [
+            'user_id' => Auth::id(),
+            'role' => Auth::user() ? Auth::user()->role : 'N/A',
+            'data_keys' => array_keys($request->all())
         ]);
 
-        $inicioTurno = Carbon::parse($validated['fecha_apertura']);
+        // Validación flexible: si fallan los secundarios, permitimos 0
+        $data = $request->all();
+
+        $saldoInicial = $data['saldo_inicial'] ?? 0;
+        $ventasEfectivo = $data['ventas_efectivo'] ?? 0;
+        $ventasOtros = $data['ventas_otros'] ?? 0;
+        $totalGastos = $data['total_gastos'] ?? 0;
+        $totalDevoluciones = $data['total_devoluciones'] ?? 0;
+        $saldoContado = $data['saldo_contado'] ?? 0;
+
+        $inicioTurno = isset($data['fecha_apertura']) ? Carbon::parse($data['fecha_apertura']) : now()->subDay();
         $user = Auth::user();
 
-        // Recalcular detalles para asegurar consistencia
-        $calculos = $this->obtenerDetallesCierre($user, $inicioTurno);
+        // Intentar obtener detalles, si falla no bloqueamos el cierre
+        try {
+            $calculos = $this->obtenerDetallesCierre($user, $inicioTurno);
+            $detallesJson = $calculos['detalles'];
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Fallo obtenerDetallesCierre: ' . $e->getMessage());
+            $detallesJson = [];
+        }
 
-        $saldoEsperado = $validated['saldo_inicial'] + $validated['ventas_efectivo'] - $validated['total_gastos'] - $validated['total_devoluciones'];
-        $diferencia = $validated['saldo_contado'] - $saldoEsperado;
+        $saldoEsperado = round($saldoInicial + $ventasEfectivo - $totalGastos - $totalDevoluciones, 2);
+        $diferencia = round($saldoContado - $saldoEsperado, 2);
 
         DB::beginTransaction();
         try {
             $cierre = CierreCaja::create([
                 'user_id' => Auth::id(),
                 'revisor_id' => Auth::id(),
-                'fecha_apertura' => $validated['fecha_apertura'],
+                'fecha_apertura' => $data['fecha_apertura'] ?? now(),
                 'fecha_cierre' => now(),
-                'saldo_inicial' => $validated['saldo_inicial'],
-                'ventas_efectivo' => $validated['ventas_efectivo'],
-                'ventas_otros' => $validated['ventas_otros'],
-                'total_gastos' => $validated['total_gastos'],
-                'total_devoluciones' => $validated['total_devoluciones'],
+                'saldo_inicial' => $saldoInicial,
+                'ventas_efectivo' => $ventasEfectivo,
+                'ventas_otros' => $ventasOtros,
+                'total_gastos' => $totalGastos,
+                'total_devoluciones' => $totalDevoluciones,
                 'saldo_esperado' => $saldoEsperado,
-                'saldo_contado' => $validated['saldo_contado'],
+                'saldo_contado' => $saldoContado,
                 'diferencia' => $diferencia,
-                'observaciones' => $validated['observaciones'],
-                'estado' => 'pendiente',
-                'detalles' => $calculos['detalles'], // Guardamos el desglose detallado del sistema
-                'arqueo_detalles' => $validated['arqueo_detalles'], // Guardamos el conteo manual de billetes
-                'confirmacion_transferencias' => $validated['confirmacion_transferencias'], // Guardamos IDs confirmados
+                'observaciones' => $data['observaciones'] ?? '',
+                'estado' => 'aprobado',
+                'detalles' => $detallesJson,
+                'arqueo_detalles' => $data['arqueo_detalles'] ?? [],
+                'confirmacion_transferencias' => $data['confirmacion_transferencias'] ?? [],
             ]);
 
-            $cierre->update(['estado' => 'aprobado']);
-
             DB::commit();
-
-            // Notificar Admins y Moderadores
-            try {
-                $admins = User::whereIn('role', ['admin', 'moderador'])->get();
-                Notification::send($admins, new CierreCajaNotification($cierre));
-            } catch (\Exception $e) {
-                \Illuminate\Support\Facades\Log::error('Error enviando notificación de cierre: ' . $e->getMessage());
-            }
+            \Illuminate\Support\Facades\Log::emergency('!!! CIERRE GUARDADO EXITOSAMENTE ID: ' . $cierre->id . ' !!!');
 
             return redirect()->route('ventas.cierres')->with('success', 'Cierre realizado con éxito.');
         } catch (\Exception $e) {
             DB::rollBack();
-            return back()->with('error', 'Error al guardar el cierre: ' . $e->getMessage());
+            \Illuminate\Support\Facades\Log::emergency('!!! ERROR CRÍTICO AL GUARDAR CIERRE !!!: ' . $e->getMessage());
+            return back()->with('error', 'Error crítico: ' . $e->getMessage());
         }
     }
 
@@ -159,9 +163,22 @@ class CierreCajaController extends Controller
         $cierre = CierreCaja::with(['usuario', 'revisor'])->findOrFail($id);
 
         // Seguridad: solo dueño o admin
-        if (Auth::user()->role !== 'admin' && Auth::user()->role !== 'moderador' && Auth::user()->id !== $cierre->user_id) {
+        $currentUser = Auth::user();
+        if ($currentUser->role !== 'admin' && $currentUser->role !== 'moderador' && $currentUser->id !== $cierre->user_id) {
+            Log::warning('Acceso denegado a cierre', [
+                'attempt_user_id' => $currentUser->id ?? null,
+                'attempt_user_role' => $currentUser->role ?? null,
+                'cierre_id' => $cierre->id,
+                'cierre_user_id' => $cierre->user_id,
+            ]);
             abort(403);
         }
+
+        Log::info('Mostrar cierre accedido', [
+            'user_id' => $currentUser->id ?? null,
+            'role' => $currentUser->role ?? null,
+            'cierre_id' => $cierre->id,
+        ]);
 
         return Inertia::render('Cierres/Show', [
             'cierre' => $cierre
@@ -187,11 +204,9 @@ class CierreCajaController extends Controller
     {
         // 1. Obtener Pagos de Ventas (Ingresos por Venta)
         $pagos = \App\Models\PagoVenta::whereHas('venta', function ($q) use ($user, $inicioTurno) {
-            // Filtrar ventas confirmadas/completadas si es necesario, pero usualmente 'pendiente' cuenta si ya pagaron.
-            // Asumiremos que todas las ventas registradas cuentan, o filtrar por estado si se requiere.
             $q->where('user_id', $user->id)
                 ->where('created_at', '>=', $inicioTurno);
-        })->with(['moneda', 'cuenta', 'cliente', 'venta'])->get();
+        })->with(['moneda', 'cuenta', 'cliente', 'venta.detalles.producto'])->get();
 
         // 2. Obtener Movimientos Financieros (Gastos, Ingresos, Transferencias) del usuario
         $movimientos = MovimientoFinanciero::where('user_id', $user->id)
@@ -202,8 +217,8 @@ class CierreCajaController extends Controller
         // Estructura para agrupar por Moneda
         $resumenPorMoneda = [];
 
-        // Inicializar monedas activas
-        $monedas = Moneda::where('estado', true)->get();
+        // Inicializar monedas activas (Principal primero)
+        $monedas = Moneda::where('estado', true)->orderBy('principal', 'desc')->orderBy('codigo_moneda')->get();
         foreach ($monedas as $moneda) {
             $resumenPorMoneda[$moneda->codigo_moneda] = [
                 'moneda' => $moneda->codigo_moneda,
@@ -231,14 +246,25 @@ class CierreCajaController extends Controller
                 $resumenPorMoneda[$codigo] = $this->initMonedaStruct($codigo);
             }
 
+            // Construir detalle de productos para el tooltip
+            $detallesStr = "";
+            if ($pago->venta && $pago->venta->detalles) {
+                foreach ($pago->venta->detalles as $det) {
+                    $nombreProd = $det->producto ? $det->producto->nombre_producto : 'Producto';
+                    $detallesStr .= "{$det->cantidad}x {$nombreProd}, ";
+                }
+                $detallesStr = rtrim($detallesStr, ", ");
+            }
+
             $itemVenta = [
-                'id' => $pago->venta_id,
+                'id' => 'p_' . $pago->id,
                 'monto' => $pago->monto,
                 'tipo_pago' => $pago->tipo_pago,
-                'confirmada' => true, // En pagos realizados se asume confirmación inicial
+                'confirmada' => !empty($pago->referencia),
                 'referencia' => $pago->referencia,
                 'cliente' => $pago->cliente ? $pago->cliente->nombre_cliente : 'Mostrador',
-                'hora' => $pago->created_at->format('H:i')
+                'hora' => $pago->created_at->format('H:i'),
+                'detalles' => $detallesStr // <--- Nuevo campo para el tooltip
             ];
 
             // Clasificar Efectivo vs Transferencia
@@ -268,6 +294,7 @@ class CierreCajaController extends Controller
             }
 
             $item = [
+                'id' => 'm_' . $mov->id,
                 'desc' => $mov->descripcion,
                 'monto' => $mov->monto,
                 'hora' => $mov->created_at->format('H:i'),

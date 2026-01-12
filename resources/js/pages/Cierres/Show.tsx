@@ -3,10 +3,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem, PageProps } from '@/types';
 import { Head } from '@inertiajs/react';
-import { ArrowDownCircle, ArrowUpCircle, Banknote, CheckCircle2, Clock, Receipt, User, Wallet, XCircle } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Banknote, CheckCircle2, Clock, Info, Receipt, User, Wallet, XCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 interface Cierre {
@@ -27,7 +28,7 @@ interface Cierre {
     estado: string;
     usuario: { name: string };
     revisor: { name: string } | null;
-    confirmacion_transferencias: number[]; // IDs de transferencias que fueron confirmadas
+    confirmacion_transferencias: string[]; // IDs de transferencias que fueron confirmadas (m_id o p_id)
     detalles: Array<{
         moneda: string;
         tasa_cambio: number;
@@ -38,16 +39,17 @@ interface Cierre {
         transferencias_salientes: number;
         saldo_calculado: number;
         items_ventas: Array<{
-            id: number;
+            id: string;
             monto: number;
             tipo_pago: string;
             cliente: string;
             hora: string;
             referencia?: string;
+            detalles: string;
         }>;
         items_gastos: Array<{ desc: string; monto: number; hora: string }>;
         items_ingresos: Array<{ desc: string; monto: number; hora: string }>;
-        items_transferencias: Array<{ id: number; desc: string; monto: number; hora: string }>;
+        items_transferencias: Array<{ id: string; desc: string; monto: number; hora: string }>;
     }> | null;
 }
 
@@ -148,20 +150,43 @@ export default function Show({ cierre }: Props) {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent className="px-0">
-                                <div className="divide-y text-sm">
-                                    {activeDetalle?.items_ventas.map((v, i) => (
-                                        <div key={i} className="hover:bg-muted/30 flex items-center justify-between p-3">
-                                            <div className="flex items-center gap-3">
-                                                <span className="text-muted-foreground font-mono text-[10px]">{v.hora}</span>
-                                                <span className="font-medium">{v.cliente}</span>
-                                                <Badge variant="outline" className="text-[9px] uppercase">
-                                                    {v.tipo_pago}
-                                                </Badge>
+                                <TooltipProvider>
+                                    <div className="divide-y text-sm">
+                                        {activeDetalle?.items_ventas.map((v, i) => (
+                                            <div key={i} className="hover:bg-muted/30 flex items-center justify-between p-3">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-muted-foreground font-mono text-[10px]">{v.hora}</span>
+                                                    <span className="font-medium">{v.cliente}</span>
+                                                    <Badge variant="outline" className="text-[9px] uppercase">
+                                                        {v.tipo_pago}
+                                                    </Badge>
+                                                    <Badge variant="secondary" className="h-4 px-1 text-[8px]">
+                                                        {cierre.confirmacion_transferencias?.includes(v.id) ? (
+                                                            <span className="flex items-center gap-0.5 text-emerald-600">
+                                                                <CheckCircle2 size={8} /> Confirmada
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-rose-600">Pendiente</span>
+                                                        )}
+                                                    </Badge>
+                                                    {v.detalles && (
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <button className="text-muted-foreground hover:text-primary transition-colors">
+                                                                    <Info size={14} />
+                                                                </button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                                <p className="max-w-xs text-xs">{v.detalles}</p>
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    )}
+                                                </div>
+                                                <span className="font-mono font-bold">${Number(v.monto).toFixed(2)}</span>
                                             </div>
-                                            <span className="font-mono font-bold">${Number(v.monto).toFixed(2)}</span>
-                                        </div>
-                                    ))}
-                                </div>
+                                        ))}
+                                    </div>
+                                </TooltipProvider>
                             </CardContent>
                         </Card>
 
@@ -220,12 +245,15 @@ export default function Show({ cierre }: Props) {
                                                 <div key={i} className="flex items-center justify-between border-b border-dashed pb-1 text-[11px]">
                                                     <div className="flex max-w-25 items-center gap-2 truncate">
                                                         {confirmada ? (
-                                                            <CheckCircle2
-                                                                className="h-3 w-3 shrink-0 text-emerald-500"
-                                                                title="Confirmada en destino"
-                                                            />
+                                                            <div className="flex items-center gap-1 text-emerald-500">
+                                                                <CheckCircle2 className="h-3 w-3 shrink-0" />
+                                                                <span className="text-[9px] font-bold">Confirmada</span>
+                                                            </div>
                                                         ) : (
-                                                            <XCircle className="text-muted-foreground h-3 w-3 shrink-0" title="No confirmada" />
+                                                            <div className="flex items-center gap-1 text-rose-500">
+                                                                <XCircle className="h-3 w-3 shrink-0" />
+                                                                <span className="text-[9px] font-bold">Pendiente</span>
+                                                            </div>
                                                         )}
                                                         <span className="truncate">{t.desc}</span>
                                                     </div>
@@ -251,7 +279,7 @@ export default function Show({ cierre }: Props) {
                                 <div className="space-y-3">
                                     <div className="bg-muted/50 flex items-center justify-between rounded-lg border p-4">
                                         <span className="text-muted-foreground text-xs font-bold uppercase">Saldo Contado:</span>
-                                        <span className="font-mono text-2xl font-black">${cierre.saldo_contado.toFixed(2)}</span>
+                                        <span className="font-mono text-2xl font-black">${Number(cierre.saldo_contado ?? 0).toFixed(2)}</span>
                                     </div>
 
                                     <div
@@ -259,8 +287,8 @@ export default function Show({ cierre }: Props) {
                                     >
                                         <div className="text-[10px] font-black tracking-wider uppercase">Diferencia Final</div>
                                         <div className="font-mono text-xl font-bold">
-                                            {cierre.diferencia >= 0 ? '+' : ''}
-                                            {cierre.diferencia.toFixed(2)}
+                                            {Number(cierre.diferencia ?? 0) >= 0 ? '+' : ''}
+                                                {Number(cierre.diferencia ?? 0).toFixed(2)}
                                         </div>
                                     </div>
                                 </div>

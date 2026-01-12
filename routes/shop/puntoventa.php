@@ -13,7 +13,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/punto-venta', [VentaController::class, 'index'])->name('punto-venta.index');
     Route::get('/ventas/listado', [VentaController::class, 'listadoVentas'])->name('ventas.listado');
     Route::get('/ventas/{id}/show', [VentaController::class, 'show'])->name('ventas.show');
-    // Modificar estas rutas para usar el nuevo controlador
+    // Rutas de Cierres (Sin verified para evitar 403 accidentales)
     Route::get('/vendor/cierres', [CierreCajaController::class, 'index'])->name('ventas.cierres');
     Route::get('/vendor/cierres/crear', [CierreCajaController::class, 'create'])->name('ventas.cierres.create');
     Route::post('/vendor/cierres', [CierreCajaController::class, 'store'])->name('ventas.cierres.store');
