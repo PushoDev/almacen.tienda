@@ -18,6 +18,9 @@ class CheckAlmacenPermission
     {
         $almacenId = $request->route('almacen');
         if (!Auth::user()->almacenes->contains($almacenId) && !Auth::user()->isAdmin()) {
+            if ($request->wantsJson() || $request->header('X-Inertia')) {
+                return response()->json(['message' => 'Forbidden'], 403);
+            }
             abort(403);
         }
         return $next($request);

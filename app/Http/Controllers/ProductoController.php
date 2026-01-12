@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
+// NOTE: Removed automatic migration/seed calls for safety in production
 use App\Exports\ProductoExport;
 use App\Imports\ProductoImport;
 use Maatwebsite\Excel\Facades\Excel;
@@ -23,6 +24,8 @@ class ProductoController extends Controller
     public function index(Request $request)
     {
         $user = Auth::user();
+
+        // No ejecutar migraciones/seed automáticamente desde la petición.
 
         // Query base con relaciones
         $query = Producto::with(['categoria', 'almacenes'])
@@ -109,6 +112,8 @@ class ProductoController extends Controller
             'sort' => ['field' => $sortField, 'direction' => $sortDirection],
         ]);
     }
+
+
 
     /**
      * Mostrar producto con detalle completo

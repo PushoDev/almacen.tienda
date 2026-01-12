@@ -10,6 +10,10 @@ Route::middleware(['auth', 'verified'])->group(
             'productos' => 'producto',
         ]);
 
+        // Ruta para regenerar código de barras desde la UI (Inertia)
+        Route::post('/productos/{producto}/regenerar-barcode', [ProductoController::class, 'regenerarBarcode'])
+            ->name('productos.regenerar-barcode');
+
         // Rutas para importar/exportar
         // Exportar productos
         Route::get('/productos/exportar/excel', [ProductoController::class, 'export'])->name('productos.export');
