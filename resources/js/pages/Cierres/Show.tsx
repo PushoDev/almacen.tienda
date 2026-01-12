@@ -279,7 +279,7 @@ export default function Show({ cierre }: Props) {
                                 <div className="space-y-3">
                                     <div className="bg-muted/50 flex items-center justify-between rounded-lg border p-4">
                                         <span className="text-muted-foreground text-xs font-bold uppercase">Saldo Contado:</span>
-                                        <span className="font-mono text-2xl font-black">${cierre.saldo_contado.toFixed(2)}</span>
+                                        <span className="font-mono text-2xl font-black">${Number(cierre.saldo_contado ?? 0).toFixed(2)}</span>
                                     </div>
 
                                     <div
@@ -287,8 +287,8 @@ export default function Show({ cierre }: Props) {
                                     >
                                         <div className="text-[10px] font-black tracking-wider uppercase">Diferencia Final</div>
                                         <div className="font-mono text-xl font-bold">
-                                            {cierre.diferencia >= 0 ? '+' : ''}
-                                            {cierre.diferencia.toFixed(2)}
+                                            {Number(cierre.diferencia ?? 0) >= 0 ? '+' : ''}
+                                                {Number(cierre.diferencia ?? 0).toFixed(2)}
                                         </div>
                                     </div>
                                 </div>
