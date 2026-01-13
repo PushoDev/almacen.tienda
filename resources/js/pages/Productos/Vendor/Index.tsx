@@ -50,7 +50,7 @@ interface PageProps {
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Resumen General', href: '/dashboard' },
-    { title: 'Productos', href: '/productos' },
+    { title: 'Productos', href: '/listado-productos' },
     { title: 'Precios por Almacén', href: '#' },
 ];
 

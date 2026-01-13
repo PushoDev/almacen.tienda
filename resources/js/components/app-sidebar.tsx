@@ -74,7 +74,7 @@ const allNavItems: NavItem[] = [
     },
     {
         title: 'Productos',
-        href: '/productos',
+        href: '/listado-productos',
         icon: Package,
         roles: ['admin', 'moderador', 'vendedor'],
     },

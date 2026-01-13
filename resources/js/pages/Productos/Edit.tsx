@@ -4,8 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
 import { CategoriasProps, ProductoProps, SharedData, type BreadcrumbItem } from '@/types';
 import { Head, useForm, usePage } from '@inertiajs/react';
@@ -15,7 +13,7 @@ import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Resumen General', href: '/dashboard' },
-    { title: 'Productos', href: '/productos' },
+    { title: 'Productos', href: '/listado-productos' },
     { title: 'Editar Producto', href: '#' },
 ];
 
@@ -271,8 +269,6 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                                 </div>
                             </div>
                         </div>
-
-
 
                         {/* Información adicional */}
                         <div className="rounded-lg bg-gray-50 p-4 dark:bg-gray-800">

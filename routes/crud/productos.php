@@ -6,23 +6,31 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'verified'])->group(
     function () {
-        Route::resource('productos', ProductoController::class)->parameters([
-            'productos' => 'producto',
+        Route::resource('listado-productos', ProductoController::class)->parameters([
+            'listado-productos' => 'producto',
+        ])->names([
+            'index' => 'productos.index',
+            'create' => 'productos.create',
+            'store' => 'productos.store',
+            'show' => 'productos.show',
+            'edit' => 'productos.edit',
+            'update' => 'productos.update',
+            'destroy' => 'productos.destroy',
         ]);
 
         // Ruta para regenerar código de barras desde la UI (Inertia)
-        Route::post('/productos/{producto}/regenerar-barcode', [ProductoController::class, 'regenerarBarcode'])
+        Route::post('/listado-productos/{producto}/regenerar-barcode', [ProductoController::class, 'regenerarBarcode'])
             ->name('productos.regenerar-barcode');
 
         // Rutas para importar/exportar
         // Exportar productos
-        Route::get('/productos/exportar/excel', [ProductoController::class, 'export'])->name('productos.export');
+        Route::get('/listado-productos/exportar/excel', [ProductoController::class, 'export'])->name('productos.export');
 
         // Importar productos (con almacén opcional en request)
-        Route::post('/productos/importar/excel', [ProductoController::class, 'import'])->name('productos.import');
+        Route::post('/listado-productos/importar/excel', [ProductoController::class, 'import'])->name('productos.import');
 
         // Importar a almacén específico (ruta con parámetro)
-        Route::post('/productos/importar/almacen/{almacenId}', [ProductoController::class, 'importToAlmacen'])->name('productos.import.almacen');
+        Route::post('/listado-productos/importar/almacen/{almacenId}', [ProductoController::class, 'importToAlmacen'])->name('productos.import.almacen');
 
         // Plantilla (opcional)
         // Route::get('/productos/descargar/plantilla', [ProductoController::class, 'downloadTemplate'])->name('productos.template');

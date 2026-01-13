@@ -17,7 +17,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
     {
         title: 'Productos',
-        href: '/productos',
+        href: '/listado-productos',
     },
     {
         title: 'Detalles del Producto',
@@ -187,8 +187,6 @@ export default function ShowPageProductos({ producto, precio_venta }: { producto
                                         </div>
                                     </div>
                                 </div>
-
-
 
                                 {/* Información de Stock */}
                                 <Separator className="my-6" />

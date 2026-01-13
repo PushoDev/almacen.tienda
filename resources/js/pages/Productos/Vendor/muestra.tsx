@@ -26,7 +26,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
     {
         title: 'Todos los Productos',
-        href: '/productos',
+        href: '/listado-productos',
     },
     {
         title: 'Productos Disponibles',

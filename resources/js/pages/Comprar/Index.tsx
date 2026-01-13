@@ -123,7 +123,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
     {
         title: 'Productos',
-        href: '/productos',
+        href: '/listado-productos',
     },
     {
         title: 'Realizar Venta',

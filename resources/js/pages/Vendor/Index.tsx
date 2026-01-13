@@ -120,7 +120,7 @@ interface PaymentVia {
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Productos', href: '/productos' },
+    { title: 'Productos', href: '/listado-productos' },
     { title: 'Punto de Ventas', href: '#' },
 ];
 
