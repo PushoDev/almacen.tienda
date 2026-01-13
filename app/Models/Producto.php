@@ -24,7 +24,6 @@ class Producto extends Model
         'barcode_image',
         'categoria_id',
         'precio_compra_producto',
-        'precio_venta_actualizado',
         'descripcion_producto',
         'imagen_producto',
         'activo',

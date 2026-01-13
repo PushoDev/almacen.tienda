@@ -22,7 +22,11 @@ class EnsureUserIsAdmin
             return $next($request);
         }
 
-        // Si no es 'admin', redirigir a la ruta de vendedor
+        // Si no es 'admin', devolver JSON en peticiones Inertia/AJAX o redirigir en peticiones normales
+        if ($request->wantsJson() || $request->header('X-Inertia')) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
         return redirect()->route('vendedor');
     }
 }

@@ -20,6 +20,10 @@ class EnsureUserIsModerator
             return $next($request);
         }
 
+        if ($request->wantsJson() || $request->header('X-Inertia')) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
         return redirect()->route('vendedor');
     }
 }
