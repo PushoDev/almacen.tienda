@@ -213,10 +213,10 @@ class Producto extends Model
         return $this->almacenes->sum('pivot.cantidad');
     }
 
-    // 🔥 Stock bajo si es menor a 3
+    // 🔥 Stock bajo si es menor a 5
     public function getStockBajoAttribute(): bool
     {
-        return $this->cantidad_total < 3;
+        return $this->cantidad_total < 5;
     }
 
     // 🔥 Accesor para URL de imagen
@@ -249,6 +249,16 @@ class Producto extends Model
     }
 
     /**
+     * Scope para filtrar productos con stock bajo (menos de 3 unidades totales)
+     */
+    public function scopeStockBajo($query)
+    {
+        return $query->with('almacenes')->get()->filter(function ($producto) {
+            return $producto->cantidad_total < 5;
+        });
+    }
+
+    /**
      * Verifica si la imagen del código de barras existe físicamente
      */
     public function barcodeImageExists(): bool
@@ -267,4 +277,3 @@ class Producto extends Model
         return false;
     }
 }
-
