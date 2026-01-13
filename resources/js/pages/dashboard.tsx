@@ -13,10 +13,10 @@ import {
     ComputerIcon,
     DiamondPercent,
     DollarSign,
+    IdCard,
     LucideBaggageClaim,
     LucideBoomBox,
-    LucideClockArrowDown,
-    MonitorCog,
+    Notebook,
     ShoppingBagIcon,
     TrendingUp,
     Users,
@@ -325,7 +325,7 @@ export default function Dashboard({
                             <div className="relative z-10 h-full p-6">
                                 {/* Ícono en la esquina superior izquierda */}
                                 <div className="absolute top-4 left-4">
-                                    <LucideClockArrowDown className="h-8 w-8 text-white" />
+                                    <IdCard className="h-8 w-8 text-white" />
                                 </div>
 
                                 {/* Textos alineados a la derecha */}
@@ -346,7 +346,7 @@ export default function Dashboard({
                         </div>
                     </div>
 
-                    {/* Widget de Remesas - Todos */}
+                    {/* Widget de Cierres - Todos */}
                     <div>
                         <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-amber-800 to-amber-400">
                             {/* Ícono de fondo transparente */}
@@ -358,12 +358,14 @@ export default function Dashboard({
                             <div className="relative z-10 h-full p-6">
                                 {/* Ícono en la esquina superior izquierda */}
                                 <div className="absolute top-4 left-4">
-                                    <MonitorCog className="h-8 w-8 text-white" />
+                                    <Notebook className="h-8 w-8 text-white" />
                                 </div>
 
                                 {/* Textos alineados a la derecha */}
                                 <div className="flex h-full flex-col items-end justify-center space-y-2">
-                                    <h3 className="text-4xl font-bold text-white">$ 0.00</h3>
+                                    <h3 className="text-4xl font-bold text-white">
+                                        Cuadre de Caja
+                                    </h3>
                                 </div>
 
                                 {/* Botón pequeño */}
