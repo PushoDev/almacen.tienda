@@ -65,11 +65,14 @@ class ProductoController extends Controller
             }
         }
 
-        // ✅ Filtrar por stock bajo a nivel de base de datos si es posible
-        // Esto asume que `stock_bajo` se puede determinar en la consulta (ej. a través de un scope)
+        // Filtrar por stock bajo
         if ($request->has('stock_bajo') && $request->stock_bajo) {
-            // Suponiendo que tienes un scope en tu modelo Producto: scopeStockBajo($query)
-            $query->stockBajo();
+            // Obtener todos los productos y filtrar por stock bajo usando el scope
+            $productosStockBajo = Producto::with(['categoria', 'almacenes'])->stockBajo();
+
+            // Convertir a query builder para mantener compatibilidad con paginación
+            $ids = $productosStockBajo->pluck('id')->toArray();
+            $query->whereIn('id', $ids);
         }
 
         // Paginación
@@ -91,8 +94,6 @@ class ProductoController extends Controller
                 'cantidad_total' => $producto->cantidad_total,
                 'imagen_url' => $producto->imagen_url,
                 'barcode_image_url' => $producto->barcode_image_url,
-                'activo' => (bool) $producto->activo,
-                'descripcion_producto' => $producto->descripcion_producto,
                 'stock_bajo' => $producto->stock_bajo,
                 'created_at' => $producto->created_at?->toISOString(),
                 'updated_at' => $producto->updated_at?->toISOString(),
@@ -134,8 +135,6 @@ class ProductoController extends Controller
                 'cantidad_total' => $producto->cantidad_total, // ✅ Accessor del modelo (ya actualizado)
                 'imagen_url' => $producto->imagen_url,
                 'barcode_image_url' => $producto->barcode_image_url,
-                'activo' => (bool) $producto->activo,
-                'descripcion_producto' => $producto->descripcion_producto,
                 'stock_bajo' => $producto->stock_bajo,
                 'almacenes' => $producto->almacenes->map(fn($almacen) => [
                     'id' => $almacen->id,

@@ -677,7 +677,10 @@ export default function ProductosPage({
                                 const isStockBajo = producto.stock_bajo;
 
                                 return (
-                                    <TableRow key={producto.id} className={isStockBajo ? 'animate-pulse bg-red-50 dark:bg-red-950/30' : ''}>
+                                    <TableRow
+                                        key={producto.id}
+                                        className={isStockBajo ? 'animate-pulse border-l-4 border-red-500 bg-red-100 dark:bg-red-950/50' : ''}
+                                    >
                                         <TableCell>
                                             <div className="flex items-center gap-2">
                                                 <Package size={14} className="text-primary shrink-0" />
@@ -716,10 +719,18 @@ export default function ProductosPage({
                                                 <Hash size={14} className="shrink-0 text-blue-500" />
                                                 <span className={isStockBajo ? 'font-bold text-red-600' : ''}>{producto.cantidad_total}</span>
                                                 {isStockBajo && (
-                                                    <Badge variant="destructive" className="ml-2 animate-pulse">
-                                                        <AlertTriangle size={12} className="mr-1" />
-                                                        Bajo
-                                                    </Badge>
+                                                    <>
+                                                        <div className="group relative">
+                                                            <AlertTriangle size={16} className="animate-pulse cursor-help text-red-600" />
+                                                            <div className="invisible absolute bottom-full left-1/2 z-50 mb-2 w-48 -translate-x-1/2 rounded-md bg-gray-900 px-3 py-2 text-xs text-white shadow-lg group-hover:visible">
+                                                                <div className="text-center">⚠️ Producto con bajo stock</div>
+                                                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                                                            </div>
+                                                        </div>
+                                                        <Badge variant="destructive" className="ml-1 animate-pulse">
+                                                            Bajo
+                                                        </Badge>
+                                                    </>
                                                 )}
                                             </div>
                                         </TableCell>
