@@ -188,37 +188,7 @@ export default function ShowPageProductos({ producto, precio_venta }: { producto
                                     </div>
                                 </div>
 
-                                {/* Ecommerce Info */}
-                                <Separator className="my-6" />
-                                <div className="space-y-4">
-                                    <h3 className="text-lg font-semibold text-blue-600">Información para Ecommerce</h3>
-                                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                                        <div className="space-y-4">
-                                            <div>
-                                                <p className="text-muted-foreground text-sm">Precio en Catálogo Online</p>
-                                                <p className="text-xl font-bold text-blue-700">${formatPrecio(producto.precio_venta_actualizado)}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-muted-foreground text-sm">Estado en Ecommerce</p>
-                                                <div className="mt-1">
-                                                    {producto.activo ? (
-                                                        <Badge className="bg-green-600">Activo en Catálogo</Badge>
-                                                    ) : (
-                                                        <Badge variant="outline" className="text-gray-500">
-                                                            Inactivo en Catálogo
-                                                        </Badge>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <p className="text-muted-foreground text-sm">Descripción para Clientes</p>
-                                            <div className="mt-1 rounded-lg bg-gray-50 p-4 text-sm italic dark:bg-gray-800">
-                                                {producto.descripcion_producto || 'Sin descripción detallada.'}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+
 
                                 {/* Información de Stock */}
                                 <Separator className="my-6" />

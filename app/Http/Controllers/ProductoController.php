@@ -28,10 +28,7 @@ class ProductoController extends Controller
         // No ejecutar migraciones/seed automáticamente desde la petición.
 
         // Query base con relaciones
-        $query = Producto::with(['categoria', 'almacenes'])
-            ->with(['vendedores' => function ($query) use ($user) {
-                $query->where('users.id', $user->id);
-            }]);
+        $query = Producto::with(['categoria', 'almacenes']);
 
         // Búsqueda
         if ($request->has('search') && $request->search != '') {
@@ -94,8 +91,6 @@ class ProductoController extends Controller
                 'cantidad_total' => $producto->cantidad_total,
                 'imagen_url' => $producto->imagen_url,
                 'barcode_image_url' => $producto->barcode_image_url,
-                'precio_venta' => $producto->vendedores->first()->pivot->precio_venta ?? null,
-                'precio_venta_actualizado' => (float) $producto->precio_venta_actualizado,
                 'activo' => (bool) $producto->activo,
                 'descripcion_producto' => $producto->descripcion_producto,
                 'stock_bajo' => $producto->stock_bajo,
@@ -123,13 +118,7 @@ class ProductoController extends Controller
         $user = Auth::user();
 
         // ✅ FORZAR recarga de relaciones para datos ACTUALIZADOS
-        $producto->load(['categoria', 'almacenes', 'vendedores' => function ($query) use ($user) {
-            $query->where('users.id', $user->id)
-                ->select('users.id', 'producto_vendedors.precio_venta', 'producto_vendedors.venta_ganancia');
-        }]);
-
-        $precioVenta = $producto->vendedores->first()->pivot->precio_venta ?? null;
-        $ganancia = $producto->vendedores->first()->pivot->venta_ganancia ?? null;
+        $producto->load(['categoria', 'almacenes']);
 
         return Inertia::render('Productos/Show', [
             'producto' => [
@@ -145,11 +134,8 @@ class ProductoController extends Controller
                 'cantidad_total' => $producto->cantidad_total, // ✅ Accessor del modelo (ya actualizado)
                 'imagen_url' => $producto->imagen_url,
                 'barcode_image_url' => $producto->barcode_image_url,
-                'precio_venta' => $precioVenta,
-                'precio_venta_actualizado' => (float) $producto->precio_venta_actualizado,
                 'activo' => (bool) $producto->activo,
                 'descripcion_producto' => $producto->descripcion_producto,
-                'ganancia' => $ganancia,
                 'stock_bajo' => $producto->stock_bajo,
                 'almacenes' => $producto->almacenes->map(fn($almacen) => [
                     'id' => $almacen->id,
@@ -185,7 +171,6 @@ class ProductoController extends Controller
                 'codigo_producto' => $producto->codigo_producto,
                 'categoria_id' => $producto->categoria_id,
                 'precio_compra_producto' => (float) $producto->precio_compra_producto,
-                'precio_venta_actualizado' => (float) $producto->precio_venta_actualizado,
                 'activo' => (bool) $producto->activo,
                 'descripcion_producto' => $producto->descripcion_producto,
                 'imagen_url' => $producto->imagen_url,
@@ -215,7 +200,6 @@ class ProductoController extends Controller
             ],
             'categoria_id' => ['required', 'exists:categorias,id'],
             'precio_compra_producto' => ['required', 'numeric', 'min:0'],
-            'precio_venta_actualizado' => ['nullable', 'numeric', 'min:0'],
             'activo' => ['nullable', 'boolean'],
             'descripcion_producto' => ['nullable', 'string'],
             'imagen_producto' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'],
@@ -244,7 +228,6 @@ class ProductoController extends Controller
             // ✅ Restringir campos de ecommerce solo a admin/moderador
             $user = Auth::user();
             if ($user->role !== 'admin' && $user->role !== 'moderador') {
-                unset($updateData['precio_venta_actualizado']);
                 unset($updateData['activo']);
                 unset($updateData['descripcion_producto']);
             }
@@ -284,7 +267,6 @@ class ProductoController extends Controller
 
             // Eliminar relaciones
             $producto->almacenes()->detach();
-            $producto->vendedores()->detach();
 
             // Eliminar producto
             $producto->delete();
