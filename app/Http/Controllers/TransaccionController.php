@@ -33,7 +33,13 @@ class TransaccionController extends Controller
             ->limit(50)
             ->get();
 
-        $cuentas = Cuenta::with('moneda')->get();
+        // ✅ Filtrar cuentas según el rol del usuario
+        if (auth()->user()->role === 'vendedor') {
+            $cuentas = auth()->user()->cuentas()->with('moneda')->get();
+        } else {
+            $cuentas = Cuenta::with('moneda')->get();
+        }
+        
         $clientes = Cliente::all();
         $proveedores = Proveedor::all();
 
@@ -64,10 +70,19 @@ class TransaccionController extends Controller
             'productos' => fn($query) => $query->withPivot('cantidad', 'precio')
         ]);
 
-        // ✅ Filtrar cuentas que tengan moneda con código CUP
-        $cuentas = Cuenta::whereHas('moneda', function ($query) {
-            $query->where('codigo_moneda', 'CUP')->where('estado', true);
-        })->with('moneda')->get();
+        // ✅ Filtrar cuentas según el rol del usuario y que tengan moneda CUP
+        if (auth()->user()->role === 'vendedor') {
+            $cuentas = auth()->user()->cuentas()
+                ->whereHas('moneda', function ($query) {
+                    $query->where('codigo_moneda', 'CUP')->where('estado', true);
+                })
+                ->with('moneda')
+                ->get();
+        } else {
+            $cuentas = Cuenta::whereHas('moneda', function ($query) {
+                $query->where('codigo_moneda', 'CUP')->where('estado', true);
+            })->with('moneda')->get();
+        }
 
         // ✅ Obtener moneda CUP por defecto
         $monedaCUP = Moneda::where('codigo_moneda', 'CUP')
@@ -95,6 +110,15 @@ class TransaccionController extends Controller
         try {
             $compra = Compra::with('productos')->findOrFail($validatedData['purchase_id']);
             $cuenta = Cuenta::with('moneda')->findOrFail($validatedData['account_id']);
+
+            // ✅ Validar que el vendedor tenga acceso a esta cuenta
+            if (auth()->user()->role === 'vendedor') {
+                $cuentasAsignadas = auth()->user()->cuentas()->pluck('id')->toArray();
+                if (!in_array($cuenta->id, $cuentasAsignadas)) {
+                    DB::rollBack();
+                    return redirect()->back()->with('error', 'No tiene permiso para operar con esta cuenta.');
+                }
+            }
 
             if ($cuenta->tipo_cuenta === 'deudas') {
                 DB::rollBack();
@@ -360,6 +384,14 @@ class TransaccionController extends Controller
             if ($request->origen_tipo === 'cuenta') {
                 $origen = Cuenta::with('moneda')->lockForUpdate()->findOrFail($request->origen_id);
 
+                // ✅ Validar que el vendedor tenga acceso a esta cuenta
+                if (auth()->user()->role === 'vendedor') {
+                    $cuentasAsignadas = auth()->user()->cuentas()->pluck('id')->toArray();
+                    if (!in_array($origen->id, $cuentasAsignadas)) {
+                        throw new \Exception('No tiene permiso para operar con esta cuenta.');
+                    }
+                }
+
                 // ✅ Validar que la moneda de la cuenta coincida
                 if ($origen->moneda->codigo_moneda !== $request->moneda) {
                     throw new \Exception("La moneda de la cuenta ({$origen->moneda->codigo_moneda}) no coincide con la transacción ({$request->moneda}).");
@@ -430,6 +462,14 @@ class TransaccionController extends Controller
 
             if ($request->destino_tipo === 'cuenta') {
                 $destino = Cuenta::with('moneda')->lockForUpdate()->findOrFail($request->destino_id);
+
+                // ✅ Validar que el vendedor tenga acceso a esta cuenta
+                if (auth()->user()->role === 'vendedor') {
+                    $cuentasAsignadas = auth()->user()->cuentas()->pluck('id')->toArray();
+                    if (!in_array($destino->id, $cuentasAsignadas)) {
+                        throw new \Exception('No tiene permiso para operar con esta cuenta.');
+                    }
+                }
 
                 // ✅ Validar que la moneda de la cuenta coincida
                 if ($destino->moneda->codigo_moneda !== $request->moneda) {
@@ -502,6 +542,14 @@ class TransaccionController extends Controller
             if ($request->origen_tipo === 'cuenta') {
                 $origen = Cuenta::with('moneda')->lockForUpdate()->findOrFail($request->origen_id);
 
+                // ✅ Validar que el vendedor tenga acceso a esta cuenta
+                if (auth()->user()->role === 'vendedor') {
+                    $cuentasAsignadas = auth()->user()->cuentas()->pluck('id')->toArray();
+                    if (!in_array($origen->id, $cuentasAsignadas)) {
+                        throw new \Exception('No tiene permiso para operar con esta cuenta.');
+                    }
+                }
+
                 if ($origen->moneda->codigo_moneda !== $request->moneda) {
                     throw new \Exception("La moneda de la cuenta origen ({$origen->moneda->codigo_moneda}) no coincide con la transacción ({$request->moneda}).");
                 }
@@ -520,6 +568,14 @@ class TransaccionController extends Controller
             // Manejo del Destino
             if ($request->destino_tipo === 'cuenta') {
                 $destino = Cuenta::with('moneda')->lockForUpdate()->findOrFail($request->destino_id);
+
+                // ✅ Validar que el vendedor tenga acceso a esta cuenta
+                if (auth()->user()->role === 'vendedor') {
+                    $cuentasAsignadas = auth()->user()->cuentas()->pluck('id')->toArray();
+                    if (!in_array($destino->id, $cuentasAsignadas)) {
+                        throw new \Exception('No tiene permiso para operar con esta cuenta.');
+                    }
+                }
 
                 if ($destino->moneda->codigo_moneda !== $request->moneda) {
                     throw new \Exception("La moneda de la cuenta destino ({$destino->moneda->codigo_moneda}) no coincide con la transacción ({$request->moneda}).");
@@ -590,6 +646,14 @@ class TransaccionController extends Controller
         try {
             $compra = Compra::with('productos')->findOrFail($request->compra_id);
             $cuenta = Cuenta::with('moneda')->findOrFail($request->cuenta_id);
+
+            // ✅ Validar que el vendedor tenga acceso a esta cuenta
+            if (auth()->user()->role === 'vendedor') {
+                $cuentasAsignadas = auth()->user()->cuentas()->pluck('id')->toArray();
+                if (!in_array($cuenta->id, $cuentasAsignadas)) {
+                    throw new \Exception('No tiene permiso para operar con esta cuenta.');
+                }
+            }
 
             // Validar que la cuenta sea CUP
             if ($cuenta->moneda->codigo_moneda !== 'CUP') {
