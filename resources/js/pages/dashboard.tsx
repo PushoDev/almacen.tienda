@@ -232,7 +232,9 @@ export default function Dashboard({
                 </div>
 
                 {/* Opciones */}
-                <div className="animate__animated animate__flipInX grid auto-rows-min gap-4 md:grid-cols-4">
+                <div
+                    className={`animate__animated animate__flipInX grid auto-rows-min gap-4 ${userRole === 'vendedor' ? 'md:grid-cols-3' : 'md:grid-cols-4'}`}
+                >
                     {/* Widget de Compra - Solo Admin y Moderador */}
                     {(userRole === 'admin' || userRole === 'moderador') && (
                         <div>
@@ -363,9 +365,7 @@ export default function Dashboard({
 
                                 {/* Textos alineados a la derecha */}
                                 <div className="flex h-full flex-col items-end justify-center space-y-2">
-                                    <h3 className="text-4xl font-bold text-white">
-                                        Cuadre de Caja
-                                    </h3>
+                                    <h3 className="text-4xl font-bold text-white">Cuadre de Caja</h3>
                                 </div>
 
                                 {/* Botón pequeño */}
