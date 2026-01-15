@@ -88,6 +88,13 @@ interface MovimientoForm {
     monto_convertido: string;
 }
 
+// ✅ Estados para validaciones de límites
+interface LimitValidation {
+    isValid: boolean;
+    message: string;
+    severity: 'warning' | 'error';
+}
+
 // ✅ TIPO SIMPLIFICADO para setData
 type FormSetter = (data: Partial<MovimientoForm> | ((data: MovimientoForm) => MovimientoForm)) => void;
 
@@ -147,11 +154,15 @@ const ConversionTransferencia: React.FC<ConversionTransferenciaProps> = ({ data,
         return null;
     }
 
-    // Si son la misma moneda, no hay conversión
-    if (data.moneda === data.moneda_destino) {
+    // Determinar tipos de entidad
+    const origenEsCuenta = data.origen_tipo === 'cuenta';
+    const destinoEsCuenta = data.destino_tipo === 'cuenta';
+
+    // Si ambos son cliente/proveedor (USD), no hay conversión
+    if (!origenEsCuenta && !destinoEsCuenta) {
         return (
-            <div className="rounded-md bg-blue-50 p-3 dark:bg-blue-900">
-                <p className="text-sm text-blue-800 dark:text-blue-200">💰 Mismo tipo de moneda: {data.moneda}. No se requiere conversión.</p>
+            <div className="rounded-md bg-gray-50 p-3 dark:bg-gray-900">
+                <p className="text-sm text-gray-800 dark:text-gray-200">💵 Ambas entidades operan en USD. No se requiere conversión.</p>
             </div>
         );
     }
@@ -164,35 +175,62 @@ const ConversionTransferencia: React.FC<ConversionTransferenciaProps> = ({ data,
         return null;
     }
 
-    // Calcular tasa de conversión - Asegurar que siempre sea un número
-    let tasaConversion = 1;
-    if (data.moneda === 'USD') {
-        tasaConversion = Number(monedaDestino.tasa_cambio) || 1;
-    } else if (data.moneda_destino === 'USD') {
-        tasaConversion = Number(monedaOrigen.tasa_cambio) || 1;
+    // Calcular tasa y monto convertido según la nueva lógica
+    const montoOrigen = Number(data.monto) || 0;
+    let tasaSistema = 1;
+    let montoConvertido = 0;
+    let tasaOrigenUsar = 1;
+    let tasaDestinoUsar = 1;
+
+    if (origenEsCuenta && destinoEsCuenta) {
+        // CUENTA → CUENTA: Dividir por tasa de la moneda destino
+        tasaDestinoUsar = Number(monedaDestino.tasa_cambio) || 1;
+        tasaSistema = tasaDestinoUsar;
+        montoConvertido = tasaDestinoUsar > 0 ? montoOrigen / tasaDestinoUsar : 0;
+    } else if (origenEsCuenta && !destinoEsCuenta) {
+        // CUENTA → CLIENTE/PROVEEDOR: Convertir de moneda cuenta a USD
+        tasaOrigenUsar = Number(monedaOrigen.tasa_cambio) || 1;
+        tasaSistema = tasaOrigenUsar;
+        montoConvertido = tasaOrigenUsar > 0 ? montoOrigen / tasaOrigenUsar : 0;
+    } else if (!origenEsCuenta && destinoEsCuenta) {
+        // CLIENTE/PROVEEDOR → CUENTA: Convertir de USD a moneda cuenta
+        tasaDestinoUsar = Number(monedaDestino.tasa_cambio) || 1;
+        tasaSistema = tasaDestinoUsar;
+        montoConvertido = montoOrigen * tasaDestinoUsar;
     } else {
-        // Conversión entre monedas no USD (relativo a USD)
-        const tasaOrigen = Number(monedaOrigen.tasa_cambio) || 1;
-        const tasaDestino = Number(monedaDestino.tasa_cambio) || 1;
-        tasaConversion = tasaOrigen / tasaDestino;
+        // Ambos son cliente/proveedor (USD), sin conversión
+        montoConvertido = montoOrigen;
     }
 
     // Usar tasa personalizada si se proporcionó
-    const tasaFinal = data.tasa_cambio_aplicada ? Number(data.tasa_cambio_aplicada) : tasaConversion;
+    const tasaPersonalizada = data.tasa_cambio_aplicada ? Number(data.tasa_cambio_aplicada) : null;
+    let tasaFinal = tasaSistema;
+    let montoFinal = montoConvertido;
 
-    // Calcular monto convertido
-    const montoOrigen = Number(data.monto) || 0;
-    const montoConvertido = tasaFinal > 0 ? montoOrigen / tasaFinal : 0;
+    if (tasaPersonalizada && tasaPersonalizada > 0) {
+        tasaFinal = tasaPersonalizada;
+        if (origenEsCuenta && destinoEsCuenta) {
+            montoFinal = montoOrigen / tasaPersonalizada;
+        } else if (origenEsCuenta && !destinoEsCuenta) {
+            montoFinal = montoOrigen / tasaPersonalizada;
+        } else if (!origenEsCuenta && destinoEsCuenta) {
+            montoFinal = montoOrigen * tasaPersonalizada;
+        } else {
+            montoFinal = montoOrigen;
+        }
+    }
 
     // Actualizar monto convertido en el formulario
     useEffect(() => {
         if (montoOrigen > 0 && tasaFinal > 0) {
             setData((prev: MovimientoForm) => ({
                 ...prev,
-                monto_convertido: montoConvertido.toFixed(2),
+                monto_convertido: montoFinal.toFixed(2),
             }));
         }
     }, [montoOrigen, tasaFinal]);
+
+    const mostrarTasaEditable = origenEsCuenta || destinoEsCuenta;
 
     return (
         <div className="space-y-3">
@@ -203,30 +241,42 @@ const ConversionTransferencia: React.FC<ConversionTransferenciaProps> = ({ data,
                         Origen: {montoOrigen.toFixed(2)} {data.moneda}
                     </p>
                     <p>
-                        Destino: {montoConvertido.toFixed(2)} {data.moneda_destino}
+                        Destino: {montoFinal.toFixed(2)} {data.moneda_destino}
                     </p>
                     <p>
-                        Tasa: 1 {data.moneda} = {tasaFinal > 0 ? (1 / tasaFinal).toFixed(6) : '0'} {data.moneda_destino}
+                        {(() => {
+                            if (origenEsCuenta && destinoEsCuenta) {
+                                return `Tasa: 1 ${data.moneda} = ${(1 / tasaFinal).toFixed(6)} ${data.moneda_destino}`;
+                            } else if (origenEsCuenta && !destinoEsCuenta) {
+                                return `Tasa: 1 ${data.moneda} = ${(1 / tasaFinal).toFixed(6)} USD`;
+                            } else if (!origenEsCuenta && destinoEsCuenta) {
+                                return `Tasa: 1 USD = ${tasaFinal.toFixed(6)} ${data.moneda_destino}`;
+                            } else {
+                                return 'Sin conversión (ambos USD)';
+                            }
+                        })()}
                     </p>
                 </div>
             </div>
 
-            <div>
-                <Label htmlFor="tasa_cambio_transferencia">Tasa de Cambio (Editable)</Label>
-                <Input
-                    type="number"
-                    id="tasa_cambio_transferencia"
-                    value={data.tasa_cambio_aplicada || ''}
-                    onChange={(e) => setData({ ...data, tasa_cambio_aplicada: e.target.value })}
-                    step="0.0001"
-                    min="0.0001"
-                    placeholder={`Tasa del sistema: ${tasaConversion.toFixed(4)}`}
-                />
-                <p className="mt-1 text-xs text-gray-500">
-                    Puede editar la tasa para esta transferencia. Vacío usa tasa del sistema ({tasaConversion.toFixed(4)}).
-                </p>
-                {errors.tasa_cambio_aplicada && <p className="mt-1 text-sm text-red-500">{errors.tasa_cambio_aplicada}</p>}
-            </div>
+            {mostrarTasaEditable && (
+                <div>
+                    <Label htmlFor="tasa_cambio_transferencia">Tasa de Cambio (Editable)</Label>
+                    <Input
+                        type="number"
+                        id="tasa_cambio_transferencia"
+                        value={data.tasa_cambio_aplicada || ''}
+                        onChange={(e) => setData({ ...data, tasa_cambio_aplicada: e.target.value })}
+                        step="0.0001"
+                        min="0.0001"
+                        placeholder={`Tasa del sistema: ${tasaSistema.toFixed(4)}`}
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                        Puede editar la tasa para esta transferencia. Vacío usa tasa del sistema ({tasaSistema.toFixed(4)}).
+                    </p>
+                    {errors.tasa_cambio_aplicada && <p className="mt-1 text-sm text-red-500">{errors.tasa_cambio_aplicada}</p>}
+                </div>
+            )}
         </div>
     );
 };
@@ -236,10 +286,110 @@ const ConversionTransferencia: React.FC<ConversionTransferenciaProps> = ({ data,
 // ------------------------------------
 export default function Movimientos({ cuentas, clientes, proveedores, monedasActivas }: Props) {
     const [alert, setAlert] = useState<AlertState>({ show: false, message: '', type: 'success' });
+    const [limitValidation, setLimitValidation] = useState<LimitValidation | null>(null);
 
     const showToast = (message: string, type: 'success' | 'error') => {
         setAlert({ show: true, message, type });
         setTimeout(() => setAlert({ show: false, message: '', type: 'success' }), 4000);
+    };
+
+    // ✅ Validar límites en tiempo real para transferencias
+    const validarLimitesTransferencia = (monto: string, destinoId: string, destinoTipo: EntidadTipo, montoConvertido: string) => {
+        if (!monto || !destinoId || destinoId === '') {
+            setLimitValidation(null);
+            return;
+        }
+
+        const montoNum = parseFloat(montoConvertido) || 0;
+
+        switch (destinoTipo) {
+            case 'cuenta':
+                const cuentaDestino = cuentas.find((c) => c.id === parseInt(destinoId));
+                if (cuentaDestino) {
+                    const limiteMaximo = 1000000; // 1 millón
+                    const saldoActual = cuentaDestino.saldo_cuenta || 0;
+                    const saldoDespues = saldoActual + montoNum;
+
+                    if (saldoDespues > limiteMaximo) {
+                        setLimitValidation({
+                            isValid: false,
+                            message: `⚠️ Esta transferencia excedería el límite de ${limiteMaximo.toLocaleString()} ${cuentaDestino.moneda.codigo_moneda} para esta cuenta.`,
+                            severity: 'error',
+                        });
+                        return;
+                    }
+
+                    if (saldoDespues > limiteMaximo * 0.9) {
+                        // 90% del límite
+                        setLimitValidation({
+                            isValid: true,
+                            message: `⚠️ Cercano al límite máximo de ${limiteMaximo.toLocaleString()} ${cuentaDestino.moneda.codigo_moneda}`,
+                            severity: 'warning',
+                        });
+                        return;
+                    }
+                }
+                break;
+
+            case 'cliente':
+                const clienteDestino = clientes.find((c) => c.id === parseInt(destinoId));
+                if (clienteDestino) {
+                    const limiteMaximo = 50000; // 50,000 USD
+                    const saldoActual = parseFloat(String(clienteDestino.deuda_pago_cliente)) || 0;
+                    const saldoDespues = saldoActual + montoNum;
+
+                    if (saldoDespues > limiteMaximo) {
+                        setLimitValidation({
+                            isValid: false,
+                            message: `⚠️ Esta transferencia excedería el límite de $${limiteMaximo.toLocaleString()} USD para este cliente.`,
+                            severity: 'error',
+                        });
+                        return;
+                    }
+
+                    if (saldoDespues > limiteMaximo * 0.9) {
+                        // 90% del límite
+                        setLimitValidation({
+                            isValid: true,
+                            message: `⚠️ Cercano al límite máximo de $${limiteMaximo.toLocaleString()} USD`,
+                            severity: 'warning',
+                        });
+                        return;
+                    }
+                }
+                break;
+
+            case 'proveedor':
+                const proveedorDestino = proveedores.find((p) => p.id === parseInt(destinoId));
+                if (proveedorDestino) {
+                    const limiteMaximo = 100000; // 100,000 USD
+                    const saldoActual = proveedorDestino.saldo_proveedor || 0;
+                    const saldoDespues = saldoActual + montoNum;
+
+                    if (saldoDespues > limiteMaximo) {
+                        setLimitValidation({
+                            isValid: false,
+                            message: `⚠️ Esta transferencia excedería el límite de $${limiteMaximo.toLocaleString()} USD para este proveedor.`,
+                            severity: 'error',
+                        });
+                        return;
+                    }
+
+                    if (saldoDespues > limiteMaximo * 0.9) {
+                        // 90% del límite
+                        setLimitValidation({
+                            isValid: true,
+                            message: `⚠️ Cercano al límite máximo de $${limiteMaximo.toLocaleString()} USD`,
+                            severity: 'warning',
+                        });
+                        return;
+                    }
+                }
+                break;
+        }
+
+        // Si pasa todas las validaciones
+        setLimitValidation(null);
     };
 
     // --- FORMULARIOS SIMPLIFICADOS ---
@@ -361,29 +511,67 @@ export default function Movimientos({ cuentas, clientes, proveedores, monedasAct
             const monedaOrigen = monedasActivas.find((m) => m.codigo_moneda === transferData.moneda);
             const monedaDestino = monedasActivas.find((m) => m.codigo_moneda === transferData.moneda_destino);
 
-            if (monedaOrigen && monedaDestino && transferData.moneda !== transferData.moneda_destino) {
-                let tasaConversion = 1;
-                if (transferData.moneda === 'USD') {
-                    tasaConversion = Number(monedaDestino.tasa_cambio) || 1;
-                } else if (transferData.moneda_destino === 'USD') {
-                    tasaConversion = Number(monedaOrigen.tasa_cambio) || 1;
+            if (monedaOrigen && monedaDestino) {
+                const origenEsCuenta = transferData.origen_tipo === 'cuenta';
+                const destinoEsCuenta = transferData.destino_tipo === 'cuenta';
+                const montoOrigen = Number(transferData.monto) || 0;
+
+                let tasaSistema = 1;
+                let montoConvertido = 0;
+
+                if (origenEsCuenta && destinoEsCuenta) {
+                    // CUENTA → CUENTA: Dividir por tasa de la moneda destino
+                    tasaSistema = Number(monedaDestino.tasa_cambio) || 1;
+                    montoConvertido = tasaSistema > 0 ? montoOrigen / tasaSistema : 0;
+                } else if (origenEsCuenta && !destinoEsCuenta) {
+                    // CUENTA → CLIENTE/PROVEEDOR: Convertir de moneda cuenta a USD
+                    tasaSistema = Number(monedaOrigen.tasa_cambio) || 1;
+                    montoConvertido = tasaSistema > 0 ? montoOrigen / tasaSistema : 0;
+                } else if (!origenEsCuenta && destinoEsCuenta) {
+                    // CLIENTE/PROVEEDOR → CUENTA: Convertir de USD a moneda cuenta
+                    tasaSistema = Number(monedaDestino.tasa_cambio) || 1;
+                    montoConvertido = montoOrigen * tasaSistema;
                 } else {
-                    const tasaOrigen = Number(monedaOrigen.tasa_cambio) || 1;
-                    const tasaDestino = Number(monedaDestino.tasa_cambio) || 1;
-                    tasaConversion = tasaOrigen / tasaDestino;
+                    // Ambos son cliente/proveedor (USD), sin conversión
+                    montoConvertido = montoOrigen;
                 }
 
-                const tasaFinal = transferData.tasa_cambio_aplicada ? Number(transferData.tasa_cambio_aplicada) : tasaConversion;
-                const montoOrigen = Number(transferData.monto) || 0;
-                const montoConvertido = tasaFinal > 0 ? montoOrigen / tasaFinal : 0;
+                // Usar tasa personalizada si se proporcionó
+                const tasaPersonalizada = transferData.tasa_cambio_aplicada ? Number(transferData.tasa_cambio_aplicada) : null;
+                let tasaFinal = tasaSistema;
+                let montoFinal = montoConvertido;
+
+                if (tasaPersonalizada && tasaPersonalizada > 0) {
+                    tasaFinal = tasaPersonalizada;
+                    if (origenEsCuenta && destinoEsCuenta) {
+                        montoFinal = montoOrigen / tasaPersonalizada;
+                    } else if (origenEsCuenta && !destinoEsCuenta) {
+                        montoFinal = montoOrigen / tasaPersonalizada;
+                    } else if (!origenEsCuenta && destinoEsCuenta) {
+                        montoFinal = montoOrigen * tasaPersonalizada;
+                    } else {
+                        montoFinal = montoOrigen;
+                    }
+                }
 
                 setTransferData((prev) => ({
                     ...prev,
-                    monto_convertido: montoConvertido.toFixed(2),
+                    monto_convertido: montoFinal.toFixed(2),
                 }));
+
+                // ✅ Validar límites después de calcular
+                validarLimitesTransferencia(transferData.monto, transferData.destino_id, transferData.destino_tipo, montoFinal.toFixed(2));
             }
         }
-    }, [transferData.moneda, transferData.moneda_destino, transferData.monto, transferData.tasa_cambio_aplicada, monedasActivas]);
+    }, [
+        transferData.moneda,
+        transferData.moneda_destino,
+        transferData.monto,
+        transferData.tasa_cambio_aplicada,
+        transferData.origen_tipo,
+        transferData.destino_tipo,
+        monedasActivas,
+    ]);
 
     // --- MANEJADORES Y AYUDANTES DE RENDERIZADO ACTUALIZADOS ---
 
@@ -429,6 +617,11 @@ export default function Movimientos({ cuentas, clientes, proveedores, monedasAct
                     newData.destino_tipo = tipoEntidad;
                     newData.destino_id = value;
                     newData.moneda_destino = selectedMoneda;
+
+                    // Limpiar validación de límites cuando cambia el destino
+                    if (formSetter === setTransferData) {
+                        setLimitValidation(null);
+                    }
                 }
                 return newData;
             });
@@ -924,8 +1117,43 @@ export default function Movimientos({ cuentas, clientes, proveedores, monedasAct
                                         id="monto_convertido"
                                         value={transferData.monto_convertido}
                                         readOnly
-                                        className="bg-green-100 font-semibold dark:bg-green-800"
+                                        className={`font-semibold ${
+                                            limitValidation?.severity === 'error'
+                                                ? 'border-red-500 bg-red-100 dark:bg-red-900'
+                                                : limitValidation?.severity === 'warning'
+                                                  ? 'border-yellow-500 bg-yellow-100 dark:bg-yellow-900'
+                                                  : 'bg-green-100 dark:bg-green-800'
+                                        }`}
                                     />
+                                </div>
+                            )}
+
+                            {/* ✅ COMPONENTE DE CONVERSIÓN PARA TRANSFERENCIAS */}
+                            <ConversionTransferencia
+                                data={transferData}
+                                setData={setTransferData}
+                                errors={transferErrors}
+                                monedasActivas={monedasActivas}
+                            />
+
+                            {/* ✅ ADVERTENCIA DE LÍMITES */}
+                            {limitValidation && (
+                                <div
+                                    className={`rounded-md p-3 ${
+                                        limitValidation.severity === 'error'
+                                            ? 'border border-red-200 bg-red-50 dark:border-red-700 dark:bg-red-900'
+                                            : 'border border-yellow-200 bg-yellow-50 dark:border-yellow-700 dark:bg-yellow-900'
+                                    }`}
+                                >
+                                    <p
+                                        className={`text-sm ${
+                                            limitValidation.severity === 'error'
+                                                ? 'text-red-800 dark:text-red-200'
+                                                : 'text-yellow-800 dark:text-yellow-200'
+                                        }`}
+                                    >
+                                        {limitValidation.message}
+                                    </p>
                                 </div>
                             )}
 
@@ -956,7 +1184,8 @@ export default function Movimientos({ cuentas, clientes, proveedores, monedasAct
                                     !transferData.destino_id ||
                                     !transferData.monto ||
                                     Number(transferData.monto) <= 0 ||
-                                    (transferData.origen_tipo === transferData.destino_tipo && transferData.origen_id === transferData.destino_id)
+                                    (transferData.origen_tipo === transferData.destino_tipo && transferData.origen_id === transferData.destino_id) ||
+                                    limitValidation?.severity === 'error'
                                 }
                                 className="w-full"
                             >

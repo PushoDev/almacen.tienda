@@ -552,11 +552,14 @@ class TransaccionController extends Controller
 
             // Calcular tasas de cambio y montos convertidos
             $montoOrigen = (float)$request->monto;
-            $montoDestino = $this->calcularMontoConvertido($montoOrigen, $monedaOrigen, $monedaDestino, $request->tasa_cambio_aplicada);
-            $tasaCambioAplicada = $this->obtenerTasaCambioFinal($monedaOrigen, $monedaDestino, $request->tasa_cambio_aplicada);
+            $montoDestino = $this->calcularMontoConvertido($montoOrigen, $monedaOrigen, $monedaDestino, $request->tasa_cambio_aplicada, $request->origen_tipo, $request->destino_tipo);
+            $tasaCambioAplicada = $this->obtenerTasaCambioFinal($monedaOrigen, $monedaDestino, $request->tasa_cambio_aplicada, $request->origen_tipo, $request->destino_tipo);
 
             // Validar saldo suficiente
             $this->validarSaldoOrigen($origen, $request->origen_tipo, $montoOrigen);
+
+            // Validar límite máximo para el destino
+            $this->validarLimiteDestino($destino, $request->destino_tipo, $montoDestino, $monedaDestino);
 
             // Realizar débito en origen
             $this->realizarDebito($origen, $request->origen_tipo, $montoOrigen);
@@ -651,24 +654,94 @@ class TransaccionController extends Controller
     }
 
     /**
-     * Calcula el monto convertido según tasas de cambio
+     * Valida que el monto no exceda el límite máximo permitido para el destino
      */
-    private function calcularMontoConvertido(float $montoOrigen, Moneda $monedaOrigen, Moneda $monedaDestino, ?float $tasaPersonalizada): float
+    private function validarLimiteDestino($entidad, string $tipo, float $montoDestino, Moneda $monedaDestino): void
     {
-        // Si son la misma moneda, no hay conversión
-        if ($monedaOrigen->codigo_moneda === $monedaDestino->codigo_moneda) {
+        switch ($tipo) {
+            case 'cuenta':
+                // Límite máximo para cuentas: 1,000,000 de su moneda
+                $limiteMaximoCuenta = 1000000;
+                $saldoActual = (float)$entidad->saldo_cuenta;
+                $saldoDespuesDeTransferencia = $saldoActual + $montoDestino;
+                
+                if ($saldoDespuesDeTransferencia > $limiteMaximoCuenta) {
+                    throw new \Exception("La transferencia excedería el saldo máximo permitido para esta cuenta. Límite: {$limiteMaximoCuenta} {$monedaDestino->codigo_moneda}, Saldo actual: {$saldoActual}, Saldo después: {$saldoDespuesDeTransferencia} {$monedaDestino->codigo_moneda}");
+                }
+                break;
+
+            case 'cliente':
+                // Límite máximo para clientes: 50,000 USD
+                $limiteMaximoCliente = 50000;
+                $saldoActual = (float)$entidad->deuda_pago_cliente;
+                $saldoDespuesDeTransferencia = $saldoActual + $montoDestino;
+                
+                if ($saldoDespuesDeTransferencia > $limiteMaximoCliente) {
+                    throw new \Exception("La transferencia excedería el límite máximo permitido para este cliente. Límite: {$limiteMaximoCliente} USD, Saldo actual: {$saldoActual}, Saldo después: {$saldoDespuesDeTransferencia} USD");
+                }
+                break;
+
+            case 'proveedor':
+                // Límite máximo para proveedores: 100,000 USD
+                $limiteMaximoProveedor = 100000;
+                $saldoActual = (float)$entidad->saldo_proveedor;
+                $saldoDespuesDeTransferencia = $saldoActual + $montoDestino;
+                
+                if ($saldoDespuesDeTransferencia > $limiteMaximoProveedor) {
+                    throw new \Exception("La transferencia excedería el límite máximo permitido para este proveedor. Límite: {$limiteMaximoProveedor} USD, Saldo actual: {$saldoActual}, Saldo después: {$saldoDespuesDeTransferencia} USD");
+                }
+                break;
+        }
+    }
+
+    /**
+     * Calcula el monto convertido según tasas de cambio y tipos de entidad
+     */
+    private function calcularMontoConvertido(float $montoOrigen, Moneda $monedaOrigen, Moneda $monedaDestino, ?float $tasaPersonalizada, string $origenTipo, string $destinoTipo): float
+    {
+        // Clientes y Proveedores siempre operan en USD
+        $origenEsCuenta = $origenTipo === 'cuenta';
+        $destinoEsCuenta = $destinoTipo === 'cuenta';
+        
+        // Si son la misma moneda y mismo tipo de entidad, no hay conversión
+        if ($monedaOrigen->codigo_moneda === $monedaDestino->codigo_moneda && $origenEsCuenta === $destinoEsCuenta) {
             return $montoOrigen;
         }
 
-        // Obtener tasa de cambio a usar
-        $tasaCambio = $tasaPersonalizada ?? $this->obtenerTasaCambioEntreMonedas($monedaOrigen, $monedaDestino);
-
-        if ($tasaCambio <= 0) {
-            throw new \Exception("La tasa de cambio entre {$monedaOrigen->codigo_moneda} y {$monedaDestino->codigo_moneda} no es válida.");
+        // Si es cliente/proveedor → cliente/proveedor, ambos USD, sin conversión
+        if (!$origenEsCuenta && !$destinoEsCuenta) {
+            return $montoOrigen;
         }
 
-        // Convertir monto
-        $montoConvertido = $montoOrigen / $tasaCambio;
+        // Calcular monto convertido según el tipo de transferencia
+        if ($origenEsCuenta && $destinoEsCuenta) {
+            // CUENTA → CUENTA: Dividir por tasa de la moneda destino (relativo a USD)
+            $tasaDestino = $tasaPersonalizada ?? $monedaDestino->tasa_cambio;
+            if ($tasaDestino <= 0) {
+                throw new \Exception("La tasa de cambio para {$monedaDestino->codigo_moneda} no es válida.");
+            }
+            $montoConvertido = $montoOrigen / $tasaDestino;
+            
+        } elseif ($origenEsCuenta && !$destinoEsCuenta) {
+            // CUENTA → CLIENTE/PROVEEDOR: Convertir de moneda cuenta a USD
+            $tasaOrigen = $tasaPersonalizada ?? $monedaOrigen->tasa_cambio;
+            if ($tasaOrigen <= 0) {
+                throw new \Exception("La tasa de cambio para {$monedaOrigen->codigo_moneda} no es válida.");
+            }
+            $montoConvertido = $montoOrigen / $tasaOrigen;
+            
+        } elseif (!$origenEsCuenta && $destinoEsCuenta) {
+            // CLIENTE/PROVEEDOR → CUENTA: Convertir de USD a moneda cuenta
+            $tasaDestino = $tasaPersonalizada ?? $monedaDestino->tasa_cambio;
+            if ($tasaDestino <= 0) {
+                throw new \Exception("La tasa de cambio para {$monedaDestino->codigo_moneda} no es válida.");
+            }
+            $montoConvertido = $montoOrigen * $tasaDestino;
+            
+        } else {
+            // Ambos son cliente/proveedor (USD), sin conversión
+            $montoConvertido = $montoOrigen;
+        }
 
         // Redondear a 2 decimales
         return round($montoConvertido, 2);
@@ -697,13 +770,38 @@ class TransaccionController extends Controller
     /**
      * Obtiene la tasa de cambio final que se aplicará
      */
-    private function obtenerTasaCambioFinal(Moneda $monedaOrigen, Moneda $monedaDestino, ?float $tasaPersonalizada): float
+    private function obtenerTasaCambioFinal(Moneda $monedaOrigen, Moneda $monedaDestino, ?float $tasaPersonalizada, string $origenTipo, string $destinoTipo): float
     {
-        if ($monedaOrigen->codigo_moneda === $monedaDestino->codigo_moneda) {
+        // Si son la misma moneda y mismo tipo, tasa es 1.0
+        if ($monedaOrigen->codigo_moneda === $monedaDestino->codigo_moneda && $origenTipo === $destinoTipo) {
             return 1.0;
         }
 
-        return $tasaPersonalizada ?? $this->obtenerTasaCambioEntreMonedas($monedaOrigen, $monedaDestino);
+        // Si hay tasa personalizada, usarla
+        if ($tasaPersonalizada && $tasaPersonalizada > 0) {
+            return $tasaPersonalizada;
+        }
+
+        // Determinar qué tasa usar según el tipo de transferencia
+        $origenEsCuenta = $origenTipo === 'cuenta';
+        $destinoEsCuenta = $destinoTipo === 'cuenta';
+
+        if ($origenEsCuenta && $destinoEsCuenta) {
+            // CUENTA → CUENTA: Usar tasa de la moneda destino
+            return $monedaDestino->tasa_cambio;
+            
+        } elseif ($origenEsCuenta && !$destinoEsCuenta) {
+            // CUENTA → CLIENTE/PROVEEDOR: Usar tasa de la moneda origen
+            return $monedaOrigen->tasa_cambio;
+            
+        } elseif (!$origenEsCuenta && $destinoEsCuenta) {
+            // CLIENTE/PROVEEDOR → CUENTA: Usar tasa de la moneda destino
+            return $monedaDestino->tasa_cambio;
+            
+        } else {
+            // CLIENTE/PROVEEDOR → CLIENTE/PROVEEDOR: Ambos USD
+            return 1.0;
+        }
     }
 
     /**
