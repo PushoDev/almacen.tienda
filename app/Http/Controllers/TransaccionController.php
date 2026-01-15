@@ -507,7 +507,7 @@ class TransaccionController extends Controller
     }
 
     /**
-     * Registrar Transferencia (Cuenta ↔ Cliente ↔ Proveedor)
+     * Registrar Transferencia (Cuenta ↔ Cliente ↔ Proveedor) con soporte multi-moneda
      */
     public function transferir(Request $request)
     {
@@ -533,67 +533,42 @@ class TransaccionController extends Controller
         DB::beginTransaction();
 
         try {
-            $tasaCambioAplicada = $this->resolveTasaCambio($request);
+            // Obtener entidades con sus monedas
+            $origen = $this->obtenerEntidadConMoneda($request->origen_tipo, $request->origen_id);
+            $destino = $this->obtenerEntidadConMoneda($request->destino_tipo, $request->destino_id);
 
-            $origenNombre = '';
-            $destinoNombre = '';
+            // Validar acceso para vendedores
+            $this->validarAccesoVendedor($origen, $request->origen_tipo);
+            $this->validarAccesoVendedor($destino, $request->destino_tipo);
 
-            // Manejo del Origen
-            if ($request->origen_tipo === 'cuenta') {
-                $origen = Cuenta::with('moneda')->lockForUpdate()->findOrFail($request->origen_id);
+            // Obtener monedas
+            $monedaOrigen = $this->obtenerMonedaEntidad($origen, $request->origen_tipo);
+            $monedaDestino = $this->obtenerMonedaEntidad($destino, $request->destino_tipo);
 
-                // ✅ Validar que el vendedor tenga acceso a esta cuenta
-                if (auth()->user()->role === 'vendedor') {
-                    $cuentasAsignadas = auth()->user()->cuentas()->pluck('id')->toArray();
-                    if (!in_array($origen->id, $cuentasAsignadas)) {
-                        throw new \Exception('No tiene permiso para operar con esta cuenta.');
-                    }
-                }
-
-                if ($origen->moneda->codigo_moneda !== $request->moneda) {
-                    throw new \Exception("La moneda de la cuenta origen ({$origen->moneda->codigo_moneda}) no coincide con la transacción ({$request->moneda}).");
-                }
-
-                if ($origen->saldo_cuenta < $request->monto) {
-                    throw new \Exception('Saldo insuficiente en la cuenta origen.');
-                }
-                $origen->decrement('saldo_cuenta', $request->monto);
-                $origenNombre = "Cuenta: {$origen->nombre_cuenta}";
-            } else {
-                $origen = Cliente::lockForUpdate()->findOrFail($request->origen_id);
-                $origen->decrement('deuda_pago_cliente', $request->monto);
-                $origenNombre = "Cliente: {$origen->nombre_cliente}";
+            // Validar que la moneda del origen coincida con la transacción
+            if ($monedaOrigen->codigo_moneda !== $request->moneda) {
+                throw new \Exception("La moneda del origen ({$monedaOrigen->codigo_moneda}) no coincide con la moneda de la transacción ({$request->moneda}).");
             }
 
-            // Manejo del Destino
-            if ($request->destino_tipo === 'cuenta') {
-                $destino = Cuenta::with('moneda')->lockForUpdate()->findOrFail($request->destino_id);
+            // Calcular tasas de cambio y montos convertidos
+            $montoOrigen = (float)$request->monto;
+            $montoDestino = $this->calcularMontoConvertido($montoOrigen, $monedaOrigen, $monedaDestino, $request->tasa_cambio_aplicada);
+            $tasaCambioAplicada = $this->obtenerTasaCambioFinal($monedaOrigen, $monedaDestino, $request->tasa_cambio_aplicada);
 
-                // ✅ Validar que el vendedor tenga acceso a esta cuenta
-                if (auth()->user()->role === 'vendedor') {
-                    $cuentasAsignadas = auth()->user()->cuentas()->pluck('id')->toArray();
-                    if (!in_array($destino->id, $cuentasAsignadas)) {
-                        throw new \Exception('No tiene permiso para operar con esta cuenta.');
-                    }
-                }
+            // Validar saldo suficiente
+            $this->validarSaldoOrigen($origen, $request->origen_tipo, $montoOrigen);
 
-                if ($destino->moneda->codigo_moneda !== $request->moneda) {
-                    throw new \Exception("La moneda de la cuenta destino ({$destino->moneda->codigo_moneda}) no coincide con la transacción ({$request->moneda}).");
-                }
+            // Realizar débito en origen
+            $this->realizarDebito($origen, $request->origen_tipo, $montoOrigen);
 
-                $destino->increment('saldo_cuenta', $request->monto);
-                $destinoNombre = "Cuenta: {$destino->nombre_cuenta}";
-            } else if ($request->destino_tipo === 'cliente') {
-                $destino = Cliente::lockForUpdate()->findOrFail($request->destino_id);
-                $destino->increment('deuda_pago_cliente', $request->monto);
-                $destinoNombre = "Cliente: {$destino->nombre_cliente}";
-            } else {
-                // ✅ NUEVO: Manejo de proveedores como destino
-                $destino = Proveedor::lockForUpdate()->findOrFail($request->destino_id);
-                $destino->increment('saldo_proveedor', $request->monto);
-                $destinoNombre = "Proveedor: {$destino->nombre_proveedor}";
-            }
+            // Realizar crédito en destino
+            $this->realizarCredito($destino, $request->destino_tipo, $montoDestino);
 
+            // Obtener nombres para descripción
+            $origenNombre = $this->obtenerNombreEntidad($origen, $request->origen_tipo);
+            $destinoNombre = $this->obtenerNombreEntidad($destino, $request->destino_tipo);
+
+            // Crear movimiento financiero
             MovimientoFinanciero::create([
                 'user_id' => auth()->id(),
                 'tipo_movimiento_id' => 3,
@@ -602,20 +577,202 @@ class TransaccionController extends Controller
                 'cuenta_destino_id' => $request->destino_tipo === 'cuenta' ? $destino->id : null,
                 'cliente_destino_id' => $request->destino_tipo === 'cliente' ? $destino->id : null,
                 'proveedor_destino_id' => $request->destino_tipo === 'proveedor' ? $destino->id : null,
-                'monto' => $request->monto,
+                'monto' => $montoOrigen,
                 'moneda' => $request->moneda,
                 'tasa_cambio_aplicada' => $tasaCambioAplicada,
-                'descripcion' => $request->comentario ?? "Transferencia de {$origenNombre} a {$destinoNombre}",
+                'descripcion' => $request->comentario ?? "Transferencia: {$montoOrigen} {$monedaOrigen->codigo_moneda} → {$montoDestino} {$monedaDestino->codigo_moneda} ({$origenNombre} → {$destinoNombre})",
                 'fecha_operacion' => now(),
                 'estado' => 'completado',
             ]);
 
             DB::commit();
-            return Redirect::back()->with('success', "✅ Transferencia de {$request->monto} {$request->moneda} registrada con éxito.");
+
+            $mensajeExito = $monedaOrigen->codigo_moneda === $monedaDestino->codigo_moneda
+                ? "✅ Transferencia de {$montoOrigen} {$monedaOrigen->codigo_moneda} registrada con éxito."
+                : "✅ Transferencia de {$montoOrigen} {$monedaOrigen->codigo_moneda} → {$montoDestino} {$monedaDestino->codigo_moneda} registrada con éxito (Tasa: {$tasaCambioAplicada}).";
+
+            return Redirect::back()->with('success', $mensajeExito);
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Error al registrar transferencia: ' . $e->getMessage());
             return Redirect::back()->with('error', '❌ Error al registrar la transferencia: ' . $e->getMessage());
+        }
+    }
+
+    // =======================================================
+    // === MÉTODOS AUXILIARES PARA TRANSFERENCIAS MULTI-MONEDA ===
+    // =======================================================
+
+    /**
+     * Obtiene la entidad con su moneda cargada
+     */
+    private function obtenerEntidadConMoneda(string $tipo, int $id)
+    {
+        switch ($tipo) {
+            case 'cuenta':
+                return Cuenta::with('moneda')->lockForUpdate()->findOrFail($id);
+            case 'cliente':
+                return Cliente::lockForUpdate()->findOrFail($id);
+            case 'proveedor':
+                return Proveedor::lockForUpdate()->findOrFail($id);
+            default:
+                throw new \Exception("Tipo de entidad no válido: {$tipo}");
+        }
+    }
+
+    /**
+     * Obtiene la moneda de una entidad
+     */
+    private function obtenerMonedaEntidad($entidad, string $tipo): Moneda
+    {
+        switch ($tipo) {
+            case 'cuenta':
+                return $entidad->moneda;
+            case 'cliente':
+            case 'proveedor':
+                // Clientes y proveedores operan siempre en USD
+                return $this->obtenerMonedaPorCodigo('USD');
+            default:
+                throw new \Exception("Tipo de entidad no válido para obtener moneda: {$tipo}");
+        }
+    }
+
+    /**
+     * Valida que el vendedor tenga acceso a la entidad
+     */
+    private function validarAccesoVendedor($entidad, string $tipo): void
+    {
+        if (auth()->user()->role === 'vendedor' && $tipo === 'cuenta') {
+            $cuentasAsignadas = auth()->user()->cuentas()->pluck('id')->toArray();
+            if (!in_array($entidad->id, $cuentasAsignadas)) {
+                throw new \Exception('No tiene permiso para operar con esta cuenta.');
+            }
+        }
+    }
+
+    /**
+     * Calcula el monto convertido según tasas de cambio
+     */
+    private function calcularMontoConvertido(float $montoOrigen, Moneda $monedaOrigen, Moneda $monedaDestino, ?float $tasaPersonalizada): float
+    {
+        // Si son la misma moneda, no hay conversión
+        if ($monedaOrigen->codigo_moneda === $monedaDestino->codigo_moneda) {
+            return $montoOrigen;
+        }
+
+        // Obtener tasa de cambio a usar
+        $tasaCambio = $tasaPersonalizada ?? $this->obtenerTasaCambioEntreMonedas($monedaOrigen, $monedaDestino);
+
+        if ($tasaCambio <= 0) {
+            throw new \Exception("La tasa de cambio entre {$monedaOrigen->codigo_moneda} y {$monedaDestino->codigo_moneda} no es válida.");
+        }
+
+        // Convertir monto
+        $montoConvertido = $montoOrigen / $tasaCambio;
+
+        // Redondear a 2 decimales
+        return round($montoConvertido, 2);
+    }
+
+    /**
+     * Obtiene la tasa de cambio entre dos monedas
+     */
+    private function obtenerTasaCambioEntreMonedas(Moneda $monedaOrigen, Moneda $monedaDestino): float
+    {
+        // Si el origen es USD, la tasa es la de la moneda destino
+        if ($monedaOrigen->codigo_moneda === 'USD') {
+            return $monedaDestino->tasa_cambio;
+        }
+
+        // Si el destino es USD, la tasa es la de la moneda origen
+        if ($monedaDestino->codigo_moneda === 'USD') {
+            return $monedaOrigen->tasa_cambio;
+        }
+
+        // Para otras conversiones, calculamos relativo a USD
+        // Ejemplo: CUP → EUR = (CUP/USD) / (EUR/USD)
+        return $monedaOrigen->tasa_cambio / $monedaDestino->tasa_cambio;
+    }
+
+    /**
+     * Obtiene la tasa de cambio final que se aplicará
+     */
+    private function obtenerTasaCambioFinal(Moneda $monedaOrigen, Moneda $monedaDestino, ?float $tasaPersonalizada): float
+    {
+        if ($monedaOrigen->codigo_moneda === $monedaDestino->codigo_moneda) {
+            return 1.0;
+        }
+
+        return $tasaPersonalizada ?? $this->obtenerTasaCambioEntreMonedas($monedaOrigen, $monedaDestino);
+    }
+
+    /**
+     * Valida saldo suficiente en origen
+     */
+    private function validarSaldoOrigen($entidad, string $tipo, float $monto): void
+    {
+        switch ($tipo) {
+            case 'cuenta':
+                if ($entidad->saldo_cuenta < $monto) {
+                    throw new \Exception('Saldo insuficiente en la cuenta origen.');
+                }
+                break;
+            case 'cliente':
+                $saldoActual = (float)($entidad->deuda_pago_cliente ?? 0);
+                if ($saldoActual < $monto) {
+                    throw new \Exception('Saldo insuficiente en la cuenta del cliente.');
+                }
+                break;
+        }
+    }
+
+    /**
+     * Realiza débito en la entidad de origen
+     */
+    private function realizarDebito($entidad, string $tipo, float $monto): void
+    {
+        switch ($tipo) {
+            case 'cuenta':
+                $entidad->decrement('saldo_cuenta', $monto);
+                break;
+            case 'cliente':
+                $entidad->decrement('deuda_pago_cliente', $monto);
+                break;
+        }
+    }
+
+    /**
+     * Realiza crédito en la entidad de destino
+     */
+    private function realizarCredito($entidad, string $tipo, float $monto): void
+    {
+        switch ($tipo) {
+            case 'cuenta':
+                $entidad->increment('saldo_cuenta', $monto);
+                break;
+            case 'cliente':
+                $entidad->increment('deuda_pago_cliente', $monto);
+                break;
+            case 'proveedor':
+                $entidad->increment('saldo_proveedor', $monto);
+                break;
+        }
+    }
+
+    /**
+     * Obtiene el nombre descriptivo de la entidad
+     */
+    private function obtenerNombreEntidad($entidad, string $tipo): string
+    {
+        switch ($tipo) {
+            case 'cuenta':
+                return "Cuenta: {$entidad->nombre_cuenta}";
+            case 'cliente':
+                return "Cliente: {$entidad->nombre_cliente}";
+            case 'proveedor':
+                return "Proveedor: {$entidad->nombre_proveedor}";
+            default:
+                return "Entidad desconocida";
         }
     }
 

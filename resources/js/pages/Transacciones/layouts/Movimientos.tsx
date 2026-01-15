@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useForm } from '@inertiajs/react';
 import { Building, DollarSign, User } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 // ------------------------------------
 // TIPOS DE DATOS Y UTILIDADES ACTUALIZADOS
@@ -82,19 +82,21 @@ interface MovimientoForm {
     destino_id: string;
     monto: string;
     moneda: string;
+    moneda_destino: string;
     comentario: string;
     tasa_cambio_aplicada: string;
+    monto_convertido: string;
 }
 
 // ✅ TIPO SIMPLIFICADO para setData
-type FormSetter = (data: MovimientoForm | ((data: MovimientoForm) => MovimientoForm)) => void;
+type FormSetter = (data: Partial<MovimientoForm> | ((data: MovimientoForm) => MovimientoForm)) => void;
 
 // ------------------------------------
 // COMPONENTE AUXILIAR PARA LA TASA DE CAMBIO CORREGIDO
 // ------------------------------------
 interface TasaCambioProps {
     data: MovimientoForm;
-    setData: FormSetter;
+    setData: any;
     errors: Record<string, string>;
     monedasActivas: Moneda[];
 }
@@ -130,6 +132,106 @@ const TasaCambioInput: React.FC<TasaCambioProps> = ({ data, setData, errors, mon
 };
 
 // ------------------------------------
+// COMPONENTE DE CONVERSIÓN PARA TRANSFERENCIAS
+// ------------------------------------
+interface ConversionTransferenciaProps {
+    data: MovimientoForm;
+    setData: any;
+    errors: Record<string, string>;
+    monedasActivas: Moneda[];
+}
+
+const ConversionTransferencia: React.FC<ConversionTransferenciaProps> = ({ data, setData, errors, monedasActivas }) => {
+    // Si no hay moneda de origen o destino, no mostrar nada
+    if (!data.moneda || !data.moneda_destino) {
+        return null;
+    }
+
+    // Si son la misma moneda, no hay conversión
+    if (data.moneda === data.moneda_destino) {
+        return (
+            <div className="rounded-md bg-blue-50 p-3 dark:bg-blue-900">
+                <p className="text-sm text-blue-800 dark:text-blue-200">💰 Mismo tipo de moneda: {data.moneda}. No se requiere conversión.</p>
+            </div>
+        );
+    }
+
+    // Obtener información de monedas
+    const monedaOrigen = monedasActivas.find((m) => m.codigo_moneda === data.moneda);
+    const monedaDestino = monedasActivas.find((m) => m.codigo_moneda === data.moneda_destino);
+
+    if (!monedaOrigen || !monedaDestino) {
+        return null;
+    }
+
+    // Calcular tasa de conversión - Asegurar que siempre sea un número
+    let tasaConversion = 1;
+    if (data.moneda === 'USD') {
+        tasaConversion = Number(monedaDestino.tasa_cambio) || 1;
+    } else if (data.moneda_destino === 'USD') {
+        tasaConversion = Number(monedaOrigen.tasa_cambio) || 1;
+    } else {
+        // Conversión entre monedas no USD (relativo a USD)
+        const tasaOrigen = Number(monedaOrigen.tasa_cambio) || 1;
+        const tasaDestino = Number(monedaDestino.tasa_cambio) || 1;
+        tasaConversion = tasaOrigen / tasaDestino;
+    }
+
+    // Usar tasa personalizada si se proporcionó
+    const tasaFinal = data.tasa_cambio_aplicada ? Number(data.tasa_cambio_aplicada) : tasaConversion;
+
+    // Calcular monto convertido
+    const montoOrigen = Number(data.monto) || 0;
+    const montoConvertido = tasaFinal > 0 ? montoOrigen / tasaFinal : 0;
+
+    // Actualizar monto convertido en el formulario
+    useEffect(() => {
+        if (montoOrigen > 0 && tasaFinal > 0) {
+            setData((prev: MovimientoForm) => ({
+                ...prev,
+                monto_convertido: montoConvertido.toFixed(2),
+            }));
+        }
+    }, [montoOrigen, tasaFinal]);
+
+    return (
+        <div className="space-y-3">
+            <div className="rounded-md bg-green-50 p-3 dark:bg-green-900">
+                <h4 className="mb-2 text-sm font-semibold text-green-800 dark:text-green-200">🔄 Conversión de Moneda</h4>
+                <div className="space-y-1 text-sm text-green-700 dark:text-green-300">
+                    <p>
+                        Origen: {montoOrigen.toFixed(2)} {data.moneda}
+                    </p>
+                    <p>
+                        Destino: {montoConvertido.toFixed(2)} {data.moneda_destino}
+                    </p>
+                    <p>
+                        Tasa: 1 {data.moneda} = {tasaFinal > 0 ? (1 / tasaFinal).toFixed(6) : '0'} {data.moneda_destino}
+                    </p>
+                </div>
+            </div>
+
+            <div>
+                <Label htmlFor="tasa_cambio_transferencia">Tasa de Cambio (Editable)</Label>
+                <Input
+                    type="number"
+                    id="tasa_cambio_transferencia"
+                    value={data.tasa_cambio_aplicada || ''}
+                    onChange={(e) => setData({ ...data, tasa_cambio_aplicada: e.target.value })}
+                    step="0.0001"
+                    min="0.0001"
+                    placeholder={`Tasa del sistema: ${tasaConversion.toFixed(4)}`}
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                    Puede editar la tasa para esta transferencia. Vacío usa tasa del sistema ({tasaConversion.toFixed(4)}).
+                </p>
+                {errors.tasa_cambio_aplicada && <p className="mt-1 text-sm text-red-500">{errors.tasa_cambio_aplicada}</p>}
+            </div>
+        </div>
+    );
+};
+
+// ------------------------------------
 // COMPONENTE PRINCIPAL (Movimientos) CORREGIDO
 // ------------------------------------
 export default function Movimientos({ cuentas, clientes, proveedores, monedasActivas }: Props) {
@@ -153,10 +255,12 @@ export default function Movimientos({ cuentas, clientes, proveedores, monedasAct
         origen_id: '',
         monto: '',
         moneda: '',
+        moneda_destino: '',
         comentario: '',
         destino_tipo: 'cuenta',
         destino_id: '',
         tasa_cambio_aplicada: '',
+        monto_convertido: '',
     });
 
     const handleGastoSubmit = (e: React.FormEvent) => {
@@ -164,14 +268,6 @@ export default function Movimientos({ cuentas, clientes, proveedores, monedasAct
 
         // ✅ CORRECCIÓN: Enviar datos correctamente
         postGasto(route('transacciones.gastar'), {
-            data: {
-                origen_tipo: gastoData.origen_tipo,
-                origen_id: gastoData.origen_id,
-                monto: gastoData.monto,
-                moneda: gastoData.moneda,
-                comentario: gastoData.comentario,
-                tasa_cambio_aplicada: gastoData.tasa_cambio_aplicada,
-            },
             onSuccess: () => {
                 showToast('¡Gasto registrado con éxito!', 'success');
                 resetGasto();
@@ -195,24 +291,18 @@ export default function Movimientos({ cuentas, clientes, proveedores, monedasAct
         destino_id: '',
         monto: '',
         moneda: '',
+        moneda_destino: '',
         comentario: '',
         origen_tipo: 'cuenta',
         origen_id: '',
         tasa_cambio_aplicada: '',
+        monto_convertido: '',
     });
 
     const handleIngresoSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
         postIngreso(route('transacciones.ingresar'), {
-            data: {
-                destino_tipo: ingresoData.destino_tipo,
-                destino_id: ingresoData.destino_id,
-                monto: ingresoData.monto,
-                moneda: ingresoData.moneda,
-                comentario: ingresoData.comentario,
-                tasa_cambio_aplicada: ingresoData.tasa_cambio_aplicada,
-            },
             onSuccess: () => {
                 showToast('¡Ingreso registrado con éxito!', 'success');
                 resetIngreso();
@@ -238,8 +328,10 @@ export default function Movimientos({ cuentas, clientes, proveedores, monedasAct
         destino_id: '',
         monto: '',
         moneda: '',
+        moneda_destino: '',
         comentario: '',
         tasa_cambio_aplicada: '',
+        monto_convertido: '',
     });
 
     const handleTransferSubmit = (e: React.FormEvent) => {
@@ -251,16 +343,6 @@ export default function Movimientos({ cuentas, clientes, proveedores, monedasAct
         }
 
         postTransfer(route('transacciones.transferir'), {
-            data: {
-                origen_tipo: transferData.origen_tipo,
-                origen_id: transferData.origen_id,
-                destino_tipo: transferData.destino_tipo,
-                destino_id: transferData.destino_id,
-                monto: transferData.monto,
-                moneda: transferData.moneda,
-                comentario: transferData.comentario,
-                tasa_cambio_aplicada: transferData.tasa_cambio_aplicada,
-            },
             onSuccess: () => {
                 showToast('¡Transferencia realizada con éxito!', 'success');
                 resetTransfer();
@@ -273,9 +355,39 @@ export default function Movimientos({ cuentas, clientes, proveedores, monedasAct
         });
     };
 
+    // Efecto para recalcular conversión en transferencias
+    useEffect(() => {
+        if (transferData.moneda && transferData.moneda_destino && transferData.monto) {
+            const monedaOrigen = monedasActivas.find((m) => m.codigo_moneda === transferData.moneda);
+            const monedaDestino = monedasActivas.find((m) => m.codigo_moneda === transferData.moneda_destino);
+
+            if (monedaOrigen && monedaDestino && transferData.moneda !== transferData.moneda_destino) {
+                let tasaConversion = 1;
+                if (transferData.moneda === 'USD') {
+                    tasaConversion = Number(monedaDestino.tasa_cambio) || 1;
+                } else if (transferData.moneda_destino === 'USD') {
+                    tasaConversion = Number(monedaOrigen.tasa_cambio) || 1;
+                } else {
+                    const tasaOrigen = Number(monedaOrigen.tasa_cambio) || 1;
+                    const tasaDestino = Number(monedaDestino.tasa_cambio) || 1;
+                    tasaConversion = tasaOrigen / tasaDestino;
+                }
+
+                const tasaFinal = transferData.tasa_cambio_aplicada ? Number(transferData.tasa_cambio_aplicada) : tasaConversion;
+                const montoOrigen = Number(transferData.monto) || 0;
+                const montoConvertido = tasaFinal > 0 ? montoOrigen / tasaFinal : 0;
+
+                setTransferData((prev) => ({
+                    ...prev,
+                    monto_convertido: montoConvertido.toFixed(2),
+                }));
+            }
+        }
+    }, [transferData.moneda, transferData.moneda_destino, transferData.monto, transferData.tasa_cambio_aplicada, monedasActivas]);
+
     // --- MANEJADORES Y AYUDANTES DE RENDERIZADO ACTUALIZADOS ---
 
-    const handleEntidadChange = (value: string, tipoEntidad: EntidadTipo, campo: 'origen' | 'destino', formSetter: FormSetter) => {
+    const handleEntidadChange = (value: string, tipoEntidad: EntidadTipo, campo: 'origen' | 'destino', formSetter: any) => {
         const id = Number(value);
         let selectedMoneda = '';
         let initialTasa = '';
@@ -299,26 +411,51 @@ export default function Movimientos({ cuentas, clientes, proveedores, monedasAct
             initialTasa = '';
         }
 
-        formSetter((data) => {
-            const newData = { ...data };
+        if (formSetter === setTransferData) {
+            setTransferData((data: MovimientoForm) => {
+                const newData = { ...data };
 
-            if (campo === 'origen') {
-                newData.origen_tipo = tipoEntidad;
-                newData.origen_id = value;
-                newData.moneda = selectedMoneda;
-                newData.tasa_cambio_aplicada = initialTasa;
-            }
+                if (campo === 'origen') {
+                    newData.origen_tipo = tipoEntidad;
+                    newData.origen_id = value;
+                    newData.moneda = selectedMoneda;
+                    newData.tasa_cambio_aplicada = initialTasa;
+                    // Resetear moneda destino y monto convertido cuando cambia el origen
+                    newData.moneda_destino = '';
+                    newData.monto_convertido = '';
+                }
 
-            if (campo === 'destino') {
-                newData.destino_tipo = tipoEntidad;
-                newData.destino_id = value;
-                if (formSetter === setIngresoData) {
+                if (campo === 'destino') {
+                    newData.destino_tipo = tipoEntidad;
+                    newData.destino_id = value;
+                    newData.moneda_destino = selectedMoneda;
+                }
+                return newData;
+            });
+        } else if (formSetter === setGastoData) {
+            setGastoData((data: MovimientoForm) => {
+                const newData = { ...data };
+                if (campo === 'origen') {
+                    newData.origen_tipo = tipoEntidad;
+                    newData.origen_id = value;
                     newData.moneda = selectedMoneda;
                     newData.tasa_cambio_aplicada = initialTasa;
                 }
-            }
-            return newData;
-        });
+                return newData;
+            });
+        } else if (formSetter === setIngresoData) {
+            setIngresoData((data: MovimientoForm) => {
+                const newData = { ...data };
+                if (campo === 'destino') {
+                    newData.destino_tipo = tipoEntidad;
+                    newData.destino_id = value;
+                    newData.moneda = selectedMoneda;
+                    newData.moneda_destino = selectedMoneda;
+                    newData.tasa_cambio_aplicada = initialTasa;
+                }
+                return newData;
+            });
+        }
     };
 
     /**
@@ -746,7 +883,7 @@ export default function Movimientos({ cuentas, clientes, proveedores, monedasAct
 
                             {/* Resto de campos de Transferencia */}
                             <div>
-                                <Label htmlFor="moneda_transferir">Moneda (Determinada por Origen)</Label>
+                                <Label htmlFor="moneda_transferir">Moneda Origen</Label>
                                 <Input
                                     id="moneda_transferir"
                                     value={transferData.moneda || 'Seleccione entidad de origen primero'}
@@ -754,6 +891,16 @@ export default function Movimientos({ cuentas, clientes, proveedores, monedasAct
                                     className="bg-gray-100 dark:bg-gray-800"
                                 />
                                 {transferErrors.moneda && <p className="mt-1 text-sm text-red-500">{transferErrors.moneda}</p>}
+                            </div>
+
+                            <div>
+                                <Label htmlFor="moneda_destino_transferir">Moneda Destino</Label>
+                                <Input
+                                    id="moneda_destino_transferir"
+                                    value={transferData.moneda_destino || 'Seleccione entidad de destino primero'}
+                                    readOnly
+                                    className="bg-gray-100 dark:bg-gray-800"
+                                />
                             </div>
 
                             <div>
@@ -770,8 +917,25 @@ export default function Movimientos({ cuentas, clientes, proveedores, monedasAct
                                 {transferErrors.monto && <p className="mt-1 text-sm text-red-500">{transferErrors.monto}</p>}
                             </div>
 
-                            {/* ✅ Tasa de Cambio Condicional CORREGIDA */}
-                            <TasaCambioInput data={transferData} setData={setTransferData} errors={transferErrors} monedasActivas={monedasActivas} />
+                            {transferData.monto_convertido && (
+                                <div>
+                                    <Label htmlFor="monto_convertido">Monto Convertido (Destino)</Label>
+                                    <Input
+                                        id="monto_convertido"
+                                        value={transferData.monto_convertido}
+                                        readOnly
+                                        className="bg-green-100 font-semibold dark:bg-green-800"
+                                    />
+                                </div>
+                            )}
+
+                            {/* ✅ COMPONENTE DE CONVERSIÓN PARA TRANSFERENCIAS */}
+                            <ConversionTransferencia
+                                data={transferData}
+                                setData={setTransferData}
+                                errors={transferErrors}
+                                monedasActivas={monedasActivas}
+                            />
 
                             <div>
                                 <Label htmlFor="comentario_transferir">Comentario</Label>
