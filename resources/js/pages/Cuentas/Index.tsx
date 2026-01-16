@@ -55,6 +55,7 @@ interface CuentaConMoneda extends CuentaProps {
 export default function CuentasPage({ cuentas }: { cuentas: CuentaConMoneda[] }) {
     const { props } = usePage();
     const isAdmin = props.auth?.user?.role === 'admin';
+    const isVendedor = props.auth?.user?.role === 'vendedor';
 
     const deleteCuenta = (id: number) => {
         router.delete(route('cuentas.destroy', { cuenta: id }), {
@@ -272,12 +273,14 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaConMoneda[] })
                                     </SelectContent>
                                 </Select>
 
-                                <Link href={route('cuentas.create')}>
-                                    <Button className="flex cursor-pointer items-center gap-2">
-                                        <Plus size={16} />
-                                        Nueva Cuenta
-                                    </Button>
-                                </Link>
+                                {!isVendedor && (
+                                    <Link href={route('cuentas.create')}>
+                                        <Button className="flex cursor-pointer items-center gap-2">
+                                            <Plus size={16} />
+                                            Nueva Cuenta
+                                        </Button>
+                                    </Link>
+                                )}
                             </div>
                         </div>
                     </CardHeader>

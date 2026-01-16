@@ -54,10 +54,6 @@ class CierreCajaController extends Controller
     /**
      * Muestra la vista de pre-cierre con los cálculos del turno actual.
      */
-
-    /**
-     * Muestra la vista de pre-cierre con los cálculos del turno actual.
-     */
     public function create()
     {
         $user = Auth::user();
@@ -359,7 +355,7 @@ class CierreCajaController extends Controller
             'detalles' => array_values($resumenPorMoneda), // Array para frontend
             'ventas_efectivo' => round($ventasEfectivoTotalUSD, 2),
             'ventas_otros' => round($ventasOtrosTotalUSD, 2),
-            // Pasamos el saldo calculo total para pre-llenar los campos
+            // Pasamos el saldo calculado total para pre-llenar los campos
             'saldo_esperado_global' => round($saldoEsperadoTotalUSD, 2)
         ];
     }

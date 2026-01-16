@@ -236,61 +236,107 @@ export default function Create({ calculos, fecha_apertura }: Props) {
 
                         {/* Cards de Resumen */}
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                            <Card>
-                                <CardHeader className="pb-2">
-                                    <CardTitle className="text-muted-foreground text-xs font-semibold uppercase">Efectivo Ventas</CardTitle>
+                            <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-emerald-50/50 to-emerald-100/30 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-xl dark:from-emerald-950/30 dark:to-emerald-900/20 dark:shadow-emerald-900/20">
+                                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                                <CardHeader className="relative pb-3">
+                                    <div className="flex items-center gap-2">
+                                        <div className="rounded-lg bg-emerald-500/10 p-2">
+                                            <ArrowUpCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                        </div>
+                                        <CardTitle className="text-xs font-semibold text-emerald-700 uppercase dark:text-emerald-300">
+                                            Efectivo Ventas
+                                        </CardTitle>
+                                    </div>
                                 </CardHeader>
-                                <CardContent className="space-y-3">
-                                    <div className="font-mono text-2xl font-bold">${Number(activeDetalle?.ventas_efectivo || 0).toFixed(2)}</div>
-                                    <div className="space-y-1">
+                                <CardContent className="relative space-y-3">
+                                    <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 bg-clip-text font-mono text-2xl font-bold text-transparent dark:from-emerald-400 dark:to-emerald-500">
+                                        ${Number(activeDetalle?.ventas_efectivo || 0).toFixed(2)}
+                                    </div>
+                                    <div className="scrollbar-thin scrollbar-thumb-emerald-200 dark:scrollbar-thumb-emerald-800 max-h-32 space-y-1 overflow-y-auto">
                                         {activeDetalle?.items_ventas
                                             .filter((v) => v.tipo_pago === 'efectivo')
                                             .map((v, i) => (
-                                                <div key={i} className="flex items-center justify-between border-b border-dashed pb-1 text-[11px]">
+                                                <div
+                                                    key={i}
+                                                    className="group/item flex items-center justify-between border-b border-emerald-200/30 pb-1 text-[11px] transition-colors hover:bg-emerald-50/50 dark:border-emerald-800/30 dark:hover:bg-emerald-950/30"
+                                                >
                                                     <div className="flex max-w-25 items-center gap-2 truncate">
                                                         <Switch
                                                             checked={data.confirmacion_transferencias.includes(v.id)}
                                                             onCheckedChange={() => toggleConfirmacionTransferencia(v.id)}
+                                                            className="scale-75"
                                                         />
-                                                        <span className="truncate">{v.cliente}</span>
+                                                        <span className="truncate font-medium">{v.cliente}</span>
                                                     </div>
-                                                    <span className="font-mono">${Number(v.monto).toFixed(2)}</span>
+                                                    <span className="font-mono text-emerald-600 dark:text-emerald-400">
+                                                        ${Number(v.monto).toFixed(2)}
+                                                    </span>
                                                 </div>
                                             ))}
                                     </div>
                                 </CardContent>
                             </Card>
-                            <Card>
-                                <CardHeader className="pb-2">
-                                    <CardTitle className="text-muted-foreground text-xs font-semibold uppercase">Transferencias Ventas</CardTitle>
+                            <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-blue-50/50 to-blue-100/30 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-xl dark:from-blue-950/30 dark:to-blue-900/20 dark:shadow-blue-900/20">
+                                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                                <CardHeader className="relative pb-3">
+                                    <div className="flex items-center gap-2">
+                                        <div className="rounded-lg bg-blue-500/10 p-2">
+                                            <Banknote className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                        </div>
+                                        <CardTitle className="text-xs font-semibold text-blue-700 uppercase dark:text-blue-300">
+                                            Transferencias
+                                        </CardTitle>
+                                    </div>
                                 </CardHeader>
-                                <CardContent className="space-y-3">
-                                    <div className="font-mono text-2xl font-bold">${Number(activeDetalle?.ventas_transferencia || 0).toFixed(2)}</div>
-                                    <div className="space-y-1">
+                                <CardContent className="relative space-y-3">
+                                    <div className="bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text font-mono text-2xl font-bold text-transparent dark:from-blue-400 dark:to-blue-500">
+                                        ${Number(activeDetalle?.ventas_transferencia || 0).toFixed(2)}
+                                    </div>
+                                    <div className="scrollbar-thin scrollbar-thumb-blue-200 dark:scrollbar-thumb-blue-800 max-h-32 space-y-1 overflow-y-auto">
                                         {activeDetalle?.items_ventas
                                             .filter((v) => v.tipo_pago !== 'efectivo')
                                             .map((v, i) => (
-                                                <div key={i} className="flex items-center justify-between border-b border-dashed pb-1 text-[11px]">
+                                                <div
+                                                    key={i}
+                                                    className="group/item flex items-center justify-between border-b border-blue-200/30 pb-1 text-[11px] transition-colors hover:bg-blue-50/50 dark:border-blue-800/30 dark:hover:bg-blue-950/30"
+                                                >
                                                     <div className="flex max-w-25 items-center gap-2 truncate">
                                                         <Switch
                                                             checked={data.confirmacion_transferencias.includes(v.id)}
                                                             onCheckedChange={() => toggleConfirmacionTransferencia(v.id)}
+                                                            className="scale-75"
                                                         />
-                                                        <span className="truncate">{v.cliente}</span>
+                                                        <span className="truncate font-medium">{v.cliente}</span>
                                                     </div>
-                                                    <span className="font-mono">${Number(v.monto).toFixed(2)}</span>
+                                                    <span className="font-mono text-blue-600 dark:text-blue-400">${Number(v.monto).toFixed(2)}</span>
                                                 </div>
                                             ))}
                                     </div>
                                 </CardContent>
                             </Card>
-                            <Card className="border-primary/20 bg-primary/5">
-                                <CardHeader className="pb-2">
-                                    <CardTitle className="text-primary text-xs font-semibold uppercase">Saldo Esperado ({selectedMoneda})</CardTitle>
+                            <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-violet-50/50 to-violet-100/30 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-xl dark:from-violet-950/30 dark:to-violet-900/20 dark:shadow-violet-900/20">
+                                <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                                <CardHeader className="relative pb-3">
+                                    <div className="flex items-center gap-2">
+                                        <div className="rounded-lg bg-violet-500/10 p-2">
+                                            <Wallet className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                                        </div>
+                                        <CardTitle className="text-xs font-semibold text-violet-700 uppercase dark:text-violet-300">
+                                            Saldo Esperado
+                                        </CardTitle>
+                                    </div>
                                 </CardHeader>
-                                <CardContent>
-                                    <div className="text-primary font-mono text-2xl font-bold">
-                                        ${Number(activeDetalle?.saldo_calculado || 0).toFixed(2)}
+                                <CardContent className="relative">
+                                    <div className="flex items-center justify-between">
+                                        <div className="bg-gradient-to-r from-violet-600 to-violet-700 bg-clip-text font-mono text-2xl font-bold text-transparent dark:from-violet-400 dark:to-violet-500">
+                                            ${Number(activeDetalle?.saldo_calculado || 0).toFixed(2)}
+                                        </div>
+                                        <Badge
+                                            variant="secondary"
+                                            className="bg-violet-100 text-[10px] font-bold text-violet-700 dark:bg-violet-900/50 dark:text-violet-300"
+                                        >
+                                            {selectedMoneda}
+                                        </Badge>
                                     </div>
                                 </CardContent>
                             </Card>
@@ -299,19 +345,28 @@ export default function Create({ calculos, fecha_apertura }: Props) {
                         {/* Detalle de Movimientos Financieros */}
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                             {/* Gastos */}
-                            <Card>
-                                <CardHeader className="pb-2">
-                                    <CardTitle className="flex items-center gap-2 text-sm text-rose-600">
-                                        <ArrowDownCircle className="h-4 w-4" /> Egresos/Gastos
-                                    </CardTitle>
+                            <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-rose-50/50 to-rose-100/30 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-xl dark:from-rose-950/30 dark:to-rose-900/20 dark:shadow-rose-900/20">
+                                <div className="absolute inset-0 bg-gradient-to-br from-rose-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                                <CardHeader className="relative pb-3">
+                                    <div className="flex items-center gap-2">
+                                        <div className="rounded-lg bg-rose-500/10 p-2">
+                                            <ArrowDownCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                                        </div>
+                                        <CardTitle className="text-sm font-semibold text-rose-700 dark:text-rose-300">Egresos/Gastos</CardTitle>
+                                    </div>
                                 </CardHeader>
-                                <CardContent className="space-y-3">
-                                    <div className="text-xl font-bold">-${Number(activeDetalle?.gastos || 0).toFixed(2)}</div>
-                                    <div className="space-y-1">
+                                <CardContent className="relative space-y-3">
+                                    <div className="bg-gradient-to-r from-rose-600 to-rose-700 bg-clip-text font-mono text-xl font-bold text-transparent dark:from-rose-400 dark:to-rose-500">
+                                        -${Number(activeDetalle?.gastos || 0).toFixed(2)}
+                                    </div>
+                                    <div className="scrollbar-thin scrollbar-thumb-rose-200 dark:scrollbar-thumb-rose-800 max-h-32 space-y-1 overflow-y-auto">
                                         {activeDetalle?.items_gastos.map((g: ItemMovimiento, i: number) => (
-                                            <div key={i} className="flex justify-between border-b border-dashed pb-1 text-[11px]">
+                                            <div
+                                                key={i}
+                                                className="group/item flex justify-between border-b border-rose-200/30 pb-1 text-[11px] transition-colors hover:bg-rose-50/50 dark:border-rose-800/30 dark:hover:bg-rose-950/30"
+                                            >
                                                 <span className="text-muted-foreground mr-2 max-w-25 truncate">{g.desc}</span>
-                                                <span className="font-mono">-${Number(g.monto).toFixed(2)}</span>
+                                                <span className="font-mono text-rose-600 dark:text-rose-400">-${Number(g.monto).toFixed(2)}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -319,19 +374,30 @@ export default function Create({ calculos, fecha_apertura }: Props) {
                             </Card>
 
                             {/* Ingresos */}
-                            <Card>
-                                <CardHeader className="pb-2">
-                                    <CardTitle className="flex items-center gap-2 text-sm text-emerald-600">
-                                        <ArrowUpCircle className="h-4 w-4" /> Ingresos Extra
-                                    </CardTitle>
+                            <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-emerald-50/50 to-emerald-100/30 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-xl dark:from-emerald-950/30 dark:to-emerald-900/20 dark:shadow-emerald-900/20">
+                                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                                <CardHeader className="relative pb-3">
+                                    <div className="flex items-center gap-2">
+                                        <div className="rounded-lg bg-emerald-500/10 p-2">
+                                            <ArrowUpCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                        </div>
+                                        <CardTitle className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Ingresos Extra</CardTitle>
+                                    </div>
                                 </CardHeader>
-                                <CardContent className="space-y-3">
-                                    <div className="text-xl font-bold">+${Number(activeDetalle?.ingresos_extra || 0).toFixed(2)}</div>
-                                    <div className="space-y-1">
+                                <CardContent className="relative space-y-3">
+                                    <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 bg-clip-text font-mono text-xl font-bold text-transparent dark:from-emerald-400 dark:to-emerald-500">
+                                        +${Number(activeDetalle?.ingresos_extra || 0).toFixed(2)}
+                                    </div>
+                                    <div className="scrollbar-thin scrollbar-thumb-emerald-200 dark:scrollbar-thumb-emerald-800 max-h-32 space-y-1 overflow-y-auto">
                                         {activeDetalle?.items_ingresos.map((ing: ItemMovimiento, i: number) => (
-                                            <div key={i} className="flex justify-between border-b border-dashed pb-1 text-[11px]">
+                                            <div
+                                                key={i}
+                                                className="group/item flex justify-between border-b border-emerald-200/30 pb-1 text-[11px] transition-colors hover:bg-emerald-50/50 dark:border-emerald-800/30 dark:hover:bg-emerald-950/30"
+                                            >
                                                 <span className="text-muted-foreground mr-2 max-w-25 truncate">{ing.desc}</span>
-                                                <span className="font-mono">+${Number(ing.monto).toFixed(2)}</span>
+                                                <span className="font-mono text-emerald-600 dark:text-emerald-400">
+                                                    +${Number(ing.monto).toFixed(2)}
+                                                </span>
                                             </div>
                                         ))}
                                     </div>
@@ -339,27 +405,37 @@ export default function Create({ calculos, fecha_apertura }: Props) {
                             </Card>
 
                             {/* Transferencias/Giros */}
-                            <Card>
-                                <CardHeader className="pb-2">
-                                    <CardTitle className="flex items-center gap-2 text-sm text-indigo-600">
-                                        <Banknote className="h-4 w-4" /> Giros/Transf.
-                                    </CardTitle>
+                            <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-indigo-50/50 to-indigo-100/30 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-xl dark:from-indigo-950/30 dark:to-indigo-900/20 dark:shadow-indigo-900/20">
+                                <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                                <CardHeader className="relative pb-3">
+                                    <div className="flex items-center gap-2">
+                                        <div className="rounded-lg bg-indigo-500/10 p-2">
+                                            <Banknote className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                                        </div>
+                                        <CardTitle className="text-sm font-semibold text-indigo-700 dark:text-indigo-300">Giros/Transf.</CardTitle>
+                                    </div>
                                 </CardHeader>
-                                <CardContent className="space-y-3">
-                                    <div className="text-xl font-bold">-${Number(activeDetalle?.transferencias_salientes || 0).toFixed(2)}</div>
-                                    <div className="space-y-2">
+                                <CardContent className="relative space-y-3">
+                                    <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 bg-clip-text font-mono text-xl font-bold text-transparent dark:from-indigo-400 dark:to-indigo-500">
+                                        -${Number(activeDetalle?.transferencias_salientes || 0).toFixed(2)}
+                                    </div>
+                                    <div className="scrollbar-thin scrollbar-thumb-indigo-200 dark:scrollbar-thumb-indigo-800 max-h-32 space-y-2 overflow-y-auto">
                                         {activeDetalle?.items_transferencias.map((t: ItemMovimiento, i: number) => (
-                                            <div key={i} className="flex items-center justify-between border-b border-dashed pb-1 text-[11px]">
+                                            <div
+                                                key={i}
+                                                className="group/item flex items-center justify-between border-b border-indigo-200/30 pb-1 text-[11px] transition-colors hover:bg-indigo-50/50 dark:border-indigo-800/30 dark:hover:bg-indigo-950/30"
+                                            >
                                                 <div className="flex max-w-25 items-center gap-2 truncate">
                                                     <Switch
                                                         checked={data.confirmacion_transferencias.includes(t.id)}
                                                         onCheckedChange={() => toggleConfirmacionTransferencia(t.id)}
+                                                        className="scale-75"
                                                     />
-                                                    <span className="truncate" title={t.desc}>
+                                                    <span className="truncate font-medium" title={t.desc}>
                                                         {t.desc}
                                                     </span>
                                                 </div>
-                                                <span className="font-mono">-${Number(t.monto).toFixed(2)}</span>
+                                                <span className="font-mono text-indigo-600 dark:text-indigo-400">-${Number(t.monto).toFixed(2)}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -368,45 +444,67 @@ export default function Create({ calculos, fecha_apertura }: Props) {
                         </div>
 
                         {/* Listado de Ventas Recientes */}
-                        <Card>
-                            <CardHeader>
+                        <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-slate-50/50 to-slate-100/30 shadow-lg transition-all duration-300 dark:from-slate-950/30 dark:to-slate-900/20 dark:shadow-slate-900/20">
+                            <div className="absolute inset-0 bg-gradient-to-br from-slate-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                            <CardHeader className="relative border-b border-slate-200/50 bg-slate-50/30 dark:border-slate-800/50 dark:bg-slate-900/30">
                                 <CardTitle className="flex items-center gap-2 text-base">
-                                    <Receipt className="h-5 w-5" /> Ventas en {selectedMoneda}
+                                    <div className="rounded-lg bg-slate-500/10 p-2">
+                                        <Receipt className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+                                    </div>
+                                    <span className="bg-gradient-to-r from-slate-700 to-slate-800 bg-clip-text font-semibold dark:from-slate-300 dark:to-slate-400">
+                                        Ventas en {selectedMoneda}
+                                    </span>
                                 </CardTitle>
                             </CardHeader>
-                            <CardContent className="px-0">
+                            <CardContent className="relative px-0">
                                 <TooltipProvider>
-                                    <div className="divide-y text-sm">
+                                    <div className="scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800 max-h-96 divide-y divide-slate-200/30 overflow-y-auto dark:divide-slate-800/30">
                                         {activeDetalle?.items_ventas.map((v: ItemVenta, i: number) => (
-                                            <div key={i} className="hover:bg-muted/30 flex items-center justify-between p-3">
+                                            <div
+                                                key={i}
+                                                className="group/item flex items-center justify-between p-4 transition-all duration-200 hover:bg-slate-50/50 dark:hover:bg-slate-950/30"
+                                            >
                                                 <div className="flex items-center gap-3">
                                                     <Switch
                                                         checked={data.confirmacion_transferencias.includes(v.id)}
                                                         onCheckedChange={() => toggleConfirmacionTransferencia(v.id)}
+                                                        className="scale-75"
                                                     />
-                                                    <span className="text-muted-foreground font-mono text-[10px]">{v.hora}</span>
-                                                    <span className="font-medium">{v.cliente}</span>
-                                                    <Badge variant="outline" className="text-[9px] uppercase">
+                                                    <span className="font-mono text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                                                        {v.hora}
+                                                    </span>
+                                                    <span className="font-medium text-slate-700 dark:text-slate-300">{v.cliente}</span>
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="border-slate-300 bg-slate-100 text-[9px] font-bold text-slate-700 uppercase dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                                                    >
                                                         {v.tipo_pago}
                                                     </Badge>
                                                     {v.detalles && (
                                                         <Tooltip>
                                                             <TooltipTrigger asChild>
-                                                                <button className="text-muted-foreground hover:text-primary transition-colors">
+                                                                <button className="text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300">
                                                                     <Info size={14} />
                                                                 </button>
                                                             </TooltipTrigger>
-                                                            <TooltipContent>
+                                                            <TooltipContent className="border-slate-700 bg-slate-900 text-slate-100 dark:border-slate-300 dark:bg-slate-100 dark:text-slate-900">
                                                                 <p className="max-w-xs text-xs">{v.detalles}</p>
                                                             </TooltipContent>
                                                         </Tooltip>
                                                     )}
                                                 </div>
-                                                <span className="font-mono font-bold">${Number(v.monto).toFixed(2)}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                                                        ${Number(v.monto).toFixed(2)}
+                                                    </span>
+                                                    <div className="h-2 w-2 rounded-full bg-gradient-to-r from-slate-400 to-slate-500 opacity-0 transition-all duration-300 group-hover:opacity-100 dark:from-slate-600 dark:to-slate-700" />
+                                                </div>
                                             </div>
                                         ))}
                                         {(!activeDetalle || activeDetalle.items_ventas.length === 0) && (
-                                            <div className="text-muted-foreground p-4 text-center text-xs italic">No hay ventas registradas</div>
+                                            <div className="p-8 text-center text-sm text-slate-500 italic dark:text-slate-400">
+                                                No hay ventas registradas
+                                            </div>
                                         )}
                                     </div>
                                 </TooltipProvider>
