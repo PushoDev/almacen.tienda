@@ -951,6 +951,17 @@ class TransaccionController extends Controller
             'proveedorDestino'
         ]);
 
+        // Debug: Verificar qué relaciones se cargaron
+        \Log::info('Relaciones cargadas:', [
+            'user' => $movimiento->user ? 'loaded' : 'not loaded',
+            'tipoMovimiento' => $movimiento->tipoMovimiento ? 'loaded' : 'not loaded',
+            'cuentaOrigen' => $movimiento->cuentaOrigen ? 'loaded' : 'not loaded',
+            'cuentaDestino' => $movimiento->cuentaDestino ? 'loaded' : 'not loaded',
+            'clienteOrigen' => $movimiento->clienteOrigen ? 'loaded' : 'not loaded',
+            'clienteDestino' => $movimiento->clienteDestino ? 'loaded' : 'not loaded',
+            'proveedorDestino' => $movimiento->proveedorDestino ? 'loaded' : 'not loaded',
+        ]);
+
         return Inertia::render('Transacciones/Show', [
             'movimiento' => $movimiento,
             'userRole' => auth()->user()->role ?? 'vendedor',
