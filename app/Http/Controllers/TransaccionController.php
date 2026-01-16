@@ -415,7 +415,22 @@ class TransaccionController extends Controller
             MovimientoFinanciero::create($movimientoData);
 
             DB::commit();
-            return Redirect::back()->with('success', "✅ Gasto de {$request->monto} {$request->moneda} registrado con éxito.");
+            
+            // Obtener el movimiento recién creado
+            $movimiento = MovimientoFinanciero::where('user_id', auth()->id())
+                ->where('tipo_movimiento_id', 1) // Gasto
+                ->where('monto', $request->monto)
+                ->where('moneda', $request->moneda)
+                ->where('descripcion', 'LIKE', '%' . ($request->comentario ?? '') . '%')
+                ->orderBy('created_at', 'desc')
+                ->first();
+            
+            if (!$movimiento) {
+                return Redirect::back()->with('error', 'No se pudo encontrar el movimiento registrado.');
+            }
+            
+            return Redirect::route('transacciones.show', $movimiento->id)
+                ->with('success', "✅ Gasto de {$request->monto} {$request->moneda} registrado con éxito.");
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Error al registrar gasto: ' . $e->getMessage());
@@ -498,7 +513,22 @@ class TransaccionController extends Controller
             MovimientoFinanciero::create($movimientoData);
 
             DB::commit();
-            return Redirect::back()->with('success', "✅ Ingreso de {$request->monto} {$request->moneda} registrado con éxito.");
+            
+            // Obtener el movimiento recién creado
+            $movimiento = MovimientoFinanciero::where('user_id', auth()->id())
+                ->where('tipo_movimiento_id', 2) // Ingreso
+                ->where('monto', $request->monto)
+                ->where('moneda', $request->moneda)
+                ->where('descripcion', 'LIKE', '%' . ($request->comentario ?? '') . '%')
+                ->orderBy('created_at', 'desc')
+                ->first();
+            
+            if (!$movimiento) {
+                return Redirect::back()->with('error', 'No se pudo encontrar el movimiento registrado.');
+            }
+            
+            return Redirect::route('transacciones.show', $movimiento->id)
+                ->with('success', "✅ Ingreso de {$request->monto} {$request->moneda} registrado con éxito.");
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Error al registrar ingreso: ' . $e->getMessage());
@@ -590,11 +620,24 @@ class TransaccionController extends Controller
 
             DB::commit();
 
+            // Obtener el movimiento recién creado
+            $movimiento = MovimientoFinanciero::where('user_id', auth()->id())
+                ->where('tipo_movimiento_id', 3) // Transferencia
+                ->where('monto', $montoOrigen)
+                ->where('moneda', $request->moneda)
+                ->where('descripcion', 'LIKE', '%' . ($request->comentario ?? '') . '%')
+                ->orderBy('created_at', 'desc')
+                ->first();
+            
+            if (!$movimiento) {
+                return Redirect::back()->with('error', 'No se pudo encontrar el movimiento registrado.');
+            }
+
             $mensajeExito = $monedaOrigen->codigo_moneda === $monedaDestino->codigo_moneda
                 ? "✅ Transferencia de {$montoOrigen} {$monedaOrigen->codigo_moneda} registrada con éxito."
                 : "✅ Transferencia de {$montoOrigen} {$monedaOrigen->codigo_moneda} → {$montoDestino} {$monedaDestino->codigo_moneda} registrada con éxito (Tasa: {$tasaCambioAplicada}).";
 
-            return Redirect::back()->with('success', $mensajeExito);
+            return Redirect::route('transacciones.show', $movimiento->id)->with('success', $mensajeExito);
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Error al registrar transferencia: ' . $e->getMessage());
@@ -872,6 +915,46 @@ class TransaccionController extends Controller
             default:
                 return "Entidad desconocida";
         }
+    }
+
+    // =======================================================
+    // === MÉTODO PARA MOSTRAR DETALLES DE TRANSACCIÓN ===
+    // =======================================================
+
+    /**
+     * Muestra los detalles de un movimiento financiero específico
+     */
+    public function show(MovimientoFinanciero $movimiento)
+    {
+        // ✅ Validar que el vendedor solo pueda ver sus transacciones
+        if (auth()->user()->role === 'vendedor') {
+            $cuentasAsignadas = auth()->user()->cuentas()->pluck('id')->toArray();
+            
+            // Verificar si la transacción involucra alguna de sus cuentas asignadas
+            $involucraCuentaAsignada = in_array($movimiento->cuenta_origen_id, $cuentasAsignadas) || 
+                                    in_array($movimiento->cuenta_destino_id, $cuentasAsignadas);
+            
+            // Si no es admin y no involucra sus cuentas, denegar acceso
+            if (!$involucraCuentaAsignada && auth()->user()->role !== 'admin') {
+                abort(403, 'No tiene permiso para ver esta transacción.');
+            }
+        }
+
+        // Cargar relaciones necesarias
+        $movimiento->load([
+            'user',
+            'tipoMovimiento',
+            'cuentaOrigen.moneda',
+            'cuentaDestino.moneda',
+            'clienteOrigen',
+            'clienteDestino',
+            'proveedorDestino'
+        ]);
+
+        return Inertia::render('Transacciones/Show', [
+            'movimiento' => $movimiento,
+            'userRole' => auth()->user()->role ?? 'vendedor',
+        ]);
     }
 
     // =======================================================

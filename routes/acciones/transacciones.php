@@ -36,6 +36,10 @@ Route::middleware(['auth', 'verified'])->group(
         Route::post('transacciones/transferir', [TransaccionController::class, 'transferir'])
             ->name('transacciones.transferir');
 
+        // ✅ NUEVA RUTA: Mostrar detalles de transacción
+        Route::get('transacciones/{movimiento}', [TransaccionController::class, 'show'])
+            ->name('transacciones.show');
+
         // ✅ NUEVA RUTA: Gastos por Transportación
         Route::post('transacciones/gasto-transportacion', [TransaccionController::class, 'gastoTransportacion'])
             ->name('transacciones.gasto-transportacion');
