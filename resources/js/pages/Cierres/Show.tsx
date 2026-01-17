@@ -10,6 +10,23 @@ import { Head } from '@inertiajs/react';
 import { ArrowDownCircle, ArrowUpCircle, Banknote, CheckCircle2, Clock, Info, Receipt, User, Wallet, XCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
+interface TransferenciaItem {
+    id: string;
+    desc: string;
+    monto_origen: number;
+    moneda_origen: string;
+    origen_tipo: string;
+    origen_nombre: string;
+    monto_destino: number;
+    moneda_destino: string;
+    destino_tipo: string;
+    destino_nombre: string;
+    tasa_cambio: number;
+    hora: string;
+    afecta_saldo_usuario?: boolean;
+    es_entrada?: boolean;
+}
+
 interface Cierre {
     id: number;
     user_id: number;
@@ -37,6 +54,7 @@ interface Cierre {
         ingresos_extra: number;
         gastos: number;
         transferencias_salientes: number;
+        transferencias_entrantes: number;
         saldo_calculado: number;
         items_ventas: Array<{
             id: string;
@@ -50,6 +68,8 @@ interface Cierre {
         items_gastos: Array<{ desc: string; monto: number; hora: string }>;
         items_ingresos: Array<{ desc: string; monto: number; hora: string }>;
         items_transferencias: Array<{ id: string; desc: string; monto: number; hora: string }>;
+        items_transferencias_salientes: TransferenciaItem[];
+        items_transferencias_entrantes: TransferenciaItem[];
     }> | null;
 }
 
@@ -117,49 +137,84 @@ export default function Show({ cierre }: Props) {
                             <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-emerald-50/50 to-emerald-100/30 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-xl dark:from-emerald-950/30 dark:to-emerald-900/20 dark:shadow-emerald-900/20">
                                 <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
                                 <CardHeader className="relative pb-3">
-                                    <div className="flex items-center gap-2">
-                                        <div className="rounded-lg bg-emerald-500/10 p-2">
-                                            <ArrowUpCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <div className="rounded-lg bg-emerald-500/10 p-2">
+                                                <ArrowUpCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                            </div>
+                                            <CardTitle className="text-xs font-semibold text-emerald-700 uppercase dark:text-emerald-300">
+                                                Efectivo Sistema
+                                            </CardTitle>
                                         </div>
-                                        <CardTitle className="text-xs font-semibold text-emerald-700 uppercase dark:text-emerald-300">
-                                            Efectivo Sistema
-                                        </CardTitle>
+                                        <div className="text-right">
+                                            <div className="text-[9px] font-medium text-emerald-600 dark:text-emerald-400">
+                                                {activeDetalle?.items_ventas?.filter((v) => v.tipo_pago === 'efectivo').length || 0} ops
+                                            </div>
+                                        </div>
                                     </div>
                                 </CardHeader>
                                 <CardContent className="relative">
-                                    <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 bg-clip-text font-mono text-2xl font-bold text-transparent dark:from-emerald-400 dark:to-emerald-500">
-                                        ${Number(activeDetalle?.ventas_efectivo || 0).toFixed(2)}
+                                    <div className="flex items-center justify-between">
+                                        <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 bg-clip-text font-mono text-2xl font-bold text-transparent dark:from-emerald-400 dark:to-emerald-500">
+                                            ${Number(activeDetalle?.ventas_efectivo || 0).toFixed(2)}
+                                        </div>
+                                        <Badge
+                                            variant="secondary"
+                                            className="bg-emerald-100 text-[9px] font-bold text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300"
+                                        >
+                                            {selectedMoneda}
+                                        </Badge>
                                     </div>
                                 </CardContent>
                             </Card>
                             <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-blue-50/50 to-blue-100/30 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-xl dark:from-blue-950/30 dark:to-blue-900/20 dark:shadow-blue-900/20">
                                 <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
                                 <CardHeader className="relative pb-3">
-                                    <div className="flex items-center gap-2">
-                                        <div className="rounded-lg bg-blue-500/10 p-2">
-                                            <Banknote className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <div className="rounded-lg bg-blue-500/10 p-2">
+                                                <Banknote className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                            </div>
+                                            <CardTitle className="text-xs font-semibold text-blue-700 uppercase dark:text-blue-300">
+                                                Transferencias Sistema
+                                            </CardTitle>
                                         </div>
-                                        <CardTitle className="text-xs font-semibold text-blue-700 uppercase dark:text-blue-300">
-                                            Transferencias Sistema
-                                        </CardTitle>
+                                        <div className="text-right">
+                                            <div className="text-[9px] font-medium text-blue-600 dark:text-blue-400">
+                                                {activeDetalle?.items_ventas?.filter((v) => v.tipo_pago !== 'efectivo').length || 0} ops
+                                            </div>
+                                        </div>
                                     </div>
                                 </CardHeader>
                                 <CardContent className="relative">
-                                    <div className="bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text font-mono text-2xl font-bold text-transparent dark:from-blue-400 dark:to-blue-500">
-                                        ${Number(activeDetalle?.ventas_transferencia || 0).toFixed(2)}
+                                    <div className="flex items-center justify-between">
+                                        <div className="bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text font-mono text-2xl font-bold text-transparent dark:from-blue-400 dark:to-blue-500">
+                                            ${Number(activeDetalle?.ventas_transferencia || 0).toFixed(2)}
+                                        </div>
+                                        <Badge
+                                            variant="secondary"
+                                            className="bg-blue-100 text-[9px] font-bold text-blue-700 dark:bg-blue-900/50 dark:text-blue-300"
+                                        >
+                                            {selectedMoneda}
+                                        </Badge>
                                     </div>
                                 </CardContent>
                             </Card>
                             <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-violet-50/50 to-violet-100/30 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-xl dark:from-violet-950/30 dark:to-violet-900/20 dark:shadow-violet-900/20">
                                 <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
                                 <CardHeader className="relative pb-3">
-                                    <div className="flex items-center gap-2">
-                                        <div className="rounded-lg bg-violet-500/10 p-2">
-                                            <Wallet className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <div className="rounded-lg bg-violet-500/10 p-2">
+                                                <Wallet className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                                            </div>
+                                            <CardTitle className="text-xs font-semibold text-violet-700 uppercase dark:text-violet-300">
+                                                Saldo Esperado
+                                            </CardTitle>
                                         </div>
-                                        <CardTitle className="text-xs font-semibold text-violet-700 uppercase dark:text-violet-300">
-                                            Saldo Esperado
-                                        </CardTitle>
+                                        <div className="text-right">
+                                            <div className="text-[9px] font-medium text-violet-600 dark:text-violet-400">Neto</div>
+                                        </div>
                                     </div>
                                 </CardHeader>
                                 <CardContent className="relative">
@@ -169,7 +224,7 @@ export default function Show({ cierre }: Props) {
                                         </div>
                                         <Badge
                                             variant="secondary"
-                                            className="bg-violet-100 text-[10px] font-bold text-violet-700 dark:bg-violet-900/50 dark:text-violet-300"
+                                            className="bg-violet-100 text-[9px] font-bold text-violet-700 dark:bg-violet-900/50 dark:text-violet-300"
                                         >
                                             {selectedMoneda}
                                         </Badge>
@@ -312,7 +367,7 @@ export default function Show({ cierre }: Props) {
                                 </CardContent>
                             </Card>
 
-                            {/* Transferencias/Giros */}
+                            {/* Transferencias/Giros - BIDIRECCIONAL */}
                             <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-indigo-50/50 to-indigo-100/30 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-xl dark:from-indigo-950/30 dark:to-indigo-900/20 dark:shadow-indigo-900/20">
                                 <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
                                 <CardHeader className="relative pb-3">
@@ -320,23 +375,29 @@ export default function Show({ cierre }: Props) {
                                         <div className="rounded-lg bg-indigo-500/10 p-2">
                                             <Banknote className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                                         </div>
-                                        <CardTitle className="text-sm font-semibold text-indigo-700 dark:text-indigo-300">Giros/Transf.</CardTitle>
+                                        <CardTitle className="text-sm font-semibold text-indigo-700 dark:text-indigo-300">Transferencias</CardTitle>
                                     </div>
                                 </CardHeader>
                                 <CardContent className="relative space-y-3">
-                                    <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 bg-clip-text font-mono text-xl font-bold text-transparent dark:from-indigo-400 dark:to-indigo-500">
-                                        -${Number(activeDetalle?.transferencias_salientes || 0).toFixed(2)}
+                                    <div className="flex items-center justify-between">
+                                        <div className="bg-gradient-to-r from-rose-600 to-rose-700 bg-clip-text font-mono text-lg font-bold text-transparent dark:from-rose-400 dark:to-rose-500">
+                                            Salientes: -${Number(activeDetalle?.transferencias_salientes || 0).toFixed(2)}
+                                        </div>
+                                        <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 bg-clip-text font-mono text-lg font-bold text-transparent dark:from-emerald-400 dark:to-emerald-500">
+                                            Entrantes: +${Number(activeDetalle?.transferencias_entrantes || 0).toFixed(2)}
+                                        </div>
                                     </div>
-                                    <div className="scrollbar-thin scrollbar-thumb-indigo-200 dark:scrollbar-thumb-indigo-800 max-h-32 space-y-2 overflow-y-auto">
-                                        {activeDetalle?.items_transferencias.map(
-                                            (t: { id: string; desc: string; monto: number; hora: string }, i: number) => {
-                                                const confirmada = cierre.confirmacion_transferencias?.includes(t.id);
-                                                return (
-                                                    <div
-                                                        key={i}
-                                                        className="group/item flex items-center justify-between border-b border-indigo-200/30 pb-1 text-[11px] transition-colors hover:bg-indigo-50/50 dark:border-indigo-800/30 dark:hover:bg-indigo-950/30"
-                                                    >
-                                                        <div className="flex max-w-25 items-center gap-2 truncate">
+                                    <div className="scrollbar-thin scrollbar-thumb-indigo-200 dark:scrollbar-thumb-indigo-800 max-h-64 space-y-2 overflow-y-auto">
+                                        {/* Transferencias Salientes */}
+                                        {(activeDetalle?.items_transferencias_salientes || []).map((t: TransferenciaItem, i: number) => {
+                                            const confirmada = cierre.confirmacion_transferencias?.includes(t.id);
+                                            return (
+                                                <div
+                                                    key={`saliente_${i}`}
+                                                    className="group/item border-l-4 border-rose-400 bg-rose-50/30 p-2 transition-colors hover:bg-rose-100/50 dark:border-rose-600 dark:bg-rose-950/20 dark:hover:bg-rose-950/40"
+                                                >
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex max-w-40 items-center gap-2 truncate">
                                                             {confirmada ? (
                                                                 <div className="flex items-center gap-1 text-emerald-500">
                                                                     <CheckCircle2 className="h-3 w-3 shrink-0" />
@@ -348,17 +409,95 @@ export default function Show({ cierre }: Props) {
                                                                     <span className="text-[9px] font-bold">Pendiente</span>
                                                                 </div>
                                                             )}
+                                                            <span className="font-medium text-rose-700 dark:text-rose-300">↓</span>
                                                             <span className="truncate font-medium" title={t.desc}>
                                                                 {t.desc}
                                                             </span>
                                                         </div>
-                                                        <span className="font-mono text-indigo-600 dark:text-indigo-400">
-                                                            -${Number(t.monto).toFixed(2)}
-                                                        </span>
+                                                        <div className="text-right">
+                                                            <div className="font-mono text-sm font-bold text-rose-600 dark:text-rose-400">
+                                                                -{Number(t.monto_origen).toFixed(2)} {t.moneda_origen}
+                                                            </div>
+                                                            {t.moneda_destino !== t.moneda_origen && (
+                                                                <div className="text-muted-foreground text-[9px]">
+                                                                    → {Number(t.monto_destino).toFixed(2)} {t.moneda_destino}
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                );
-                                            },
-                                        )}
+                                                    <div className="text-muted-foreground mt-1 text-[9px]">
+                                                        <span className="font-medium">{t.origen_tipo}:</span> {t.origen_nombre} →{' '}
+                                                        <span className="font-medium">{t.destino_tipo}:</span> {t.destino_nombre}
+                                                    </div>
+                                                    {t.moneda_destino !== t.moneda_origen && (
+                                                        <div className="text-[9px] text-indigo-600 dark:text-indigo-400">
+                                                            Tasa: 1 {t.moneda_destino} = {t.tasa_cambio} {t.moneda_origen}
+                                                        </div>
+                                                    )}
+                                                    <div className="text-muted-foreground mt-1 text-[8px]">
+                                                        {t.hora} {t.afecta_saldo_usuario ? '• Afecta saldo' : ''}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+
+                                        {/* Transferencias Entrantes */}
+                                        {(activeDetalle?.items_transferencias_entrantes || []).map((t: TransferenciaItem, i: number) => {
+                                            const confirmada = cierre.confirmacion_transferencias?.includes(t.id);
+                                            return (
+                                                <div
+                                                    key={`entrante_${i}`}
+                                                    className="group/item border-l-4 border-emerald-400 bg-emerald-50/30 p-2 transition-colors hover:bg-emerald-100/50 dark:border-emerald-600 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/40"
+                                                >
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex max-w-40 items-center gap-2 truncate">
+                                                            {confirmada ? (
+                                                                <div className="flex items-center gap-1 text-emerald-500">
+                                                                    <CheckCircle2 className="h-3 w-3 shrink-0" />
+                                                                    <span className="text-[9px] font-bold">Confirmada</span>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex items-center gap-1 text-rose-500">
+                                                                    <XCircle className="h-3 w-3 shrink-0" />
+                                                                    <span className="text-[9px] font-bold">Pendiente</span>
+                                                                </div>
+                                                            )}
+                                                            <span className="font-medium text-emerald-700 dark:text-emerald-300">↑</span>
+                                                            <span className="truncate font-medium" title={t.desc}>
+                                                                {t.desc}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <div className="font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                                                                +{Number(t.monto_destino).toFixed(2)} {t.moneda_destino}
+                                                            </div>
+                                                            {t.moneda_destino !== t.moneda_origen && (
+                                                                <div className="text-muted-foreground text-[9px]">
+                                                                    ← {Number(t.monto_origen).toFixed(2)} {t.moneda_origen}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-muted-foreground mt-1 text-[9px]">
+                                                        <span className="font-medium">{t.origen_tipo}:</span> {t.origen_nombre} →{' '}
+                                                        <span className="font-medium">{t.destino_tipo}:</span> {t.destino_nombre}
+                                                    </div>
+                                                    {t.moneda_destino !== t.moneda_origen && (
+                                                        <div className="text-[9px] text-indigo-600 dark:text-indigo-400">
+                                                            Tasa: 1 {t.moneda_destino} = {t.tasa_cambio} {t.moneda_origen}
+                                                        </div>
+                                                    )}
+                                                    <div className="text-muted-foreground mt-1 text-[8px]">{t.hora}</div>
+                                                </div>
+                                            );
+                                        })}
+
+                                        {!activeDetalle?.items_transferencias_salientes?.length &&
+                                            !activeDetalle?.items_transferencias_entrantes?.length && (
+                                                <div className="text-muted-foreground p-4 text-center text-xs italic">
+                                                    No hay transferencias registradas
+                                                </div>
+                                            )}
                                     </div>
                                 </CardContent>
                             </Card>
