@@ -230,53 +230,30 @@ const ConversionTransferencia: React.FC<ConversionTransferenciaProps> = ({ data,
         }
     }, [montoOrigen, tasaFinal]);
 
-    const mostrarTasaEditable = origenEsCuenta || destinoEsCuenta;
-
     return (
-        <div className="space-y-3">
-            <div className="rounded-md bg-green-50 p-3 dark:bg-green-900">
-                <h4 className="mb-2 text-sm font-semibold text-green-800 dark:text-green-200">🔄 Conversión de Moneda</h4>
-                <div className="space-y-1 text-sm text-green-700 dark:text-green-300">
-                    <p>
-                        Origen: {montoOrigen.toFixed(2)} {data.moneda}
-                    </p>
-                    <p>
-                        Destino: {montoFinal.toFixed(2)} {data.moneda_destino}
-                    </p>
-                    <p>
-                        {(() => {
-                            if (origenEsCuenta && destinoEsCuenta) {
-                                return `Tasa: 1 ${data.moneda} = ${(1 / tasaFinal).toFixed(6)} ${data.moneda_destino}`;
-                            } else if (origenEsCuenta && !destinoEsCuenta) {
-                                return `Tasa: 1 ${data.moneda} = ${(1 / tasaFinal).toFixed(6)} USD`;
-                            } else if (!origenEsCuenta && destinoEsCuenta) {
-                                return `Tasa: 1 USD = ${tasaFinal.toFixed(6)} ${data.moneda_destino}`;
-                            } else {
-                                return 'Sin conversión (ambos USD)';
-                            }
-                        })()}
-                    </p>
-                </div>
+        <div className="rounded-md bg-green-50 p-3 dark:bg-green-900">
+            <h4 className="mb-2 text-sm font-semibold text-green-800 dark:text-green-200">🔄 Conversión de Moneda</h4>
+            <div className="space-y-1 text-sm text-green-700 dark:text-green-300">
+                <p>
+                    Origen: {montoOrigen.toFixed(2)} {data.moneda}
+                </p>
+                <p>
+                    Destino: {montoFinal.toFixed(2)} {data.moneda_destino}
+                </p>
+                <p>
+                    {(() => {
+                        if (origenEsCuenta && destinoEsCuenta) {
+                            return `Tasa: 1 ${data.moneda} = ${(1 / tasaFinal).toFixed(6)} ${data.moneda_destino}`;
+                        } else if (origenEsCuenta && !destinoEsCuenta) {
+                            return `Tasa: 1 ${data.moneda} = ${(1 / tasaFinal).toFixed(6)} USD`;
+                        } else if (!origenEsCuenta && destinoEsCuenta) {
+                            return `Tasa: 1 USD = ${tasaFinal.toFixed(6)} ${data.moneda_destino}`;
+                        } else {
+                            return 'Sin conversión (ambos USD)';
+                        }
+                    })()}
+                </p>
             </div>
-
-            {mostrarTasaEditable && (
-                <div>
-                    <Label htmlFor="tasa_cambio_transferencia">Tasa de Cambio (Editable)</Label>
-                    <Input
-                        type="number"
-                        id="tasa_cambio_transferencia"
-                        value={data.tasa_cambio_aplicada || ''}
-                        onChange={(e) => setData({ ...data, tasa_cambio_aplicada: e.target.value })}
-                        step="0.0001"
-                        min="0.0001"
-                        placeholder={`Tasa del sistema: ${tasaSistema.toFixed(4)}`}
-                    />
-                    <p className="mt-1 text-xs text-gray-500">
-                        Puede editar la tasa para esta transferencia. Vacío usa tasa del sistema ({tasaSistema.toFixed(4)}).
-                    </p>
-                    {errors.tasa_cambio_aplicada && <p className="mt-1 text-sm text-red-500">{errors.tasa_cambio_aplicada}</p>}
-                </div>
-            )}
         </div>
     );
 };
@@ -1110,24 +1087,6 @@ export default function Movimientos({ cuentas, clientes, proveedores, monedasAct
                                 {transferErrors.monto && <p className="mt-1 text-sm text-red-500">{transferErrors.monto}</p>}
                             </div>
 
-                            {transferData.monto_convertido && (
-                                <div>
-                                    <Label htmlFor="monto_convertido">Monto Convertido (Destino)</Label>
-                                    <Input
-                                        id="monto_convertido"
-                                        value={transferData.monto_convertido}
-                                        readOnly
-                                        className={`font-semibold ${
-                                            limitValidation?.severity === 'error'
-                                                ? 'border-red-500 bg-red-100 dark:bg-red-900'
-                                                : limitValidation?.severity === 'warning'
-                                                  ? 'border-yellow-500 bg-yellow-100 dark:bg-yellow-900'
-                                                  : 'bg-green-100 dark:bg-green-800'
-                                        }`}
-                                    />
-                                </div>
-                            )}
-
                             {/* ✅ COMPONENTE DE CONVERSIÓN PARA TRANSFERENCIAS */}
                             <ConversionTransferencia
                                 data={transferData}
@@ -1135,6 +1094,9 @@ export default function Movimientos({ cuentas, clientes, proveedores, monedasAct
                                 errors={transferErrors}
                                 monedasActivas={monedasActivas}
                             />
+
+                            {/* ✅ CAMPO DE TASA DE CAMBIO EDITABLE PARA TRANSFERENCIAS */}
+                            <TasaCambioInput data={transferData} setData={setTransferData} errors={transferErrors} monedasActivas={monedasActivas} />
 
                             {/* ✅ ADVERTENCIA DE LÍMITES */}
                             {limitValidation && (
@@ -1156,14 +1118,6 @@ export default function Movimientos({ cuentas, clientes, proveedores, monedasAct
                                     </p>
                                 </div>
                             )}
-
-                            {/* ✅ COMPONENTE DE CONVERSIÓN PARA TRANSFERENCIAS */}
-                            <ConversionTransferencia
-                                data={transferData}
-                                setData={setTransferData}
-                                errors={transferErrors}
-                                monedasActivas={monedasActivas}
-                            />
 
                             <div>
                                 <Label htmlFor="comentario_transferir">Comentario</Label>
