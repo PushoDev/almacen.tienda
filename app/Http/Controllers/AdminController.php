@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\TasaCambio;
 use App\Models\TasaCambioMLC;
+use App\Models\HistorialTasaCambio;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
@@ -16,18 +17,12 @@ class AdminController extends Controller
      */
     public function index()
     {
-        // CORRECCIÓN CLAVE: getTasa() ahora requiere la moneda base y la destino.
-        // Asumimos que la tasa principal usada en tu cálculo de capital es USD -> CUP.
-        $tasa = TasaCambio::getTasa('USD', 'CUP');
-
-        // Asumimos que tu lógica de MLC utiliza una tabla separada o un valor fijo.
-        $tasaMLC = TasaCambioMLC::latest()->first();
-
-        // Obtener datos para las nuevas tablas
-        $user = Auth::user();
+        // Obtener datos para las tablas
+        $user = auth()->user();
         $montosPorMoneda = [];
         $totalCapital = 0;
         $comparaciones = [];
+        $historialCambios = [];
 
         // Solo calcular si el usuario tiene cuentas asignadas
         if ($user) {
@@ -41,6 +36,8 @@ class AdminController extends Controller
 
             // Agrupar montos por moneda
             foreach ($cuentasUsuario as $cuenta) {
+                if (!$cuenta->moneda) continue;
+                
                 $monedaCodigo = $cuenta->moneda->codigo_moneda;
                 $monto = $cuenta->saldo_cuenta ?? 0;
                 $tasaCambio = $cuenta->moneda->tasa_cambio ?? 1;
@@ -67,24 +64,19 @@ class AdminController extends Controller
                 // Para admin y moderador, mostrar comparaciones de todas las cuentas
                 $comparaciones = $this->getComparacionesMensuales(null); // null significa todas las cuentas
             }
+
+            // Obtener historial de cambios de tasa (solo para admin y moderador)
+            if (in_array($user->role, ['admin', 'moderador'])) {
+                $historialCambios = $this->getHistorialCambiosRecientes();
+            }
         }
 
         return Inertia::render('dashboard', [
-            'userRole' => Auth::user()->role,
-            'tasa' => [
-                'tasa_cambio' => $tasa ?? 325.0,
-            ],
-            'tasamlc' => [
-                'tasa_mlc' => $tasaMLC ? $tasaMLC->tasa_mlc : 1,
-            ],
-            'montoCUP' => $this->getMontoCUP() ?? 0,
-            'montoUSD' => $this->getMontoUSD() ?? 0,
-            'montoEUR' => $this->getMontoEUR() ?? 0,
-            'montoMLC' => $this->getMontoMLC() ?? 0,
-            'capital' => ($this->getMontoCUP() / ($tasa ?? 325.0)) + $this->getMontoUSD() + $this->getMontoEUR() + ($this->getMontoMLC() / ($tasaMLC ? $tasaMLC->tasa_mlc : 1)),
+            'userRole' => auth()->user()->role,
             'montosPorMoneda' => array_values($montosPorMoneda),
             'totalCapital' => $totalCapital,
             'comparaciones' => $comparaciones,
+            'historialCambios' => $historialCambios,
         ]);
     }
 
@@ -195,49 +187,7 @@ class AdminController extends Controller
         return $comparaciones;
     }
 
-    /**
-     * Obtener monto en CUP
-     */
-    private function getMontoCUP()
-    {
-        return DB::table('cuentas')
-            ->where('tipo_moneda', 'CUP')
-            ->whereIn('tipo_cuenta', ['permanentes', 'temporales'])
-            ->sum('saldo_cuenta');
-    }
-
-    /**
-     * Obtener monto en USD
-     */
-    private function getMontoUSD()
-    {
-        return DB::table('cuentas')
-            ->where('tipo_moneda', 'USD')
-            ->whereIn('tipo_cuenta', ['permanentes', 'temporales'])
-            ->sum('saldo_cuenta');
-    }
-
-    /**
-     * Obtener monto en EUR
-     */
-    private function getMontoEUR()
-    {
-        return DB::table('cuentas')
-            ->where('tipo_moneda', 'EUR')
-            ->whereIn('tipo_cuenta', ['permanentes', 'temporales'])
-            ->sum('saldo_cuenta');
-    }
-
-    /**
-     * Obtener monto en MLC
-     */
-    private function getMontoMLC()
-    {
-        return DB::table('cuentas')
-            ->where('tipo_moneda', 'MLC')
-            ->whereIn('tipo_cuenta', ['permanentes', 'temporales'])
-            ->sum('saldo_cuenta');
-    }
+    
 
     /**
      * Actualizar la tasa de cambio USD -> CUP
@@ -281,5 +231,134 @@ class AdminController extends Controller
         }
 
         return back()->with('success', 'Tasa MLC actualizada correctamente.');
+    }
+
+    /**
+     * Obtener historial de cambios de tasa recientes
+     */
+    private function getHistorialCambiosRecientes(): array
+    {
+        return HistorialTasaCambio::with(['moneda:id,nombre_moneda,codigo_moneda,simbolo_moneda', 'user:id,name'])
+            ->orderBy('created_at', 'desc')
+            ->limit(10) // Últimos 10 cambios
+            ->get()
+            ->map(function ($historial) {
+                return [
+                    'id' => $historial->id,
+                    'moneda' => [
+                        'id' => $historial->moneda->id,
+                        'nombre_moneda' => $historial->moneda->nombre_moneda,
+                        'codigo_moneda' => $historial->moneda->codigo_moneda,
+                        'simbolo_moneda' => $historial->moneda->simbolo_moneda,
+                    ],
+                    'usuario' => [
+                        'id' => $historial->user->id,
+                        'name' => $historial->user->name,
+                    ],
+                    'tasa_anterior' => number_format($historial->tasa_anterior, 2),
+                    'tasa_nueva' => number_format($historial->tasa_nueva, 2),
+                    'diferencia_tasa' => number_format($historial->diferencia_tasa, 2),
+                    'porcentaje_cambio' => number_format($historial->porcentaje_cambio, 4),
+                    'total_cuentas_afectadas' => number_format($historial->total_cuentas_afectadas, 2),
+                    'impacto_financiero' => number_format($historial->impacto_financiero, 2),
+                    'impacto_porcentaje' => number_format($historial->impacto_porcentaje, 2),
+                    'numero_cuentas_afectadas' => $historial->numero_cuentas_afectadas,
+                    'es_ganancia' => $historial->esGanancia(),
+                    'es_perdida' => $historial->esPerdida(),
+                    'impacto_formateado' => $historial->getImpactoFormateadoAttribute(),
+                    'impacto_porcentaje_formateado' => $historial->getImpactoPorcentajeFormateadoAttribute(),
+                    'fecha_cambio' => $historial->created_at->format('Y-m-d H:i:s'),
+                    'fecha_formateada' => $historial->created_at->format('d/m/Y H:i'),
+                ];
+            })
+            ->toArray();
+    }
+
+    /**
+     * API para obtener historial completo de cambios
+     */
+    public function getHistorialCompleto(Request $request)
+    {
+        $request->validate([
+            'moneda_id' => 'nullable|exists:monedas,id',
+            'dias' => 'nullable|integer|min:1|max:365',
+            'tipo' => 'nullable|in:ganancias,perdidas,todos',
+        ]);
+
+        $query = HistorialTasaCambio::with(['moneda:id,nombre_moneda,codigo_moneda,simbolo_moneda', 'user:id,name']);
+
+        // Filtros
+        if ($request->moneda_id) {
+            $query->porMoneda($request->moneda_id);
+        }
+
+        if ($request->dias) {
+            $query->recientes($request->dias);
+        }
+
+        if ($request->tipo === 'ganancias') {
+            $query->ganancias();
+        } elseif ($request->tipo === 'perdidas') {
+            $query->perdidas();
+        }
+
+        $historial = $query->orderBy('created_at', 'desc')
+            ->paginate(20)
+            ->through(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'moneda' => $item->moneda,
+                    'usuario' => $item->user,
+                    'tasa_anterior' => $item->tasa_anterior,
+                    'tasa_nueva' => $item->tasa_nueva,
+                    'diferencia_tasa' => $item->diferencia_tasa,
+                    'porcentaje_cambio' => $item->porcentaje_cambio,
+                    'impacto_financiero' => $item->impacto_financiero,
+                    'impacto_porcentaje' => $item->impacto_porcentaje,
+                    'es_ganancia' => $item->esGanancia(),
+                    'impacto_formateado' => $item->getImpactoFormateadoAttribute(),
+                    'fecha_formateada' => $item->created_at->format('d/m/Y H:i'),
+                ];
+            });
+
+        return response()->json($historial);
+    }
+
+    /**
+     * Obtener estadísticas de impacto financiero
+     */
+    public function getEstadisticasImpacto()
+    {
+        $totalGanancias = HistorialTasaCambio::ganancias()->sum('impacto_financiero');
+        $totalPerdidas = abs(HistorialTasaCambio::perdidas()->sum('impacto_financiero'));
+        $netoImpacto = $totalGanancias - $totalPerdidas;
+        
+        $numeroCambios = HistorialTasaCambio::count();
+        $cambiosConGanancia = HistorialTasaCambio::ganancias()->count();
+        $cambiosConPerdida = HistorialTasaCambio::perdidas()->count();
+        
+        $mayorGanancia = HistorialTasaCambio::ganancias()->orderBy('impacto_financiero', 'desc')->first();
+        $mayorPerdida = HistorialTasaCambio::perdidas()->orderBy('impacto_financiero', 'asc')->first();
+
+        return response()->json([
+            'total_ganancias' => number_format($totalGanancias, 2),
+            'total_perdidas' => number_format($totalPerdidas, 2),
+            'neto_impacto' => number_format($netoImpacto, 2),
+            'numero_cambios' => $numeroCambios,
+            'cambios_con_ganancia' => $cambiosConGanancia,
+            'cambios_con_perdida' => $cambiosConPerdida,
+            'porcentaje_ganancias' => $numeroCambios > 0 ? round(($cambiosConGanancia / $numeroCambios) * 100, 2) : 0,
+            'porcentaje_perdidas' => $numeroCambios > 0 ? round(($cambiosConPerdida / $numeroCambios) * 100, 2) : 0,
+            'mayor_ganancia' => $mayorGanancia ? [
+                'monto' => number_format($mayorGanancia->impacto_financiero, 2),
+                'moneda' => $mayorGanancia->moneda->nombre_moneda,
+                'fecha' => $mayorGanancia->created_at->format('d/m/Y'),
+            ] : null,
+            'mayor_perdida' => $mayorPerdida ? [
+                'monto' => number_format(abs($mayorPerdida->impacto_financiero), 2),
+                'moneda' => $mayorPerdida->moneda->nombre_moneda,
+                'fecha' => $mayorPerdida->created_at->format('d/m/Y'),
+            ] : null,
+        ]);
     }
 }

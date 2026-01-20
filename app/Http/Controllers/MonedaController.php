@@ -3,10 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\Moneda;
+use App\Models\HistorialTasaCambio;
+use App\Models\Cuenta;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Auth;
 
 class MonedaController extends Controller
 {
@@ -140,33 +143,75 @@ class MonedaController extends Controller
             DB::transaction(function () use ($request, $moneda) {
                 $era_principal = $moneda->principal;
                 $nuevo_principal = $request->principal;
+                
+                // Guardar tasa anterior para el historial
+                $tasaAnterior = $moneda->tasa_cambio;
+                $tasaNueva = (float) $request->tasa_cambio;
 
-                // Si se está marcando como principal y antes no lo era
-                if ($nuevo_principal && !$era_principal) {
-                    Moneda::where('principal', true)->update(['principal' => false]);
-                }
-
-                // Si se está quitando el principal y era el principal
-                if (!$nuevo_principal && $era_principal) {
-                    // Buscar otra moneda activa para hacerla principal
-                    $otra_moneda = Moneda::where('id', '!=', $moneda->id)
-                        ->where('estado', true)
-                        ->first();
-
-                    if ($otra_moneda) {
-                        $otra_moneda->update(['principal' => true]);
+                // Solo registrar historial si la tasa realmente cambió
+                if ($tasaAnterior != $tasaNueva) {
+                    // Calcular capital total ANTES del cambio
+                    $totalCapitalAntes = $this->calcularCapitalTotal();
+                    
+                    // Si se está marcando como principal y antes no lo era
+                    if ($nuevo_principal && !$era_principal) {
+                        Moneda::where('principal', true)->update(['principal' => false]);
                     }
-                }
 
-                $moneda->update([
-                    'codigo_moneda' => strtoupper($request->codigo_moneda),
-                    'nombre_moneda' => $request->nombre_moneda,
-                    'simbolo_moneda' => $request->simbolo_moneda,
-                    'tasa_cambio' => $request->tasa_cambio,
-                    'commission' => $request->commission,
-                    'estado' => $request->estado,
-                    'principal' => $request->principal,
-                ]);
+                    // Si se está quitando el principal y era el principal
+                    if (!$nuevo_principal && $era_principal) {
+                        // Buscar otra moneda activa para hacerla principal
+                        $otra_moneda = Moneda::where('id', '!=', $moneda->id)
+                            ->where('estado', true)
+                            ->first();
+
+                        if ($otra_moneda) {
+                            $otra_moneda->update(['principal' => true]);
+                        }
+                    }
+
+                    // Actualizar la moneda
+                    $moneda->update([
+                        'codigo_moneda' => strtoupper($request->codigo_moneda),
+                        'nombre_moneda' => $request->nombre_moneda,
+                        'simbolo_moneda' => $request->simbolo_moneda,
+                        'tasa_cambio' => $request->tasa_cambio,
+                        'commission' => $request->commission,
+                        'estado' => $request->estado,
+                        'principal' => $request->principal,
+                    ]);
+
+                    // Calcular capital total DESPUÉS del cambio
+                    $totalCapitalDespues = $this->calcularCapitalTotal();
+                    
+                    // Crear registro en el historial
+                    $this->registrarHistorialCambioTasa($moneda, $tasaAnterior, $tasaNueva, $totalCapitalAntes, $totalCapitalDespues);
+                } else {
+                    // Si la tasa no cambió, solo actualizar los demás campos
+                    if ($nuevo_principal && !$era_principal) {
+                        Moneda::where('principal', true)->update(['principal' => false]);
+                    }
+
+                    if (!$nuevo_principal && $era_principal) {
+                        $otra_moneda = Moneda::where('id', '!=', $moneda->id)
+                            ->where('estado', true)
+                            ->first();
+
+                        if ($otra_moneda) {
+                            $otra_moneda->update(['principal' => true]);
+                        }
+                    }
+
+                    $moneda->update([
+                        'codigo_moneda' => strtoupper($request->codigo_moneda),
+                        'nombre_moneda' => $request->nombre_moneda,
+                        'simbolo_moneda' => $request->simbolo_moneda,
+                        'tasa_cambio' => $request->tasa_cambio,
+                        'commission' => $request->commission,
+                        'estado' => $request->estado,
+                        'principal' => $request->principal,
+                    ]);
+                }
             });
 
             return redirect()->route('monedas.index')
@@ -259,6 +304,62 @@ class MonedaController extends Controller
             return redirect()->route('monedas.index')
                 ->with('error', 'Error al establecer moneda principal: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Calcular el capital total del sistema (convertido a USD)
+     */
+    private function calcularCapitalTotal(): float
+    {
+        $totalCapital = 0;
+        
+        // Obtener todas las cuentas con sus monedas
+        $cuentas = Cuenta::with('moneda')->get();
+        
+        foreach ($cuentas as $cuenta) {
+            if (!$cuenta->moneda) continue;
+            
+            $monto = $cuenta->saldo_cuenta ?? 0;
+            $tasaCambio = $cuenta->moneda->tasa_cambio ?? 1;
+            
+            // Convertir a moneda base (USD)
+            $totalCapital += $monto / $tasaCambio;
+        }
+        
+        return (float) $totalCapital;
+    }
+
+    /**
+     * Registrar el historial de cambio de tasa con impacto financiero
+     */
+    private function registrarHistorialCambioTasa(Moneda $moneda, float $tasaAnterior, float $tasaNueva, float $totalCapitalAntes, float $totalCapitalDespues): void
+    {
+        // Calcular impacto financiero
+        $impactoFinanciero = $totalCapitalDespues - $totalCapitalAntes;
+        $impactoPorcentaje = $totalCapitalAntes != 0 ? ($impactoFinanciero / $totalCapitalAntes) * 100 : 0;
+        
+        // Calcular diferencia y porcentaje de cambio en la tasa
+        $diferenciaTasa = $tasaNueva - $tasaAnterior;
+        $porcentajeCambioTasa = $tasaAnterior != 0 ? ($diferenciaTasa / $tasaAnterior) * 100 : 0;
+        
+        // Obtener cuentas afectadas por esta moneda
+        $cuentasAfectadas = Cuenta::where('moneda_id', $moneda->id)->get();
+        $numeroCuentas = $cuentasAfectadas->count();
+        $totalCuentasAfectadas = $cuentasAfectadas->sum('saldo_cuenta');
+        
+        // Crear registro en el historial
+        HistorialTasaCambio::create([
+            'moneda_id' => $moneda->id,
+            'user_id' => Auth::id(),
+            'tasa_anterior' => $tasaAnterior,
+            'tasa_nueva' => $tasaNueva,
+            'diferencia_tasa' => $diferenciaTasa,
+            'porcentaje_cambio' => $porcentajeCambioTasa,
+            'total_cuentas_afectadas' => $numeroCuentas, // Corregido: ahora guarda número de cuentas
+            'impacto_financiero' => $impactoFinanciero,
+            'impacto_porcentaje' => $impactoPorcentaje,
+            'numero_cuentas_afectadas' => $numeroCuentas,
+        ]);
     }
 
 }
