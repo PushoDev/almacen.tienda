@@ -106,7 +106,7 @@ const allNavItems: NavItem[] = [
         title: 'Clientes',
         href: '/clientes',
         icon: Users,
-        roles: ['admin', 'moderador', 'vendedor'],
+        roles: ['admin', 'moderador'],
     },
     {
         title: 'Reportes',
