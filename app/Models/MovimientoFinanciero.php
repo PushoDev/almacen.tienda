@@ -26,18 +26,32 @@ class MovimientoFinanciero extends Model
         'descripcion',
         'fecha_operacion',
         'estado',
+        'saldo_anterior_origen',
+        'saldo_posterior_origen',
+        'moneda_origen',
+        'saldo_anterior_destino',
+        'saldo_posterior_destino',
+        'moneda_destino',
     ];
-
-    public function user(): BelongsTo
-    {
-        return $this->belongsTo(User::class);
-    }
 
     protected $casts = [
         'fecha_operacion' => 'datetime',
         'monto' => 'double',
         'tasa_cambio_aplicada' => 'double',
+        'saldo_anterior_origen' => 'double',
+        'saldo_posterior_origen' => 'double',
+        'saldo_anterior_destino' => 'double',
+        'saldo_posterior_destino' => 'double',
     ];
+
+    // -------------------------
+    // --- Relaciones con Usuario ---
+    // -------------------------
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
 
     // -------------------------
     // --- Relaciones Comunes ---
@@ -91,5 +105,49 @@ class MovimientoFinanciero extends Model
     public function proveedorDestino(): BelongsTo
     {
         return $this->belongsTo(Proveedor::class, 'proveedor_destino_id');
+    }
+
+     // -------------------------
+    // --- Métodos Auxiliares ---
+    // -------------------------
+
+    /**
+     * Verifica si este movimiento tiene datos de saldos guardados
+     */
+    public function tieneDatosSaldos(): bool
+    {
+        return $this->saldo_anterior_origen !== null ||
+            $this->saldo_anterior_destino !== null;
+    }
+
+    /**
+     * Obtiene el nombre descriptivo de la entidad origen
+     */
+    public function getNombreOrigenAttribute(): ?string
+    {
+        if ($this->cuentaOrigen) {
+            return $this->cuentaOrigen->nombre_cuenta;
+        }
+        if ($this->clienteOrigen) {
+            return $this->clienteOrigen->nombre_cliente;
+        }
+        return null;
+    }
+
+    /**
+     * Obtiene el nombre descriptivo de la entidad destino
+     */
+    public function getNombreDestinoAttribute(): ?string
+    {
+        if ($this->cuentaDestino) {
+            return $this->cuentaDestino->nombre_cuenta;
+        }
+        if ($this->clienteDestino) {
+            return $this->clienteDestino->nombre_cliente;
+        }
+        if ($this->proveedorDestino) {
+            return $this->proveedorDestino->nombre_proveedor;
+        }
+        return null;
     }
 }

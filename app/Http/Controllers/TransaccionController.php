@@ -39,7 +39,7 @@ class TransaccionController extends Controller
         } else {
             $cuentas = Cuenta::with('moneda')->get();
         }
-        
+
         $clientes = Cliente::all();
         $proveedores = Proveedor::all();
 
@@ -400,35 +400,38 @@ class TransaccionController extends Controller
                 if ($origen->saldo_cuenta < $request->monto) {
                     throw new \Exception('Saldo insuficiente en la cuenta.');
                 }
+
+                // ✅ GUARDAR SALDOS ANTES Y DESPUÉS
+                $saldoAnterior = $origen->saldo_cuenta;
+                $saldoPosterior = $saldoAnterior - $request->monto;
+
                 $origen->decrement('saldo_cuenta', $request->monto);
 
                 $movimientoData['cuenta_origen_id'] = $origen->id;
                 $movimientoData['descripcion'] = $request->comentario ?? "Gasto desde cuenta: {$origen->nombre_cuenta}";
+                $movimientoData['saldo_anterior_origen'] = $saldoAnterior;
+                $movimientoData['saldo_posterior_origen'] = $saldoPosterior;
+                $movimientoData['moneda_origen'] = $origen->moneda->codigo_moneda;
             } else {
                 $origen = Cliente::lockForUpdate()->findOrFail($request->origen_id);
+
+                // ✅ GUARDAR SALDOS ANTES Y DESPUÉS
+                $saldoAnterior = $origen->deuda_pago_cliente;
+                $saldoPosterior = $saldoAnterior - $request->monto;
+
                 $origen->decrement('deuda_pago_cliente', $request->monto);
 
                 $movimientoData['cliente_origen_id'] = $origen->id;
                 $movimientoData['descripcion'] = $request->comentario ?? "Gasto desde cliente: {$origen->nombre_cliente}";
+                $movimientoData['saldo_anterior_origen'] = $saldoAnterior;
+                $movimientoData['saldo_posterior_origen'] = $saldoPosterior;
+                $movimientoData['moneda_origen'] = 'USD'; // Clientes siempre operan en USD
             }
 
-            MovimientoFinanciero::create($movimientoData);
+            $movimiento = MovimientoFinanciero::create($movimientoData);
 
             DB::commit();
-            
-            // Obtener el movimiento recién creado
-            $movimiento = MovimientoFinanciero::where('user_id', auth()->id())
-                ->where('tipo_movimiento_id', 1) // Gasto
-                ->where('monto', $request->monto)
-                ->where('moneda', $request->moneda)
-                ->where('descripcion', 'LIKE', '%' . ($request->comentario ?? '') . '%')
-                ->orderBy('created_at', 'desc')
-                ->first();
-            
-            if (!$movimiento) {
-                return Redirect::back()->with('error', 'No se pudo encontrar el movimiento registrado.');
-            }
-            
+
             return Redirect::route('transacciones.show', $movimiento->id)
                 ->with('success', "✅ Gasto de {$request->monto} {$request->moneda} registrado con éxito.");
         } catch (\Exception $e) {
@@ -491,42 +494,52 @@ class TransaccionController extends Controller
                     throw new \Exception("La moneda de la cuenta ({$destino->moneda->codigo_moneda}) no coincide con la transacción ({$request->moneda}).");
                 }
 
+                // ✅ GUARDAR SALDOS ANTES Y DESPUÉS
+                $saldoAnterior = $destino->saldo_cuenta;
+                $saldoPosterior = $saldoAnterior + $request->monto;
+
                 $destino->increment('saldo_cuenta', $request->monto);
 
                 $movimientoData['cuenta_destino_id'] = $destino->id;
                 $movimientoData['descripcion'] = $request->comentario ?? "Ingreso a cuenta: {$destino->nombre_cuenta}";
+                $movimientoData['saldo_anterior_destino'] = $saldoAnterior;
+                $movimientoData['saldo_posterior_destino'] = $saldoPosterior;
+                $movimientoData['moneda_destino'] = $destino->moneda->codigo_moneda;
             } else if ($request->destino_tipo === 'cliente') {
                 $destino = Cliente::lockForUpdate()->findOrFail($request->destino_id);
+
+                // ✅ GUARDAR SALDOS ANTES Y DESPUÉS
+                $saldoAnterior = $destino->deuda_pago_cliente;
+                $saldoPosterior = $saldoAnterior + $request->monto;
+
                 $destino->increment('deuda_pago_cliente', $request->monto);
 
                 $movimientoData['cliente_destino_id'] = $destino->id;
                 $movimientoData['descripcion'] = $request->comentario ?? "Ingreso a cliente: {$destino->nombre_cliente}";
+                $movimientoData['saldo_anterior_destino'] = $saldoAnterior;
+                $movimientoData['saldo_posterior_destino'] = $saldoPosterior;
+                $movimientoData['moneda_destino'] = 'USD'; // Clientes siempre operan en USD
             } else {
                 // ✅ NUEVO: Manejo de proveedores
                 $destino = Proveedor::lockForUpdate()->findOrFail($request->destino_id);
+
+                // ✅ GUARDAR SALDOS ANTES Y DESPUÉS
+                $saldoAnterior = $destino->saldo_proveedor;
+                $saldoPosterior = $saldoAnterior + $request->monto;
+
                 $destino->increment('saldo_proveedor', $request->monto);
 
                 $movimientoData['proveedor_destino_id'] = $destino->id;
                 $movimientoData['descripcion'] = $request->comentario ?? "Ingreso a proveedor: {$destino->nombre_proveedor}";
+                $movimientoData['saldo_anterior_destino'] = $saldoAnterior;
+                $movimientoData['saldo_posterior_destino'] = $saldoPosterior;
+                $movimientoData['moneda_destino'] = 'USD'; // Proveedores siempre operan en USD
             }
 
-            MovimientoFinanciero::create($movimientoData);
+            $movimiento = MovimientoFinanciero::create($movimientoData);
 
             DB::commit();
-            
-            // Obtener el movimiento recién creado
-            $movimiento = MovimientoFinanciero::where('user_id', auth()->id())
-                ->where('tipo_movimiento_id', 2) // Ingreso
-                ->where('monto', $request->monto)
-                ->where('moneda', $request->moneda)
-                ->where('descripcion', 'LIKE', '%' . ($request->comentario ?? '') . '%')
-                ->orderBy('created_at', 'desc')
-                ->first();
-            
-            if (!$movimiento) {
-                return Redirect::back()->with('error', 'No se pudo encontrar el movimiento registrado.');
-            }
-            
+
             return Redirect::route('transacciones.show', $movimiento->id)
                 ->with('success', "✅ Ingreso de {$request->monto} {$request->moneda} registrado con éxito.");
         } catch (\Exception $e) {
@@ -591,18 +604,26 @@ class TransaccionController extends Controller
             // Validar límite máximo para el destino
             $this->validarLimiteDestino($destino, $request->destino_tipo, $montoDestino, $monedaDestino);
 
+            // ✅ GUARDAR SALDOS ANTES de las operaciones
+            $saldoAnteriorOrigen = $this->obtenerSaldoEntidad($origen, $request->origen_tipo);
+            $saldoAnteriorDestino = $this->obtenerSaldoEntidad($destino, $request->destino_tipo);
+
             // Realizar débito en origen
             $this->realizarDebito($origen, $request->origen_tipo, $montoOrigen);
 
             // Realizar crédito en destino
             $this->realizarCredito($destino, $request->destino_tipo, $montoDestino);
 
+            // ✅ CALCULAR SALDOS DESPUÉS de las operaciones
+            $saldoPosteriorOrigen = $saldoAnteriorOrigen - $montoOrigen;
+            $saldoPosteriorDestino = $saldoAnteriorDestino + $montoDestino;
+
             // Obtener nombres para descripción
             $origenNombre = $this->obtenerNombreEntidad($origen, $request->origen_tipo);
             $destinoNombre = $this->obtenerNombreEntidad($destino, $request->destino_tipo);
 
-            // Crear movimiento financiero
-            MovimientoFinanciero::create([
+            // Crear movimiento financiero con TODOS los datos de saldos
+            $movimiento = MovimientoFinanciero::create([
                 'user_id' => auth()->id(),
                 'tipo_movimiento_id' => 3,
                 'cuenta_origen_id' => $request->origen_tipo === 'cuenta' ? $origen->id : null,
@@ -616,22 +637,16 @@ class TransaccionController extends Controller
                 'descripcion' => $request->comentario ?? "Transferencia: {$montoOrigen} {$monedaOrigen->codigo_moneda} → {$montoDestino} {$monedaDestino->codigo_moneda} ({$origenNombre} → {$destinoNombre})",
                 'fecha_operacion' => now(),
                 'estado' => 'completado',
+                // ✅ NUEVOS DATOS DE SALDOS
+                'saldo_anterior_origen' => $saldoAnteriorOrigen,
+                'saldo_posterior_origen' => $saldoPosteriorOrigen,
+                'moneda_origen' => $monedaOrigen->codigo_moneda,
+                'saldo_anterior_destino' => $saldoAnteriorDestino,
+                'saldo_posterior_destino' => $saldoPosteriorDestino,
+                'moneda_destino' => $monedaDestino->codigo_moneda,
             ]);
 
             DB::commit();
-
-            // Obtener el movimiento recién creado
-            $movimiento = MovimientoFinanciero::where('user_id', auth()->id())
-                ->where('tipo_movimiento_id', 3) // Transferencia
-                ->where('monto', $montoOrigen)
-                ->where('moneda', $request->moneda)
-                ->where('descripcion', 'LIKE', '%' . ($request->comentario ?? '') . '%')
-                ->orderBy('created_at', 'desc')
-                ->first();
-            
-            if (!$movimiento) {
-                return Redirect::back()->with('error', 'No se pudo encontrar el movimiento registrado.');
-            }
 
             $mensajeExito = $monedaOrigen->codigo_moneda === $monedaDestino->codigo_moneda
                 ? "✅ Transferencia de {$montoOrigen} {$monedaOrigen->codigo_moneda} registrada con éxito."
@@ -642,6 +657,23 @@ class TransaccionController extends Controller
             DB::rollBack();
             Log::error('Error al registrar transferencia: ' . $e->getMessage());
             return Redirect::back()->with('error', '❌ Error al registrar la transferencia: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Obtiene el saldo actual de una entidad
+     */
+    private function obtenerSaldoEntidad($entidad, string $tipo): float
+    {
+        switch ($tipo) {
+            case 'cuenta':
+                return (float)$entidad->saldo_cuenta;
+            case 'cliente':
+                return (float)$entidad->deuda_pago_cliente;
+            case 'proveedor':
+                return (float)$entidad->saldo_proveedor;
+            default:
+                return 0.0;
         }
     }
 
@@ -707,7 +739,7 @@ class TransaccionController extends Controller
                 $limiteMaximoCuenta = 1000000;
                 $saldoActual = (float)$entidad->saldo_cuenta;
                 $saldoDespuesDeTransferencia = $saldoActual + $montoDestino;
-                
+
                 if ($saldoDespuesDeTransferencia > $limiteMaximoCuenta) {
                     throw new \Exception("La transferencia excedería el saldo máximo permitido para esta cuenta. Límite: {$limiteMaximoCuenta} {$monedaDestino->codigo_moneda}, Saldo actual: {$saldoActual}, Saldo después: {$saldoDespuesDeTransferencia} {$monedaDestino->codigo_moneda}");
                 }
@@ -718,7 +750,7 @@ class TransaccionController extends Controller
                 $limiteMaximoCliente = 50000;
                 $saldoActual = (float)$entidad->deuda_pago_cliente;
                 $saldoDespuesDeTransferencia = $saldoActual + $montoDestino;
-                
+
                 if ($saldoDespuesDeTransferencia > $limiteMaximoCliente) {
                     throw new \Exception("La transferencia excedería el límite máximo permitido para este cliente. Límite: {$limiteMaximoCliente} USD, Saldo actual: {$saldoActual}, Saldo después: {$saldoDespuesDeTransferencia} USD");
                 }
@@ -729,7 +761,7 @@ class TransaccionController extends Controller
                 $limiteMaximoProveedor = 100000;
                 $saldoActual = (float)$entidad->saldo_proveedor;
                 $saldoDespuesDeTransferencia = $saldoActual + $montoDestino;
-                
+
                 if ($saldoDespuesDeTransferencia > $limiteMaximoProveedor) {
                     throw new \Exception("La transferencia excedería el límite máximo permitido para este proveedor. Límite: {$limiteMaximoProveedor} USD, Saldo actual: {$saldoActual}, Saldo después: {$saldoDespuesDeTransferencia} USD");
                 }
@@ -745,7 +777,7 @@ class TransaccionController extends Controller
         // Clientes y Proveedores siempre operan en USD
         $origenEsCuenta = $origenTipo === 'cuenta';
         $destinoEsCuenta = $destinoTipo === 'cuenta';
-        
+
         // Si son la misma moneda y mismo tipo de entidad, no hay conversión
         if ($monedaOrigen->codigo_moneda === $monedaDestino->codigo_moneda && $origenEsCuenta === $destinoEsCuenta) {
             return $montoOrigen;
@@ -764,7 +796,6 @@ class TransaccionController extends Controller
                 throw new \Exception("La tasa de cambio para {$monedaDestino->codigo_moneda} no es válida.");
             }
             $montoConvertido = $montoOrigen / $tasaDestino;
-            
         } elseif ($origenEsCuenta && !$destinoEsCuenta) {
             // CUENTA → CLIENTE/PROVEEDOR: Convertir de moneda cuenta a USD
             $tasaOrigen = $tasaPersonalizada ?? $monedaOrigen->tasa_cambio;
@@ -772,7 +803,6 @@ class TransaccionController extends Controller
                 throw new \Exception("La tasa de cambio para {$monedaOrigen->codigo_moneda} no es válida.");
             }
             $montoConvertido = $montoOrigen / $tasaOrigen;
-            
         } elseif (!$origenEsCuenta && $destinoEsCuenta) {
             // CLIENTE/PROVEEDOR → CUENTA: Convertir de USD a moneda cuenta
             $tasaDestino = $tasaPersonalizada ?? $monedaDestino->tasa_cambio;
@@ -780,7 +810,6 @@ class TransaccionController extends Controller
                 throw new \Exception("La tasa de cambio para {$monedaDestino->codigo_moneda} no es válida.");
             }
             $montoConvertido = $montoOrigen * $tasaDestino;
-            
         } else {
             // Ambos son cliente/proveedor (USD), sin conversión
             $montoConvertido = $montoOrigen;
@@ -832,15 +861,12 @@ class TransaccionController extends Controller
         if ($origenEsCuenta && $destinoEsCuenta) {
             // CUENTA → CUENTA: Usar tasa de la moneda destino
             return $monedaDestino->tasa_cambio;
-            
         } elseif ($origenEsCuenta && !$destinoEsCuenta) {
             // CUENTA → CLIENTE/PROVEEDOR: Usar tasa de la moneda origen
             return $monedaOrigen->tasa_cambio;
-            
         } elseif (!$origenEsCuenta && $destinoEsCuenta) {
             // CLIENTE/PROVEEDOR → CUENTA: Usar tasa de la moneda destino
             return $monedaDestino->tasa_cambio;
-            
         } else {
             // CLIENTE/PROVEEDOR → CLIENTE/PROVEEDOR: Ambos USD
             return 1.0;
@@ -921,26 +947,24 @@ class TransaccionController extends Controller
     // === MÉTODO PARA MOSTRAR DETALLES DE TRANSACCIÓN ===
     // =======================================================
 
-    /**
-     * Muestra los detalles de un movimiento financiero específico
-     */
+    // Mostrar detalles de una transacción específica
     public function show(MovimientoFinanciero $movimiento)
     {
         // ✅ Validar que el vendedor solo pueda ver sus transacciones
         if (auth()->user()->role === 'vendedor') {
             $cuentasAsignadas = auth()->user()->cuentas()->pluck('id')->toArray();
-            
+
             // Verificar si la transacción involucra alguna de sus cuentas asignadas
-            $involucraCuentaAsignada = in_array($movimiento->cuenta_origen_id, $cuentasAsignadas) || 
-                                    in_array($movimiento->cuenta_destino_id, $cuentasAsignadas);
-            
+            $involucraCuentaAsignada = in_array($movimiento->cuenta_origen_id, $cuentasAsignadas) ||
+                in_array($movimiento->cuenta_destino_id, $cuentasAsignadas);
+
             // Si no es admin y no involucra sus cuentas, denegar acceso
             if (!$involucraCuentaAsignada && auth()->user()->role !== 'admin') {
                 abort(403, 'No tiene permiso para ver esta transacción.');
             }
         }
 
-        // Cargar relaciones necesarias
+        // ✅ Cargar TODAS las relaciones necesarias de forma eager
         $movimiento->load([
             'user',
             'tipoMovimiento',
@@ -951,19 +975,57 @@ class TransaccionController extends Controller
             'proveedorDestino'
         ]);
 
-        // Debug: Verificar qué relaciones se cargaron
-        \Log::info('Relaciones cargadas:', [
-            'user' => $movimiento->user ? 'loaded' : 'not loaded',
-            'tipoMovimiento' => $movimiento->tipoMovimiento ? 'loaded' : 'not loaded',
-            'cuentaOrigen' => $movimiento->cuentaOrigen ? 'loaded' : 'not loaded',
-            'cuentaDestino' => $movimiento->cuentaDestino ? 'loaded' : 'not loaded',
-            'clienteOrigen' => $movimiento->clienteOrigen ? 'loaded' : 'not loaded',
-            'clienteDestino' => $movimiento->clienteDestino ? 'loaded' : 'not loaded',
-            'proveedorDestino' => $movimiento->proveedorDestino ? 'loaded' : 'not loaded',
-        ]);
+        // ✅ Calcular diferencias de saldo si los datos existen
+        $detallesOrigen = null;
+        $detallesDestino = null;
+
+        // Construir detalles del ORIGEN
+        if ($movimiento->cuenta_origen_id || $movimiento->cliente_origen_id) {
+            $detallesOrigen = [
+                'tipo' => $movimiento->cuenta_origen_id ? 'cuenta' : 'cliente',
+                'nombre' => $movimiento->nombreOrigen,
+                'moneda' => $movimiento->moneda_origen ?? $movimiento->moneda,
+                'tiene_datos_historicos' => $movimiento->saldo_anterior_origen !== null,
+                'saldo_anterior' => $movimiento->saldo_anterior_origen,
+                'saldo_posterior' => $movimiento->saldo_posterior_origen,
+                'monto_operacion' => -1 * abs($movimiento->monto), // Negativo porque sale dinero
+                'saldo_actual' => $movimiento->cuentaOrigen?->saldo_cuenta ??
+                    $movimiento->clienteOrigen?->deuda_pago_cliente,
+            ];
+        }
+
+        // Construir detalles del DESTINO
+        if ($movimiento->cuenta_destino_id || $movimiento->cliente_destino_id || $movimiento->proveedor_destino_id) {
+            $tipoDestino = 'cuenta';
+            $saldoActual = null;
+
+            if ($movimiento->cuenta_destino_id) {
+                $tipoDestino = 'cuenta';
+                $saldoActual = $movimiento->cuentaDestino?->saldo_cuenta;
+            } elseif ($movimiento->cliente_destino_id) {
+                $tipoDestino = 'cliente';
+                $saldoActual = $movimiento->clienteDestino?->deuda_pago_cliente;
+            } elseif ($movimiento->proveedor_destino_id) {
+                $tipoDestino = 'proveedor';
+                $saldoActual = $movimiento->proveedorDestino?->saldo_proveedor;
+            }
+
+            $detallesDestino = [
+                'tipo' => $tipoDestino,
+                'nombre' => $movimiento->nombreDestino,
+                'moneda' => $movimiento->moneda_destino ?? $movimiento->moneda,
+                'tiene_datos_historicos' => $movimiento->saldo_anterior_destino !== null,
+                'saldo_anterior' => $movimiento->saldo_anterior_destino,
+                'saldo_posterior' => $movimiento->saldo_posterior_destino,
+                'monto_operacion' => abs($movimiento->monto), // Positivo porque entra dinero
+                'saldo_actual' => $saldoActual,
+            ];
+        }
 
         return Inertia::render('Transacciones/Show', [
             'movimiento' => $movimiento,
+            'detallesOrigen' => $detallesOrigen,
+            'detallesDestino' => $detallesDestino,
             'userRole' => auth()->user()->role ?? 'vendedor',
         ]);
     }

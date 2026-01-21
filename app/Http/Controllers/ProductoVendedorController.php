@@ -151,6 +151,88 @@ class ProductoVendedorController extends Controller
     }
 
     /**
+     * 🆕 NUEVO MÉTODO: Obtener precios de vendedores para un producto en un almacén específico
+     * Solo accesible para admin y moderador
+     */
+    public function preciosPorVendedor($productoId, $almacenId)
+    {
+        $user = Auth::user();
+
+        if (!in_array($user->role, ['admin', 'moderador'])) {
+            return response()->json([
+                'success' => false,
+                'error' => 'No tienes permisos para ver esta información.'
+            ], 403);
+        }
+
+        try {
+            $producto = Producto::findOrFail($productoId);
+            $almacen = Almacen::findOrFail($almacenId);
+
+            $precios = DB::table('producto_vendedors')
+                ->join('users', 'producto_vendedors.user_id', '=', 'users.id')
+                ->where('producto_vendedors.producto_id', $productoId)
+                ->where('producto_vendedors.almacen_id', $almacenId)
+                ->where('producto_vendedors.precio_venta', '>', 0)
+                ->select(
+                    'users.id as user_id',
+                    'users.name as vendedor',
+                    'users.email as email',
+                    'producto_vendedors.precio_venta',
+                    'producto_vendedors.venta_ganancia',
+                    'producto_vendedors.updated_at as ultima_actualizacion'
+                )
+                ->orderBy('producto_vendedors.precio_venta', 'desc')
+                ->get()
+                ->map(function ($item) {
+                    return [
+                        'user_id' => $item->user_id,
+                        'vendedor' => $item->vendedor,
+                        'email' => $item->email,
+                        'precio_venta' => round((float)$item->precio_venta, 2),
+                        'ganancia' => round((float)$item->venta_ganancia, 2),
+                        'ultima_actualizacion' => \Carbon\Carbon::parse($item->ultima_actualizacion)->format('d/m/Y H:i'),
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'producto' => [
+                    'id' => $producto->id,
+                    'nombre' => $producto->nombre_producto,
+                    'marca' => $producto->marca_producto,
+                    'modelo' => $producto->modelo_producto,
+                    'capacidad' => $producto->capacidad_producto,
+                    'precio_compra' => round((float)$producto->precio_compra_producto, 2),
+                ],
+                'almacen' => [
+                    'id' => $almacen->id,
+                    'nombre' => $almacen->nombre_almacen,
+                ],
+                'precios' => $precios,
+                'total_vendedores' => $precios->count(),
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Producto o almacén no encontrado.',
+            ], 404);
+        } catch (\Exception $e) {
+            Log::error('Error al obtener precios por vendedor: ' . $e->getMessage(), [
+                'producto_id' => $productoId,
+                'almacen_id' => $almacenId,
+                'user_id' => $user->id,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Error al obtener los precios de vendedores.',
+                'details' => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
+        }
+    }
+
+    /**
      * Recalcula la ganancia (venta_ganancia) para todos los vendedores
      * que tienen un precio de venta establecido para un producto cuyo
      * precio de compra (costo) ha cambiado, A TRAVÉS DE TODOS LOS ALMACENES.

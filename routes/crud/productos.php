@@ -37,5 +37,12 @@ Route::middleware(['auth', 'verified'])->group(
 
         // Ruta para agregar el precio de venta a los Productos
         Route::resource('disponibles', ProductoVendedorController::class);
+
+        // 🆕 NUEVA RUTA: Ver precios de vendedores para un producto en un almacén específico
+        // IMPORTANTE: Esta debe ir ANTES del resource para que no sea interceptada por {disponible}
+        Route::get(
+            '/disponibles/{producto}/precios-vendedores/{almacen}',
+            [ProductoVendedorController::class, 'preciosPorVendedor']
+        )->name('disponibles.precios-vendedores');
     }
 );

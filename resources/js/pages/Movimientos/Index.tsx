@@ -631,7 +631,7 @@ export default function MovimientosPage({
                                 </div>
                                 <div className="flex space-x-2">
                                     {movimientos.links.map((link, index: number) => {
-                                        let displayLabel = link.label
+                                        const displayLabel = link.label
                                             .replace('&laquo;', '«')
                                             .replace('&raquo;', '»')
                                             .replace('pagination.previous', '«')

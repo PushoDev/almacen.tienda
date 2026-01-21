@@ -68,7 +68,7 @@ class CierreCajaController extends Controller
         // Calcular detalles usando método compartido
         $calculos = $this->obtenerDetallesCierre($user, $inicioTurno);
 
-        // Preparar respuesta para Inertia
+        // Preparar respuesta para Inertia con detalles mejorados de transferencias
         return Inertia::render('Cierres/Create', [
             'fecha_apertura' => $inicioTurno instanceof Carbon ? $inicioTurno->toDateTimeString() : $inicioTurno,
             'calculos' => [
@@ -79,7 +79,9 @@ class CierreCajaController extends Controller
                 'gastos' => 0, // Ya incluido en saldo_esperado_global
                 'devoluciones' => 0,
                 'saldo_esperado_global' => $calculos['saldo_esperado_global'], // Saldo calculado con ingresos extras, gastos, etc.
-                'detalles' => $calculos['detalles']
+                'detalles' => $calculos['detalles'],
+                // Nuevos campos para transferencias bidireccionales
+                'transferencias_resumen' => $this->obtenerResumenTransferencias($calculos['detalles'])
             ]
         ]);
     }
@@ -207,7 +209,7 @@ class CierreCajaController extends Controller
         // 2. Obtener Movimientos Financieros (Gastos, Ingresos, Transferencias) del usuario
         $movimientos = MovimientoFinanciero::where('user_id', $user->id)
             ->where('fecha_operacion', '>=', $inicioTurno)
-            ->with(['tipoMovimiento', 'cuentaOrigen', 'cuentaDestino'])
+            ->with(['tipoMovimiento', 'cuentaOrigen', 'cuentaDestino', 'clienteOrigen', 'clienteDestino', 'proveedorDestino'])
             ->get();
 
         // Estructura para agrupar por Moneda
@@ -224,12 +226,14 @@ class CierreCajaController extends Controller
                 'ingresos_extra' => 0,
                 'gastos' => 0,
                 'transferencias_salientes' => 0,
+                'transferencias_entrantes' => 0,
                 'saldo_calculado' => 0,
                 // Detalles específicos para la UI solicitada
                 'items_ventas' => [],
                 'items_gastos' => [],
                 'items_ingresos' => [],
-                'items_transferencias' => [],
+                'items_transferencias_salientes' => [],
+                'items_transferencias_entrantes' => [],
             ];
         }
         // Asegurar que si hay monedas en pagos que no esten activas, se creen
@@ -289,17 +293,17 @@ class CierreCajaController extends Controller
                 $resumenPorMoneda[$codigo] = $this->initMonedaStruct($codigo);
             }
 
-            $item = [
-                'id' => 'm_' . $mov->id,
-                'desc' => $mov->descripcion,
-                'monto' => $mov->monto,
-                'hora' => $mov->created_at->format('H:i'),
-                'origen' => $mov->cuentaOrigen ? $mov->cuentaOrigen->nombre_cuenta : 'Caja',
-                'destino' => $mov->cuentaDestino ? $mov->cuentaDestino->nombre_cuenta : 'Externo'
-            ];
-
             // TIPO 1: GASTO
             if ($mov->tipo_movimiento_id == 1) {
+                $item = [
+                    'id' => 'm_' . $mov->id,
+                    'desc' => $mov->descripcion,
+                    'monto' => $mov->monto,
+                    'hora' => $mov->created_at->format('H:i'),
+                    'origen' => $this->obtenerNombreOrigen($mov),
+                    'destino' => $this->obtenerNombreDestino($mov),
+                ];
+                
                 // Resta a la caja
                 $resumenPorMoneda[$codigo]['gastos'] += $mov->monto;
                 $resumenPorMoneda[$codigo]['saldo_calculado'] -= $mov->monto; // Gasto sale de caja
@@ -307,6 +311,15 @@ class CierreCajaController extends Controller
             }
             // TIPO 2: INGRESO
             elseif ($mov->tipo_movimiento_id == 2) {
+                $item = [
+                    'id' => 'm_' . $mov->id,
+                    'desc' => $mov->descripcion,
+                    'monto' => $mov->monto,
+                    'hora' => $mov->created_at->format('H:i'),
+                    'origen' => $this->obtenerNombreOrigen($mov),
+                    'destino' => $this->obtenerNombreDestino($mov),
+                ];
+                
                 // Suma a la caja
                 $resumenPorMoneda[$codigo]['ingresos_extra'] += $mov->monto;
                 $resumenPorMoneda[$codigo]['saldo_calculado'] += $mov->monto;
@@ -314,18 +327,17 @@ class CierreCajaController extends Controller
             }
             // TIPO 3: TRANSFERENCIA
             elseif ($mov->tipo_movimiento_id == 3) {
-                // Si Origen es NULL (o cuenta de caja), es salida.
-                // Si Destino es NULL (o cuenta de caja), es entrada.
-                // Como filtramos por 'user_id' creador, asumimos que EL USUARIO inició la transferencia.
-                // Si es salida:
-                $resumenPorMoneda[$codigo]['transferencias_salientes'] += $mov->monto;
-                $resumenPorMoneda[$codigo]['saldo_calculado'] -= $mov->monto;
-                $resumenPorMoneda[$codigo]['items_transferencias'][] = $item;
-
-                // NOTA: Si hubiera transferencias ENTRANTES hechas por OTRO usuario hacia este usuario,
-                // no saldrían en esta query (user_id = auth).
-                // Eso requeriría una lógica más compleja de "Buzón de transferencias".
-                // Por ahora asumimos flujo simple.
+                // Procesar transferencia con detalles bidireccionales
+                $detallesTransferencia = $this->procesarTransferenciaBidireccional($mov, $resumenPorMoneda, $user);
+                
+                // Actualizar saldos según corresponda
+                if ($detallesTransferencia['afecta_saldo_origen']) {
+                    $resumenPorMoneda[$codigo]['transferencias_salientes'] += $mov->monto;
+                    $resumenPorMoneda[$codigo]['saldo_calculado'] -= $mov->monto;
+                }
+                
+                // Agregar a la lista de transferencias salientes (el usuario siempre ve sus salidas)
+                $resumenPorMoneda[$codigo]['items_transferencias_salientes'][] = $detallesTransferencia['item_salida'];
             }
         }
 
@@ -370,11 +382,263 @@ class CierreCajaController extends Controller
             'ingresos_extra' => 0,
             'gastos' => 0,
             'transferencias_salientes' => 0,
+            'transferencias_entrantes' => 0,
             'saldo_calculado' => 0,
             'items_ventas' => [],
             'items_gastos' => [],
             'items_ingresos' => [],
-            'items_transferencias' => [],
+            'items_transferencias_salientes' => [],
+            'items_transferencias_entrantes' => [],
         ];
+    }
+
+    /**
+     * Obtiene el nombre descriptivo del origen de un movimiento
+     */
+    private function obtenerNombreOrigen($movimiento): string
+    {
+        if ($movimiento->cuentaOrigen) {
+            return "Cuenta: {$movimiento->cuentaOrigen->nombre_cuenta}";
+        } elseif ($movimiento->clienteOrigen) {
+            return "Cliente: {$movimiento->clienteOrigen->nombre_cliente}";
+        } else {
+            return "Caja/Origen no especificado";
+        }
+    }
+
+    /**
+     * Obtiene el nombre descriptivo del destino de un movimiento
+     */
+    private function obtenerNombreDestino($movimiento): string
+    {
+        if ($movimiento->cuentaDestino) {
+            return "Cuenta: {$movimiento->cuentaDestino->nombre_cuenta}";
+        } elseif ($movimiento->clienteDestino) {
+            return "Cliente: {$movimiento->clienteDestino->nombre_cliente}";
+        } elseif ($movimiento->proveedorDestino) {
+            return "Proveedor: {$movimiento->proveedorDestino->nombre_proveedor}";
+        } else {
+            return "Destino no especificado";
+        }
+    }
+
+    /**
+     * Procesa una transferencia para mostrar detalles bidireccionales completos
+     */
+    private function procesarTransferenciaBidireccional($movimiento, &$resumenPorMoneda, $user): array
+    {
+        $codigoOrigen = $movimiento->moneda ?? 'USD';
+        $tasaCambio = $movimiento->tasa_cambio_aplicada ?? 1;
+        
+        // Obtener información del origen
+        $origenInfo = $this->obtenerInfoEntidad($movimiento, 'origen');
+        $destinoInfo = $this->obtenerInfoEntidad($movimiento, 'destino');
+        
+        // Determinar si afecta el saldo del usuario (solo si el origen es una cuenta suya)
+        $afectaSaldoOrigen = false;
+        
+        if ($movimiento->cuentaOrigen && $user !== null) {
+            $afectaSaldoOrigen = in_array($user->role, ['admin', 'moderador']) || 
+                                $user->cuentas()->where('id', $movimiento->cuentaOrigen->id)->exists();
+        }
+
+        // Crear item de salida con detalles completos
+        $itemSalida = [
+            'id' => 't_' . $movimiento->id,
+            'desc' => $movimiento->descripcion,
+            'monto_origen' => $movimiento->monto,
+            'moneda_origen' => $codigoOrigen,
+            'origen_tipo' => $origenInfo['tipo'],
+            'origen_nombre' => $origenInfo['nombre'],
+            'destino_tipo' => $destinoInfo['tipo'],
+            'destino_nombre' => $destinoInfo['nombre'],
+            'monto_destino' => $this->calcularMontoDestino($movimiento),
+            'moneda_destino' => $destinoInfo['moneda'],
+            'tasa_cambio' => $tasaCambio,
+            'hora' => $movimiento->created_at->format('H:i'),
+            'afecta_saldo_usuario' => $afectaSaldoOrigen,
+        ];
+
+        // Si el destino está en una moneda diferente, agregar también a la lista de esa moneda
+        if ($destinoInfo['moneda'] !== $codigoOrigen && isset($resumenPorMoneda[$destinoInfo['moneda']])) {
+            $itemEntrada = [
+                'id' => 't_entrada_' . $movimiento->id,
+                'desc' => $movimiento->descripcion,
+                'monto_origen' => $movimiento->monto,
+                'moneda_origen' => $codigoOrigen,
+                'origen_tipo' => $origenInfo['tipo'],
+                'origen_nombre' => $origenInfo['nombre'],
+                'destino_tipo' => $destinoInfo['tipo'],
+                'destino_nombre' => $destinoInfo['nombre'],
+                'monto_destino' => $this->calcularMontoDestino($movimiento),
+                'moneda_destino' => $destinoInfo['moneda'],
+                'tasa_cambio' => $tasaCambio,
+                'hora' => $movimiento->created_at->format('H:i'),
+                'es_entrada' => true,
+            ];
+            
+            $resumenPorMoneda[$destinoInfo['moneda']]['items_transferencias_entrantes'][] = $itemEntrada;
+            $resumenPorMoneda[$destinoInfo['moneda']]['transferencias_entrantes'] += $itemEntrada['monto_destino'];
+        }
+
+        return [
+            'item_salida' => $itemSalida,
+            'afecta_saldo_origen' => $afectaSaldoOrigen,
+        ];
+    }
+
+    /**
+     * Obtiene información detallada de una entidad (origen o destino)
+     */
+    private function obtenerInfoEntidad($movimiento, string $lado): array
+    {
+        $info = [
+            'tipo' => 'desconocido',
+            'nombre' => 'No especificado',
+            'moneda' => $movimiento->moneda ?? 'USD',
+        ];
+
+        if ($lado === 'origen') {
+            if ($movimiento->cuentaOrigen) {
+                $info['tipo'] = 'cuenta';
+                $info['nombre'] = $movimiento->cuentaOrigen->nombre_cuenta;
+                $info['moneda'] = $movimiento->cuentaOrigen->moneda->codigo_moneda ?? 'USD';
+            } elseif ($movimiento->clienteOrigen) {
+                $info['tipo'] = 'cliente';
+                $info['nombre'] = $movimiento->clienteOrigen->nombre_cliente;
+                $info['moneda'] = 'USD'; // Clientes siempre operan en USD
+            }
+        } else { // destino
+            if ($movimiento->cuentaDestino) {
+                $info['tipo'] = 'cuenta';
+                $info['nombre'] = $movimiento->cuentaDestino->nombre_cuenta;
+                $info['moneda'] = $movimiento->cuentaDestino->moneda->codigo_moneda ?? 'USD';
+            } elseif ($movimiento->clienteDestino) {
+                $info['tipo'] = 'cliente';
+                $info['nombre'] = $movimiento->clienteDestino->nombre_cliente;
+                $info['moneda'] = 'USD'; // Clientes siempre operan en USD
+            } elseif ($movimiento->proveedorDestino) {
+                $info['tipo'] = 'proveedor';
+                $info['nombre'] = $movimiento->proveedorDestino->nombre_proveedor;
+                $info['moneda'] = 'USD'; // Proveedores siempre operan en USD
+            }
+        }
+
+        return $info;
+    }
+
+    /**
+     * Calcula el monto en la moneda de destino aplicando la tasa de cambio
+     */
+    private function calcularMontoDestino($movimiento): float
+    {
+        $origenInfo = $this->obtenerInfoEntidad($movimiento, 'origen');
+        $destinoInfo = $this->obtenerInfoEntidad($movimiento, 'destino');
+        
+        // Si ambas monedas son iguales, no hay conversión
+        if ($origenInfo['moneda'] === $destinoInfo['moneda']) {
+            return (float)$movimiento->monto;
+        }
+
+        $tasaCambio = $movimiento->tasa_cambio_aplicada ?? 1;
+        
+        // Lógica de conversión según el tipo de entidades
+        if ($origenInfo['tipo'] === 'cuenta' && $destinoInfo['tipo'] === 'cuenta') {
+            // Cuenta → Cuenta: Dividir por tasa de la moneda destino
+            return round($movimiento->monto / $tasaCambio, 2);
+        } elseif ($origenInfo['tipo'] === 'cuenta' && in_array($destinoInfo['tipo'], ['cliente', 'proveedor'])) {
+            // Cuenta → Cliente/Proveedor: Convertir a USD
+            return round($movimiento->monto / $tasaCambio, 2);
+        } elseif (in_array($origenInfo['tipo'], ['cliente', 'proveedor']) && $destinoInfo['tipo'] === 'cuenta') {
+            // Cliente/Proveedor → Cuenta: Convertir de USD a moneda cuenta
+            return round($movimiento->monto * $tasaCambio, 2);
+        } else {
+            // Cliente/Proveedor → Cliente/Proveedor: Ambos USD, sin conversión
+            return (float)$movimiento->monto;
+        }
+    }
+
+    /**
+     * Genera un resumen de transferencias para mostrar en la vista
+     */
+    private function obtenerResumenTransferencias(array $detalles): array
+    {
+        $resumenTransferencias = [
+            'total_salientes' => 0,
+            'total_entrantes' => 0,
+            'por_moneda' => [],
+            'detalles_completos' => []
+        ];
+
+        foreach ($detalles as $monedaData) {
+            $codigo = $monedaData['moneda'];
+            
+            // Acumular totales
+            $resumenTransferencias['total_salientes'] += $monedaData['transferencias_salientes'];
+            $resumenTransferencias['total_entrantes'] += $monedaData['transferencias_entrantes'];
+            
+            // Resumen por moneda
+            if ($monedaData['transferencias_salientes'] > 0 || $monedaData['transferencias_entrantes'] > 0) {
+                $resumenTransferencias['por_moneda'][$codigo] = [
+                    'moneda' => $codigo,
+                    'tasa_cambio' => $monedaData['tasa_cambio'],
+                    'salientes' => $monedaData['transferencias_salientes'],
+                    'entrantes' => $monedaData['transferencias_entrantes'],
+                    'neto' => $monedaData['transferencias_entrantes'] - $monedaData['transferencias_salientes'],
+                    'items_salientes' => $monedaData['items_transferencias_salientes'],
+                    'items_entrantes' => $monedaData['items_transferencias_entrantes'] ?? []
+                ];
+            }
+            
+            // Agregar detalles completos para vista
+            if (!empty($monedaData['items_transferencias_salientes'])) {
+                foreach ($monedaData['items_transferencias_salientes'] as $transferencia) {
+                    $resumenTransferencias['detalles_completos'][] = [
+                        'id' => $transferencia['id'],
+                        'descripcion' => $transferencia['desc'],
+                        'monto_origen' => $transferencia['monto_origen'],
+                        'moneda_origen' => $transferencia['moneda_origen'],
+                        'origen_tipo' => $transferencia['origen_tipo'],
+                        'origen_nombre' => $transferencia['origen_nombre'],
+                        'monto_destino' => $transferencia['monto_destino'],
+                        'moneda_destino' => $transferencia['moneda_destino'],
+                        'destino_tipo' => $transferencia['destino_tipo'],
+                        'destino_nombre' => $transferencia['destino_nombre'],
+                        'tasa_cambio' => $transferencia['tasa_cambio'],
+                        'hora' => $transferencia['hora'],
+                        'afecta_saldo_usuario' => $transferencia['afecta_saldo_usuario'] ?? false,
+                        'tipo' => 'saliente'
+                    ];
+                }
+            }
+            
+            // Agregar transferencias entrantes si existen
+            if (!empty($monedaData['items_transferencias_entrantes'])) {
+                foreach ($monedaData['items_transferencias_entrantes'] as $transferencia) {
+                    $resumenTransferencias['detalles_completos'][] = [
+                        'id' => $transferencia['id'],
+                        'descripcion' => $transferencia['desc'],
+                        'monto_origen' => $transferencia['monto_origen'],
+                        'moneda_origen' => $transferencia['moneda_origen'],
+                        'origen_tipo' => $transferencia['origen_tipo'],
+                        'origen_nombre' => $transferencia['origen_nombre'],
+                        'monto_destino' => $transferencia['monto_destino'],
+                        'moneda_destino' => $transferencia['moneda_destino'],
+                        'destino_tipo' => $transferencia['destino_tipo'],
+                        'destino_nombre' => $transferencia['destino_nombre'],
+                        'tasa_cambio' => $transferencia['tasa_cambio'],
+                        'hora' => $transferencia['hora'],
+                        'tipo' => 'entrante'
+                    ];
+                }
+            }
+        }
+
+        // Ordenar detalles completos por hora
+        usort($resumenTransferencias['detalles_completos'], function ($a, $b) {
+            return strcmp($a['hora'], $b['hora']);
+        });
+
+        return $resumenTransferencias;
     }
 }

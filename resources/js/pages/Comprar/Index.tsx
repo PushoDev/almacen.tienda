@@ -183,7 +183,7 @@ export default function ComprarPage() {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
 
     const { data, setData, post, processing } = useForm({
-        compra: 'deuda_proveedor',
+        compra: '',
         proveedor: '',
         fecha: date ? date.toISOString().split('T')[0] : '',
         pagos: [] as { cuenta_id: number; monto: number }[],
@@ -391,17 +391,17 @@ export default function ComprarPage() {
             prev.map((prod) =>
                 prod.id === editingProductId
                     ? ({
-                          id: editingProductId,
-                          almacen_id: parseInt(tempFormData.almacen_id),
-                          producto: tempFormData.producto,
-                          marca: tempFormData.marca,
-                          modelo: tempFormData.modelo,
-                          capacidad: tempFormData.capacidad,
-                          categoria: tempFormData.categoria,
-                          codigo: tempFormData.codigo,
-                          cantidad: tempFormData.cantidad,
-                          precio: tempFormData.precio,
-                      } as ProductoComprarProps)
+                        id: editingProductId,
+                        almacen_id: parseInt(tempFormData.almacen_id),
+                        producto: tempFormData.producto,
+                        marca: tempFormData.marca,
+                        modelo: tempFormData.modelo,
+                        capacidad: tempFormData.capacidad,
+                        categoria: tempFormData.categoria,
+                        codigo: tempFormData.codigo,
+                        cantidad: tempFormData.cantidad,
+                        precio: tempFormData.precio,
+                    } as ProductoComprarProps)
                     : prod,
             ),
         );
@@ -475,8 +475,8 @@ export default function ComprarPage() {
                     name === 'nombre_almacen' || name === 'provincia_almacen' || name === 'ciudad_almacen' || name === 'notas_almacen'
                         ? value.toUpperCase()
                         : name === 'correo_almacen'
-                          ? value.toLowerCase()
-                          : value,
+                            ? value.toLowerCase()
+                            : value,
             }));
         };
 
@@ -957,9 +957,9 @@ export default function ComprarPage() {
     const CrearClienteDialogContent = () => {
         const [localCliente, setLocalCliente] = useState({
             nombre_cliente: '',
-            telefono_cliente: '',
-            direccion_cliente: '',
-            ciudad_cliente: '',
+            telefono_cliente: '+123456789',
+            direccion_cliente: 'Residencia del Cliente',
+            ciudad_cliente: 'Ciudad de Residencia',
         });
 
         const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
@@ -1537,7 +1537,18 @@ export default function ComprarPage() {
                                                         <Edit2 />
                                                     </Button>
                                                 </AlertDialogTrigger>
-                                                <AlertDialogContent className="flex h-[90vh] w-[95vw] max-w-6xl flex-col p-0 sm:h-[85vh]">
+
+                                                <AlertDialogContent
+                                                    className="
+        !max-w-none
+        flex
+        h-[90vh]
+        w-[95vw]
+        max-w-[1024px]
+        flex-col
+        p-0
+    "
+                                                >
                                                     <AlertDialogHeader className="shrink-0 border-b px-6 py-4">
                                                         <AlertDialogTitle className="flex items-center gap-3 text-xl font-semibold text-gray-800 sm:text-2xl dark:text-white">
                                                             <Edit2 className="h-6 w-6" />
@@ -1548,14 +1559,14 @@ export default function ComprarPage() {
                                                         </AlertDialogDescription>
                                                     </AlertDialogHeader>
 
-                                                    <div className="grid flex-1 grid-cols-1 overflow-hidden md:grid-cols-3 lg:grid-cols-4">
-                                                        {/* Main Form Section */}
-                                                        <div className="col-span-1 flex flex-col gap-y-8 overflow-y-auto px-6 py-8 md:col-span-2 lg:col-span-3">
-                                                            {/* Product Information Card */}
+                                                    <div className="grid flex-1 overflow-hidden lg:grid-cols-[1fr_380px]">
+                                                        {/* CONTENIDO PRINCIPAL */}
+                                                        <div className="flex flex-col gap-y-8 overflow-y-auto px-6 py-8">
                                                             <div className="space-y-6 rounded-lg border border-slate-200 p-6 dark:border-slate-700">
                                                                 <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
                                                                     Detalles del Producto
                                                                 </h3>
+
                                                                 <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
                                                                     <div className="sm:col-span-2">
                                                                         <Label htmlFor="edit-producto">Nombre del Producto *</Label>
@@ -1564,9 +1575,9 @@ export default function ComprarPage() {
                                                                             name="producto"
                                                                             value={tempFormData.producto}
                                                                             onChange={handleTempInputChange}
-                                                                            placeholder="Ej: Memoria RAM"
                                                                         />
                                                                     </div>
+
                                                                     <div>
                                                                         <Label htmlFor="edit-marca">Marca</Label>
                                                                         <Input
@@ -1574,9 +1585,9 @@ export default function ComprarPage() {
                                                                             name="marca"
                                                                             value={tempFormData.marca}
                                                                             onChange={handleTempInputChange}
-                                                                            placeholder="Ej: Kingston"
                                                                         />
                                                                     </div>
+
                                                                     <div>
                                                                         <Label htmlFor="edit-modelo">Modelo</Label>
                                                                         <Input
@@ -1584,9 +1595,9 @@ export default function ComprarPage() {
                                                                             name="modelo"
                                                                             value={tempFormData.modelo}
                                                                             onChange={handleTempInputChange}
-                                                                            placeholder="Ej: Fury Beast"
                                                                         />
                                                                     </div>
+
                                                                     <div className="sm:col-span-2">
                                                                         <Label htmlFor="edit-capacidad">Capacidad / Tamaño</Label>
                                                                         <Input
@@ -1594,17 +1605,16 @@ export default function ComprarPage() {
                                                                             name="capacidad"
                                                                             value={tempFormData.capacidad}
                                                                             onChange={handleTempInputChange}
-                                                                            placeholder="Ej: 16GB, 1TB, 27''"
                                                                         />
                                                                     </div>
                                                                 </div>
                                                             </div>
 
-                                                            {/* Inventory and Pricing Card */}
                                                             <div className="space-y-6 rounded-lg border border-slate-200 p-6 dark:border-slate-700">
                                                                 <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
                                                                     Inventario y Precio
                                                                 </h3>
+
                                                                 <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
                                                                     <div>
                                                                         <Label htmlFor="edit-cantidad">Cantidad *</Label>
@@ -1614,10 +1624,10 @@ export default function ComprarPage() {
                                                                             name="cantidad"
                                                                             value={tempFormData.cantidad || ''}
                                                                             onChange={handleTempInputChange}
-                                                                            placeholder="0"
                                                                             min="1"
                                                                         />
                                                                     </div>
+
                                                                     <div>
                                                                         <Label htmlFor="edit-precio">Precio Unitario *</Label>
                                                                         <div className="relative">
@@ -1632,7 +1642,6 @@ export default function ComprarPage() {
                                                                                 value={tempFormData.precio || ''}
                                                                                 onChange={handleTempInputChange}
                                                                                 className="pl-7"
-                                                                                placeholder="0.00"
                                                                                 min="0"
                                                                             />
                                                                         </div>
@@ -1641,16 +1650,16 @@ export default function ComprarPage() {
                                                             </div>
                                                         </div>
 
-                                                        {/* Sidebar Section */}
-                                                        <div className="col-span-1 flex flex-col border-l border-slate-200 bg-slate-50/50 p-6 dark:border-slate-700 dark:bg-slate-800/20">
+                                                        {/* SIDEBAR */}
+                                                        <div className="flex flex-col border-l border-slate-200 bg-slate-50/50 p-6 dark:border-slate-700 dark:bg-slate-800/20">
                                                             <div className="space-y-6">
                                                                 <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
                                                                     Organización
                                                                 </h3>
+
                                                                 <div>
-                                                                    <Label htmlFor="edit-almacen">Almacén Destino *</Label>
+                                                                    <Label>Almacén Destino *</Label>
                                                                     <Select
-                                                                        name="almacen_id"
                                                                         value={tempFormData.almacen_id}
                                                                         onValueChange={(value) => handleTempSelectChange('almacen_id', value)}
                                                                     >
@@ -1658,45 +1667,17 @@ export default function ComprarPage() {
                                                                             <SelectValue placeholder="Seleccione Almacén" />
                                                                         </SelectTrigger>
                                                                         <SelectContent>
-                                                                            <div className="p-2">
-                                                                                <Input
-                                                                                    type="text"
-                                                                                    placeholder="Buscar almacén..."
-                                                                                    value={almacenSearchTerm}
-                                                                                    onChange={(e) => setAlmacenSearchTerm(e.target.value)}
-                                                                                    className="text-sm"
-                                                                                />
-                                                                            </div>
-                                                                            <div className="max-h-40 overflow-y-auto">
-                                                                                {filteredAlmacens.map((almacen) => (
-                                                                                    <SelectItem key={almacen.id} value={almacen.id.toString()}>
-                                                                                        <div className="flex items-center gap-2">
-                                                                                            <Warehouse className="h-4 w-4 text-gray-500" />
-                                                                                            <span>{almacen.nombre_almacen}</span>
-                                                                                            {almacen.tipo_almacen && (
-                                                                                                <Badge variant="outline" className="ml-auto text-xs">
-                                                                                                    {almacen.tipo_almacen}
-                                                                                                </Badge>
-                                                                                            )}
-                                                                                        </div>
-                                                                                    </SelectItem>
-                                                                                ))}
-                                                                            </div>
-                                                                            <Separator className="my-2" />
-                                                                            <div
-                                                                                className="flex cursor-pointer items-center rounded-md bg-blue-50 px-3 py-2 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-300"
-                                                                                onClick={() => {
-                                                                                    setIsCrearAlmacenDialogOpen(true);
-                                                                                }}
-                                                                            >
-                                                                                <PlusCircle className="mr-2 h-4 w-4" />
-                                                                                <span>Crear nuevo almacén</span>
-                                                                            </div>
+                                                                            {filteredAlmacens.map((almacen) => (
+                                                                                <SelectItem key={almacen.id} value={almacen.id.toString()}>
+                                                                                    {almacen.nombre_almacen}
+                                                                                </SelectItem>
+                                                                            ))}
                                                                         </SelectContent>
                                                                     </Select>
                                                                 </div>
+
                                                                 <div>
-                                                                    <Label htmlFor="edit-categoria">Categoría *</Label>
+                                                                    <Label>Categoría *</Label>
                                                                     <Select
                                                                         value={tempFormData.categoria}
                                                                         onValueChange={(value) => handleTempSelectChange('categoria', value)}
@@ -1705,101 +1686,41 @@ export default function ComprarPage() {
                                                                             <SelectValue placeholder="Seleccione o cree" />
                                                                         </SelectTrigger>
                                                                         <SelectContent>
-                                                                            <div className="p-2">
-                                                                                <Input
-                                                                                    type="text"
-                                                                                    placeholder="Buscar o crear..."
-                                                                                    value={searchCategoria}
-                                                                                    onChange={(e) => setSearchCategoria(e.target.value.toUpperCase())}
-                                                                                    onKeyDown={(e) => {
-                                                                                        if (e.key === 'Enter') {
-                                                                                            e.preventDefault();
-                                                                                            const trimmed = searchCategoria.trim();
-                                                                                            if (trimmed) {
-                                                                                                handleTempSelectChange('categoria', trimmed);
-                                                                                                setSearchCategoria('');
-                                                                                            }
-                                                                                        }
-                                                                                    }}
-                                                                                />
-                                                                            </div>
-                                                                            <div className="max-h-40 overflow-y-auto">
-                                                                                {searchCategoria.trim() &&
-                                                                                    !filteredCategorias.some(
-                                                                                        (c) => c.nombre_categoria === searchCategoria.trim(),
-                                                                                    ) && (
-                                                                                        <SelectItem value={searchCategoria.trim()}>
-                                                                                            <div className="flex items-center gap-2">
-                                                                                                <PlusIcon className="h-4 w-4" />
-                                                                                                <span>
-                                                                                                    Crear: <strong>{searchCategoria.trim()}</strong>
-                                                                                                </span>
-                                                                                            </div>
-                                                                                        </SelectItem>
-                                                                                    )}
-                                                                                {filteredCategorias.map((cat) => (
-                                                                                    <SelectItem key={cat.id} value={cat.nombre_categoria}>
-                                                                                        {cat.nombre_categoria}
-                                                                                    </SelectItem>
-                                                                                ))}
-                                                                            </div>
+                                                                            {filteredCategorias.map((cat) => (
+                                                                                <SelectItem key={cat.id} value={cat.nombre_categoria}>
+                                                                                    {cat.nombre_categoria}
+                                                                                </SelectItem>
+                                                                            ))}
                                                                         </SelectContent>
                                                                     </Select>
                                                                 </div>
+
                                                                 <div>
-                                                                    <Label htmlFor="edit-codigo">Código de Barras</Label>
-                                                                    <Input
-                                                                        id="edit-codigo"
-                                                                        value={tempFormData.codigo || 'Generado automáticamente...'}
-                                                                        className="cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-700"
-                                                                        disabled
-                                                                    />
+                                                                    <Label>Código de Barras</Label>
+                                                                    <Input value={tempFormData.codigo || ''} disabled />
                                                                 </div>
                                                             </div>
 
-                                                            <div className="mt-auto rounded-xl border-2 border-blue-500/40 bg-blue-50/50 p-4 shadow-lg dark:border-blue-700/60 dark:bg-blue-900/30">
-                                                                <h4 className="mb-3 text-lg font-bold text-blue-900 dark:text-blue-200">
-                                                                    Resumen de Costo
-                                                                </h4>
-                                                                <div className="space-y-2 text-base">
-                                                                    <div className="flex justify-between">
-                                                                        <span className="text-slate-600 dark:text-slate-400">Unidades:</span>
-                                                                        <span className="font-medium text-slate-800 dark:text-slate-200">
-                                                                            {tempFormData.cantidad || 0}
-                                                                        </span>
-                                                                    </div>
-                                                                    <div className="flex justify-between">
-                                                                        <span className="text-slate-600 dark:text-slate-400">Precio Unitario:</span>
-                                                                        <span className="font-medium text-slate-800 dark:text-slate-200">
-                                                                            ${(tempFormData.precio || 0).toFixed(2)}
-                                                                        </span>
-                                                                    </div>
-                                                                    <Separator className="!my-3 bg-blue-300/50 dark:bg-blue-600/40" />
-                                                                    <div className="flex items-center justify-between">
-                                                                        <span className="text-lg font-semibold text-slate-700 dark:text-slate-300">
-                                                                            Subtotal:
-                                                                        </span>
-                                                                        <span className="text-xl font-bold text-blue-800 dark:text-blue-300">
-                                                                            ${((tempFormData.cantidad || 0) * (tempFormData.precio || 0)).toFixed(2)}
-                                                                        </span>
-                                                                    </div>
+                                                            <div className="mt-auto rounded-xl border-2 border-blue-500/40 bg-blue-50/50 p-4 dark:bg-blue-900/30">
+                                                                <div className="flex justify-between">
+                                                                    <span>Subtotal</span>
+                                                                    <span className="font-bold">
+                                                                        ${((tempFormData.cantidad || 0) * (tempFormData.precio || 0)).toFixed(2)}
+                                                                    </span>
                                                                 </div>
                                                             </div>
                                                         </div>
                                                     </div>
 
-                                                    <AlertDialogFooter className="shrink-0 flex-row items-center justify-end space-x-4 border-t border-slate-200 bg-slate-50/70 px-6 py-4 dark:border-slate-700 dark:bg-slate-800/50">
+                                                    <AlertDialogFooter className="shrink-0 flex-row justify-end space-x-4 border-t px-6 py-4">
                                                         <AlertDialogCancel asChild>
-                                                            <Button
-                                                                variant="ghost"
-                                                                className="hover:bg-slate-200 dark:hover:bg-slate-700"
-                                                                onClick={() => setIsDialogOpen(false)}
-                                                            >
+                                                            <Button variant="ghost" onClick={() => setIsDialogOpen(false)}>
                                                                 Cancelar
                                                             </Button>
                                                         </AlertDialogCancel>
+
                                                         <Button
-                                                            className="cursor-pointer bg-blue-600 text-white shadow-sm transition-all duration-200 hover:bg-blue-700"
+                                                            className="bg-blue-600 text-white hover:bg-blue-700"
                                                             onClick={handleActualizarProducto}
                                                         >
                                                             <HardDriveUpload className="mr-2 h-4 w-4" />
@@ -1807,6 +1728,7 @@ export default function ComprarPage() {
                                                         </Button>
                                                     </AlertDialogFooter>
                                                 </AlertDialogContent>
+
                                             </AlertDialog>
 
                                             <Button
