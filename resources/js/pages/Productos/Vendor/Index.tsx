@@ -59,6 +59,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
     // const { props } = usePage<PageProps>(); // ELIMINADO para resolver la advertencia de ESLint
 
     const [almacenes, setAlmacenes] = useState<AlmacenData[]>(initialAlmacenes);
+    const [selectedAlmacenId, setSelectedAlmacenId] = useState<number | null>(initialAlmacenes.length > 0 ? initialAlmacenes[0].almacen_id : null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState<Producto | null>(null);
     const [newPrice, setNewPrice] = useState<string>('');
@@ -69,19 +70,29 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
     const [searchTerm, setSearchTerm] = useState('');
     const itemsPerPage = 10;
 
-    // Obtener la lista aplanada y enriquecida para búsqueda/paginación
-    const allProducts = almacenes.flatMap((almacen) =>
-        almacen.productos.map((p) => ({
-            ...p,
-            almacen_nombre: almacen.nombre_almacen,
-        })),
-    );
+    // Obtener el almacén seleccionado
+    const selectedAlmacen = almacenes.find((a) => a.almacen_id === selectedAlmacenId);
 
-    // Obtener la lista única de almacenes disponibles para el select
-    const availableAlmacenes = initialAlmacenes.map((a) => ({
-        id: a.almacen_id,
-        nombre: a.nombre_almacen,
-    }));
+    // Obtener productos del almacén seleccionado para búsqueda/paginación
+    const productsInAlmacen = selectedAlmacen?.productos || [];
+
+    // Obtener la lista de almacenes con información completa para el selector
+    const availableAlmacenes = initialAlmacenes.map((a) => {
+        const totalProductos = a.productos.length;
+        const totalStock = a.productos.reduce((sum, p) => sum + p.stock_almacen, 0);
+        const valorTotal = a.productos.reduce((sum, p) => sum + (p.precio_venta || p.precio_compra) * p.stock_almacen, 0);
+        const productosConPrecio = a.productos.filter((p) => p.precio_venta !== null).length;
+
+        return {
+            id: a.almacen_id,
+            nombre: a.nombre_almacen,
+            totalProductos,
+            totalStock,
+            valorTotal,
+            productosConPrecio,
+            productosSinPrecio: totalProductos - productosConPrecio,
+        };
+    });
 
     const formatCurrency = (value: number | null) => {
         if (value === null || value === undefined) return 'No definido';
@@ -171,11 +182,12 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
         }
     };
 
-    // Filtrar y paginar
-    const filteredProducts = allProducts.filter(
+    // Filtrar y paginar productos del almacén seleccionado
+    const filteredProducts = productsInAlmacen.filter(
         (producto) =>
             producto.nombre_producto.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            producto.almacen_nombre.toLowerCase().includes(searchTerm.toLowerCase()),
+            producto.marca_producto.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            producto.categoria.toLowerCase().includes(searchTerm.toLowerCase()),
     );
 
     const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
@@ -190,24 +202,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
         }
     };
 
-    // Agrupar los productos filtrados y paginados por almacén para el renderizado
-    const groupedProducts = currentProducts.reduce(
-        (acc, product) => {
-            const key = product.almacen_id;
-            if (!acc[key]) {
-                acc[key] = {
-                    almacen_id: key,
-                    nombre_almacen: product.almacen_nombre,
-                    productos: [],
-                };
-            }
-            acc[key].productos.push(product as Producto); // Aseguramos el tipo
-            return acc;
-        },
-        {} as Record<number, { almacen_id: number; nombre_almacen: string; productos: Producto[] }>,
-    );
-
-    const displayedAlmacenes = Object.values(groupedProducts);
+    // Ya no necesitamos agrupar, mostramos productos del almacén seleccionado directamente
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -258,124 +253,195 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                         </span>
                     </p>
                 </div>
-                {/* Tabla de Productos agrupados por Almacén (sin cambios) */}
+                {/* Selector de Almacén y Estadísticas */}
+                <div className="space-y-4">
+                    <div className="flex items-center gap-4">
+                        <div className="max-w-sm flex-1">
+                            <Label htmlFor="almacen-selector" className="mb-2 block text-sm font-medium">
+                                Seleccionar Almacén
+                            </Label>
+                            <Select
+                                value={selectedAlmacenId?.toString()}
+                                onValueChange={(value) => {
+                                    setSelectedAlmacenId(parseInt(value));
+                                    setCurrentPage(1);
+                                    setSearchTerm('');
+                                }}
+                            >
+                                <SelectTrigger id="almacen-selector" className="bg-background hover:bg-accent/50 h-11 transition-colors">
+                                    <div className="flex items-center gap-2">
+                                        <Warehouse className="text-muted-foreground h-4 w-4" />
+                                        <SelectValue placeholder="Seleccione un almacén" />
+                                    </div>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {availableAlmacenes.map((almacen) => (
+                                        <SelectItem key={almacen.id} value={almacen.id.toString()}>
+                                            <div className="flex flex-col items-start">
+                                                <span className="font-medium">{almacen.nombre}</span>
+                                                <span className="text-muted-foreground text-xs">
+                                                    {almacen.totalProductos} productos • {almacen.totalStock} unidades •{' '}
+                                                    {formatCurrency(almacen.valorTotal)}
+                                                </span>
+                                            </div>
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {selectedAlmacen &&
+                            (() => {
+                                const almacenStats = availableAlmacenes.find((a) => a.id === selectedAlmacen.almacen_id);
+                                return almacenStats ? (
+                                    <div className="grid flex-1 grid-cols-2 gap-3 md:grid-cols-4">
+                                        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+                                            <p className="text-xs font-medium text-blue-600">Total Productos</p>
+                                            <p className="text-lg font-bold text-blue-900">{almacenStats.totalProductos}</p>
+                                        </div>
+                                        <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                                            <p className="text-xs font-medium text-green-600">Con Precio</p>
+                                            <p className="text-lg font-bold text-green-900">{almacenStats.productosConPrecio}</p>
+                                        </div>
+                                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                                            <p className="text-xs font-medium text-amber-600">Sin Precio</p>
+                                            <p className="text-lg font-bold text-amber-900">{almacenStats.productosSinPrecio}</p>
+                                        </div>
+                                        <div className="rounded-lg border border-purple-200 bg-purple-50 p-3">
+                                            <p className="text-xs font-medium text-purple-600">Stock Total</p>
+                                            <p className="text-lg font-bold text-purple-900">{almacenStats.totalStock}</p>
+                                        </div>
+                                    </div>
+                                ) : null;
+                            })()}
+                    </div>
+                </div>
+
+                {/* Tabla de Productos del Almacén Seleccionado */}
                 <div className="border-sidebar-border/70 dark:border-sidebar-border relative flex-1 overflow-x-auto rounded-xl border">
-                    {displayedAlmacenes.length > 0 ? (
-                        displayedAlmacenes.map((almacenGroup) => (
-                            <div key={almacenGroup.almacen_id} className="mb-6 last:mb-0">
-                                <h3 className="flex items-center gap-2 border-b bg-gray-50 p-3 text-lg font-semibold dark:bg-gray-800">
+                    {selectedAlmacen && currentProducts.length > 0 ? (
+                        <div>
+                            <div className="border-b bg-gray-50 p-3 dark:bg-gray-800">
+                                <h3 className="flex items-center gap-2 text-lg font-semibold">
                                     <Warehouse size={20} className="text-primary" />
-                                    {almacenGroup.nombre_almacen}
+                                    {selectedAlmacen.nombre_almacen}
+                                    <Badge variant="secondary" className="ml-2">
+                                        {filteredProducts.length} productos
+                                    </Badge>
                                 </h3>
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow className="bg-gray-100 hover:bg-gray-100 dark:bg-gray-900 dark:hover:bg-gray-900">
-                                            <TableHead className="w-[200px]">Producto</TableHead>
-                                            <TableHead>Marca</TableHead>
-                                            <TableHead>Modelo</TableHead>
-                                            <TableHead>Capacidad</TableHead>
-                                            <TableHead>Categoría</TableHead>
-                                            <TableHead>Precio Compra</TableHead>
-                                            <TableHead>Stock</TableHead>
-                                            <TableHead>Precio Venta</TableHead>
-                                            <TableHead>Ganancia</TableHead>
-                                            <TableHead className="text-center">Acciones</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {almacenGroup.productos.map((producto) => (
-                                            <TableRow key={`${producto.id}-${producto.almacen_id}`}>
-                                                <TableCell className="font-medium">
-                                                    <TooltipProvider>
-                                                        <Tooltip>
-                                                            <TooltipTrigger asChild>
-                                                                <span className="cursor-help decoration-gray-400 decoration-dashed underline-offset-4 hover:underline">
-                                                                    {producto.nombre_producto}
-                                                                </span>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent className="border-primary/20 max-w-xs p-4 shadow-xl">
-                                                                <div className="space-y-2">
-                                                                    <p className="text-base font-bold text-white">{producto.nombre_producto}</p>
-                                                                    <Separator className="bg-border/50" />
-                                                                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                                                                        <span className="text-muted-foreground">Marca:</span>
-                                                                        <span className="font-medium">{producto.marca_producto}</span>
-
-                                                                        {producto.modelo_producto && (
-                                                                            <>
-                                                                                <span className="text-muted-foreground">Modelo:</span>
-                                                                                <span className="font-medium">{producto.modelo_producto}</span>
-                                                                            </>
-                                                                        )}
-
-                                                                        {producto.capacidad_producto && (
-                                                                            <>
-                                                                                <span className="text-muted-foreground">Capacidad:</span>
-                                                                                <span className="font-medium">{producto.capacidad_producto}</span>
-                                                                            </>
-                                                                        )}
-
-                                                                        <span className="text-muted-foreground">Categoría:</span>
-                                                                        <span className="font-medium">{producto.categoria}</span>
-
-                                                                        <span className="text-muted-foreground">P. Compra:</span>
-                                                                        <span className="text-sidebar font-medium">
-                                                                            {formatCurrency(producto.precio_compra)}
-                                                                        </span>
-                                                                    </div>
-                                                                </div>
-                                                            </TooltipContent>
-                                                        </Tooltip>
-                                                    </TooltipProvider>
-                                                </TableCell>
-                                                <TableCell>{producto.marca_producto}</TableCell>
-                                                <TableCell>{producto.modelo_producto || '-'}</TableCell>
-                                                <TableCell>{producto.capacidad_producto || '-'}</TableCell>
-                                                <TableCell>{producto.categoria || 'Sin categoría'}</TableCell>
-                                                <TableCell>{formatCurrency(producto.precio_compra)}</TableCell>
-                                                <TableCell>
-                                                    <Badge variant="outline">{producto.stock_almacen}</Badge>
-                                                </TableCell>
-                                                <TableCell
-                                                    className={cn(producto.precio_venta === null ? 'text-amber-400 italic' : 'text-amber-800')}
-                                                >
-                                                    {formatCurrency(producto.precio_venta)}
-                                                </TableCell>
-                                                <TableCell
-                                                    className={cn(
-                                                        'font-medium',
-                                                        producto.ganancia === null
-                                                            ? 'text-gray-400 italic'
-                                                            : producto.ganancia >= 0
-                                                              ? 'text-green-600'
-                                                              : 'text-red-600',
-                                                    )}
-                                                >
-                                                    {formatCurrency(producto.ganancia)}
-                                                </TableCell>
-                                                <TableCell className="text-center">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className={cn(
-                                                            producto.precio_venta !== null
-                                                                ? 'text-amber-600 hover:animate-pulse hover:bg-amber-200 hover:text-amber-800'
-                                                                : 'text-green-600 hover:animate-pulse hover:bg-emerald-200 hover:text-green-800',
-                                                        )}
-                                                        onClick={() => openEditModal(producto)}
-                                                    >
-                                                        <BadgeDollarSign size={16} />
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
                             </div>
-                        ))
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="bg-gray-100 hover:bg-gray-100 dark:bg-gray-900 dark:hover:bg-gray-900">
+                                        <TableHead className="w-[200px]">Producto</TableHead>
+                                        <TableHead>Marca</TableHead>
+                                        <TableHead>Modelo</TableHead>
+                                        <TableHead>Capacidad</TableHead>
+                                        <TableHead>Categoría</TableHead>
+                                        <TableHead>Precio Compra</TableHead>
+                                        <TableHead>Stock</TableHead>
+                                        <TableHead>Precio Venta</TableHead>
+                                        <TableHead>Ganancia</TableHead>
+                                        <TableHead className="text-center">Acciones</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {currentProducts.map((producto) => (
+                                        <TableRow key={`${producto.id}-${producto.almacen_id}`}>
+                                            <TableCell className="font-medium">
+                                                <TooltipProvider>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <span className="cursor-help decoration-gray-400 decoration-dashed underline-offset-4 hover:underline">
+                                                                {producto.nombre_producto}
+                                                            </span>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent className="border-primary/20 max-w-xs p-4 shadow-xl">
+                                                            <div className="space-y-2">
+                                                                <p className="text-base font-bold text-white">{producto.nombre_producto}</p>
+                                                                <Separator className="bg-border/50" />
+                                                                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                                                                    <span className="text-muted-foreground">Marca:</span>
+                                                                    <span className="font-medium">{producto.marca_producto}</span>
+
+                                                                    {producto.modelo_producto && (
+                                                                        <>
+                                                                            <span className="text-muted-foreground">Modelo:</span>
+                                                                            <span className="font-medium">{producto.modelo_producto}</span>
+                                                                        </>
+                                                                    )}
+
+                                                                    {producto.capacidad_producto && (
+                                                                        <>
+                                                                            <span className="text-muted-foreground">Capacidad:</span>
+                                                                            <span className="font-medium">{producto.capacidad_producto}</span>
+                                                                        </>
+                                                                    )}
+
+                                                                    <span className="text-muted-foreground">Categoría:</span>
+                                                                    <span className="font-medium">{producto.categoria}</span>
+
+                                                                    <span className="text-muted-foreground">P. Compra:</span>
+                                                                    <span className="text-sidebar font-medium">
+                                                                        {formatCurrency(producto.precio_compra)}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </TooltipProvider>
+                                            </TableCell>
+                                            <TableCell>{producto.marca_producto}</TableCell>
+                                            <TableCell>{producto.modelo_producto || '-'}</TableCell>
+                                            <TableCell>{producto.capacidad_producto || '-'}</TableCell>
+                                            <TableCell>{producto.categoria || 'Sin categoría'}</TableCell>
+                                            <TableCell>{formatCurrency(producto.precio_compra)}</TableCell>
+                                            <TableCell>
+                                                <Badge variant="outline">{producto.stock_almacen}</Badge>
+                                            </TableCell>
+                                            <TableCell className={cn(producto.precio_venta === null ? 'text-amber-400 italic' : 'text-amber-800')}>
+                                                {formatCurrency(producto.precio_venta)}
+                                            </TableCell>
+                                            <TableCell
+                                                className={cn(
+                                                    'font-medium',
+                                                    producto.ganancia === null
+                                                        ? 'text-gray-400 italic'
+                                                        : producto.ganancia >= 0
+                                                          ? 'text-green-600'
+                                                          : 'text-red-600',
+                                                )}
+                                            >
+                                                {formatCurrency(producto.ganancia)}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className={cn(
+                                                        producto.precio_venta !== null
+                                                            ? 'text-amber-600 hover:animate-pulse hover:bg-amber-200 hover:text-amber-800'
+                                                            : 'text-green-600 hover:animate-pulse hover:bg-emerald-200 hover:text-green-800',
+                                                    )}
+                                                    onClick={() => openEditModal(producto)}
+                                                >
+                                                    <BadgeDollarSign size={16} />
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
                     ) : (
-                        <div className="p-4 text-center text-gray-500">
-                            No hay productos disponibles en tus almacenes que coincidan con la búsqueda.
+                        <div className="p-8 text-center text-gray-500">
+                            <Warehouse size={48} className="mx-auto mb-4 text-gray-300" />
+                            <h3 className="mb-2 text-lg font-medium">{selectedAlmacen ? 'No hay productos disponibles' : 'Seleccione un almacén'}</h3>
+                            <p className="text-sm">
+                                {selectedAlmacen
+                                    ? 'No se encontraron productos en este almacén que coincidan con la búsqueda.'
+                                    : 'Por favor seleccione un almacén para ver sus productos.'}
+                            </p>
                         </div>
                     )}
                 </div>
