@@ -49,6 +49,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard/financial-states', [ReporteController::class, 'getFinancialStates'])->name('dashboard.financial.states');
     Route::get('/dashboard/usuarios', [ReporteController::class, 'getUsuarios'])->name('dashboard.usuarios');
     Route::get('/dashboard/monedas', [ReporteController::class, 'getMonedas'])->name('dashboard.monedas');
+    Route::get('/dashboard/historial-comparaciones', [AdminController::class, 'getHistorialComparaciones'])->name('dashboard.historial.comparaciones');
+    Route::get('/dashboard/historial-comparaciones/view', function () {
+        return Inertia::render('dashboard/historial-comparaciones');
+    })->name('dashboard.historial.comparaciones.view');
 
     /**
      * Notificaciones
