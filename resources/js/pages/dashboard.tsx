@@ -395,7 +395,7 @@ export default function Dashboard({
 
                                 {/* Textos alineados a la derecha */}
                                 <div className="flex h-full flex-col items-end justify-center space-y-2">
-                                    <h3 className="text-4xl font-bold text-white">Cuadre de Caja</h3>
+                                    <h3 className="text-4xl font-bold text-white">Cuadrar Caja</h3>
                                 </div>
 
                                 {/* Botón pequeño */}

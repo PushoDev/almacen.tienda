@@ -19,7 +19,10 @@ use Inertia\Inertia;
 use Illuminate\Support\Facades\Log;
 use Exception;
 use Illuminate\Support\Facades\Redirect;
+use Illuminate\Support\Facades\Notification;
 use App\Http\Controllers\ProductoVendedorController;
+use App\Notifications\MovimientoFinancieroNotification;
+use App\Services\NotificationService;
 
 class TransaccionController extends Controller
 {
@@ -432,6 +435,27 @@ class TransaccionController extends Controller
 
             DB::commit();
 
+            // Notificar a usuarios relevantes del gasto
+            try {
+                $notificationService = new NotificationService();
+                $datosNotificacion = $notificationService->prepararDatosMovimientoFinanciero($movimiento);
+                $usuariosParaNotificar = $notificationService->getUsuariosParaNotificar($datosNotificacion);
+                
+                // Debug: Log para verificar usuarios
+                Log::info('Usuarios para notificar (gasto): ' . $usuariosParaNotificar->pluck('id')->implode(','));
+                Log::info('Total usuarios notificados: ' . $usuariosParaNotificar->count());
+                
+                // Cargar relaciones necesarias para la notificación
+                $movimiento->load(['user', 'cuentaOrigen', 'clienteOrigen']);
+                
+                Notification::send($usuariosParaNotificar, new MovimientoFinancieroNotification($movimiento, 'gasto'));
+                
+                Log::info('Notificación de gasto enviada exitosamente');
+            } catch (\Exception $e) {
+                Log::error('Error enviando notificación de gasto: ' . $e->getMessage());
+                Log::error('Stack trace: ' . $e->getTraceAsString());
+            }
+
             return Redirect::route('transacciones.show', $movimiento->id)
                 ->with('success', "✅ Gasto de {$request->monto} {$request->moneda} registrado con éxito.");
         } catch (\Exception $e) {
@@ -540,6 +564,27 @@ class TransaccionController extends Controller
 
             DB::commit();
 
+            // Notificar a usuarios relevantes del ingreso
+            try {
+                $notificationService = new NotificationService();
+                $datosNotificacion = $notificationService->prepararDatosMovimientoFinanciero($movimiento);
+                $usuariosParaNotificar = $notificationService->getUsuariosParaNotificar($datosNotificacion);
+                
+                // Debug: Log para verificar usuarios
+                Log::info('Usuarios para notificar (ingreso): ' . $usuariosParaNotificar->pluck('id')->implode(','));
+                Log::info('Total usuarios notificados: ' . $usuariosParaNotificar->count());
+                
+                // Cargar relaciones necesarias para la notificación
+                $movimiento->load(['user', 'cuentaDestino', 'clienteDestino', 'proveedorDestino']);
+                
+                Notification::send($usuariosParaNotificar, new MovimientoFinancieroNotification($movimiento, 'ingreso'));
+                
+                Log::info('Notificación de ingreso enviada exitosamente');
+            } catch (\Exception $e) {
+                Log::error('Error enviando notificación de ingreso: ' . $e->getMessage());
+                Log::error('Stack trace: ' . $e->getTraceAsString());
+            }
+
             return Redirect::route('transacciones.show', $movimiento->id)
                 ->with('success', "✅ Ingreso de {$request->monto} {$request->moneda} registrado con éxito.");
         } catch (\Exception $e) {
@@ -647,6 +692,27 @@ class TransaccionController extends Controller
             ]);
 
             DB::commit();
+
+            // Notificar a usuarios relevantes de la transferencia
+            try {
+                $notificationService = new NotificationService();
+                $datosNotificacion = $notificationService->prepararDatosTransferencia($movimiento);
+                $usuariosParaNotificar = $notificationService->getUsuariosParaNotificar($datosNotificacion);
+                
+                // Debug: Log para verificar usuarios
+                Log::info('Usuarios para notificar (transferencia): ' . $usuariosParaNotificar->pluck('id')->implode(','));
+                Log::info('Total usuarios notificados: ' . $usuariosParaNotificar->count());
+                
+                // Cargar relaciones necesarias para la notificación
+                $movimiento->load(['user', 'cuentaOrigen', 'cuentaDestino', 'clienteOrigen', 'clienteDestino', 'proveedorDestino']);
+                
+                Notification::send($usuariosParaNotificar, new MovimientoFinancieroNotification($movimiento, 'transferencia'));
+                
+                Log::info('Notificación de transferencia enviada exitosamente');
+            } catch (\Exception $e) {
+                Log::error('Error enviando notificación de transferencia: ' . $e->getMessage());
+                Log::error('Stack trace: ' . $e->getTraceAsString());
+            }
 
             $mensajeExito = $monedaOrigen->codigo_moneda === $monedaDestino->codigo_moneda
                 ? "✅ Transferencia de {$montoOrigen} {$monedaOrigen->codigo_moneda} registrada con éxito."
@@ -1088,7 +1154,7 @@ class TransaccionController extends Controller
             );
 
             // Registrar el movimiento financiero
-            MovimientoFinanciero::create([
+            $movimiento = MovimientoFinanciero::create([
                 'user_id' => auth()->id(),
                 'tipo_movimiento_id' => 1,
                 'cuenta_origen_id' => $cuenta->id,
@@ -1127,6 +1193,27 @@ class TransaccionController extends Controller
             $cuenta->decrement('saldo_cuenta', $request->monto);
 
             DB::commit();
+
+            // Notificar a usuarios relevantes del gasto de transportación
+            try {
+                $notificationService = new NotificationService();
+                $datosNotificacion = $notificationService->prepararDatosGastoTransportacion($movimiento, $cuenta->id);
+                $usuariosParaNotificar = $notificationService->getUsuariosParaNotificar($datosNotificacion);
+                
+                // Debug: Log para verificar usuarios
+                Log::info('Usuarios para notificar (gasto transportación): ' . $usuariosParaNotificar->pluck('id')->implode(','));
+                Log::info('Total usuarios notificados: ' . $usuariosParaNotificar->count());
+                
+                // Cargar relaciones necesarias para la notificación
+                $movimiento->load(['user', 'cuentaOrigen']);
+                
+                Notification::send($usuariosParaNotificar, new MovimientoFinancieroNotification($movimiento, 'gasto'));
+                
+                Log::info('Notificación de gasto transportación enviada exitosamente');
+            } catch (\Exception $e) {
+                Log::error('Error enviando notificación de gasto transportación: ' . $e->getMessage());
+                Log::error('Stack trace: ' . $e->getTraceAsString());
+            }
 
             return Redirect::back()->with(
                 'success',

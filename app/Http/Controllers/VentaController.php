@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Notification;
 use App\Notifications\VentaCreadaNotification;
+use App\Services\NotificationService;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Log;
 
@@ -728,10 +729,13 @@ class VentaController extends Controller
 
             DB::commit();
 
-            // Notificar a Admins y Moderadores
+            // Notificar a usuarios relevantes usando NotificationService
             try {
-                $admins = User::whereIn('role', ['admin', 'moderador'])->get();
-                Notification::send($admins, new VentaCreadaNotification($venta));
+                $notificationService = new NotificationService();
+                $datosNotificacion = $notificationService->prepararDatosVenta($venta);
+                $usuariosParaNotificar = $notificationService->getUsuariosParaNotificar($datosNotificacion);
+                
+                Notification::send($usuariosParaNotificar, new VentaCreadaNotification($venta));
             } catch (\Exception $e) {
                 \Log::error('Error enviando notificación de venta: ' . $e->getMessage());
             }
