@@ -1291,7 +1291,7 @@ export default function PuntoVentaOficial({
                                                             )}
                                                         </Button>
                                                     </AlertDialogTrigger>
-                                                    <AlertDialogContent className="max-h-[500px] overflow-y-auto p-0 sm:max-w-[800px]">
+                                                    <AlertDialogContent className="max-h-[700px] overflow-y-auto p-0 sm:max-w-[1024px]">
                                                         <AlertDialogHeader className="from-secondary to-secondary/50 border-b bg-linear-to-r px-6 pt-6 pb-4">
                                                             <div className="flex items-start justify-between">
                                                                 <div>
