@@ -1637,43 +1637,6 @@ export default function PuntoVentaOficial({
                                                                 )}
                                                             </div>
                                                         </div>
-                                                        <div className="border-t p-6 pt-4">
-                                                            <div className="flex items-center justify-between">
-                                                                <span className="font-medium">Total a pagar:</span>
-                                                                <span className="text-lg font-bold text-emerald-600">
-                                                                    $
-                                                                    {Number(calcularTotal).toLocaleString('es-ES', {
-                                                                        minimumFractionDigits: 2,
-                                                                        maximumFractionDigits: 2,
-                                                                    })}{' '}
-                                                                    USD
-                                                                </span>
-                                                            </div>
-                                                            <div className="flex items-center justify-between">
-                                                                <span className="font-medium">Pagado:</span>
-                                                                <span className="text-lg font-bold text-emerald-600">
-                                                                    $
-                                                                    {Number(totalPaid).toLocaleString('es-ES', {
-                                                                        minimumFractionDigits: 2,
-                                                                        maximumFractionDigits: 2,
-                                                                    })}{' '}
-                                                                    USD
-                                                                </span>
-                                                            </div>
-                                                            <div className="flex items-center justify-between border-t pt-2">
-                                                                <span className="font-medium">Restante:</span>
-                                                                <span
-                                                                    className={`text-lg font-bold ${remainingInUsd > 0.01 ? 'text-red-600' : 'text-emerald-600'}`}
-                                                                >
-                                                                    $
-                                                                    {Number(remainingInUsd).toLocaleString('es-ES', {
-                                                                        minimumFractionDigits: 2,
-                                                                        maximumFractionDigits: 2,
-                                                                    })}{' '}
-                                                                    USD
-                                                                </span>
-                                                            </div>
-                                                        </div>
                                                         <AlertDialogFooter className="border-t p-6">
                                                             <Button
                                                                 onClick={handleCompleteSale}
