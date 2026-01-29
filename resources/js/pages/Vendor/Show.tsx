@@ -164,9 +164,10 @@ interface Venta {
 
 interface Props {
     venta: Venta;
+    userRole: 'admin' | 'moderador' | 'vendedor';
 }
 
-export default function ResultadoCarrito({ venta }: Props) {
+export default function ResultadoCarrito({ venta, userRole }: Props) {
     console.log('🔍 Venta recibida en el frontend:', venta);
 
     // Estados para gestionar las acciones
@@ -485,43 +486,44 @@ export default function ResultadoCarrito({ venta }: Props) {
                 <Separator />
 
                 {/* Resumen de Ganancias - NUEVO */}
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                    <div className="bg-card rounded-xl border p-4 text-center">
-                        <DollarSign size={24} className="mx-auto mb-2 text-green-500" />
-                        <p className="text-muted-foreground mb-1 text-sm">Ganancia Operacional</p>
-                        <p className="text-2xl font-bold text-green-600">
-                            {formatCurrency(currentVenta.total_ganancia, monedaPrincipal?.codigo || 'USD')}
-                        </p>
-                    </div>
+                {(userRole === 'admin' || userRole === 'moderador') && (
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                        <div className="bg-card rounded-xl border p-4 text-center">
+                            <DollarSign size={24} className="mx-auto mb-2 text-green-500" />
+                            <p className="text-muted-foreground mb-1 text-sm">Ganancia Operacional</p>
+                            <p className="text-2xl font-bold text-green-600">
+                                {formatCurrency(currentVenta.total_ganancia, monedaPrincipal?.codigo || 'USD')}
+                            </p>
+                        </div>
 
-                    <div className="bg-card rounded-xl border p-4 text-center">
-                        <DollarSign
-                            size={24}
-                            className={`mx-auto mb-2 ${currentVenta.ganancia_perdida_cambiaria >= 0 ? 'text-green-500' : 'text-red-500'}`}
-                        />
-                        <p className="text-muted-foreground mb-1 text-sm">Ganancia/Pérdida Cambiaria</p>
-                        <p className={`text-2xl font-bold ${currentVenta.ganancia_perdida_cambiaria >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatCurrency(currentVenta.ganancia_perdida_cambiaria, monedaPrincipal?.codigo || 'USD')}
-                        </p>
-                    </div>
+                        <div className="bg-card rounded-xl border p-4 text-center">
+                            <DollarSign
+                                size={24}
+                                className={`mx-auto mb-2 ${currentVenta.ganancia_perdida_cambiaria >= 0 ? 'text-green-500' : 'text-red-500'}`}
+                            />
+                            <p className="text-muted-foreground mb-1 text-sm">Ganancia/Pérdida Cambiaria</p>
+                            <p className={`text-2xl font-bold ${currentVenta.ganancia_perdida_cambiaria >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {formatCurrency(currentVenta.ganancia_perdida_cambiaria, monedaPrincipal?.codigo || 'USD')}
+                            </p>
+                        </div>
 
-                    <div className="bg-card rounded-xl border p-4 text-center">
-                        <DollarSign size={24} className="mx-auto mb-2 text-blue-500" />
-                        <p className="text-muted-foreground mb-1 text-sm">Ganancia Real Total</p>
-                        <p className="text-2xl font-bold text-blue-600">
-                            {formatCurrency(currentVenta.ganancia_real_total, monedaPrincipal?.codigo || 'USD')}
-                        </p>
-                    </div>
+                        <div className="bg-card rounded-xl border p-4 text-center">
+                            <DollarSign size={24} className="mx-auto mb-2 text-blue-500" />
+                            <p className="text-muted-foreground mb-1 text-sm">Ganancia Real Total</p>
+                            <p className="text-2xl font-bold text-blue-600">
+                                {formatCurrency(currentVenta.ganancia_real_total, monedaPrincipal?.codigo || 'USD')}
+                            </p>
+                        </div>
 
-                    <div className="bg-card rounded-xl border p-4 text-center">
-                        <DollarSign size={24} className="mx-auto mb-2 text-purple-500" />
-                        <p className="text-muted-foreground mb-1 text-sm">Tasa Cambio Principal</p>
-                        <p className="text-2xl font-bold text-purple-600">
-                            1 {monedaPrincipal?.codigo || 'USD'} = {Number(currentVenta.tasa_cambio_principal)?.toFixed(2) || '0.00'}
-                        </p>
+                        <div className="bg-card rounded-xl border p-4 text-center">
+                            <DollarSign size={24} className="mx-auto mb-2 text-purple-500" />
+                            <p className="text-muted-foreground mb-1 text-sm">Tasa Cambio Principal</p>
+                            <p className="text-2xl font-bold text-purple-600">
+                                1 {monedaPrincipal?.codigo || 'USD'} = {Number(currentVenta.tasa_cambio_principal)?.toFixed(2) || '0.00'}
+                            </p>
+                        </div>
                     </div>
-                </div>
-
+                )}
                 <Separator />
 
                 {/* Botones de acción */}
@@ -705,14 +707,16 @@ export default function ResultadoCarrito({ venta }: Props) {
                             </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent className="max-w-2xl">
-                            <AlertDialogHeader >
+                            <AlertDialogHeader>
                                 <AlertDialogTitle className="text-center">
                                     <div className="flex justify-center">
                                         <AppLogoIcon />
                                     </div>
                                 </AlertDialogTitle>
                                 <AlertDialogDescription className="text-center">
-                                    <h2 className="text-lg font-bold">Reporte de Venta #{currentVenta.id} - {currentVenta.almacen.nombre}</h2>
+                                    <h2 className="text-lg font-bold">
+                                        Reporte de Venta #{currentVenta.id} - {currentVenta.almacen.nombre}
+                                    </h2>
                                 </AlertDialogDescription>
                             </AlertDialogHeader>
                             <div className="max-h-[70vh] overflow-y-auto">
@@ -726,14 +730,10 @@ export default function ResultadoCarrito({ venta }: Props) {
                                     </div>
 
                                     <div className="mb-2">
-                                        <p>
-                                            <span className="font-bold">Cliente:</span>{' '}
-                                            {currentVenta.cliente ? currentVenta.cliente.nombre : 'Cliente no especificado'}
-                                        </p>
                                         {currentVenta.destinatario && (
                                             <>
                                                 <p>
-                                                    <span className="font-bold">Receptor:</span> {currentVenta.destinatario.nombre}{' '}
+                                                    <span className="font-bold">Receptor / Cliente:</span> {currentVenta.destinatario.nombre}{' '}
                                                     {currentVenta.destinatario.apellidos}
                                                 </p>
                                                 <p>
@@ -812,7 +812,7 @@ export default function ResultadoCarrito({ venta }: Props) {
                                             toast.error('No se pudo generar el reporte para imprimir');
                                         }
                                     }}
-                                    className='cursor-pointer'
+                                    className="cursor-pointer"
                                 >
                                     Imprimir Ticket
                                 </Button>
@@ -1164,98 +1164,100 @@ export default function ResultadoCarrito({ venta }: Props) {
                     </div>
 
                     {/* Reporte de la Venta */}
-                    <div className="bg-card rounded-lg p-6 shadow-sm">
-                        <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold">
-                            <DollarSign className="h-5 w-5" />
-                            Resumen Financiero
-                        </h3>
-                        <div className="space-y-3">
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Total de la Venta:</span>
-                                <span className="font-semibold">{formatCurrency(currentVenta.total, simboloMonedaPrincipal)}</span>
+                    {(userRole === 'admin' || userRole === 'moderador') && (
+                        <div className="bg-card rounded-lg p-6 shadow-sm">
+                            <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold">
+                                <DollarSign className="h-5 w-5" />
+                                Resumen Financiero
+                            </h3>
+                            <div className="space-y-3">
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Total de la Venta:</span>
+                                    <span className="font-semibold">{formatCurrency(currentVenta.total, simboloMonedaPrincipal)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Total Pagado:</span>
+                                    <span className="font-semibold text-green-600">
+                                        {formatCurrency(currentVenta.total_pagado, simboloMonedaPrincipal)}
+                                    </span>
+                                </div>
+                                <Separator />
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Restante por Pagar:</span>
+                                    <span className={`font-semibold ${currentVenta.restante > 0 ? 'text-orange-500' : 'text-green-600'}`}>
+                                        {formatCurrency(currentVenta.restante, simboloMonedaPrincipal)}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Ganancia Operacional:</span>
+                                    <span className="font-semibold text-green-600">
+                                        {formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}
+                                    </span>
+                                </div>
+                                {currentVenta.estado === 'completada' && (
+                                    <>
+                                        <div className="flex justify-between">
+                                            <span className="text-muted-foreground">Ganancia/Pérdida Cambiaria:</span>
+                                            <span
+                                                className={`font-semibold ${currentVenta.ganancia_perdida_cambiaria < 0 ? 'text-red-500' : 'text-green-600'
+                                                    }`}
+                                            >
+                                                {formatCurrency(currentVenta.ganancia_perdida_cambiaria, simboloMonedaPrincipal)}
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-muted-foreground">Ganancia Real Total:</span>
+                                            <span className="font-semibold text-green-600">
+                                                {formatCurrency(currentVenta.ganancia_real_total, simboloMonedaPrincipal)}
+                                            </span>
+                                        </div>
+                                    </>
+                                )}
+                                <Separator />
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Estado:</span>
+                                    <span className={`font-semibold ${estadoConfig.textColor}`}>{estadoConfig.text}</span>
+                                </div>
+                                <Separator />
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Moneda Principal:</span>
+                                    <span className="font-semibold">{monedaPrincipal?.nombre || 'No especificada'}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Tasa Cambio Principal:</span>
+                                    <span className="font-semibold">{currentVenta.tasa_cambio_principal}</span>
+                                </div>
                             </div>
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Total Pagado:</span>
-                                <span className="font-semibold text-green-600">
-                                    {formatCurrency(currentVenta.total_pagado, simboloMonedaPrincipal)}
-                                </span>
-                            </div>
-                            <Separator />
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Restante por Pagar:</span>
-                                <span className={`font-semibold ${currentVenta.restante > 0 ? 'text-orange-500' : 'text-green-600'}`}>
-                                    {formatCurrency(currentVenta.restante, simboloMonedaPrincipal)}
-                                </span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Ganancia Operacional:</span>
-                                <span className="font-semibold text-green-600">
-                                    {formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}
-                                </span>
-                            </div>
-                            {currentVenta.estado === 'completada' && (
-                                <>
-                                    <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Ganancia/Pérdida Cambiaria:</span>
-                                        <span
-                                            className={`font-semibold ${currentVenta.ganancia_perdida_cambiaria < 0 ? 'text-red-500' : 'text-green-600'
-                                                }`}
-                                        >
-                                            {formatCurrency(currentVenta.ganancia_perdida_cambiaria, simboloMonedaPrincipal)}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Ganancia Real Total:</span>
-                                        <span className="font-semibold text-green-600">
-                                            {formatCurrency(currentVenta.ganancia_real_total, simboloMonedaPrincipal)}
-                                        </span>
-                                    </div>
-                                </>
+
+                            {/* Información adicional según estado */}
+                            {isVentaPendiente && (
+                                <div className="mt-4 rounded-md bg-yellow-50 p-3">
+                                    <p className="text-sm text-yellow-800">
+                                        <strong>Venta Pendiente:</strong> Esta venta requiere aprobación para afectar stock y cuentas.
+                                        {!currentVenta.destinatario && (
+                                            <span className="mt-1 block font-semibold">
+                                                ❌ Para aprobar, primero debe registrar la información del receptor.
+                                            </span>
+                                        )}
+                                        {currentVenta.destinatario && (
+                                            <span className="mt-1 block font-semibold text-green-600">
+                                                ✅ Receptor registrado. Ya puede aprobar la venta.
+                                            </span>
+                                        )}
+                                    </p>
+                                </div>
                             )}
-                            <Separator />
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Estado:</span>
-                                <span className={`font-semibold ${estadoConfig.textColor}`}>{estadoConfig.text}</span>
-                            </div>
-                            <Separator />
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Moneda Principal:</span>
-                                <span className="font-semibold">{monedaPrincipal?.nombre || 'No especificada'}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Tasa Cambio Principal:</span>
-                                <span className="font-semibold">{currentVenta.tasa_cambio_principal}</span>
-                            </div>
+
+                            {isVentaCancelada && (
+                                <div className="mt-4 rounded-md bg-red-50 p-3">
+                                    <p className="text-sm text-red-800">
+                                        <strong>Venta Anulada:</strong> Esta venta fue cancelada.
+                                        {isVentaCompletada && ' Stock y saldos de cuentas fueron revertidos.'}
+                                    </p>
+                                </div>
+                            )}
                         </div>
-
-                        {/* Información adicional según estado */}
-                        {isVentaPendiente && (
-                            <div className="mt-4 rounded-md bg-yellow-50 p-3">
-                                <p className="text-sm text-yellow-800">
-                                    <strong>Venta Pendiente:</strong> Esta venta requiere aprobación para afectar stock y cuentas.
-                                    {!currentVenta.destinatario && (
-                                        <span className="mt-1 block font-semibold">
-                                            ❌ Para aprobar, primero debe registrar la información del receptor.
-                                        </span>
-                                    )}
-                                    {currentVenta.destinatario && (
-                                        <span className="mt-1 block font-semibold text-green-600">
-                                            ✅ Receptor registrado. Ya puede aprobar la venta.
-                                        </span>
-                                    )}
-                                </p>
-                            </div>
-                        )}
-
-                        {isVentaCancelada && (
-                            <div className="mt-4 rounded-md bg-red-50 p-3">
-                                <p className="text-sm text-red-800">
-                                    <strong>Venta Anulada:</strong> Esta venta fue cancelada.
-                                    {isVentaCompletada && ' Stock y saldos de cuentas fueron revertidos.'}
-                                </p>
-                            </div>
-                        )}
-                    </div>
+                    )}
                 </div>
 
                 {/* Información adicional para administradores */}

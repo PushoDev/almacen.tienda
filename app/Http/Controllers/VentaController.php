@@ -20,7 +20,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Notification;
 use App\Notifications\VentaCreadaNotification;
-use App\Services\NotificationService;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Log;
 
@@ -543,7 +542,8 @@ class VentaController extends Controller
         ];
 
         return Inertia::render('Vendor/Show', [
-            'venta' => $ventaData
+            'venta' => $ventaData,
+            'userRole' => Auth::user()->role ?? 'vendedor'
         ]);
     }
 
@@ -729,13 +729,10 @@ class VentaController extends Controller
 
             DB::commit();
 
-            // Notificar a usuarios relevantes usando NotificationService
+            // Notificar a Admins y Moderadores
             try {
-                $notificationService = new NotificationService();
-                $datosNotificacion = $notificationService->prepararDatosVenta($venta);
-                $usuariosParaNotificar = $notificationService->getUsuariosParaNotificar($datosNotificacion);
-                
-                Notification::send($usuariosParaNotificar, new VentaCreadaNotification($venta));
+                $admins = User::whereIn('role', ['admin', 'moderador'])->get();
+                Notification::send($admins, new VentaCreadaNotification($venta));
             } catch (\Exception $e) {
                 \Log::error('Error enviando notificación de venta: ' . $e->getMessage());
             }
@@ -819,32 +816,6 @@ class VentaController extends Controller
         }
 
         DB::transaction(function () use ($venta) {
-            // ✅ NUEVO: Asignar cliente si no existe pero hay destinatario
-            if (!$venta->cliente_id && $venta->destinatario) {
-                // Buscar si ya existe un cliente con los datos del destinatario
-                $clienteExistente = Cliente::where('nombre_cliente', $venta->destinatario->nombre)
-                    ->where('telefono_cliente', $venta->destinatario->telefono_contacto)
-                    ->first();
-                
-                if ($clienteExistente) {
-                    // Usar cliente existente
-                    $venta->update(['cliente_id' => $clienteExistente->id]);
-                } else {
-                    // Crear nuevo cliente con datos del destinatario
-                    $nuevoCliente = Cliente::create([
-                        'nombre_cliente' => $venta->destinatario->nombre . ' ' . $venta->destinatario->apellidos,
-                        'telefono_cliente' => $venta->destinatario->telefono_contacto ?? '',
-                        'direccion_cliente' => $venta->destinatario->direccion_residencia,
-                        'ciudad_cliente' => null,
-                        'tipo_cliente' => 'fisico',
-                        'deuda_pago_cliente' => 0,
-                    ]);
-                    
-                    // Asignar el nuevo cliente a la venta
-                    $venta->update(['cliente_id' => $nuevoCliente->id]);
-                }
-            }
-
             // 1. Cambiar estado a completada
             $venta->update(['estado' => 'completada']);
 
