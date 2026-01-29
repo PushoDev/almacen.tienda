@@ -362,10 +362,13 @@ export default function PuntoVentaOficial({
 
     const handleMonedaChange = (monedaId: string) => {
         const selectedCurrency = currencies.find((c) => c.id === monedaId);
+        const automaticAmount = calculateAutomaticAmount(monedaId);
+
         setCurrentPayment({
             ...currentPayment,
             moneda_id: monedaId,
             exchangeRate: selectedCurrency ? selectedCurrency.exchangeRate.toString() : '',
+            amount: automaticAmount,
             cuenta_id: '',
             cliente_id: '',
         });
@@ -503,6 +506,20 @@ export default function PuntoVentaOficial({
             return 0;
         }
         return amount / exchangeRate;
+    };
+
+    const calculateAutomaticAmount = (monedaId: string): string => {
+        if (remainingInUsd <= 0) {
+            return '';
+        }
+
+        const selectedCurrency = currencies.find((c) => c.id === monedaId);
+        if (!selectedCurrency || !selectedCurrency.exchangeRate || selectedCurrency.exchangeRate <= 0) {
+            return '';
+        }
+
+        const automaticAmount = remainingInUsd * selectedCurrency.exchangeRate;
+        return automaticAmount.toFixed(2);
     };
 
     const handleAddPayment = () => {
@@ -1420,19 +1437,31 @@ export default function PuntoVentaOficial({
                                                                                           : ''
                                                                                 }
                                                                                 onValueChange={(value) => {
+                                                                                    let updatedPayment = { ...currentPayment };
+
                                                                                     if (value.startsWith('cuenta_')) {
-                                                                                        setCurrentPayment({
-                                                                                            ...currentPayment,
+                                                                                        updatedPayment = {
+                                                                                            ...updatedPayment,
                                                                                             cuenta_id: value.replace('cuenta_', ''),
                                                                                             cliente_id: '',
-                                                                                        });
+                                                                                        };
                                                                                     } else if (value.startsWith('cliente_')) {
-                                                                                        setCurrentPayment({
-                                                                                            ...currentPayment,
+                                                                                        updatedPayment = {
+                                                                                            ...updatedPayment,
                                                                                             cliente_id: value.replace('cliente_', ''),
                                                                                             cuenta_id: '',
-                                                                                        });
+                                                                                        };
                                                                                     }
+
+                                                                                    // Si ya hay una moneda seleccionada, recalcular el monto automático
+                                                                                    if (updatedPayment.moneda_id) {
+                                                                                        const automaticAmount = calculateAutomaticAmount(
+                                                                                            updatedPayment.moneda_id,
+                                                                                        );
+                                                                                        updatedPayment.amount = automaticAmount;
+                                                                                    }
+
+                                                                                    setCurrentPayment(updatedPayment);
                                                                                 }}
                                                                             >
                                                                                 <SelectTrigger>
