@@ -819,6 +819,32 @@ class VentaController extends Controller
         }
 
         DB::transaction(function () use ($venta) {
+            // ✅ NUEVO: Asignar cliente si no existe pero hay destinatario
+            if (!$venta->cliente_id && $venta->destinatario) {
+                // Buscar si ya existe un cliente con los datos del destinatario
+                $clienteExistente = Cliente::where('nombre_cliente', $venta->destinatario->nombre)
+                    ->where('telefono_cliente', $venta->destinatario->telefono_contacto)
+                    ->first();
+                
+                if ($clienteExistente) {
+                    // Usar cliente existente
+                    $venta->update(['cliente_id' => $clienteExistente->id]);
+                } else {
+                    // Crear nuevo cliente con datos del destinatario
+                    $nuevoCliente = Cliente::create([
+                        'nombre_cliente' => $venta->destinatario->nombre . ' ' . $venta->destinatario->apellidos,
+                        'telefono_cliente' => $venta->destinatario->telefono_contacto ?? '',
+                        'direccion_cliente' => $venta->destinatario->direccion_residencia,
+                        'ciudad_cliente' => null,
+                        'tipo_cliente' => 'fisico',
+                        'deuda_pago_cliente' => 0,
+                    ]);
+                    
+                    // Asignar el nuevo cliente a la venta
+                    $venta->update(['cliente_id' => $nuevoCliente->id]);
+                }
+            }
+
             // 1. Cambiar estado a completada
             $venta->update(['estado' => 'completada']);
 
