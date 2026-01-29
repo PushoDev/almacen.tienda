@@ -542,7 +542,8 @@ class VentaController extends Controller
         ];
 
         return Inertia::render('Vendor/Show', [
-            'venta' => $ventaData
+            'venta' => $ventaData,
+            'userRole' => Auth::user()->role ?? 'vendedor'
         ]);
     }
 

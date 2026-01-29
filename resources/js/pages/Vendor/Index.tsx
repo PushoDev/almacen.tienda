@@ -362,10 +362,13 @@ export default function PuntoVentaOficial({
 
     const handleMonedaChange = (monedaId: string) => {
         const selectedCurrency = currencies.find((c) => c.id === monedaId);
+        const automaticAmount = calculateAutomaticAmount(monedaId);
+
         setCurrentPayment({
             ...currentPayment,
             moneda_id: monedaId,
             exchangeRate: selectedCurrency ? selectedCurrency.exchangeRate.toString() : '',
+            amount: automaticAmount,
             cuenta_id: '',
             cliente_id: '',
         });
@@ -503,6 +506,20 @@ export default function PuntoVentaOficial({
             return 0;
         }
         return amount / exchangeRate;
+    };
+
+    const calculateAutomaticAmount = (monedaId: string): string => {
+        if (remainingInUsd <= 0) {
+            return '';
+        }
+
+        const selectedCurrency = currencies.find((c) => c.id === monedaId);
+        if (!selectedCurrency || !selectedCurrency.exchangeRate || selectedCurrency.exchangeRate <= 0) {
+            return '';
+        }
+
+        const automaticAmount = remainingInUsd * selectedCurrency.exchangeRate;
+        return automaticAmount.toFixed(2);
     };
 
     const handleAddPayment = () => {
@@ -1291,7 +1308,7 @@ export default function PuntoVentaOficial({
                                                             )}
                                                         </Button>
                                                     </AlertDialogTrigger>
-                                                    <AlertDialogContent className="max-h-[500px] overflow-y-auto p-0 sm:max-w-[800px]">
+                                                    <AlertDialogContent className="max-h-[700px] overflow-y-auto p-0 sm:max-w-[1024px]">
                                                         <AlertDialogHeader className="from-secondary to-secondary/50 border-b bg-linear-to-r px-6 pt-6 pb-4">
                                                             <div className="flex items-start justify-between">
                                                                 <div>
@@ -1420,19 +1437,31 @@ export default function PuntoVentaOficial({
                                                                                           : ''
                                                                                 }
                                                                                 onValueChange={(value) => {
+                                                                                    let updatedPayment = { ...currentPayment };
+
                                                                                     if (value.startsWith('cuenta_')) {
-                                                                                        setCurrentPayment({
-                                                                                            ...currentPayment,
+                                                                                        updatedPayment = {
+                                                                                            ...updatedPayment,
                                                                                             cuenta_id: value.replace('cuenta_', ''),
                                                                                             cliente_id: '',
-                                                                                        });
+                                                                                        };
                                                                                     } else if (value.startsWith('cliente_')) {
-                                                                                        setCurrentPayment({
-                                                                                            ...currentPayment,
+                                                                                        updatedPayment = {
+                                                                                            ...updatedPayment,
                                                                                             cliente_id: value.replace('cliente_', ''),
                                                                                             cuenta_id: '',
-                                                                                        });
+                                                                                        };
                                                                                     }
+
+                                                                                    // Si ya hay una moneda seleccionada, recalcular el monto automático
+                                                                                    if (updatedPayment.moneda_id) {
+                                                                                        const automaticAmount = calculateAutomaticAmount(
+                                                                                            updatedPayment.moneda_id,
+                                                                                        );
+                                                                                        updatedPayment.amount = automaticAmount;
+                                                                                    }
+
+                                                                                    setCurrentPayment(updatedPayment);
                                                                                 }}
                                                                             >
                                                                                 <SelectTrigger>
@@ -1635,43 +1664,6 @@ export default function PuntoVentaOficial({
                                                                         </div>
                                                                     </div>
                                                                 )}
-                                                            </div>
-                                                        </div>
-                                                        <div className="border-t p-6 pt-4">
-                                                            <div className="flex items-center justify-between">
-                                                                <span className="font-medium">Total a pagar:</span>
-                                                                <span className="text-lg font-bold text-emerald-600">
-                                                                    $
-                                                                    {Number(calcularTotal).toLocaleString('es-ES', {
-                                                                        minimumFractionDigits: 2,
-                                                                        maximumFractionDigits: 2,
-                                                                    })}{' '}
-                                                                    USD
-                                                                </span>
-                                                            </div>
-                                                            <div className="flex items-center justify-between">
-                                                                <span className="font-medium">Pagado:</span>
-                                                                <span className="text-lg font-bold text-emerald-600">
-                                                                    $
-                                                                    {Number(totalPaid).toLocaleString('es-ES', {
-                                                                        minimumFractionDigits: 2,
-                                                                        maximumFractionDigits: 2,
-                                                                    })}{' '}
-                                                                    USD
-                                                                </span>
-                                                            </div>
-                                                            <div className="flex items-center justify-between border-t pt-2">
-                                                                <span className="font-medium">Restante:</span>
-                                                                <span
-                                                                    className={`text-lg font-bold ${remainingInUsd > 0.01 ? 'text-red-600' : 'text-emerald-600'}`}
-                                                                >
-                                                                    $
-                                                                    {Number(remainingInUsd).toLocaleString('es-ES', {
-                                                                        minimumFractionDigits: 2,
-                                                                        maximumFractionDigits: 2,
-                                                                    })}{' '}
-                                                                    USD
-                                                                </span>
                                                             </div>
                                                         </div>
                                                         <AlertDialogFooter className="border-t p-6">

@@ -15,10 +15,27 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Notification;
 use App\Notifications\MovimientoStockNotification;
+use App\Services\NotificationService;
 use App\Models\User;
 
 class MovimientosController extends Controller
 {
+    /**
+     * Envía notificaciones a usuarios relevantes para movimientos
+     */
+    private function notificarMovimiento($movimiento, $mensajePersonalizado = null)
+    {
+        try {
+            $notificationService = new NotificationService();
+            $datosNotificacion = $notificationService->prepararDatosMovimiento($movimiento);
+            $usuariosParaNotificar = $notificationService->getUsuariosParaNotificar($datosNotificacion);
+            
+            Notification::send($usuariosParaNotificar, new MovimientoStockNotification($movimiento, $mensajePersonalizado));
+        } catch (\Exception $e) {
+            \Log::error('Error notificación movimiento: ' . $e->getMessage());
+        }
+    }
+
     /**
      * Obtiene almacenes según rol del usuario
      */
@@ -185,13 +202,8 @@ class MovimientosController extends Controller
 
             DB::commit();
 
-            // Notificar Admins
-            try {
-                $admins = User::whereIn('role', ['admin', 'moderador'])->get();
-                Notification::send($admins, new MovimientoStockNotification($movimiento, "Nuevo movimiento creado #{$movimiento->id}"));
-            } catch (\Exception $e) {
-                \Log::error('Error notif movimiento store: ' . $e->getMessage());
-            }
+            // Notificar a usuarios relevantes
+            $this->notificarMovimiento($movimiento, "Nuevo movimiento creado #{$movimiento->id}");
 
             return redirect()->route('movimientos.index')
                 ->with('success', 'Movimiento creado exitosamente. Haz clic en enviar cuando esté listo para despachar.');
@@ -271,13 +283,8 @@ class MovimientosController extends Controller
 
             DB::commit();
 
-            // Notificar Admins
-            try {
-                $admins = User::whereIn('role', ['admin', 'moderador'])->get();
-                Notification::send($admins, new MovimientoStockNotification($movimiento, "Movimiento #{$movimiento->id} enviado"));
-            } catch (\Exception $e) {
-                \Log::error('Error notif movimiento enviar: ' . $e->getMessage());
-            }
+            // Notificar a usuarios relevantes
+            $this->notificarMovimiento($movimiento, "Movimiento #{$movimiento->id} enviado");
 
             return redirect()->route('movimientos.index')
                 ->with('success', 'Movimiento despachado y en tránsito.');
@@ -404,13 +411,8 @@ class MovimientosController extends Controller
 
             DB::commit();
 
-            // Notificar Admins
-            try {
-                $admins = User::whereIn('role', ['admin', 'moderador'])->get();
-                Notification::send($admins, new MovimientoStockNotification($movimiento, "Movimiento #{$movimiento->id} recibido ({$nuevoEstado})"));
-            } catch (\Exception $e) {
-                \Log::error('Error notif movimiento recibir: ' . $e->getMessage());
-            }
+            // Notificar a usuarios relevantes
+            $this->notificarMovimiento($movimiento, "Movimiento #{$movimiento->id} recibido ({$nuevoEstado})");
 
             return redirect()->route('movimientos.index')
                 ->with('success', 'Movimiento recibido exitosamente.');
@@ -474,13 +476,8 @@ class MovimientosController extends Controller
 
             DB::commit();
 
-            // Notificar Admins
-            try {
-                $admins = User::whereIn('role', ['admin', 'moderador'])->get();
-                Notification::send($admins, new MovimientoStockNotification($movimiento, "Movimiento #{$movimiento->id} RECHAZADO"));
-            } catch (\Exception $e) {
-                \Log::error('Error notif movimiento rechazar: ' . $e->getMessage());
-            }
+            // Notificar a usuarios relevantes
+            $this->notificarMovimiento($movimiento, "Movimiento #{$movimiento->id} RECHAZADO");
 
             return redirect()->route('movimientos.index')
                 ->with('success', 'Movimiento rechazado. Stock liberado.');

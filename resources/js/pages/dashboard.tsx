@@ -395,7 +395,7 @@ export default function Dashboard({
 
                                 {/* Textos alineados a la derecha */}
                                 <div className="flex h-full flex-col items-end justify-center space-y-2">
-                                    <h3 className="text-4xl font-bold text-white">Cuadre de Caja</h3>
+                                    <h3 className="text-4xl font-bold text-white">Cuadrar Caja</h3>
                                 </div>
 
                                 {/* Botón pequeño */}
@@ -485,11 +485,24 @@ export default function Dashboard({
                     <div>
                         <Card className="border-sidebar-border dark:border-sidebar-border">
                             <CardHeader className="border-b-sidebar-border dark:border-b-sidebar-border">
-                                <CardTitle className="flex items-center gap-2">
-                                    <TrendingUp className="h-5 w-5 text-green-600 dark:text-green-400" />
-                                    Tabla 2: Comparación Mensual
-                                </CardTitle>
-                                <CardDescription>Comparación entre el mes actual y el mes anterior</CardDescription>
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <TrendingUp className="h-5 w-5 text-green-600 dark:text-green-400" />
+                                        <div>
+                                            <CardTitle>Tabla 2: Comparación Mensual</CardTitle>
+                                            <CardDescription>Comparación entre el mes actual y el mes anterior</CardDescription>
+                                        </div>
+                                    </div>
+                                    {(userRole === 'admin' || userRole === 'moderador') && (
+                                        <button
+                                            onClick={() => window.open(route('dashboard.historial.comparaciones.view'), '_blank')}
+                                            className="flex items-center gap-2 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 cursor-pointer"
+                                        >
+                                            <TrendingUp className="h-4 w-4" />
+                                            Ver Historial
+                                        </button>
+                                    )}
+                                </div>
                             </CardHeader>
                             <CardContent>
                                 <Table>
@@ -564,6 +577,82 @@ export default function Dashboard({
                                         )}
                                     </TableBody>
                                 </Table>
+                                {comparaciones && comparaciones.length > 0 && (
+                                    <div className="border-sidebar-border dark:border-sidebar-border mt-4 grid grid-cols-6 gap-2 border-t pt-2 text-sm font-semibold">
+                                        <span className="text-right">Totales:</span>
+                                        <span></span>
+                                        <span className="text-right">
+                                            {comparaciones
+                                                .reduce((sum, comp) => {
+                                                    const tasaCambio = comp.tasa_cambio || 1;
+                                                    return sum + comp.monto_anterior / tasaCambio;
+                                                }, 0)
+                                                .toLocaleString('es-ES', {
+                                                    minimumFractionDigits: 2,
+                                                    maximumFractionDigits: 2,
+                                                })}{' '}
+                                            USD
+                                        </span>
+                                        <span className="text-right">
+                                            {comparaciones
+                                                .reduce((sum, comp) => {
+                                                    const tasaCambio = comp.tasa_cambio || 1;
+                                                    return sum + comp.monto_actual / tasaCambio;
+                                                }, 0)
+                                                .toLocaleString('es-ES', {
+                                                    minimumFractionDigits: 2,
+                                                    maximumFractionDigits: 2,
+                                                })}{' '}
+                                            USD
+                                        </span>
+                                        <span className="text-right">
+                                            <span
+                                                className={
+                                                    comparaciones.reduce((sum, comp) => {
+                                                        const tasaCambio = comp.tasa_cambio || 1;
+                                                        return sum + comp.diferencia / tasaCambio;
+                                                    }, 0) >= 0
+                                                        ? 'text-green-600 dark:text-green-400'
+                                                        : 'text-red-600 dark:text-red-400'
+                                                }
+                                            >
+                                                {comparaciones.reduce((sum, comp) => {
+                                                    const tasaCambio = comp.tasa_cambio || 1;
+                                                    return sum + comp.diferencia / tasaCambio;
+                                                }, 0) >= 0
+                                                    ? '+'
+                                                    : ''}
+                                                {comparaciones
+                                                    .reduce((sum, comp) => {
+                                                        const tasaCambio = comp.tasa_cambio || 1;
+                                                        return sum + comp.diferencia / tasaCambio;
+                                                    }, 0)
+                                                    .toLocaleString('es-ES', {
+                                                        minimumFractionDigits: 2,
+                                                        maximumFractionDigits: 2,
+                                                    })}{' '}
+                                                USD
+                                            </span>
+                                        </span>
+                                        <span className="text-right">
+                                            <span
+                                                className={
+                                                    comparaciones.reduce((sum, comp) => sum + comp.porcentaje_cambio, 0) / comparaciones.length >= 0
+                                                        ? 'text-green-600 dark:text-green-400'
+                                                        : 'text-red-600 dark:text-red-400'
+                                                }
+                                            >
+                                                {comparaciones.reduce((sum, comp) => sum + comp.porcentaje_cambio, 0) / comparaciones.length >= 0
+                                                    ? '+'
+                                                    : ''}
+                                                {(
+                                                    comparaciones.reduce((sum, comp) => sum + comp.porcentaje_cambio, 0) / comparaciones.length
+                                                ).toFixed(2)}
+                                                %
+                                            </span>
+                                        </span>
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
                     </div>

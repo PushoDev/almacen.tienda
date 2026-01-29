@@ -103,25 +103,8 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                         Loguearse
                     </LiquidButton>
 
-                    {/* <Button
-                        variant="secondary"
-                        type="submit"
-                        className="hover:bg-sidebar-accent mt-4 w-full cursor-pointer hover:animate-pulse"
-                        tabIndex={4}
-                        disabled={processing}
-                    >
-                        {processing && <LoaderCircle className="h-4 w-4" />}
-                        <DoorOpen />
-                        Loguearse
-                    </Button> */}
-                </div>
 
-                {/* <div className="text-muted-foreground text-center text-sm">
-                    No tienes cuenta?{' '}
-                    <TextLink href={route('register')} tabIndex={5}>
-                        Registro Nuevo
-                    </TextLink>
-                </div> */}
+                </div>
             </form>
 
             {status && <div className="mb-4 text-center text-sm font-medium text-green-600">{status}</div>}

@@ -1,7 +1,19 @@
-import { DropdownMenuItem } from '@/Components/ui/dropdown-menu';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
-import { Bell, CheckCircle, Lock, ShoppingCart, Truck } from 'lucide-react';
+import {
+    ArrowDownCircle,
+    ArrowLeft,
+    ArrowRight,
+    ArrowRightLeft,
+    ArrowUpCircle,
+    Bell,
+    CheckCircle,
+    DollarSign,
+    Lock,
+    ShoppingCart,
+    Truck,
+} from 'lucide-react';
 import React from 'react';
 
 interface NotificationItemProps {
@@ -19,6 +31,18 @@ const getIcon = (iconName: string) => {
             return <Lock className="h-4 w-4" />;
         case 'check':
             return <CheckCircle className="h-4 w-4" />;
+        case 'dollar-sign':
+            return <DollarSign className="h-4 w-4" />;
+        case 'arrow-up-circle':
+            return <ArrowUpCircle className="h-4 w-4" />;
+        case 'arrow-down-circle':
+            return <ArrowDownCircle className="h-4 w-4" />;
+        case 'arrow-right':
+            return <ArrowRight className="h-4 w-4" />;
+        case 'arrow-left':
+            return <ArrowLeft className="h-4 w-4" />;
+        case 'arrow-right-left':
+            return <ArrowRightLeft className="h-4 w-4" />;
         default:
             return <Bell className="h-4 w-4" />;
     }
@@ -34,6 +58,8 @@ const getColorClass = (color: string) => {
             return 'text-red-500 bg-red-100 dark:bg-red-900/20';
         case 'purple':
             return 'text-purple-500 bg-purple-100 dark:bg-purple-900/20';
+        case 'orange':
+            return 'text-orange-500 bg-orange-100 dark:bg-orange-900/20';
         default:
             return 'text-gray-500 bg-gray-100 dark:bg-gray-800';
     }

@@ -15,6 +15,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use App\Notifications\CierreCajaNotification;
+use App\Services\NotificationService;
 
 class CierreCajaController extends Controller
 {
@@ -147,6 +148,17 @@ class CierreCajaController extends Controller
 
             DB::commit();
             \Illuminate\Support\Facades\Log::emergency('!!! CIERRE GUARDADO EXITOSAMENTE ID: ' . $cierre->id . ' !!!');
+
+            // Notificar a usuarios relevantes
+            try {
+                $notificationService = new NotificationService();
+                $datosNotificacion = $notificationService->prepararDatosCierreCaja($cierre);
+                $usuariosParaNotificar = $notificationService->getUsuariosParaNotificar($datosNotificacion);
+                
+                Notification::send($usuariosParaNotificar, new CierreCajaNotification($cierre));
+            } catch (\Exception $e) {
+                \Log::error('Error enviando notificación de cierre de caja: ' . $e->getMessage());
+            }
 
             return redirect()->route('ventas.cierres')->with('success', 'Cierre realizado con éxito.');
         } catch (\Exception $e) {
