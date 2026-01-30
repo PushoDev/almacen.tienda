@@ -13,9 +13,13 @@ export default function AuthCardLayout({
     description?: string;
 }>) {
     return (
-        <div className="bg-muted flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10">
-            <div className="flex w-full max-w-md flex-col gap-6">
-                <Link href={route('home')} className="flex items-center gap-2 self-center font-medium">
+        <div className="relative flex min-h-svh items-center justify-center p-6 md:p-10">
+            {/* Imagen de fondo en toda la página */}
+            <div className="image-background animate__animated animate__fadeIn absolute inset-0" />
+            <div className="absolute inset-0 bg-black/20" />
+
+            <div className="relative z-10 flex w-full max-w-md flex-col gap-6">
+                <Link href={route('home')} className="flex items-center gap-2 self-center font-medium text-white drop-shadow-lg">
                     <div className="flex h-9 w-9 items-center justify-center">
                         <AppLogoIcon />
                     </div>
@@ -23,8 +27,6 @@ export default function AuthCardLayout({
 
                 <div className="flex flex-col gap-6">
                     <Card className="rounded-xl">
-                        {/* Imagen del Auth */}
-                        {/* <div className="image-background animate__animated animate__fadeInLeft absolute inset-0" /> */}
                         <CardHeader className="px-10 pt-8 pb-0 text-center">
                             <CardTitle className="text-xl">{title}</CardTitle>
                             <CardDescription>{description}</CardDescription>

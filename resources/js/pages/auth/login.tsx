@@ -36,6 +36,7 @@ export default function Login({ status, canResetPassword }: LoginProps) {
     };
 
     return (
+
         <AuthLayout title="🔑 Authentificar su Cuenta" description="Introduzca sus credenciales para acceder al sistema">
             <Head title="Log in - 🏪🛒" />
 
