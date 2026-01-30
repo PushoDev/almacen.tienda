@@ -11,27 +11,27 @@ use App\Http\Controllers\AdminController;
 // ============================================
 
 // Página principal del ecommerce con selector de almacén
-Route::get('/', [EcommerceController::class, 'index'])->name('Inicio');
+// Route::get('/', [EcommerceController::class, 'index'])->name('Inicio');
 
 // Productos (mismo ecommerce)
-Route::get('/productos', [EcommerceController::class, 'index'])->name('productos');
+// Route::get('/productos', [EcommerceController::class, 'index'])->name('productos');
 
 // Carrito (mismo ecommerce)
-Route::get('/carrito', [EcommerceController::class, 'index'])->name('Carrito');
+// Route::get('/carrito', [EcommerceController::class, 'index'])->name('Carrito');
 
 // API Routes para Ecommerce (sin autenticación)
-Route::prefix('api/ecommerce')->group(function () {
-    Route::get('/puntos-venta', [EcommerceController::class, 'getPuntosVenta'])->name('api.ecommerce.puntos-venta');
-    Route::post('/almacen/select', [EcommerceController::class, 'setAlmacenSesion'])->name('api.ecommerce.select-almacen');
-    Route::get('/almacen/actual', [EcommerceController::class, 'getAlmacenSesion'])->name('api.ecommerce.almacen-actual');
-    Route::get('/almacen/productos', [EcommerceController::class, 'getProductosAlmacen'])->name('api.ecommerce.productos');
-});
+// Route::prefix('api/ecommerce')->group(function () {
+//     Route::get('/puntos-venta', [EcommerceController::class, 'getPuntosVenta'])->name('api.ecommerce.puntos-venta');
+//     Route::post('/almacen/select', [EcommerceController::class, 'setAlmacenSesion'])->name('api.ecommerce.select-almacen');
+//     Route::get('/almacen/actual', [EcommerceController::class, 'getAlmacenSesion'])->name('api.ecommerce.almacen-actual');
+//     Route::get('/almacen/productos', [EcommerceController::class, 'getProductosAlmacen'])->name('api.ecommerce.productos');
+// });
 
 /**
  * Entrada al Panel Administradtivo
  */
 // Sistema de Logistica
-Route::get('/sistema', function () {
+Route::get('/', function () {
     return Inertia::render('auth/login');
 })->name('home');
 
