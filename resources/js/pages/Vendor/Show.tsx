@@ -1043,8 +1043,8 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                     <th className="p-3 text-left">Producto</th>
                                     <th className="p-3 text-left">Cantidad</th>
                                     <th className="p-3 text-left">Precio Unitario</th>
-                                    <th className="p-3 text-left">Costo Unitario</th>
-                                    <th className="p-3 text-left">Ganancia Unitaria</th>
+                                    {userRole !== 'vendedor' && <th className="p-3 text-left">Costo Unitario</th>}
+                                    {userRole !== 'vendedor' && <th className="p-3 text-left">Ganancia Unitaria</th>}
                                     <th className="p-3 text-left">Subtotal</th>
                                 </tr>
                             </thead>
@@ -1065,8 +1065,8 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                             </td>
                                             <td className="p-3">{item.cantidad}</td>
                                             <td className="p-3">{formatCurrency(item.precio_venta, simboloMonedaPrincipal)}</td>
-                                            <td className="p-3 text-red-600">{formatCurrency(item.costo_unitario, simboloMonedaPrincipal)}</td>
-                                            <td className="p-3 text-green-600">{formatCurrency(item.ganancia, simboloMonedaPrincipal)}</td>
+                                            {userRole !== 'vendedor' && <td className="p-3 text-red-600">{formatCurrency(item.costo_unitario, simboloMonedaPrincipal)}</td>}
+                                            {userRole !== 'vendedor' && <td className="p-3 text-green-600">{formatCurrency(item.ganancia, simboloMonedaPrincipal)}</td>}
                                             <td className="p-3 font-medium">{formatCurrency(item.subtotal, simboloMonedaPrincipal)}</td>
                                         </tr>
                                     );
@@ -1074,28 +1074,35 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                             </tbody>
                             <tfoot>
                                 <tr className="bg-sidebar-accent">
-                                    <td colSpan={5} className="py-3 text-right font-semibold text-white">
+                                    <td colSpan={userRole === 'vendedor' ? 3 : 5} className="py-3 text-right font-semibold text-white">
                                         Total Venta:
                                     </td>
                                     <td className="py-3 text-center text-lg font-semibold text-white">
                                         {formatCurrency(currentVenta.total, simboloMonedaPrincipal)}
                                     </td>
                                 </tr>
-                                <tr className="bg-green-50">
-                                    <td colSpan={5} className="py-3 text-right font-semibold text-green-800">
-                                        Ganancia Total:
-                                    </td>
-                                    <td className="py-3 text-center text-lg font-semibold text-green-800">
-                                        {formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}
-                                    </td>
-                                </tr>
+                                {userRole !== 'vendedor' && (
+                                    <tr className="bg-green-50">
+                                        <td colSpan={5} className="py-3 text-right font-semibold text-green-800">
+                                            Ganancia Total:
+                                        </td>
+                                        <td className="py-3 text-center text-lg font-semibold text-green-800">
+                                            {formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}
+                                        </td>
+                                    </tr>
+                                )}
                             </tfoot>
                         </table>
                     </div>
                 </div>
 
                 {/* Información de pagos y resumen */}
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+
+                <div
+                    className={`animate__animated animate__flipInX grid gap-6 auto-rows-min
+                        ${userRole === 'vendedor' ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'}`}
+                >
+
                     {/* Detalles de pagos */}
                     <div className="bg-card rounded-lg p-6 shadow-sm">
                         <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold">
