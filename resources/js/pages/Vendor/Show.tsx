@@ -1095,7 +1095,14 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 </div>
 
                 {/* Información de pagos y resumen */}
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+
+                <div
+                    className={`
+        animate__animated animate__flipInX
+        grid gap-6 auto-rows-min
+        ${userRole === 'vendedor' ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'}`}
+                >
+
                     {/* Detalles de pagos */}
                     <div className="bg-card rounded-lg p-6 shadow-sm">
                         <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold">
