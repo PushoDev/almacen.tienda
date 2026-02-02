@@ -66,7 +66,7 @@ export default function HistorialPrecioPage({ historial }: HistorialPrecioPagePr
                     {historial.length > 0 ? (
                         <div className="overflow-x-auto">
                             <table className="min-w-full table-auto">
-                                <thead className="bg-gray-100">
+                                <thead>
                                     <tr>
                                         <th className="px-4 py-2 text-left">Producto</th>
                                         <th className="px-4 py-2 text-left">Usuario</th>
