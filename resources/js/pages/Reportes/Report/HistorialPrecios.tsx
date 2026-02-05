@@ -60,7 +60,7 @@ export default function HistorialPrecioPage({ historial }: HistorialPrecioPagePr
                 <Separator className="col-span-4" />
 
                 {/* Contenido Historial */}
-                <div className="rounded-xl bg-white p-4 shadow-md">
+                <div className="rounded-xl p-4 shadow-md">
                     <h2 className="mb-4 text-xl font-semibold">Registro de Cambios</h2>
 
                     {historial.length > 0 ? (

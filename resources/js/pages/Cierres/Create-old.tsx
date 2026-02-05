@@ -1,5 +1,4 @@
 import HeadingSmall from '@/components/heading-small';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -141,28 +140,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Nuevo Cierre', href: '#' },
 ];
 
-// Sample acordion
-const items = [
-    {
-        value: "plans",
-        trigger: "What subscription plans do you offer?",
-        content:
-            "We offer three subscription tiers: Starter ($9/month), Professional ($29/month), and Enterprise ($99/month). Each plan includes increasing storage limits, API access, priority support, and team collaboration features.",
-    },
-    {
-        value: "billing",
-        trigger: "How does billing work?",
-        content:
-            "Billing occurs automatically at the start of each billing cycle. We accept all major credit cards, PayPal, and ACH transfers for enterprise customers. You'll receive an invoice via email after each payment.",
-    },
-    {
-        value: "cancel",
-        trigger: "How do I cancel my subscription?",
-        content:
-            "You can cancel your subscription anytime from your account settings. There are no cancellation fees or penalties. Your access will continue until the end of your current billing period.",
-    },
-]
-
 export default function Create({ calculos, fecha_apertura }: Props) {
     const { data, setData, post, processing } = useForm({
         saldo_inicial: calculos.saldo_inicial || 0,
@@ -197,18 +174,18 @@ export default function Create({ calculos, fecha_apertura }: Props) {
 
     const totalGlobalAuditado = isManualArqueo
         ? calculos.detalles.reduce((acc, det) => {
-            const diff = manualDifference[det.moneda] || 0;
-            return acc + (det.saldo_calculado + diff) / det.tasa_cambio;
-        }, 0)
+              const diff = manualDifference[det.moneda] || 0;
+              return acc + (det.saldo_calculado + diff) / det.tasa_cambio;
+          }, 0)
         : Object.entries(bills).reduce((acc, [key, count]) => {
-            const denom = DENOMINACIONES.find((d) => d.label === key);
-            if (denom) {
-                const detalleMoneda = calculos.detalles.find((det) => det.moneda === denom.m);
-                const tasa = detalleMoneda?.tasa_cambio || 1;
-                return acc + (denom.val * (count || 0)) / tasa;
-            }
-            return acc;
-        }, 0);
+              const denom = DENOMINACIONES.find((d) => d.label === key);
+              if (denom) {
+                  const detalleMoneda = calculos.detalles.find((det) => det.moneda === denom.m);
+                  const tasa = detalleMoneda?.tasa_cambio || 1;
+                  return acc + (denom.val * (count || 0)) / tasa;
+              }
+              return acc;
+          }, 0);
 
     useEffect(() => {
         setData('saldo_contado', totalGlobalAuditado);
@@ -278,252 +255,6 @@ export default function Create({ calculos, fecha_apertura }: Props) {
                         className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 transform opacity-40"
                     />
                 </div>
-
-                <div className="space-y-6 lg:col-span-8">
-                    {/* Selector de Moneda */}
-                    <div className="flex items-center justify-between gap-4">
-                        <h3 className="text-lg font-bold tracking-tight">Movimientos por Moneda</h3>
-                        <div className="bg-muted flex rounded-lg p-1">
-                            {calculos.detalles.map((mon: DetalleMoneda) => (
-                                <Button
-                                    key={mon.moneda}
-                                    variant={selectedMoneda === mon.moneda ? 'default' : 'ghost'}
-                                    size="sm"
-                                    onClick={() => setSelectedMoneda(mon.moneda)}
-                                    className="px-6 font-bold"
-                                >
-                                    {mon.moneda}
-                                </Button>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Acordion Cierres Ventas */}
-                <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-emerald-50/50 to-emerald-100/30 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-xl dark:from-emerald-950/30 dark:to-emerald-900/20 dark:shadow-emerald-900/20">
-                    <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                    <CardHeader className="relative pb-3">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <div className="rounded-lg bg-emerald-500/10 p-2">
-                                    <ArrowUpCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                                </div>
-                                <CardTitle className="text-xs font-semibold text-emerald-700 uppercase dark:text-emerald-300">
-                                    Efectivo Ventas
-                                </CardTitle>
-                            </div>
-                            <div className="text-right">
-                                <div className="text-[9px] font-medium text-emerald-600 dark:text-emerald-400">
-                                    {activeDetalle?.items_ventas?.filter((v) => v.tipo_pago === 'efectivo').length || 0} operaciones
-                                </div>
-                            </div>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="relative space-y-3">
-                        <div className="flex items-center justify-between">
-                            <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 bg-clip-text font-mono text-2xl font-bold text-transparent dark:from-emerald-400 dark:to-emerald-500">
-                                ${Number(activeDetalle?.ventas_efectivo || 0).toFixed(2)}
-                            </div>
-                            <Badge
-                                variant="secondary"
-                                className="bg-emerald-100 text-[9px] font-bold text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300"
-                            >
-                                {selectedMoneda}
-                            </Badge>
-                        </div>
-                        <div className="scrollbar-thin scrollbar-thumb-emerald-200 dark:scrollbar-thumb-emerald-800 max-h-40 space-y-1 overflow-y-auto">
-                            {activeDetalle?.items_ventas
-                                .filter((v) => v.tipo_pago === 'efectivo')
-                                .map((v, i) => (
-                                    <div
-                                        key={i}
-                                        className="group/item flex items-center justify-between border-b border-emerald-200/30 p-2 transition-colors hover:bg-emerald-50/50 dark:border-emerald-800/30 dark:hover:bg-emerald-950/30"
-                                    >
-                                        <div className="flex items-center gap-2">
-                                            <Switch
-                                                checked={data.confirmacion_transferencias.includes(v.id)}
-                                                onCheckedChange={() => toggleConfirmacionTransferencia(v.id)}
-                                                className="scale-75"
-                                            />
-                                            <div className="h-2 w-2 rounded-full bg-emerald-400 opacity-0 transition-all duration-300 group-hover:opacity-100" />
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <div className="flex min-w-0 flex-1 items-center gap-2">
-                                                    <span className="rounded bg-emerald-100 px-2 py-1 font-mono text-[10px] font-medium text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
-                                                        {v.hora}
-                                                    </span>
-                                                    <span className="truncate font-medium text-emerald-800 dark:text-emerald-200">
-                                                        {v.cliente}
-                                                    </span>
-                                                </div>
-                                                <div className="text-right">
-                                                    <span className="font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                                                        ${Number(v.monto).toFixed(2)}
-                                                    </span>
-                                                    {v.referencia && (
-                                                        <div className="text-[8px] text-emerald-600 dark:text-emerald-400">
-                                                            Ref: {v.referencia}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            {v.detalles && (
-                                                <div className="mt-1 rounded bg-emerald-50 px-2 py-1 text-[9px] text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400">
-                                                    <span className="font-medium">Productos:</span> {v.detalles}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                            {!activeDetalle?.items_ventas?.filter((v) => v.tipo_pago === 'efectivo').length && (
-                                <div className="p-4 text-center text-xs text-emerald-600 italic dark:text-emerald-400">
-                                    No hay ventas en efectivo registradas
-                                </div>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card >
-                    <CardHeader>
-                        <CardTitle>Ventas</CardTitle>
-                        <CardDescription>
-                            Operaciones referentes a las Ventas
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Accordion type="single" collapsible defaultValue="plans">
-                            {items.map((item) => (
-                                <AccordionItem key={item.value} value={item.value}>
-                                    <AccordionTrigger>{item.trigger}</AccordionTrigger>
-                                    <AccordionContent>{item.content}</AccordionContent>
-                                </AccordionItem>
-                            ))}
-                        </Accordion>
-                    </CardContent>
-                </Card>
-
-                {/* Acordeon de Transacciones */}
-                <Card >
-                    <CardHeader>
-                        <CardTitle>Transacciones</CardTitle>
-                        <CardDescription>
-                            Operaciones referentes a las Transacciones
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Accordion type="single" collapsible defaultValue="plans">
-                            {items.map((item) => (
-                                <AccordionItem key={item.value} value={item.value}>
-                                    <AccordionTrigger>{item.trigger}</AccordionTrigger>
-                                    <AccordionContent>{item.content}</AccordionContent>
-                                </AccordionItem>
-                            ))}
-                        </Accordion>
-                    </CardContent>
-                </Card>
-
-                {/* Listado de VEntas */}
-                <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-slate-50/50 to-slate-100/30 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-xl dark:from-slate-950/30 dark:to-slate-900/20 dark:shadow-slate-900/20">
-                    <div className="absolute inset-0 bg-gradient-to-br from-slate-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                    <CardHeader className="relative border-b border-slate-200/50 bg-slate-50/30 dark:border-slate-800/50 dark:bg-slate-900/30">
-                        <div className="flex items-center justify-between">
-                            <CardTitle className="flex items-center gap-2 text-base">
-                                <div className="rounded-lg bg-slate-500/10 p-2">
-                                    <Receipt className="h-5 w-5 text-slate-600 dark:text-slate-400" />
-                                </div>
-                                <span className="bg-gradient-to-r from-slate-700 to-slate-800 bg-clip-text font-semibold dark:from-slate-300 dark:to-slate-400">
-                                    Ventas en {selectedMoneda}
-                                </span>
-                            </CardTitle>
-                            <div className="text-right">
-                                <div className="text-[9px] font-medium text-slate-600 dark:text-slate-400">
-                                    {activeDetalle?.items_ventas?.length || 0} operaciones
-                                </div>
-                                <div className="text-[9px] font-bold text-slate-600 dark:text-slate-400">
-                                    Total: $
-                                    {Number((activeDetalle?.ventas_efectivo || 0) + (activeDetalle?.ventas_transferencia || 0)).toFixed(2)}
-                                </div>
-                            </div>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="relative px-0">
-                        <TooltipProvider>
-                            <div className="scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800 max-h-96 divide-y divide-slate-200/30 overflow-y-auto dark:divide-slate-800/30">
-                                {activeDetalle?.items_ventas.map((v: ItemVenta, i: number) => (
-                                    <div
-                                        key={i}
-                                        className="group/item flex items-start gap-4 p-4 transition-all duration-200 hover:bg-slate-50/50 dark:hover:bg-slate-950/30"
-                                    >
-                                        <div className="mt-1 flex items-center gap-2">
-                                            <Switch
-                                                checked={data.confirmacion_transferencias.includes(v.id)}
-                                                onCheckedChange={() => toggleConfirmacionTransferencia(v.id)}
-                                                className="scale-75"
-                                            />
-                                            <div
-                                                className={`h-2 w-2 rounded-full transition-all duration-300 group-hover:opacity-100 ${v.tipo_pago === 'efectivo' ? 'bg-emerald-400' : 'bg-blue-400'
-                                                    }`}
-                                            />
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <div className="mb-2 flex items-center justify-between gap-3">
-                                                <div className="flex min-w-0 flex-1 items-center gap-3">
-                                                    <span className="rounded bg-slate-100 px-2 py-1 font-mono text-[10px] font-medium text-slate-500 dark:bg-slate-900/30 dark:text-slate-400">
-                                                        {v.hora}
-                                                    </span>
-                                                    <span className="truncate font-medium text-slate-700 dark:text-slate-300">
-                                                        {v.cliente}
-                                                    </span>
-                                                    <Badge
-                                                        variant={v.tipo_pago === 'efectivo' ? 'default' : 'outline'}
-                                                        className={`text-[9px] font-bold uppercase ${v.tipo_pago === 'efectivo'
-                                                            ? 'border-emerald-500 bg-emerald-500 text-white'
-                                                            : 'border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                                                            }`}
-                                                    >
-                                                        {v.tipo_pago}
-                                                    </Badge>
-                                                    {v.referencia && (
-                                                        <Badge variant="secondary" className="ml-2 h-4 px-1 text-[8px]">
-                                                            Ref: {v.referencia}
-                                                        </Badge>
-                                                    )}
-                                                </div>
-                                                <div className="text-right">
-                                                    <div className="font-mono text-lg font-bold text-slate-800 dark:text-slate-200">
-                                                        ${Number(v.monto).toFixed(2)}
-                                                    </div>
-                                                    <div className="text-xs text-slate-500 dark:text-slate-400">{selectedMoneda}</div>
-                                                </div>
-                                            </div>
-                                            {v.detalles && (
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <button className="text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300">
-                                                            <Info size={14} />
-                                                        </button>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent className="border-slate-700 bg-slate-900 text-slate-100 dark:border-slate-300 dark:bg-slate-100 dark:text-slate-900">
-                                                        <div className="max-w-xs">
-                                                            <p className="mb-1 text-xs font-medium">Detalles de productos:</p>
-                                                            <p className="text-xs">{v.detalles}</p>
-                                                        </div>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                                {(!activeDetalle || activeDetalle.items_ventas.length === 0) && (
-                                    <div className="p-8 text-center text-sm text-slate-500 italic dark:text-slate-400">
-                                        No hay ventas registradas
-                                    </div>
-                                )}
-                            </div>
-                        </TooltipProvider>
-                    </CardContent>
-                </Card>
 
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
                     {/* Columna Izquierda: Información del Sistema */}
@@ -1046,8 +777,9 @@ export default function Create({ calculos, fecha_apertura }: Props) {
                                                         className="scale-75"
                                                     />
                                                     <div
-                                                        className={`h-2 w-2 rounded-full transition-all duration-300 group-hover:opacity-100 ${v.tipo_pago === 'efectivo' ? 'bg-emerald-400' : 'bg-blue-400'
-                                                            }`}
+                                                        className={`h-2 w-2 rounded-full transition-all duration-300 group-hover:opacity-100 ${
+                                                            v.tipo_pago === 'efectivo' ? 'bg-emerald-400' : 'bg-blue-400'
+                                                        }`}
                                                     />
                                                 </div>
                                                 <div className="min-w-0 flex-1">
@@ -1061,10 +793,11 @@ export default function Create({ calculos, fecha_apertura }: Props) {
                                                             </span>
                                                             <Badge
                                                                 variant={v.tipo_pago === 'efectivo' ? 'default' : 'outline'}
-                                                                className={`text-[9px] font-bold uppercase ${v.tipo_pago === 'efectivo'
-                                                                    ? 'border-emerald-500 bg-emerald-500 text-white'
-                                                                    : 'border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                                                                    }`}
+                                                                className={`text-[9px] font-bold uppercase ${
+                                                                    v.tipo_pago === 'efectivo'
+                                                                        ? 'border-emerald-500 bg-emerald-500 text-white'
+                                                                        : 'border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                                                                }`}
                                                             >
                                                                 {v.tipo_pago}
                                                             </Badge>
