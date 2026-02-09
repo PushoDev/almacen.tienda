@@ -69,9 +69,13 @@ class CierreCajaController extends Controller
         // Calcular detalles usando método compartido
         $calculos = $this->obtenerDetallesCierre($user, $inicioTurno);
 
+        // Moneda de referencia (principal) para que total productos = total cobrado
+        $monedaRef = Moneda::where('principal', true)->first();
+
         // Preparar respuesta para Inertia con detalles mejorados de transferencias
         return Inertia::render('Cierres/Create', [
             'fecha_apertura' => $inicioTurno instanceof Carbon ? $inicioTurno->toDateTimeString() : $inicioTurno,
+            'moneda_referencia' => $monedaRef ? $monedaRef->codigo_moneda : 'USD',
             'calculos' => [
                 'inicio_turno' => $inicioTurno instanceof Carbon ? $inicioTurno->toDateTimeString() : $inicioTurno,
                 'saldo_inicial' => 0, // Implementar saldo inicial real si existe lógica
@@ -154,7 +158,7 @@ class CierreCajaController extends Controller
                 $notificationService = new NotificationService();
                 $datosNotificacion = $notificationService->prepararDatosCierreCaja($cierre);
                 $usuariosParaNotificar = $notificationService->getUsuariosParaNotificar($datosNotificacion);
-                
+
                 Notification::send($usuariosParaNotificar, new CierreCajaNotification($cierre));
             } catch (\Exception $e) {
                 \Log::error('Error enviando notificación de cierre de caja: ' . $e->getMessage());
@@ -239,13 +243,22 @@ class CierreCajaController extends Controller
                 'gastos' => 0,
                 'transferencias_salientes' => 0,
                 'transferencias_entrantes' => 0,
-                'saldo_calculado' => 0,
-                // Detalles específicos para la UI solicitada
-                'items_ventas' => [],
-                'items_gastos' => [],
-                'items_ingresos' => [],
-                'items_transferencias_salientes' => [],
-                'items_transferencias_entrantes' => [],
+                            'saldo_calculado' => 0,
+                            // Nuevos agregados para ventas
+                            'total_cantidad_productos_vendidos_en_moneda' => 0,
+                            'total_precios_unitarios_vendidos_en_moneda' => 0,
+                            'total_subtotales_vendidos_en_moneda' => 0,
+                            // Detalles específicos para la UI solicitada
+                            'items_ventas' => [],
+                            'items_gastos' => [],
+                            'items_ingresos' => [],
+                            'items_transferencias_salientes' => [],
+                            'items_transferencias_entrantes' => [],
+                            'productos_resumen' => [],
+                            'pagos_resumen' => [
+                                'efectivo' => 0,
+                                'transferencia' => 0,
+                            ],
             ];
         }
         // Asegurar que si hay monedas en pagos que no esten activas, se creen
@@ -257,26 +270,67 @@ class CierreCajaController extends Controller
             if (!isset($resumenPorMoneda[$codigo])) {
                 $resumenPorMoneda[$codigo] = $this->initMonedaStruct($codigo);
             }
-
-            // Construir detalle de productos para el tooltip
-            $detallesStr = "";
-            if ($pago->venta && $pago->venta->detalles) {
-                foreach ($pago->venta->detalles as $det) {
-                    $nombreProd = $det->producto ? $det->producto->nombre_producto : 'Producto';
-                    $detallesStr .= "{$det->cantidad}x {$nombreProd}, ";
-                }
-                $detallesStr = rtrim($detallesStr, ", ");
+            if (!isset($resumenPorMoneda[$codigo]['pagos_resumen'])) {
+                $resumenPorMoneda[$codigo]['pagos_resumen'] = ['efectivo' => 0, 'transferencia' => 0];
+            }
+            if (!isset($resumenPorMoneda[$codigo]['productos_resumen'])) {
+                $resumenPorMoneda[$codigo]['productos_resumen'] = [];
             }
 
+            // Construir detalle de productos; convertir a moneda de referencia (tasa temporal de la venta)
+            $detallesProductos = [];
+            if ($pago->venta && $pago->venta->detalles) {
+                $tasaVenta = (float) ($pago->venta->tasa_cambio_principal ?: 1);
+                foreach ($pago->venta->detalles as $det) {
+                    $nombre = $det->producto ? $det->producto->nombre_producto : 'Producto Desconocido';
+                    $marca = $det->producto && $det->producto->marca_producto
+                        ? trim($det->producto->marca_producto)
+                        : '';
+                    $modelo = $det->producto && $det->producto->modelo_producto
+                        ? trim($det->producto->modelo_producto)
+                        : '';
+                    $capacidad = $det->producto && $det->producto->capacidad_producto
+                        ? trim($det->producto->capacidad_producto)
+                        : '';
+                    $partes = array_filter([$nombre, $marca, $modelo, $capacidad]);
+                    $descripcionCompleta = implode(' ', $partes);
+                    $precioVenta = (float) $det->precio_venta;
+                    $subtotal = (float) $det->subtotal;
+                    // Equivalente en moneda de referencia (igual que monto_equivalente en pagos)
+                    $precioEquiv = $tasaVenta > 0 ? $precioVenta / $tasaVenta : $precioVenta;
+                    $subtotalEquiv = $tasaVenta > 0 ? $subtotal / $tasaVenta : $subtotal;
+                    $detallesProductos[] = [
+                        'cantidad' => (int) $det->cantidad,
+                        'descripcion' => $descripcionCompleta,
+                        'precio_unitario' => $precioVenta,
+                        'total' => $subtotal,
+                        'precio_equivalente' => round($precioEquiv, 2),
+                        'total_equivalente' => round($subtotalEquiv, 2),
+                    ];
+                }
+            }
+
+            // Destino del pago: cuenta (ej. ZELLE EDDY ALONSO) o cliente o efectivo
+            $destinoNombre = $pago->cuenta
+                ? $pago->cuenta->nombre_cuenta
+                : ($pago->cliente ? $pago->cliente->nombre_cliente : null);
             $itemVenta = [
                 'id' => 'p_' . $pago->id,
-                'monto' => $pago->monto,
+                'venta_id' => $pago->venta_id,
+                'monto' => (float) $pago->monto,
+                'monto_equivalente' => (float) ($pago->monto_equivalente ?? $pago->monto),
                 'tipo_pago' => $pago->tipo_pago,
                 'confirmada' => !empty($pago->referencia),
                 'referencia' => $pago->referencia,
                 'cliente' => $pago->cliente ? $pago->cliente->nombre_cliente : 'Mostrador',
                 'hora' => $pago->created_at->format('H:i'),
-                'detalles' => $detallesStr // <--- Nuevo campo para el tooltip
+                'detalles' => $detallesProductos,
+                // Para cierre tipo Excel: método, destino, tipo
+                'moneda_codigo' => $pago->moneda ? $pago->moneda->codigo_moneda : 'USD',
+                'via_pago' => $pago->via_pago ?? null,
+                'cuenta_nombre' => $pago->cuenta ? $pago->cuenta->nombre_cuenta : null,
+                'cliente_nombre' => $pago->cliente ? $pago->cliente->nombre_cliente : null,
+                'destino_nombre' => $destinoNombre,
             ];
 
             // Clasificar Efectivo vs Transferencia
@@ -285,16 +339,38 @@ class CierreCajaController extends Controller
             if ($pago->tipo_pago === 'efectivo') {
                 $resumenPorMoneda[$codigo]['ventas_efectivo'] += $pago->monto;
                 $resumenPorMoneda[$codigo]['saldo_calculado'] += $pago->monto;
+                $resumenPorMoneda[$codigo]['pagos_resumen']['efectivo'] += $pago->monto;
             } else {
                 $resumenPorMoneda[$codigo]['ventas_transferencia'] += $pago->monto;
+                $resumenPorMoneda[$codigo]['pagos_resumen']['transferencia'] += $pago->monto;
                 // Las transferencias NO suman al saldo físico de caja usualmente,
-                // pero SÍ suman al saldo contable del turno si el usuario es responsable de esa cuenta bancaria.
-                // IMPORTANTE: En tiendas, el cajero suele rendir solo el EFECTIVO.
-                // Las transferencias se confirman pero no se "entregan" físicamente.
-                // NO sumaremos transferencia al 'saldo_calculado' de la CAJA FÍSICA.
                 // Pero se mostrarán en el reporte.
                 $itemVenta['confirmada'] = !empty($pago->referencia);
             }
+
+            // --- AGREGAR A RESUMEN DE PRODUCTOS (SOLICITUD CLIENTE) ---
+            if ($pago->venta && $pago->venta->detalles) {
+                foreach ($pago->venta->detalles as $det) {
+                    $prodId = $det->producto_id;
+                    $nombreProd = $det->producto ? $det->producto->nombre_producto : 'Producto Desconocido';
+                    $marca = $det->producto ? $det->producto->marca_producto : '';
+
+                    if (!isset($resumenPorMoneda[$codigo]['productos_resumen'][$prodId])) {
+                        $resumenPorMoneda[$codigo]['productos_resumen'][$prodId] = [
+                            'id' => $prodId,
+                            'nombre' => $nombreProd,
+                            'detalles' => $marca,
+                            'cantidad' => 0,
+                            'precio' => (float) $det->precio_venta,
+                            'total' => 0,
+                        ];
+                    }
+
+                    $resumenPorMoneda[$codigo]['productos_resumen'][$prodId]['cantidad'] += $det->cantidad;
+                    $resumenPorMoneda[$codigo]['productos_resumen'][$prodId]['total'] += (float) $det->subtotal;
+                }
+            }
+
             $resumenPorMoneda[$codigo]['items_ventas'][] = $itemVenta;
         }
 
@@ -315,7 +391,7 @@ class CierreCajaController extends Controller
                     'origen' => $this->obtenerNombreOrigen($mov),
                     'destino' => $this->obtenerNombreDestino($mov),
                 ];
-                
+
                 // Resta a la caja
                 $resumenPorMoneda[$codigo]['gastos'] += $mov->monto;
                 $resumenPorMoneda[$codigo]['saldo_calculado'] -= $mov->monto; // Gasto sale de caja
@@ -331,7 +407,7 @@ class CierreCajaController extends Controller
                     'origen' => $this->obtenerNombreOrigen($mov),
                     'destino' => $this->obtenerNombreDestino($mov),
                 ];
-                
+
                 // Suma a la caja
                 $resumenPorMoneda[$codigo]['ingresos_extra'] += $mov->monto;
                 $resumenPorMoneda[$codigo]['saldo_calculado'] += $mov->monto;
@@ -341,13 +417,13 @@ class CierreCajaController extends Controller
             elseif ($mov->tipo_movimiento_id == 3) {
                 // Procesar transferencia con detalles bidireccionales
                 $detallesTransferencia = $this->procesarTransferenciaBidireccional($mov, $resumenPorMoneda, $user);
-                
+
                 // Actualizar saldos según corresponda
                 if ($detallesTransferencia['afecta_saldo_origen']) {
                     $resumenPorMoneda[$codigo]['transferencias_salientes'] += $mov->monto;
                     $resumenPorMoneda[$codigo]['saldo_calculado'] -= $mov->monto;
                 }
-                
+
                 // Agregar a la lista de transferencias salientes (el usuario siempre ve sus salidas)
                 $resumenPorMoneda[$codigo]['items_transferencias_salientes'][] = $detallesTransferencia['item_salida'];
             }
@@ -384,6 +460,13 @@ class CierreCajaController extends Controller
         ];
     }
 
+    /**
+     * Inicializa la estructura de moneda (helper interno)
+     */
+
+    /**
+     * Inicializa la estructura de moneda (helper interno)
+     */
     private function initMonedaStruct($codigo)
     {
         return [
@@ -396,6 +479,12 @@ class CierreCajaController extends Controller
             'transferencias_salientes' => 0,
             'transferencias_entrantes' => 0,
             'saldo_calculado' => 0,
+            // Resumen directo solicitado
+            'productos_resumen' => [],
+            'pagos_resumen' => [
+                'efectivo' => 0,
+                'transferencia' => 0,
+            ],
             'items_ventas' => [],
             'items_gastos' => [],
             'items_ingresos' => [],
@@ -441,16 +530,16 @@ class CierreCajaController extends Controller
     {
         $codigoOrigen = $movimiento->moneda ?? 'USD';
         $tasaCambio = $movimiento->tasa_cambio_aplicada ?? 1;
-        
+
         // Obtener información del origen
         $origenInfo = $this->obtenerInfoEntidad($movimiento, 'origen');
         $destinoInfo = $this->obtenerInfoEntidad($movimiento, 'destino');
-        
+
         // Determinar si afecta el saldo del usuario (solo si el origen es una cuenta suya)
         $afectaSaldoOrigen = false;
-        
+
         if ($movimiento->cuentaOrigen && $user !== null) {
-            $afectaSaldoOrigen = in_array($user->role, ['admin', 'moderador']) || 
+            $afectaSaldoOrigen = in_array($user->role, ['admin', 'moderador']) ||
                                 $user->cuentas()->where('id', $movimiento->cuentaOrigen->id)->exists();
         }
 
@@ -488,7 +577,7 @@ class CierreCajaController extends Controller
                 'hora' => $movimiento->created_at->format('H:i'),
                 'es_entrada' => true,
             ];
-            
+
             $resumenPorMoneda[$destinoInfo['moneda']]['items_transferencias_entrantes'][] = $itemEntrada;
             $resumenPorMoneda[$destinoInfo['moneda']]['transferencias_entrantes'] += $itemEntrada['monto_destino'];
         }
@@ -546,14 +635,14 @@ class CierreCajaController extends Controller
     {
         $origenInfo = $this->obtenerInfoEntidad($movimiento, 'origen');
         $destinoInfo = $this->obtenerInfoEntidad($movimiento, 'destino');
-        
+
         // Si ambas monedas son iguales, no hay conversión
         if ($origenInfo['moneda'] === $destinoInfo['moneda']) {
             return (float)$movimiento->monto;
         }
 
         $tasaCambio = $movimiento->tasa_cambio_aplicada ?? 1;
-        
+
         // Lógica de conversión según el tipo de entidades
         if ($origenInfo['tipo'] === 'cuenta' && $destinoInfo['tipo'] === 'cuenta') {
             // Cuenta → Cuenta: Dividir por tasa de la moneda destino
@@ -584,11 +673,11 @@ class CierreCajaController extends Controller
 
         foreach ($detalles as $monedaData) {
             $codigo = $monedaData['moneda'];
-            
+
             // Acumular totales
             $resumenTransferencias['total_salientes'] += $monedaData['transferencias_salientes'];
             $resumenTransferencias['total_entrantes'] += $monedaData['transferencias_entrantes'];
-            
+
             // Resumen por moneda
             if ($monedaData['transferencias_salientes'] > 0 || $monedaData['transferencias_entrantes'] > 0) {
                 $resumenTransferencias['por_moneda'][$codigo] = [
@@ -601,7 +690,7 @@ class CierreCajaController extends Controller
                     'items_entrantes' => $monedaData['items_transferencias_entrantes'] ?? []
                 ];
             }
-            
+
             // Agregar detalles completos para vista
             if (!empty($monedaData['items_transferencias_salientes'])) {
                 foreach ($monedaData['items_transferencias_salientes'] as $transferencia) {
@@ -623,7 +712,7 @@ class CierreCajaController extends Controller
                     ];
                 }
             }
-            
+
             // Agregar transferencias entrantes si existen
             if (!empty($monedaData['items_transferencias_entrantes'])) {
                 foreach ($monedaData['items_transferencias_entrantes'] as $transferencia) {

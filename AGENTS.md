@@ -4,7 +4,7 @@ This file contains guidelines and commands for agentic coding agents working in 
 
 ## Project Overview
 
-This is a Laravel 12 backend with React 19 frontend using Inertia.js for an inventory management system (almacen.tienda). The system handles products, sales, purchases, warehouses, vendors, and financial movements.
+Laravel 12 + React 19 + Inertia.js + Tailwind CSS v4 inventory management system (almacen.tienda). Manages products, sales, purchases, warehouses, vendors, and financial movements. Uses Pest PHP for testing, ESLint/Prettier for frontend formatting, Laravel Pint for backend.
 
 ## Build Commands
 
@@ -94,8 +94,9 @@ use App\Services\VentaService;
 - **Framework**: React 19 with TypeScript, Inertia.js, and Tailwind CSS
 - **UI Library**: Radix UI components with custom styling
 - **State Management**: React hooks and Inertia.js page props
-- **Formatter**: Prettier with 150 character line width, single quotes, semicolons
-- **Linter**: ESLint with React and TypeScript rules
+- **Notifications**: Sonner toast notifications
+- **Formatter**: Prettier with 150 character line width, single quotes, semicolons, 4-space tabs
+- **Linter**: ESLint with React and TypeScript rules, auto-fix enabled
 
 #### TypeScript Import Organization
 
@@ -173,6 +174,7 @@ resources/js/
 - Display validation errors using `InputError` components
 - Handle loading states with `processing` from `useForm`
 - Use toast notifications (Sonner) for user feedback
+- Import toast: `import { toast } from 'sonner';`
 
 ## Testing Guidelines
 
