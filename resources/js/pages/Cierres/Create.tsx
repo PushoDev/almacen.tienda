@@ -242,7 +242,8 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
     }));
     const totalVentasProductos = lineasProductos.reduce((s, r) => s + (r.total_equivalente ?? r.total ?? 0), 0);
 
-    // Por dónde entraron: agrupado primero por MONEDA, luego por método/destino. Totales en la moneda correspondiente (no sumar monedas).
+    // Por dónde entraron: agrupado primero por MONEDA, luego por método/destino.
+    // Incluye tanto el total en moneda original como el equivalente USD.
     const pagosPorMonedaYMetodo = todosItemsVentas.reduce(
         (acc, p) => {
             const moneda = p.moneda_codigo ?? 'USD';
@@ -255,16 +256,23 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
                 etiqueta = via ? (destino ? `${via} ${destino}` : via) : destino ? `Transferencia ${destino}` : `Transferencia ${moneda}`;
             }
             if (!acc[moneda]) acc[moneda] = {};
-            if (!acc[moneda][etiqueta]) acc[moneda][etiqueta] = { total: 0, cantidad: 0 };
+            if (!acc[moneda][etiqueta]) acc[moneda][etiqueta] = { total: 0, cantidad: 0, totalEquivalente: 0 };
             const monto = Number(p.monto) || 0;
+            const equivalente = Number(p.monto_equivalente) || monto;
             acc[moneda][etiqueta].total += monto;
+            acc[moneda][etiqueta].totalEquivalente += equivalente;
             acc[moneda][etiqueta].cantidad += 1;
             return acc;
         },
-        {} as Record<string, Record<string, { total: number; cantidad: number }>>,
+        {} as Record<string, Record<string, { total: number; cantidad: number; totalEquivalente: number }>>,
     );
 
     const monedasConPagos = Object.keys(pagosPorMonedaYMetodo).sort();
+
+    // Calcular total general USD de todos los pagos (suma de equivalentes)
+    const totalGeneralUSD = Object.values(pagosPorMonedaYMetodo).reduce((sumMoneda, metodos) => {
+        return sumMoneda + Object.values(metodos).reduce((sumMetodo, m) => sumMetodo + m.totalEquivalente, 0);
+    }, 0);
 
     // Calcular totales de transacciones del turno
     const totalGastos = (calculos.detalles ?? []).reduce((sum, d) => sum + (d.gastos ?? 0), 0);
@@ -509,6 +517,7 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
                                         const metodos = pagosPorMonedaYMetodo[moneda];
                                         const totalMoneda = Object.values(metodos).reduce((s, x) => s + (Number(x.total) || 0), 0);
                                         const cantidadMoneda = Object.values(metodos).reduce((s, x) => s + (x.cantidad || 0), 0);
+                                        const totalEquivalenteMoneda = Object.values(metodos).reduce((s, x) => s + (x.totalEquivalente || 0), 0);
                                         const detalleMoneda = calculos.detalles?.find((d) => d.moneda === moneda);
 
                                         return (
@@ -518,13 +527,15 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
                                                     <TableHeader>
                                                         <TableRow>
                                                             <TableHead>Método / Destino</TableHead>
-                                                            <TableHead className="w-24 text-center">Ventas</TableHead>
-                                                            <TableHead className="w-28 text-right">Total</TableHead>
+                                                            <TableHead className="w-20 text-center">Ventas</TableHead>
+                                                            <TableHead className="w-32 text-right">Total</TableHead>
+                                                            <TableHead className="w-32 text-right">Equiv. USD</TableHead>
                                                         </TableRow>
                                                     </TableHeader>
                                                     <TableBody>
                                                         {Object.entries(metodos).map(([etiqueta, data]) => {
                                                             const total = Number(data.total) || 0;
+                                                            const totalEquivalente = Number(data.totalEquivalente) || 0;
                                                             const operacionesPorMetodo = (detalleMoneda?.operaciones_detalle || []).filter((op) => {
                                                                 const via = (op.via_pago || '').toString().trim().toUpperCase();
                                                                 const destino = (op.destino_nombre || '').toString().trim();
@@ -537,8 +548,8 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
                                                                             ? `${via} ${destino}`
                                                                             : via
                                                                         : destino
-                                                                          ? `Transferencia ${destino}`
-                                                                          : `Transferencia ${moneda}`;
+                                                                            ? `Transferencia ${destino}`
+                                                                            : `Transferencia ${moneda}`;
                                                                 }
                                                                 return etiquetaMetodo === etiqueta;
                                                             });
@@ -554,11 +565,14 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
                                                                             </TableCell>
                                                                             <TableCell className="text-center font-mono">{data.cantidad}</TableCell>
                                                                             <TableCell className="text-right font-mono">{total.toFixed(2)}</TableCell>
+                                                                            <TableCell className="text-right font-mono font-medium text-green-600">
+                                                                                ${totalEquivalente.toFixed(2)}
+                                                                            </TableCell>
                                                                         </TableRow>
                                                                     </CollapsibleTrigger>
                                                                     <CollapsibleContent>
                                                                         <TableRow>
-                                                                            <TableCell colSpan={3} className="bg-muted/30 p-0">
+                                                                            <TableCell colSpan={4} className="bg-muted/30 p-0">
                                                                                 <div className="border-muted-foreground/20 ml-4 space-y-2 border-l-2 p-2">
                                                                                     {operacionesPorMetodo.length > 0 ? (
                                                                                         operacionesPorMetodo.map((operacion, idx) => (
@@ -615,6 +629,9 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
                                                             <TableCell className="text-center font-mono font-bold">{cantidadMoneda}</TableCell>
                                                             <TableCell className="text-right font-mono font-bold">
                                                                 {Number(totalMoneda).toFixed(2)} {moneda}
+                                                            </TableCell>
+                                                            <TableCell className="text-right font-mono font-bold text-green-600">
+                                                                ${totalEquivalenteMoneda.toFixed(2)}
                                                             </TableCell>
                                                         </TableRow>
                                                     </TableFooter>
@@ -676,8 +693,8 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
                         {/* Dialog de Detalle de Transacciones */}
                         <Dialog open={showTransaccionesDialog} onOpenChange={setShowTransaccionesDialog}>
                             <DialogTrigger asChild>
-                                <Button variant="outline" className="w-full gap-2">
-                                    <Eye className="h-4 w-4" /> Ver Detalle de Transacciones
+                                <Button variant="outline" className="w-full bg-blue-500 text-white hover:bg-blue-600 hover:text-white cursor-pointer gap-2">
+                                    <Eye className="h-4 w-4" /> Ver Detalle de los Movimientos
                                 </Button>
                             </DialogTrigger>
                             <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden p-0 sm:max-w-4xl">
