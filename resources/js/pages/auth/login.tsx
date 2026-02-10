@@ -96,7 +96,7 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                     <LiquidButton
                         tabIndex={4}
                         type="submit"
-                        className="border-sidebar cursor-pointer border-1 hover:animate-pulse dark:text-white"
+                        className="border-sidebar  cursor-pointer border-1 hover:animate-pulse dark:text-white"
                         disabled={processing}
                     >
                         {processing && <LoaderCircle className="h-4 w-4" />}

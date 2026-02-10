@@ -473,8 +473,8 @@ class CierreCajaController extends Controller
             'detalles' => array_values($resumenPorMoneda), // Array para frontend
             'ventas_efectivo' => round($ventasEfectivoTotalUSD, 2),
             'ventas_otros' => round($ventasOtrosTotalUSD, 2),
-            // Pasamos el saldo calculado total para pre-llenar los campos
-            'saldo_esperado_global' => round($saldoEsperadoTotalUSD, 2)
+            // Pasamos el saldo calculado total para pre-llenar los campos (nunca negativo)
+            'saldo_esperado_global' => max(0, round($saldoEsperadoTotalUSD, 2))
         ];
     }
 

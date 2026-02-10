@@ -18,7 +18,19 @@ import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem, PageProps } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
 import * as Collapsible from '@radix-ui/react-collapsible';
-import { Banknote, CheckCircle2, ChevronDown, ChevronRight, Receipt, Wallet } from 'lucide-react';
+import {
+    Banknote,
+    Calculator,
+    CheckCircle2,
+    ChevronDown,
+    ChevronRight,
+    CreditCard,
+    DollarSign,
+    Receipt,
+    ShoppingCart,
+    TrendingUp,
+    Wallet,
+} from 'lucide-react';
 import { useState } from 'react';
 import { toast, Toaster } from 'sonner';
 
@@ -208,22 +220,20 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
 
     // Todas las ventas de todas las monedas juntas
     const todosItemsVentas = (calculos.detalles ?? []).flatMap((d) => d.items_ventas ?? []);
+    // Contar ventas únicas (por venta_id) - no por número de pagos
+    const ventaIdsUnicos = new Set(todosItemsVentas.map((v: ItemVenta) => v.venta_id));
+    const totalVentasUnicas = ventaIdsUnicos.size;
 
-    // Lista plana de productos vendidos; usar total_equivalente para que coincida con total cobrado (moneda de referencia)
-    const lineasProductos = todosItemsVentas.flatMap((iv) =>
-        (iv.detalles ?? []).map((d) => {
-            const totalEquiv = Number((d as ProductItem).total_equivalente) || Number(d.total) || 0;
-            const precioEquiv = Number((d as ProductItem).precio_equivalente) || Number(d.precio_unitario) || 0;
-            return {
-                cantidad: Number(d.cantidad) || 0,
-                descripcion: d.descripcion ?? '',
-                precio_unitario: Number(d.precio_unitario) || 0,
-                total: Number(d.total) || 0,
-                precio_equivalente: precioEquiv,
-                total_equivalente: totalEquiv,
-            };
-        }),
-    );
+    // Lista plana de productos vendidos desde productos_resumen (ya deduplicado por venta)
+    const lineasProductosRaw = (calculos.detalles ?? []).flatMap((d) => Object.values(d.productos_resumen ?? {}));
+    const lineasProductos = lineasProductosRaw.map((p) => ({
+        cantidad: Number(p.cantidad) || 0,
+        descripcion: p.nombre + (p.detalles ? ` ${p.detalles}` : ''),
+        precio_unitario: Number(p.precio) || 0,
+        total: Number(p.total) || 0,
+        precio_equivalente: Number(p.precio) || 0,
+        total_equivalente: Number(p.total) || 0,
+    }));
     const totalVentasProductos = lineasProductos.reduce((s, r) => s + (r.total_equivalente ?? r.total ?? 0), 0);
 
     // Por dónde entraron: agrupado primero por MONEDA, luego por método/destino. Totales en la moneda correspondiente (no sumar monedas).
@@ -286,6 +296,119 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
                         className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 transform opacity-40"
                     />
                 </div>
+
+                {/* Widgets de Estadísticas */}
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                    <Card className="border-emerald-200 bg-emerald-500/5">
+                        <CardContent className="p-4">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
+                                    <ShoppingCart className="h-5 w-5 text-emerald-600" />
+                                </div>
+                                <div>
+                                    <p className="text-muted-foreground text-xs">Ventas Realizadas</p>
+                                    <p className="text-2xl font-bold">{totalVentasUnicas}</p>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="border-blue-200 bg-blue-500/5">
+                        <CardContent className="p-4">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
+                                    <DollarSign className="h-5 w-5 text-blue-600" />
+                                </div>
+                                <div>
+                                    <p className="text-muted-foreground text-xs">Total Efectivo</p>
+                                    <p className="text-2xl font-bold">${Number(calculos.ventas_efectivo || 0).toFixed(2)}</p>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="border-purple-200 bg-purple-500/5">
+                        <CardContent className="p-4">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100">
+                                    <CreditCard className="h-5 w-5 text-purple-600" />
+                                </div>
+                                <div>
+                                    <p className="text-muted-foreground text-xs">Transferencias</p>
+                                    <p className="text-2xl font-bold">${Number(calculos.ventas_otros || 0).toFixed(2)}</p>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="border-amber-200 bg-amber-500/5">
+                        <CardContent className="p-4">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100">
+                                    <Banknote className="h-5 w-5 text-amber-600" />
+                                </div>
+                                <div>
+                                    <p className="text-muted-foreground text-xs">Monedas Usadas</p>
+                                    <p className="text-2xl font-bold">{monedasConPagos.length}</p>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Widget de Resumen Global */}
+                <Card className="border-slate-200 bg-gradient-to-r from-slate-500/5 to-slate-100/50">
+                    <CardContent className="p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100">
+                                    <Calculator className="h-6 w-6 text-slate-600" />
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <p className="text-muted-foreground text-sm">Saldo Esperado en Caja</p>
+                                        <div className="group relative">
+                                            <svg
+                                                className="text-muted-foreground/60 h-4 w-4 shrink-0 cursor-help"
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                width="24"
+                                                height="24"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                strokeWidth="2"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                            >
+                                                <circle cx="12" cy="12" r="10" />
+                                                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                                                <path d="M12 17h.01" />
+                                            </svg>
+                                            <div className="invisible absolute bottom-full left-1/2 z-50 mb-2 w-64 translate-x-[-50%] rounded-md bg-slate-800 p-3 text-xs text-white opacity-0 transition-all group-hover:visible group-hover:opacity-100">
+                                                Es el total de dinero que debería haber en caja según las ventas y movimientos registrados. Incluye
+                                                ventas en efectivo + ingresos extras - gastos - transferencias.
+                                                <div className="absolute top-full left-1/2 h-2 w-2 translate-x-[-50%] bg-slate-800"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p className="text-3xl font-bold text-slate-700">${Number(calculos.saldo_esperado_global || 0).toFixed(2)}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-6 text-sm">
+                                <div className="flex items-center gap-2">
+                                    <TrendingUp className="h-4 w-4 text-emerald-600" />
+                                    <span className="text-muted-foreground">Total Productos:</span>
+                                    <span className="font-semibold">{lineasProductos.length}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <CreditCard className="h-4 w-4 text-blue-600" />
+                                    <span className="text-muted-foreground">Métodos Pago:</span>
+                                    <span className="font-semibold">{monedasConPagos.length}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
 
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
                     {/* Columna Izquierda: Información del Sistema */}

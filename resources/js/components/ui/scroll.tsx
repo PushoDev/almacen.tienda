@@ -2,61 +2,61 @@
 
 import * as React from 'react';
 import {
-  motion,
-  useScroll,
-  useSpring,
-  type HTMLMotionProps,
+    motion,
+    useScroll,
+    useSpring,
+    type HTMLMotionProps,
 } from 'motion/react';
 
 import { cn } from '@/lib/utils';
 
 type ScrollProgressProps = React.ComponentProps<'div'> & {
-  progressProps?: HTMLMotionProps<'div'>;
+    progressProps?: HTMLMotionProps<'div'>;
 };
 
 function ScrollProgress({
-  ref,
-  className,
-  children,
-  progressProps,
-  ...props
+    ref,
+    className,
+    children,
+    progressProps,
+    ...props
 }: ScrollProgressProps) {
-  const containerRef = React.useRef<HTMLDivElement | null>(null);
-  React.useImperativeHandle(ref, () => containerRef.current as HTMLDivElement);
+    const containerRef = React.useRef<HTMLDivElement | null>(null);
+    React.useImperativeHandle(ref, () => containerRef.current as HTMLDivElement);
 
-  const { scrollYProgress } = useScroll(
-    children ? { container: containerRef } : undefined,
-  );
+    const { scrollYProgress } = useScroll(
+        children ? { container: containerRef } : undefined,
+    );
 
-  const scaleX = useSpring(scrollYProgress, {
-    stiffness: 250,
-    damping: 40,
-    bounce: 0,
-  });
+    const scaleX = useSpring(scrollYProgress, {
+        stiffness: 250,
+        damping: 40,
+        bounce: 0,
+    });
 
-  return (
-    <>
-      <motion.div
-        data-slot="scroll-progress"
-        {...progressProps}
-        style={{ scaleX }}
-        className={cn(
-          'fixed z-50 top-0 inset-x-0 h-1 dark:bg-red-400 bg-blue-600 origin-left',
-          progressProps?.className,
-        )}
-      />
-      {containerRef && (
-        <div
-          ref={containerRef}
-          data-slot="scroll-progress-container"
-          className={cn('overflow-y-auto h-full', className)}
-          {...props}
-        >
-          {children}
-        </div>
-      )}
-    </>
-  );
+    return (
+        <>
+            <motion.div
+                data-slot="scroll-progress"
+                {...progressProps}
+                style={{ scaleX }}
+                className={cn(
+                    'fixed z-50 top-0 inset-x-0 h-1 bg-sidebar-accent origin-left',
+                    progressProps?.className,
+                )}
+            />
+            {containerRef && (
+                <div
+                    ref={containerRef}
+                    data-slot="scroll-progress-container"
+                    className={cn('overflow-y-auto h-full', className)}
+                    {...props}
+                >
+                    {children}
+                </div>
+            )}
+        </>
+    );
 }
 
 export { ScrollProgress, type ScrollProgressProps };
