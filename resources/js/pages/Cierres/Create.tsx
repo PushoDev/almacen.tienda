@@ -17,9 +17,14 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem, PageProps } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
-import { Banknote, CheckCircle2, Receipt, Wallet } from 'lucide-react';
+import * as Collapsible from '@radix-ui/react-collapsible';
+import { Banknote, CheckCircle2, ChevronDown, ChevronRight, Receipt, Wallet } from 'lucide-react';
 import { useState } from 'react';
 import { toast, Toaster } from 'sonner';
+
+const CollapsibleRoot = Collapsible.Root;
+const CollapsibleTrigger = Collapsible.CollapsibleTrigger;
+const CollapsibleContent = Collapsible.CollapsibleContent;
 
 interface Props extends PageProps {
     calculos: Calculos;
@@ -34,6 +39,39 @@ interface ProductItem {
     total: number;
     precio_equivalente?: number;
     total_equivalente?: number;
+}
+
+interface OperacionDetaile {
+    venta_id: string;
+    pago_id: number;
+    cliente: string;
+    monto: number;
+    hora: string;
+    tipo_pago: string;
+    via_pago?: string | null;
+    cuenta_nombre?: string | null;
+    destino_nombre?: string | null;
+    productos: ProductItem[];
+}
+
+interface DetalleMoneda {
+    moneda: string;
+    tasa_cambio: number;
+    ventas_efectivo: number;
+    ventas_transferencia: number;
+    ingresos_extra: number;
+    gastos: number;
+    transferencias_salientes: number;
+    transferencias_entrantes: number;
+    saldo_calculado: number;
+    items_ventas: ItemVenta[];
+    items_gastos: ItemMovimiento[];
+    items_ingresos: ItemMovimiento[];
+    items_transferencias: ItemMovimiento[];
+    items_transferencias_salientes: TransferenciaItem[];
+    items_transferencias_entrantes: TransferenciaItem[];
+    productos_resumen: Record<string, { id: number; nombre: string; detalles: string; cantidad: number; precio: number; total: number }>;
+    operaciones_detalle: OperacionDetaile[];
 }
 
 interface ItemVenta {
@@ -198,7 +236,7 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
             if (p.tipo_pago === 'efectivo') {
                 etiqueta = moneda;
             } else {
-                etiqueta = via ? (destino ? `${via} ${destino}` : via) : (destino ? `Transferencia ${destino}` : `Transferencia ${moneda}`);
+                etiqueta = via ? (destino ? `${via} ${destino}` : via) : destino ? `Transferencia ${destino}` : `Transferencia ${moneda}`;
             }
             if (!acc[moneda]) acc[moneda] = {};
             if (!acc[moneda][etiqueta]) acc[moneda][etiqueta] = { total: 0, cantidad: 0 };
@@ -315,7 +353,7 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
                             </CardContent>
                         </Card>
 
-                        {/* Por dónde entraron: una tabla por moneda (no se suman monedas distintas) */}
+                        {/* Por dónde entraron: una tabla por moneda con desglose de operaciones */}
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
@@ -332,41 +370,110 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
                                         const metodos = pagosPorMonedaYMetodo[moneda];
                                         const totalMoneda = Object.values(metodos).reduce((s, x) => s + (Number(x.total) || 0), 0);
                                         const cantidadMoneda = Object.values(metodos).reduce((s, x) => s + (x.cantidad || 0), 0);
+                                        const detalleMoneda = calculos.detalles?.find((d) => d.moneda === moneda);
+
                                         return (
                                             <div key={moneda} className="space-y-2">
-                                                <h4 className="text-sm font-semibold text-muted-foreground">
-                                                    {moneda}
-                                                </h4>
+                                                <h4 className="text-muted-foreground text-sm font-semibold">{moneda}</h4>
                                                 <Table>
                                                     <TableHeader>
                                                         <TableRow>
                                                             <TableHead>Método / Destino</TableHead>
-                                                            <TableHead className="text-center w-24">Ventas</TableHead>
-                                                            <TableHead className="text-right w-28">Total</TableHead>
+                                                            <TableHead className="w-24 text-center">Ventas</TableHead>
+                                                            <TableHead className="w-28 text-right">Total</TableHead>
                                                         </TableRow>
                                                     </TableHeader>
                                                     <TableBody>
                                                         {Object.entries(metodos).map(([etiqueta, data]) => {
                                                             const total = Number(data.total) || 0;
+                                                            const operacionesPorMetodo = (detalleMoneda?.operaciones_detalle || []).filter((op) => {
+                                                                const via = (op.via_pago || '').toString().trim().toUpperCase();
+                                                                const destino = (op.destino_nombre || '').toString().trim();
+                                                                let etiquetaMetodo: string;
+                                                                if (op.tipo_pago === 'efectivo') {
+                                                                    etiquetaMetodo = moneda;
+                                                                } else {
+                                                                    etiquetaMetodo = via
+                                                                        ? destino
+                                                                            ? `${via} ${destino}`
+                                                                            : via
+                                                                        : destino
+                                                                          ? `Transferencia ${destino}`
+                                                                          : `Transferencia ${moneda}`;
+                                                                }
+                                                                return etiquetaMetodo === etiqueta;
+                                                            });
+
                                                             return (
-                                                                <TableRow key={`${moneda}-${etiqueta}`}>
-                                                                    <TableCell className="font-medium">{etiqueta}</TableCell>
-                                                                    <TableCell className="text-center font-mono">
-                                                                        {data.cantidad}
-                                                                    </TableCell>
-                                                                    <TableCell className="text-right font-mono">
-                                                                        {total.toFixed(2)}
-                                                                    </TableCell>
-                                                                </TableRow>
+                                                                <CollapsibleRoot key={`${moneda}-${etiqueta}`}>
+                                                                    <CollapsibleTrigger asChild>
+                                                                        <TableRow className="hover:bg-muted/50 cursor-pointer">
+                                                                            <TableCell className="flex items-center gap-2 font-medium">
+                                                                                <ChevronDown className="collapsible-trigger-icon h-4 w-4 transition-transform" />
+                                                                                <ChevronRight className="collapsible-trigger-icon[!hidden] h-4 w-4 transition-transform" />
+                                                                                {etiqueta}
+                                                                            </TableCell>
+                                                                            <TableCell className="text-center font-mono">{data.cantidad}</TableCell>
+                                                                            <TableCell className="text-right font-mono">{total.toFixed(2)}</TableCell>
+                                                                        </TableRow>
+                                                                    </CollapsibleTrigger>
+                                                                    <CollapsibleContent>
+                                                                        <TableRow>
+                                                                            <TableCell colSpan={3} className="bg-muted/30 p-0">
+                                                                                <div className="border-muted-foreground/20 ml-4 space-y-2 border-l-2 p-2">
+                                                                                    {operacionesPorMetodo.length > 0 ? (
+                                                                                        operacionesPorMetodo.map((operacion, idx) => (
+                                                                                            <div
+                                                                                                key={idx}
+                                                                                                className="bg-card space-y-1 rounded-md border p-2 text-sm shadow-sm"
+                                                                                            >
+                                                                                                <div className="flex items-center justify-between font-medium">
+                                                                                                    <span>
+                                                                                                        Venta #{operacion.venta_id} -{' '}
+                                                                                                        {operacion.cliente}
+                                                                                                    </span>
+                                                                                                    <span className="font-mono">
+                                                                                                        ${Number(operacion.monto).toFixed(2)} -{' '}
+                                                                                                        {operacion.hora}
+                                                                                                    </span>
+                                                                                                </div>
+                                                                                                {(operacion.productos?.length ?? 0) > 0 && (
+                                                                                                    <div className="text-muted-foreground ml-4 space-y-1">
+                                                                                                        {operacion.productos?.map((prod, pidx) => (
+                                                                                                            <div
+                                                                                                                key={pidx}
+                                                                                                                className="flex justify-between text-xs"
+                                                                                                            >
+                                                                                                                <span>
+                                                                                                                    {prod.cantidad}x{' '}
+                                                                                                                    {prod.descripcion}
+                                                                                                                </span>
+                                                                                                                <span className="font-mono">
+                                                                                                                    ${Number(prod.total).toFixed(2)}
+                                                                                                                </span>
+                                                                                                            </div>
+                                                                                                        ))}
+                                                                                                    </div>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        ))
+                                                                                    ) : (
+                                                                                        <p className="text-muted-foreground px-2 text-xs italic">
+                                                                                            Sin detalle de operaciones
+                                                                                        </p>
+                                                                                    )}
+                                                                                </div>
+                                                                            </TableCell>
+                                                                        </TableRow>
+                                                                    </CollapsibleContent>
+                                                                </CollapsibleRoot>
                                                             );
                                                         })}
                                                     </TableBody>
                                                     <TableFooter>
                                                         <TableRow>
                                                             <TableCell className="font-bold">Total {moneda}</TableCell>
-                                                            <TableCell className="text-center font-mono font-bold">
-                                                                {cantidadMoneda}
-                                                            </TableCell>
+                                                            <TableCell className="text-center font-mono font-bold">{cantidadMoneda}</TableCell>
                                                             <TableCell className="text-right font-mono font-bold">
                                                                 {Number(totalMoneda).toFixed(2)} {moneda}
                                                             </TableCell>

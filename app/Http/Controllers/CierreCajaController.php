@@ -259,28 +259,21 @@ class CierreCajaController extends Controller
                                 'efectivo' => 0,
                                 'transferencia' => 0,
                             ],
+                            'operaciones_detalle' => [],
             ];
         }
         // Asegurar que si hay monedas en pagos que no esten activas, se creen
         // (Aunque el sistema no debería permitirlo, es defensivo)
 
         // --- PROCESAR PAGOS DE VENTAS ---
-        foreach ($pagos as $pago) {
-            $codigo = $pago->moneda ? $pago->moneda->codigo_moneda : 'USD';
-            if (!isset($resumenPorMoneda[$codigo])) {
-                $resumenPorMoneda[$codigo] = $this->initMonedaStruct($codigo);
-            }
-            if (!isset($resumenPorMoneda[$codigo]['pagos_resumen'])) {
-                $resumenPorMoneda[$codigo]['pagos_resumen'] = ['efectivo' => 0, 'transferencia' => 0];
-            }
-            if (!isset($resumenPorMoneda[$codigo]['productos_resumen'])) {
-                $resumenPorMoneda[$codigo]['productos_resumen'] = [];
-            }
+        $ventasProcesadas = []; // Trackear ventas ya procesadas para evitar duplicados de productos
+        $ventasConDetalles = []; // Cachear detalles de productos por venta_id
 
-            // Construir detalle de productos; convertir a moneda de referencia (tasa temporal de la venta)
-            $detallesProductos = [];
-            if ($pago->venta && $pago->venta->detalles) {
+        // Primero, construir cache de detalles de productos por venta
+        foreach ($pagos as $pago) {
+            if ($pago->venta && $pago->venta->detalles && !isset($ventasConDetalles[$pago->venta_id])) {
                 $tasaVenta = (float) ($pago->venta->tasa_cambio_principal ?: 1);
+                $detallesProductos = [];
                 foreach ($pago->venta->detalles as $det) {
                     $nombre = $det->producto ? $det->producto->nombre_producto : 'Producto Desconocido';
                     $marca = $det->producto && $det->producto->marca_producto
@@ -296,7 +289,6 @@ class CierreCajaController extends Controller
                     $descripcionCompleta = implode(' ', $partes);
                     $precioVenta = (float) $det->precio_venta;
                     $subtotal = (float) $det->subtotal;
-                    // Equivalente en moneda de referencia (igual que monto_equivalente en pagos)
                     $precioEquiv = $tasaVenta > 0 ? $precioVenta / $tasaVenta : $precioVenta;
                     $subtotalEquiv = $tasaVenta > 0 ? $subtotal / $tasaVenta : $subtotal;
                     $detallesProductos[] = [
@@ -308,7 +300,23 @@ class CierreCajaController extends Controller
                         'total_equivalente' => round($subtotalEquiv, 2),
                     ];
                 }
+                $ventasConDetalles[$pago->venta_id] = $detallesProductos;
             }
+        }
+
+        foreach ($pagos as $pago) {
+            $codigo = $pago->moneda ? $pago->moneda->codigo_moneda : 'USD';
+            if (!isset($resumenPorMoneda[$codigo])) {
+                $resumenPorMoneda[$codigo] = $this->initMonedaStruct($codigo);
+            }
+            if (!isset($resumenPorMoneda[$codigo]['pagos_resumen'])) {
+                $resumenPorMoneda[$codigo]['pagos_resumen'] = ['efectivo' => 0, 'transferencia' => 0];
+            }
+            if (!isset($resumenPorMoneda[$codigo]['productos_resumen'])) {
+                $resumenPorMoneda[$codigo]['productos_resumen'] = [];
+            }
+
+            $detallesProductos = $ventasConDetalles[$pago->venta_id] ?? [];
 
             // Destino del pago: cuenta (ej. ZELLE EDDY ALONSO) o cliente o efectivo
             $destinoNombre = $pago->cuenta
@@ -325,7 +333,6 @@ class CierreCajaController extends Controller
                 'cliente' => $pago->cliente ? $pago->cliente->nombre_cliente : 'Mostrador',
                 'hora' => $pago->created_at->format('H:i'),
                 'detalles' => $detallesProductos,
-                // Para cierre tipo Excel: método, destino, tipo
                 'moneda_codigo' => $pago->moneda ? $pago->moneda->codigo_moneda : 'USD',
                 'via_pago' => $pago->via_pago ?? null,
                 'cuenta_nombre' => $pago->cuenta ? $pago->cuenta->nombre_cuenta : null,
@@ -334,8 +341,6 @@ class CierreCajaController extends Controller
             ];
 
             // Clasificar Efectivo vs Transferencia
-            // Si el pago va a una Cuenta, revisar si la cuenta es 'Caja Física' (tipo efectivo) o Banco.
-            // Simplificación actual: Basado en 'tipo_pago' del registro.
             if ($pago->tipo_pago === 'efectivo') {
                 $resumenPorMoneda[$codigo]['ventas_efectivo'] += $pago->monto;
                 $resumenPorMoneda[$codigo]['saldo_calculado'] += $pago->monto;
@@ -343,13 +348,26 @@ class CierreCajaController extends Controller
             } else {
                 $resumenPorMoneda[$codigo]['ventas_transferencia'] += $pago->monto;
                 $resumenPorMoneda[$codigo]['pagos_resumen']['transferencia'] += $pago->monto;
-                // Las transferencias NO suman al saldo físico de caja usualmente,
-                // Pero se mostrarán en el reporte.
                 $itemVenta['confirmada'] = !empty($pago->referencia);
             }
 
-            // --- AGREGAR A RESUMEN DE PRODUCTOS (SOLICITUD CLIENTE) ---
-            if ($pago->venta && $pago->venta->detalles) {
+            // --- AGREGAR A OPERACIONES DETALLE (DESGLOSE POR MÉTODO DE PAGO) ---
+            $resumenPorMoneda[$codigo]['operaciones_detalle'][] = [
+                'venta_id' => $pago->venta_id,
+                'pago_id' => $pago->id,
+                'cliente' => $pago->cliente ? $pago->cliente->nombre_cliente : 'Mostrador',
+                'monto' => (float) $pago->monto,
+                'hora' => $pago->created_at->format('H:i'),
+                'tipo_pago' => $pago->tipo_pago,
+                'via_pago' => $pago->via_pago ?? null,
+                'cuenta_nombre' => $pago->cuenta ? $pago->cuenta->nombre_cuenta : null,
+                'destino_nombre' => $destinoNombre,
+                'productos' => $detallesProductos,
+            ];
+
+            // --- AGREGAR A RESUMEN DE PRODUCTOS (UNA SOLA VEZ POR VENTA) ---
+            if ($pago->venta && $pago->venta->detalles && !in_array($pago->venta_id, $ventasProcesadas)) {
+                $ventasProcesadas[] = $pago->venta_id;
                 foreach ($pago->venta->detalles as $det) {
                     $prodId = $det->producto_id;
                     $nombreProd = $det->producto ? $det->producto->nombre_producto : 'Producto Desconocido';
@@ -490,6 +508,7 @@ class CierreCajaController extends Controller
             'items_ingresos' => [],
             'items_transferencias_salientes' => [],
             'items_transferencias_entrantes' => [],
+            'operaciones_detalle' => [],
         ];
     }
 
