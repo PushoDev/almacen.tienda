@@ -270,44 +270,89 @@ export default function Show({ cierre }: Props) {
           </Card>
         </div>
 
-        {/* Resumen global */}
-        <Card className="border-slate-200 bg-gradient-to-r from-slate-500/5 to-slate-100/50">
-          <CardContent className="p-4">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100">
-                  <Calculator className="h-6 w-6 text-slate-600" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-muted-foreground text-sm">Saldo Esperado en Caja</p>
-                  </div>
-                  <p className="text-3xl font-bold text-slate-700">${Number(calculos.saldo_esperado_global || 0).toFixed(2)}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-6 text-sm">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4 text-emerald-600" />
-                  <span className="text-muted-foreground">Total Productos:</span>
-                  <span className="font-semibold">{lineasProductos.length}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CreditCard className="h-4 w-4 text-blue-600" />
-                  <span className="text-muted-foreground">Métodos Pago:</span>
-                  <span className="font-semibold">{monedasConPagos.length}</span>
+        {/* Resumen global + Auditoría Final */}
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          {/* Auditoría Final */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Wallet className="h-4 w-4 text-slate-600" />
+                <span>Auditoría Final</span>
+              </CardTitle>
+              <div className="px-2 text-[9px] font-bold uppercase text-slate-500">{cierre.estado}</div>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="rounded-lg border p-2.5 bg-slate-50">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold">Saldo Inicial</span>
+                  <span className="font-mono text-sm font-semibold">{Number(calculos.saldo_inicial || 0).toFixed(2)}</span>
                 </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+              <div className="rounded-lg border p-2.5 bg-slate-50">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold">Esperado</span>
+                  <span className="font-mono text-sm font-semibold">{Number(calculos.saldo_esperado_global || 0).toFixed(2)}</span>
+                </div>
+              </div>
+              <div className="rounded-lg border p-2.5 bg-slate-50">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold">Contado</span>
+                  <span className="font-mono text-sm font-semibold">{Number(cierre.saldo_contado || 0).toFixed(2)}</span>
+                </div>
+              </div>
+              <div className={`rounded-lg border p-2.5 ${Number(cierre.diferencia || 0) === 0 ? 'border-emerald-300 bg-emerald-50' : 'border-rose-300 bg-rose-50'}`}>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black">Diferencia</span>
+                  <span className={`font-mono text-sm font-bold ${Number(cierre.diferencia || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {Number(cierre.diferencia || 0) >= 0 ? '+' : ''}{Number(cierre.diferencia || 0).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+              {cierre.observaciones && (
+                <div className="border-t border-slate-200 pt-2 mt-2">
+                  <p className="text-[10px] font-bold uppercase text-slate-500 mb-1">Notas</p>
+                  <p className="text-xs italic text-slate-600">{cierre.observaciones}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-          <div className="space-y-6 lg:col-span-8">
+          {/* Saldo Esperado */}
+          <Card className="border-slate-200 bg-gradient-to-r from-slate-500/5 to-slate-100/50">
+            <CardContent className="p-4">
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100">
+                    <Calculator className="h-5 w-5 text-slate-600" />
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Saldo Esperado en Caja</p>
+                    <p className="text-2xl font-bold text-slate-700">${Number(calculos.saldo_esperado_global || 0).toFixed(2)}</p>
+                  </div>
+                </div>
+                <div className="border-t border-slate-200 pt-2 mt-2">
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="text-muted-foreground">Total Productos:</span>
+                    <span className="font-semibold">{lineasProductos.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Métodos Pago:</span>
+                    <span className="font-semibold">{monedasConPagos.length}</span>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Detalles del Cierre */}
+        <div className="grid grid-cols-1 gap-6">
+          <div className="space-y-6">
             {/* Tabla Ventas (productos) */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Receipt className="h-5 w-5" /> Ventas</CardTitle>
-                <CardDescription>Productos vendidos en el turno. Importes en {moneda_referencia}.</CardDescription>
+                <CardTitle className="flex items-center gap-2"><Receipt className="h-5 w-5" /> Ventas del Día</CardTitle>
+                <CardDescription>Productos vendidos el {new Date(cierre.fecha_apertura).toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}. Importes en {moneda_referencia}.</CardDescription>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -451,45 +496,172 @@ export default function Show({ cierre }: Props) {
               </CardContent>
             </Card>
 
-            <div className="grid grid-cols-3 gap-2">
-              <Card
-                className="cursor-pointer border-green-200 bg-green-500/5 transition-colors hover:bg-green-500/10"
-                onClick={() => setShowTransaccionesDialog(true)}
-              >
-                <CardContent className="p-3 text-center">
-                  <ArrowDown className="mx-auto mb-1 h-5 w-5 text-green-600" />
-                  <p className="text-muted-foreground text-[10px] uppercase">Ingresos</p>
-                  <p className="text-lg font-bold text-green-700">${Number(totalIngresos).toFixed(2)}</p>
-                  <p className="text-muted-foreground text-[9px]">{todosIngresos.length} oper.</p>
-                </CardContent>
-              </Card>
+            {/* Movimientos Financieros */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calculator className="h-5 w-5" /> Movimientos Financieros
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-8">
+                {/* Gastos */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 pb-3 border-b">
+                    <ArrowUp className="h-5 w-5 text-red-600" />
+                    <h3 className="font-semibold text-base">Gastos</h3>
+                    <span className="ml-auto inline-flex items-center rounded-full bg-red-100 px-3 py-1 text-sm font-medium text-red-700">
+                      {todosGastos.length} operación{todosGastos.length !== 1 ? 'es' : ''}
+                    </span>
+                  </div>
+                  {todosGastos.length > 0 ? (
+                    <div className="rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-red-50/50">
+                            <TableHead className="w-16 text-red-700">Hora</TableHead>
+                            <TableHead className="text-red-700">Descripción</TableHead>
+                            <TableHead className="w-24 text-right text-red-700">Monto</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {todosGastos.map((item: any, idx: number) => (
+                            <TableRow key={idx}>
+                              <TableCell className="font-mono text-xs">{item.hora}</TableCell>
+                              <TableCell className="text-sm">{item.desc}</TableCell>
+                              <TableCell className="text-right font-mono font-medium text-red-600">
+                                -${Number(item.monto).toFixed(2)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                        <TableFooter>
+                          <TableRow className="bg-red-50">
+                            <TableCell colSpan={2} className="font-bold text-red-700">
+                              Total Gastos
+                            </TableCell>
+                            <TableCell className="text-right font-bold text-red-600">
+                              ${Number(totalGastos).toFixed(2)}
+                            </TableCell>
+                          </TableRow>
+                        </TableFooter>
+                      </Table>
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground py-6 text-center italic text-sm">
+                      No hay gastos registrados en este turno.
+                    </p>
+                  )}
+                </div>
 
-              <Card
-                className="cursor-pointer border-red-200 bg-red-500/5 transition-colors hover:bg-red-500/10"
-                onClick={() => setShowTransaccionesDialog(true)}
-              >
-                <CardContent className="p-3 text-center">
-                  <ArrowUp className="mx-auto mb-1 h-5 w-5 text-red-600" />
-                  <p className="text-muted-foreground text-[10px] uppercase">Gastos</p>
-                  <p className="text-lg font-bold text-red-700">${Number(totalGastos).toFixed(2)}</p>
-                  <p className="text-muted-foreground text-[9px]">{todosGastos.length} oper.</p>
-                </CardContent>
-              </Card>
+                {/* Ingresos */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 pb-3 border-b">
+                    <ArrowDown className="h-5 w-5 text-green-600" />
+                    <h3 className="font-semibold text-base">Ingresos</h3>
+                    <span className="ml-auto inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-700">
+                      {todosIngresos.length} operación{todosIngresos.length !== 1 ? 'es' : ''}
+                    </span>
+                  </div>
+                  {todosIngresos.length > 0 ? (
+                    <div className="rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-green-50/50">
+                            <TableHead className="w-16 text-green-700">Hora</TableHead>
+                            <TableHead className="text-green-700">Descripción</TableHead>
+                            <TableHead className="w-24 text-right text-green-700">Monto</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {todosIngresos.map((item: any, idx: number) => (
+                            <TableRow key={idx}>
+                              <TableCell className="font-mono text-xs">{item.hora}</TableCell>
+                              <TableCell className="text-sm">{item.desc}</TableCell>
+                              <TableCell className="text-right font-mono font-medium text-green-600">
+                                +${Number(item.monto).toFixed(2)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                        <TableFooter>
+                          <TableRow className="bg-green-50">
+                            <TableCell colSpan={2} className="font-bold text-green-700">
+                              Total Ingresos
+                            </TableCell>
+                            <TableCell className="text-right font-bold text-green-600">
+                              ${Number(totalIngresos).toFixed(2)}
+                            </TableCell>
+                          </TableRow>
+                        </TableFooter>
+                      </Table>
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground py-6 text-center italic text-sm">
+                      No hay ingresos registrados en este turno.
+                    </p>
+                  )}
+                </div>
 
-              <Card
-                className="cursor-pointer border-blue-200 bg-blue-500/5 transition-colors hover:bg-blue-500/10"
-                onClick={() => setShowTransaccionesDialog(true)}
-              >
-                <CardContent className="p-3 text-center">
-                  <TrendingUp className="mx-auto mb-1 h-5 w-5 text-blue-600" />
-                  <p className="text-muted-foreground text-[10px] uppercase">Transfer.</p>
-                  <p className="text-lg font-bold text-blue-700">${Number(totalTransferencias).toFixed(2)}</p>
-                  <p className="text-muted-foreground text-[9px]">{todasTransferencias.length} oper.</p>
-                </CardContent>
-              </Card>
-            </div>
+                {/* Transferencias */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 pb-3 border-b">
+                    <TrendingUp className="h-5 w-5 text-blue-600" />
+                    <h3 className="font-semibold text-base">Transferencias</h3>
+                    <span className="ml-auto inline-flex items-center rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-700">
+                      {todasTransferencias.length} operación{todasTransferencias.length !== 1 ? 'es' : ''}
+                    </span>
+                  </div>
+                  {todasTransferencias.length > 0 ? (
+                    <div className="rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-blue-50/50">
+                            <TableHead className="w-16 text-blue-700">Hora</TableHead>
+                            <TableHead className="text-blue-700">Descripción</TableHead>
+                            <TableHead className="text-blue-700">De</TableHead>
+                            <TableHead className="text-blue-700">Para</TableHead>
+                            <TableHead className="w-28 text-right text-blue-700">Monto</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {todasTransferencias.map((item: TransferenciaItem, idx: number) => (
+                            <TableRow key={idx}>
+                              <TableCell className="font-mono text-xs">{item.hora}</TableCell>
+                              <TableCell className="text-sm max-w-xs truncate">{item.desc}</TableCell>
+                              <TableCell className="text-muted-foreground text-xs max-w-[100px] truncate" title={item.origen_nombre}>
+                                {item.origen_nombre}
+                              </TableCell>
+                              <TableCell className="text-muted-foreground text-xs max-w-[100px] truncate" title={item.destino_nombre}>
+                                {item.destino_nombre}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-xs text-blue-600">
+                                ${Number(item.monto_origen).toFixed(2)} {item.moneda_origen}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                        <TableFooter>
+                          <TableRow className="bg-blue-50">
+                            <TableCell colSpan={4} className="font-bold text-blue-700">
+                              Total Transferencias
+                            </TableCell>
+                            <TableCell className="text-right font-bold text-blue-600">
+                              ${Number(totalTransferencias).toFixed(2)}
+                            </TableCell>
+                          </TableRow>
+                        </TableFooter>
+                      </Table>
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground py-6 text-center italic text-sm">
+                      No hay transferencias registradas en este turno.
+                    </p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
 
-            {/* Dialog de Detalle de Transacciones */}
+            {/* Dialog de Detalle de Transacciones (ahora solo para compatibilidad si es necesario) */}
             <Dialog open={showTransaccionesDialog} onOpenChange={setShowTransaccionesDialog}>
               <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden p-0 sm:max-w-4xl">
                 <DialogHeader className="border-b px-6 pt-6 pb-4">
@@ -658,31 +830,6 @@ export default function Show({ cierre }: Props) {
                 </div>
               </DialogContent>
             </Dialog>
-          </div>
-
-          {/* Auditoría */}
-          <div className="space-y-6 lg:col-span-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <div className="flex items-center gap-2"><div className="rounded-lg bg-slate-500/10 p-2"><Wallet className="h-4 w-4 text-slate-600" /></div><span>Auditoría Final</span></div>
-                  <div className="px-3 text-[9px] font-bold uppercase">{cierre.estado}</div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="rounded-lg border p-3"><div className="flex items-center justify-between"><span className="text-xs font-bold">Saldo Inicial</span><span className="font-mono">{Number(calculos.saldo_inicial || 0).toFixed(2)}</span></div></div>
-                  <div className="rounded-lg border p-3"><div className="flex items-center justify-between"><span className="text-xs font-bold">Saldo Esperado</span><span className="font-mono">{Number(calculos.saldo_esperado_global || 0).toFixed(2)}</span></div></div>
-                  <div className="rounded-lg border p-3"><div className="flex items-center justify-between"><span className="text-xs font-bold">Saldo Contado</span><span className="font-mono">{Number(cierre.saldo_contado || 0).toFixed(2)}</span></div></div>
-                </div>
-
-                <div className={`rounded-lg border p-4 mt-3 ${Number(cierre.diferencia || 0) === 0 ? 'border-emerald-300' : 'border-rose-300'}`}>
-                  <div className="flex items-center justify-between"><div className="text-[10px] font-black uppercase">Diferencia Final</div><div className="font-mono text-xl">{Number(cierre.diferencia || 0) >= 0 ? '+' : ''}{Number(cierre.diferencia || 0).toFixed(2)}</div></div>
-                </div>
-
-                <div className="mt-4"><h4 className="text-[10px] font-black uppercase">Observaciones</h4><p className="italic text-xs">{cierre.observaciones || 'Sin notas adicionales.'}</p></div>
-              </CardContent>
-            </Card>
           </div>
         </div>
       </div>
