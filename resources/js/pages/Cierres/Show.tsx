@@ -1,701 +1,691 @@
 import HeadingSmall from '@/components/heading-small';
-import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem, PageProps } from '@/types';
 import { Head } from '@inertiajs/react';
-import { ArrowDownCircle, ArrowUpCircle, Banknote, CheckCircle2, Clock, Info, Receipt, User, Wallet, XCircle } from 'lucide-react';
+import * as Collapsible from '@radix-ui/react-collapsible';
+import {
+  ArrowDown,
+  ArrowUp,
+  Banknote,
+  Calculator,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  CreditCard,
+  DollarSign,
+  Eye,
+  Receipt,
+  ShoppingCart,
+  TrendingUp,
+  Wallet,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 interface TransferenciaItem {
-    id: string;
-    desc: string;
-    monto_origen: number;
-    moneda_origen: string;
-    origen_tipo: string;
-    origen_nombre: string;
-    monto_destino: number;
-    moneda_destino: string;
-    destino_tipo: string;
-    destino_nombre: string;
-    tasa_cambio: number;
-    hora: string;
-    afecta_saldo_usuario?: boolean;
-    es_entrada?: boolean;
+  id: string;
+  desc: string;
+  monto_origen: number;
+  moneda_origen: string;
+  origen_tipo: string;
+  origen_nombre: string;
+  monto_destino: number;
+  moneda_destino: string;
+  destino_tipo: string;
+  destino_nombre: string;
+  tasa_cambio: number;
+  hora: string;
+  afecta_saldo_usuario?: boolean;
+  es_entrada?: boolean;
+}
+
+interface ItemVenta {
+  id: string;
+  venta_id?: string;
+  monto: number;
+  monto_equivalente?: number;
+  tipo_pago: string;
+  confirmada?: boolean;
+  referencia?: string;
+  cliente: string;
+  hora: string;
+  detalles?: any;
+  moneda_codigo?: string;
+  via_pago?: string | null;
+  cuenta_nombre?: string | null;
+  cliente_nombre?: string | null;
+  destino_nombre?: string | null;
+}
+
+interface DetalleMoneda {
+  moneda: string;
+  tasa_cambio: number;
+  ventas_efectivo: number;
+  ventas_transferencia: number;
+  ingresos_extra: number;
+  gastos: number;
+  transferencias_salientes: number;
+  transferencias_entrantes: number;
+  saldo_calculado: number;
+  items_ventas: ItemVenta[];
+  items_gastos: Array<{ id?: string; desc: string; monto: number; hora: string }>;
+  items_ingresos: Array<{ id?: string; desc: string; monto: number; hora: string }>;
+  items_transferencias: Array<{ id: string; desc: string; monto: number; hora: string }>;
+  items_transferencias_salientes: TransferenciaItem[];
+  items_transferencias_entrantes: TransferenciaItem[];
+  productos_resumen?: Record<string, any>;
+  operaciones_detalle?: any[];
 }
 
 interface Cierre {
-    id: number;
-    user_id: number;
-    revisor_id: number;
-    fecha_apertura: string;
-    fecha_cierre: string;
-    saldo_inicial: number;
-    ventas_efectivo: number;
-    ventas_otros: number;
-    total_gastos: number;
-    total_devoluciones: number;
-    saldo_esperado: number;
-    saldo_contado: number;
-    diferencia: number;
-    observaciones: string | null;
-    estado: string;
-    usuario: { name: string };
-    revisor: { name: string } | null;
-    confirmacion_transferencias: string[]; // IDs de transferencias que fueron confirmadas (m_id o p_id)
-    detalles: Array<{
-        moneda: string;
-        tasa_cambio: number;
-        ventas_efectivo: number;
-        ventas_transferencia: number;
-        ingresos_extra: number;
-        gastos: number;
-        transferencias_salientes: number;
-        transferencias_entrantes: number;
-        saldo_calculado: number;
-        items_ventas: Array<{
-            id: string;
-            monto: number;
-            tipo_pago: string;
-            cliente: string;
-            hora: string;
-            referencia?: string;
-            detalles: string;
-        }>;
-        items_gastos: Array<{ desc: string; monto: number; hora: string }>;
-        items_ingresos: Array<{ desc: string; monto: number; hora: string }>;
-        items_transferencias: Array<{ id: string; desc: string; monto: number; hora: string }>;
-        items_transferencias_salientes: TransferenciaItem[];
-        items_transferencias_entrantes: TransferenciaItem[];
-    }> | null;
+  id: number;
+  user_id?: number;
+  revisor_id?: number;
+  fecha_apertura: string;
+  fecha_cierre: string;
+  saldo_inicial?: number;
+  ventas_efectivo?: number;
+  ventas_otros?: number;
+  total_gastos?: number;
+  total_devoluciones?: number;
+  saldo_esperado?: number;
+  saldo_contado?: number;
+  diferencia?: number;
+  observaciones?: string | null;
+  estado?: string;
+  usuario?: { name: string };
+  revisor?: { name: string } | null;
+  confirmacion_transferencias?: string[];
+  detalles?: DetalleMoneda[] | null;
 }
 
 interface Props extends PageProps {
-    cierre: Cierre;
+  cierre: Cierre;
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Cierres de Caja', href: '/vendor/cierres' },
-    { title: 'Detalle de Cierre', href: '#' },
+  { title: 'Cierres de Caja', href: '/vendor/cierres' },
+  { title: 'Detalle de Cierre', href: '#' },
 ];
 
 export default function Show({ cierre }: Props) {
-    const [selectedMoneda, setSelectedMoneda] = useState(cierre.detalles?.[0]?.moneda || 'CUP');
+  const [showTransaccionesDialog, setShowTransaccionesDialog] = useState(false);
+  const moneda_referencia = 'USD';
 
-    const activeDetalle = useMemo(
-        () => cierre.detalles?.find((d) => d.moneda === selectedMoneda) || cierre.detalles?.[0],
-        [selectedMoneda, cierre.detalles],
-    );
+  // Mapear cierre a estructura similar a calculos usada en Create.tsx
+  const calculos = useMemo(() => {
+    return {
+      saldo_inicial: cierre.saldo_inicial || 0,
+      ventas_efectivo: cierre.ventas_efectivo || 0,
+      ventas_otros: cierre.ventas_otros || 0,
+      total_gastos: cierre.total_gastos || 0,
+      total_devoluciones: cierre.total_devoluciones || 0,
+      saldo_esperado_global: cierre.saldo_esperado || 0,
+      detalles: cierre.detalles || [],
+      transferencias_resumen: undefined,
+    } as any;
+  }, [cierre]);
 
-    return (
-        <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title={`Cierre #${cierre.id}`} />
+  // Todas las ventas de todas las monedas juntas
+  const todosItemsVentas = (calculos.detalles ?? []).flatMap((d: any) => d.items_ventas ?? []);
+  const ventaIdsUnicos = new Set(todosItemsVentas.map((v: ItemVenta) => v.venta_id || v.id));
+  const totalVentasUnicas = ventaIdsUnicos.size;
 
-            <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-6 p-4 md:p-6">
-                {/* Header Estándar (Estilo Productos/Clientes) */}
-                <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-6">
-                    <HeadingSmall
-                        title={`Reporte de Cierre #${cierre.id}`}
-                        description={`Auditoría detallada de movimientos realizados por ${cierre.usuario.name}.`}
-                    />
-                    <div className="absolute top-1/2 right-6 flex -translate-y-1/2 flex-col items-end gap-2">
-                        <Badge variant={cierre.estado === 'aprobado' ? 'default' : 'secondary'} className="px-4 uppercase">
-                            {cierre.estado}
-                        </Badge>
-                        <span className="text-muted-foreground flex items-center gap-1 font-mono text-[10px]">
-                            <Clock className="h-3 w-3" /> {new Date(cierre.fecha_cierre).toLocaleString()}
-                        </span>
-                    </div>
+  const lineasProductosRaw = (calculos.detalles ?? []).flatMap((d: any) => Object.values(d.productos_resumen ?? {}));
+  const lineasProductos = lineasProductosRaw.map((p: any) => ({
+    cantidad: Number(p.cantidad) || 0,
+    descripcion: (p.nombre || '') + (p.detalles ? ` ${p.detalles}` : ''),
+    precio_unitario: Number(p.precio) || 0,
+    total: Number(p.total) || 0,
+    precio_equivalente: Number(p.precio) || 0,
+    total_equivalente: Number(p.total) || 0,
+  }));
+  const totalVentasProductos = lineasProductos.reduce((s, r) => s + (r.total_equivalente ?? r.total ?? 0), 0);
+
+  const pagosPorMonedaYMetodo = todosItemsVentas.reduce(
+    (acc: Record<string, Record<string, { total: number; cantidad: number; totalEquivalente: number }>>, p: any) => {
+      const moneda = p.moneda_codigo ?? p.moneda ?? 'USD';
+      const via = (p.via_pago || '').toString().trim().toUpperCase();
+      const destino = (p.destino_nombre || '').toString().trim();
+      let etiqueta: string;
+      if (p.tipo_pago === 'efectivo') etiqueta = moneda;
+      else etiqueta = via ? (destino ? `${via} ${destino}` : via) : destino ? `Transferencia ${destino}` : `Transferencia ${moneda}`;
+      if (!acc[moneda]) acc[moneda] = {};
+      if (!acc[moneda][etiqueta]) acc[moneda][etiqueta] = { total: 0, cantidad: 0, totalEquivalente: 0 };
+      const monto = Number(p.monto) || 0;
+      const equivalente = Number(p.monto_equivalente) || monto;
+      acc[moneda][etiqueta].total += monto;
+      acc[moneda][etiqueta].totalEquivalente += equivalente;
+      acc[moneda][etiqueta].cantidad += 1;
+      return acc;
+    },
+    {},
+  );
+
+  const monedasConPagos = Object.keys(pagosPorMonedaYMetodo).sort();
+
+  const totalGastos = (calculos.detalles ?? []).reduce((sum: number, d: any) => sum + (d.gastos || 0), 0);
+  const totalIngresos = (calculos.detalles ?? []).reduce((sum: number, d: any) => sum + (d.ingresos_extra || 0), 0);
+  const totalTransferencias = (calculos.detalles ?? []).reduce((sum: number, d: any) => sum + (d.transferencias_salientes || 0), 0);
+
+  const todosGastos = (calculos.detalles ?? []).flatMap((d: any) => d.items_gastos ?? []);
+  const todosIngresos = (calculos.detalles ?? []).flatMap((d: any) => d.items_ingresos ?? []);
+  const todasTransferencias = (calculos.detalles ?? []).flatMap((d: any) => [...(d.items_transferencias_salientes ?? []), ...(d.items_transferencias_entrantes ?? [])]);
+
+  // transferencias resumen por moneda
+  const transferenciasResumen = (calculos.detalles ?? []).reduce((acc: Record<string, any>, d: any) => {
+    const moneda = d.moneda || 'USD';
+    if (!acc[moneda]) acc[moneda] = { tasa: d.tasa_cambio || 1, salientes: 0, entrantes: 0, neto: 0, items_salientes: [], items_entrantes: [] };
+    acc[moneda].salientes += Number(d.transferencias_salientes || 0);
+    acc[moneda].entrantes += Number(d.transferencias_entrantes || 0);
+    acc[moneda].neto = acc[moneda].entrantes - acc[moneda].salientes;
+    acc[moneda].items_salientes = (acc[moneda].items_salientes || []).concat(d.items_transferencias_salientes || []);
+    acc[moneda].items_entrantes = (acc[moneda].items_entrantes || []).concat(d.items_transferencias_entrantes || []);
+    return acc;
+  }, {} as Record<string, any>);
+
+  return (
+    <AppLayout breadcrumbs={breadcrumbs}>
+      <Head title={`Cierre #${cierre.id}`} />
+
+      <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-6 p-4 md:p-6">
+        {/* Header */}
+        <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-6">
+          <HeadingSmall title={`Reporte de Cierre #${cierre.id}`} description={`Auditoría detallada de movimientos realizados por ${cierre.usuario?.name || 'usuario'}.`} />
+          <Wallet size={70} color="#d6d3d1" className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 transform opacity-40" />
+        </div>
+
+        {/* Widgets estadísticos (como Create.tsx) */}
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <Card className="border-emerald-200 bg-emerald-500/5">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
+                  <ShoppingCart className="h-5 w-5 text-emerald-600" />
                 </div>
-
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-                    {/* Detalles de Movimientos */}
-                    <div className="space-y-6 lg:col-span-8">
-                        {/* Selector de Moneda */}
-                        <div className="flex items-center justify-between gap-4">
-                            <h3 className="text-lg font-bold tracking-tight">Desglose por Moneda</h3>
-                            <div className="bg-muted flex rounded-lg p-1">
-                                {cierre.detalles?.map((d) => (
-                                    <Button
-                                        key={d.moneda}
-                                        variant={selectedMoneda === d.moneda ? 'default' : 'ghost'}
-                                        size="sm"
-                                        onClick={() => setSelectedMoneda(d.moneda)}
-                                        className="px-6 font-bold"
-                                    >
-                                        {d.moneda}
-                                    </Button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Cards de Resumen */}
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                            <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-emerald-50/50 to-emerald-100/30 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-xl dark:from-emerald-950/30 dark:to-emerald-900/20 dark:shadow-emerald-900/20">
-                                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                                <CardHeader className="relative pb-3">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <div className="rounded-lg bg-emerald-500/10 p-2">
-                                                <ArrowUpCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                                            </div>
-                                            <CardTitle className="text-xs font-semibold text-emerald-700 uppercase dark:text-emerald-300">
-                                                Efectivo Sistema
-                                            </CardTitle>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-[9px] font-medium text-emerald-600 dark:text-emerald-400">
-                                                {activeDetalle?.items_ventas?.filter((v) => v.tipo_pago === 'efectivo').length || 0} ops
-                                            </div>
-                                        </div>
-                                    </div>
-                                </CardHeader>
-                                <CardContent className="relative">
-                                    <div className="flex items-center justify-between">
-                                        <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 bg-clip-text font-mono text-2xl font-bold text-transparent dark:from-emerald-400 dark:to-emerald-500">
-                                            ${Number(activeDetalle?.ventas_efectivo || 0).toFixed(2)}
-                                        </div>
-                                        <Badge
-                                            variant="secondary"
-                                            className="bg-emerald-100 text-[9px] font-bold text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300"
-                                        >
-                                            {selectedMoneda}
-                                        </Badge>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                            <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-blue-50/50 to-blue-100/30 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-xl dark:from-blue-950/30 dark:to-blue-900/20 dark:shadow-blue-900/20">
-                                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                                <CardHeader className="relative pb-3">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <div className="rounded-lg bg-blue-500/10 p-2">
-                                                <Banknote className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                                            </div>
-                                            <CardTitle className="text-xs font-semibold text-blue-700 uppercase dark:text-blue-300">
-                                                Transferencias Sistema
-                                            </CardTitle>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-[9px] font-medium text-blue-600 dark:text-blue-400">
-                                                {activeDetalle?.items_ventas?.filter((v) => v.tipo_pago !== 'efectivo').length || 0} ops
-                                            </div>
-                                        </div>
-                                    </div>
-                                </CardHeader>
-                                <CardContent className="relative">
-                                    <div className="flex items-center justify-between">
-                                        <div className="bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text font-mono text-2xl font-bold text-transparent dark:from-blue-400 dark:to-blue-500">
-                                            ${Number(activeDetalle?.ventas_transferencia || 0).toFixed(2)}
-                                        </div>
-                                        <Badge
-                                            variant="secondary"
-                                            className="bg-blue-100 text-[9px] font-bold text-blue-700 dark:bg-blue-900/50 dark:text-blue-300"
-                                        >
-                                            {selectedMoneda}
-                                        </Badge>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                            <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-violet-50/50 to-violet-100/30 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-xl dark:from-violet-950/30 dark:to-violet-900/20 dark:shadow-violet-900/20">
-                                <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                                <CardHeader className="relative pb-3">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <div className="rounded-lg bg-violet-500/10 p-2">
-                                                <Wallet className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-                                            </div>
-                                            <CardTitle className="text-xs font-semibold text-violet-700 uppercase dark:text-violet-300">
-                                                Saldo Esperado
-                                            </CardTitle>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-[9px] font-medium text-violet-600 dark:text-violet-400">Neto</div>
-                                        </div>
-                                    </div>
-                                </CardHeader>
-                                <CardContent className="relative">
-                                    <div className="flex items-center justify-between">
-                                        <div className="bg-gradient-to-r from-violet-600 to-violet-700 bg-clip-text font-mono text-2xl font-bold text-transparent dark:from-violet-400 dark:to-violet-500">
-                                            ${Number(activeDetalle?.saldo_calculado || 0).toFixed(2)}
-                                        </div>
-                                        <Badge
-                                            variant="secondary"
-                                            className="bg-violet-100 text-[9px] font-bold text-violet-700 dark:bg-violet-900/50 dark:text-violet-300"
-                                        >
-                                            {selectedMoneda}
-                                        </Badge>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </div>
-
-                        {/* Listado de Ventas */}
-                        <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-amber-50/50 to-amber-100/30 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-xl dark:from-amber-950/30 dark:to-amber-900/20 dark:shadow-amber-900/20">
-                            <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                            <CardHeader className="relative border-b border-amber-200/50 bg-amber-50/30 dark:border-amber-800/50 dark:bg-amber-900/30">
-                                <div className="flex items-center justify-between">
-                                    <CardTitle className="flex items-center gap-2 text-base">
-                                        <div className="rounded-lg bg-amber-500/10 p-2">
-                                            <Receipt className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                                        </div>
-                                        <span className="bg-gradient-to-r from-amber-700 to-amber-800 bg-clip-text font-semibold dark:from-amber-300 dark:to-amber-400">
-                                            Ventas en {selectedMoneda}
-                                        </span>
-                                    </CardTitle>
-                                    <div className="text-right">
-                                        <div className="text-[9px] font-medium text-amber-600 dark:text-amber-400">
-                                            {activeDetalle?.items_ventas?.length || 0} operaciones
-                                        </div>
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent className="relative px-0">
-                                <TooltipProvider>
-                                    <div className="scrollbar-thin scrollbar-thumb-amber-200 dark:scrollbar-thumb-amber-800 max-h-96 divide-y divide-amber-200/30 overflow-y-auto dark:divide-amber-800/30">
-                                        {activeDetalle?.items_ventas.map((v, i) => (
-                                            <div
-                                                key={i}
-                                                className="group/item flex items-center justify-between p-4 transition-all duration-200 hover:bg-amber-50/50 dark:hover:bg-amber-950/30"
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <span className="rounded bg-amber-100 px-2 py-1 font-mono text-[10px] font-medium text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">
-                                                        {v.hora}
-                                                    </span>
-                                                    <span className="truncate font-medium text-amber-800 dark:text-amber-200">{v.cliente}</span>
-                                                    <Badge
-                                                        variant="outline"
-                                                        className="border-amber-300 bg-amber-100 text-[9px] font-bold text-amber-700 uppercase dark:border-amber-700 dark:bg-amber-800 dark:text-amber-300"
-                                                    >
-                                                        {v.tipo_pago}
-                                                    </Badge>
-                                                    <Badge variant="secondary" className="h-4 px-1 text-[8px]">
-                                                        {cierre.confirmacion_transferencias?.includes(v.id) ? (
-                                                            <span className="flex items-center gap-0.5 text-emerald-600">
-                                                                <CheckCircle2 size={8} /> Confirmada
-                                                            </span>
-                                                        ) : (
-                                                            <span className="text-rose-600">Pendiente</span>
-                                                        )}
-                                                    </Badge>
-                                                    {v.detalles && (
-                                                        <Tooltip>
-                                                            <TooltipTrigger asChild>
-                                                                <button className="text-amber-400 transition-colors hover:text-amber-600 dark:text-amber-500 dark:hover:text-amber-300">
-                                                                    <Info size={14} />
-                                                                </button>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent className="border-amber-700 bg-amber-900 text-amber-100 dark:border-amber-300 dark:bg-amber-100 dark:text-amber-900">
-                                                                <p className="max-w-xs text-xs">{v.detalles}</p>
-                                                            </TooltipContent>
-                                                        </Tooltip>
-                                                    )}
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-mono text-sm font-bold text-amber-600 dark:text-amber-400">
-                                                        ${Number(v.monto).toFixed(2)}
-                                                    </span>
-                                                    <div className="h-2 w-2 rounded-full bg-gradient-to-r from-amber-400 to-amber-500 opacity-0 transition-all duration-300 group-hover:opacity-100 dark:from-amber-600 dark:to-amber-700" />
-                                                </div>
-                                            </div>
-                                        ))}
-                                        {(!activeDetalle || activeDetalle.items_ventas.length === 0) && (
-                                            <div className="p-8 text-center text-sm text-amber-600 italic dark:text-amber-400">
-                                                No hay ventas registradas
-                                            </div>
-                                        )}
-                                    </div>
-                                </TooltipProvider>
-                            </CardContent>
-                        </Card>
-
-                        {/* Detalle de Movimientos Financieros */}
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                            {/* Gastos */}
-                            <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-rose-50/50 to-rose-100/30 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-xl dark:from-rose-950/30 dark:to-rose-900/20 dark:shadow-rose-900/20">
-                                <div className="absolute inset-0 bg-gradient-to-br from-rose-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                                <CardHeader className="relative pb-3">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <div className="rounded-lg bg-rose-500/10 p-2">
-                                                <ArrowDownCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
-                                            </div>
-                                            <CardTitle className="text-sm font-semibold text-rose-700 dark:text-rose-300">Egresos/Gastos</CardTitle>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-[9px] font-medium text-rose-600 dark:text-rose-400">
-                                                {activeDetalle?.items_gastos?.length || 0} operaciones
-                                            </div>
-                                        </div>
-                                    </div>
-                                </CardHeader>
-                                <CardContent className="relative space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <div className="bg-gradient-to-r from-rose-600 to-rose-700 bg-clip-text font-mono text-xl font-bold text-transparent dark:from-rose-400 dark:to-rose-500">
-                                            -${Number(activeDetalle?.gastos || 0).toFixed(2)}
-                                        </div>
-                                        <Badge
-                                            variant="secondary"
-                                            className="bg-rose-100 text-[9px] font-bold text-rose-700 dark:bg-rose-900/50 dark:text-rose-300"
-                                        >
-                                            {selectedMoneda}
-                                        </Badge>
-                                    </div>
-                                    <div className="scrollbar-thin scrollbar-thumb-rose-200 dark:scrollbar-thumb-rose-800 max-h-40 space-y-1 overflow-y-auto">
-                                        {activeDetalle?.items_gastos.map((g: { desc: string; monto: number; hora: string }, i: number) => (
-                                            <div
-                                                key={i}
-                                                className="group/item border-l-4 border-rose-400 bg-rose-50/30 p-2 transition-colors hover:bg-rose-100/50 dark:border-rose-600 dark:bg-rose-950/20 dark:hover:bg-rose-950/40"
-                                            >
-                                                <div className="flex items-center justify-between">
-                                                    <div className="min-w-0 flex-1">
-                                                        <div className="flex items-center justify-between gap-2">
-                                                            <div className="flex min-w-0 flex-1 items-center gap-2">
-                                                                <span className="rounded bg-rose-100 px-2 py-1 font-mono text-[10px] font-medium text-rose-600 dark:bg-rose-900/30 dark:text-rose-400">
-                                                                    {g.hora}
-                                                                </span>
-                                                                <span className="truncate font-medium text-rose-800 dark:text-rose-200">
-                                                                    {g.desc}
-                                                                </span>
-                                                            </div>
-                                                            <div className="text-right">
-                                                                <span className="font-mono text-sm font-bold text-rose-600 dark:text-rose-400">
-                                                                    -${Number(g.monto).toFixed(2)}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                        {!activeDetalle?.items_gastos?.length && (
-                                            <div className="p-4 text-center text-xs text-rose-600 italic dark:text-rose-400">
-                                                No hay gastos registrados
-                                            </div>
-                                        )}
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            {/* Ingresos */}
-                            <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-emerald-50/50 to-emerald-100/30 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-xl dark:from-emerald-950/30 dark:to-emerald-900/20 dark:shadow-emerald-900/20">
-                                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                                <CardHeader className="relative pb-3">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <div className="rounded-lg bg-emerald-500/10 p-2">
-                                                <ArrowUpCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                                            </div>
-                                            <CardTitle className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
-                                                Ingresos Extra
-                                            </CardTitle>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-[9px] font-medium text-emerald-600 dark:text-emerald-400">
-                                                {activeDetalle?.items_ingresos?.length || 0} operaciones
-                                            </div>
-                                        </div>
-                                    </div>
-                                </CardHeader>
-                                <CardContent className="relative space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 bg-clip-text font-mono text-xl font-bold text-transparent dark:from-emerald-400 dark:to-emerald-500">
-                                            +${Number(activeDetalle?.ingresos_extra || 0).toFixed(2)}
-                                        </div>
-                                        <Badge
-                                            variant="secondary"
-                                            className="bg-emerald-100 text-[9px] font-bold text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300"
-                                        >
-                                            {selectedMoneda}
-                                        </Badge>
-                                    </div>
-                                    <div className="scrollbar-thin scrollbar-thumb-emerald-200 dark:scrollbar-thumb-emerald-800 max-h-40 space-y-1 overflow-y-auto">
-                                        {activeDetalle?.items_ingresos.map((ing: { desc: string; monto: number; hora: string }, i: number) => (
-                                            <div
-                                                key={i}
-                                                className="group/item border-l-4 border-emerald-400 bg-emerald-50/30 p-2 transition-colors hover:bg-emerald-100/50 dark:border-emerald-600 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/40"
-                                            >
-                                                <div className="flex items-center justify-between">
-                                                    <div className="min-w-0 flex-1">
-                                                        <div className="flex items-center justify-between gap-2">
-                                                            <div className="flex min-w-0 flex-1 items-center gap-2">
-                                                                <span className="rounded bg-emerald-100 px-2 py-1 font-mono text-[10px] font-medium text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
-                                                                    {ing.hora}
-                                                                </span>
-                                                                <span className="truncate font-medium text-emerald-800 dark:text-emerald-200">
-                                                                    {ing.desc}
-                                                                </span>
-                                                            </div>
-                                                            <div className="text-right">
-                                                                <span className="font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                                                                    +${Number(ing.monto).toFixed(2)}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                        {!activeDetalle?.items_ingresos?.length && (
-                                            <div className="p-4 text-center text-xs text-emerald-600 italic dark:text-emerald-400">
-                                                No hay ingresos extra registrados
-                                            </div>
-                                        )}
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            {/* Transferencias/Giros - BIDIRECCIONAL */}
-                            <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-indigo-50/50 to-indigo-100/30 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-xl dark:from-indigo-950/30 dark:to-indigo-900/20 dark:shadow-indigo-900/20">
-                                <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                                <CardHeader className="relative pb-3">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <div className="rounded-lg bg-indigo-500/10 p-2">
-                                                <Banknote className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                                            </div>
-                                            <CardTitle className="text-sm font-semibold text-indigo-700 dark:text-indigo-300">
-                                                Transferencias
-                                            </CardTitle>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-[9px] font-medium text-indigo-600 dark:text-indigo-400">
-                                                {(activeDetalle?.items_transferencias_salientes?.length || 0) +
-                                                    (activeDetalle?.items_transferencias_entrantes?.length || 0)}{' '}
-                                                ops
-                                            </div>
-                                        </div>
-                                    </div>
-                                </CardHeader>
-                                <CardContent className="relative space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <div className="bg-gradient-to-r from-rose-600 to-rose-700 bg-clip-text font-mono text-lg font-bold text-transparent dark:from-rose-400 dark:to-rose-500">
-                                            Salientes: -${Number(activeDetalle?.transferencias_salientes || 0).toFixed(2)}
-                                        </div>
-                                        <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 bg-clip-text font-mono text-lg font-bold text-transparent dark:from-emerald-400 dark:to-emerald-500">
-                                            Entrantes: +${Number(activeDetalle?.transferencias_entrantes || 0).toFixed(2)}
-                                        </div>
-                                    </div>
-                                    <div className="scrollbar-thin scrollbar-thumb-indigo-200 dark:scrollbar-thumb-indigo-800 max-h-48 space-y-2 overflow-y-auto">
-                                        {/* Transferencias Salientes */}
-                                        {(activeDetalle?.items_transferencias_salientes || []).map((t: TransferenciaItem, i: number) => {
-                                            const confirmada = cierre.confirmacion_transferencias?.includes(t.id);
-                                            return (
-                                                <div
-                                                    key={`saliente_${i}`}
-                                                    className="group/item border-l-4 border-rose-400 bg-rose-50/30 p-2 transition-colors hover:bg-rose-100/50 dark:border-rose-600 dark:bg-rose-950/20 dark:hover:bg-rose-950/40"
-                                                >
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="flex max-w-40 items-center gap-2 truncate">
-                                                            {confirmada ? (
-                                                                <div className="flex items-center gap-1 text-emerald-500">
-                                                                    <CheckCircle2 className="h-3 w-3 shrink-0" />
-                                                                    <span className="text-[9px] font-bold">Confirmada</span>
-                                                                </div>
-                                                            ) : (
-                                                                <div className="flex items-center gap-1 text-rose-500">
-                                                                    <XCircle className="h-3 w-3 shrink-0" />
-                                                                    <span className="text-[9px] font-bold">Pendiente</span>
-                                                                </div>
-                                                            )}
-                                                            <span className="font-medium text-rose-700 dark:text-rose-300">↓</span>
-                                                            <span className="truncate font-medium" title={t.desc}>
-                                                                {t.desc}
-                                                            </span>
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <div className="font-mono text-sm font-bold text-rose-600 dark:text-rose-400">
-                                                                -{Number(t.monto_origen).toFixed(2)} {t.moneda_origen}
-                                                            </div>
-                                                            {t.moneda_destino !== t.moneda_origen && (
-                                                                <div className="text-muted-foreground text-[9px]">
-                                                                    → {Number(t.monto_destino).toFixed(2)} {t.moneda_destino}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                    <div className="text-muted-foreground mt-1 text-[9px]">
-                                                        <span className="font-medium">{t.origen_tipo}:</span> {t.origen_nombre} →{' '}
-                                                        <span className="font-medium">{t.destino_tipo}:</span> {t.destino_nombre}
-                                                    </div>
-                                                    {t.moneda_destino !== t.moneda_origen && (
-                                                        <div className="text-[9px] text-indigo-600 dark:text-indigo-400">
-                                                            Tasa: 1 {t.moneda_destino} = {t.tasa_cambio} {t.moneda_origen}
-                                                        </div>
-                                                    )}
-                                                    <div className="text-muted-foreground mt-1 text-[8px]">
-                                                        {t.hora} {t.afecta_saldo_usuario ? '• Afecta saldo' : ''}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-
-                                        {/* Transferencias Entrantes */}
-                                        {(activeDetalle?.items_transferencias_entrantes || []).map((t: TransferenciaItem, i: number) => {
-                                            const confirmada = cierre.confirmacion_transferencias?.includes(t.id);
-                                            return (
-                                                <div
-                                                    key={`entrante_${i}`}
-                                                    className="group/item border-l-4 border-emerald-400 bg-emerald-50/30 p-2 transition-colors hover:bg-emerald-100/50 dark:border-emerald-600 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/40"
-                                                >
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="flex max-w-40 items-center gap-2 truncate">
-                                                            {confirmada ? (
-                                                                <div className="flex items-center gap-1 text-emerald-500">
-                                                                    <CheckCircle2 className="h-3 w-3 shrink-0" />
-                                                                    <span className="text-[9px] font-bold">Confirmada</span>
-                                                                </div>
-                                                            ) : (
-                                                                <div className="flex items-center gap-1 text-rose-500">
-                                                                    <XCircle className="h-3 w-3 shrink-0" />
-                                                                    <span className="text-[9px] font-bold">Pendiente</span>
-                                                                </div>
-                                                            )}
-                                                            <span className="font-medium text-emerald-700 dark:text-emerald-300">↑</span>
-                                                            <span className="truncate font-medium" title={t.desc}>
-                                                                {t.desc}
-                                                            </span>
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <div className="font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                                                                +{Number(t.monto_destino).toFixed(2)} {t.moneda_destino}
-                                                            </div>
-                                                            {t.moneda_destino !== t.moneda_origen && (
-                                                                <div className="text-muted-foreground text-[9px]">
-                                                                    ← {Number(t.monto_origen).toFixed(2)} {t.moneda_origen}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                    <div className="text-muted-foreground mt-1 text-[9px]">
-                                                        <span className="font-medium">{t.origen_tipo}:</span> {t.origen_nombre} →{' '}
-                                                        <span className="font-medium">{t.destino_tipo}:</span> {t.destino_nombre}
-                                                    </div>
-                                                    {t.moneda_destino !== t.moneda_origen && (
-                                                        <div className="text-[9px] text-indigo-600 dark:text-indigo-400">
-                                                            Tasa: 1 {t.moneda_destino} = {t.tasa_cambio} {t.moneda_origen}
-                                                        </div>
-                                                    )}
-                                                    <div className="text-muted-foreground mt-1 text-[8px]">{t.hora}</div>
-                                                </div>
-                                            );
-                                        })}
-
-                                        {!activeDetalle?.items_transferencias_salientes?.length &&
-                                            !activeDetalle?.items_transferencias_entrantes?.length && (
-                                                <div className="text-muted-foreground p-4 text-center text-xs italic">
-                                                    No hay transferencias registradas
-                                                </div>
-                                            )}
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </div>
-                    </div>
-
-                    {/* Resumen de Auditoría */}
-                    <div className="space-y-6 lg:col-span-4">
-                        {/* Card de Auditoría con Gradiente */}
-                        <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-slate-50/50 to-slate-100/30 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-xl dark:from-slate-950/30 dark:to-slate-900/20 dark:shadow-slate-900/20">
-                            <div className="absolute inset-0 bg-gradient-to-br from-slate-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                            <CardHeader className="relative border-b border-slate-200/50 bg-slate-50/30 dark:border-slate-800/50 dark:bg-slate-900/30">
-                                <CardTitle className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <div className="rounded-lg bg-slate-500/10 p-2">
-                                            <Wallet className="h-4 w-4 text-slate-600 dark:text-slate-400" />
-                                        </div>
-                                        <span className="bg-gradient-to-r from-slate-700 to-slate-800 bg-clip-text font-semibold dark:from-slate-300 dark:to-slate-400">
-                                            Auditoría Final
-                                        </span>
-                                    </div>
-                                    <Badge
-                                        variant={cierre.estado === 'aprobado' ? 'default' : 'secondary'}
-                                        className="px-3 text-[9px] font-bold uppercase"
-                                    >
-                                        {cierre.estado}
-                                    </Badge>
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent className="relative space-y-4 pt-6">
-                                {/* Saldo Contado */}
-                                <div className="rounded-lg border border-slate-200/50 bg-gradient-to-r from-slate-50 to-slate-100 p-4 dark:border-slate-800/50 dark:from-slate-900 dark:to-slate-950">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-xs font-bold text-slate-600 uppercase dark:text-slate-400">Saldo Contado</span>
-                                        <span className="bg-gradient-to-r from-slate-600 to-slate-700 bg-clip-text font-mono text-2xl font-black text-transparent dark:from-slate-400 dark:to-slate-500">
-                                            ${Number(cierre.saldo_contado ?? 0).toFixed(2)}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                {/* Diferencia con Colores Dinámicos */}
-                                <div
-                                    className={`rounded-lg border p-4 transition-all duration-300 ${
-                                        cierre.diferencia === 0
-                                            ? 'border-emerald-500/30 bg-gradient-to-br from-emerald-50/50 to-emerald-100/30 dark:from-emerald-950/30 dark:to-emerald-900/20'
-                                            : 'border-rose-500/30 bg-gradient-to-br from-rose-50/50 to-rose-100/30 dark:from-rose-950/30 dark:to-rose-900/20'
-                                    }`}
-                                >
-                                    <div className="flex items-center justify-between">
-                                        <div
-                                            className={`text-[10px] font-black tracking-wider uppercase ${
-                                                cierre.diferencia === 0
-                                                    ? 'text-emerald-700 dark:text-emerald-300'
-                                                    : 'text-rose-700 dark:text-rose-300'
-                                            }`}
-                                        >
-                                            Diferencia Final
-                                        </div>
-                                        <div
-                                            className={`font-mono text-xl font-bold ${
-                                                cierre.diferencia === 0
-                                                    ? 'bg-gradient-to-r from-emerald-600 to-emerald-700 bg-clip-text text-transparent dark:from-emerald-400 dark:to-emerald-500'
-                                                    : 'bg-gradient-to-r from-rose-600 to-rose-700 bg-clip-text text-transparent dark:from-rose-400 dark:to-rose-500'
-                                            }`}
-                                        >
-                                            {Number(cierre.diferencia ?? 0) >= 0 ? '+' : ''}
-                                            {Number(cierre.diferencia ?? 0).toFixed(2)}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <Separator className="bg-slate-200/50 dark:bg-slate-800/50" />
-
-                                {/* Observaciones */}
-                                <div className="space-y-2">
-                                    <h4 className="text-[10px] font-black text-slate-600 uppercase dark:text-slate-400">Observaciones</h4>
-                                    <p className="rounded-lg border border-slate-200/30 bg-slate-50/50 p-3 text-xs leading-relaxed text-slate-600 italic dark:border-slate-800/30 dark:bg-slate-900/50 dark:text-slate-400">
-                                        {cierre.observaciones || 'Sin notas adicionales.'}
-                                    </p>
-                                </div>
-
-                                {/* Auditor */}
-                                <div className="flex items-center gap-3 rounded-lg border border-slate-200/30 bg-slate-50/30 p-4 dark:border-slate-800/30 dark:bg-slate-900/30">
-                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900">
-                                        <User className="h-5 w-5 text-slate-600 dark:text-slate-400" />
-                                    </div>
-                                    <div>
-                                        <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                                            {cierre.revisor?.name || 'Sistema (Auto)'}
-                                        </div>
-                                        <div className="text-[9px] text-slate-600 uppercase dark:text-slate-400">Auditor Responsable</div>
-                                    </div>
-                                </div>
-
-                                {/* Fecha del Cierre */}
-                                <div className="flex items-center justify-between rounded-lg border border-slate-200/30 bg-slate-50/30 p-3 dark:border-slate-800/30 dark:bg-slate-900/30">
-                                    <span className="text-[9px] text-slate-600 uppercase dark:text-slate-400">Fecha de Cierre</span>
-                                    <span className="font-mono text-[10px] font-medium text-slate-700 dark:text-slate-300">
-                                        {new Date(cierre.fecha_cierre).toLocaleString()}
-                                    </span>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Ventas Realizadas</p>
+                  <p className="text-2xl font-bold">{totalVentasUnicas}</p>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-blue-200 bg-blue-500/5">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
+                  <DollarSign className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Total Efectivo</p>
+                  <p className="text-2xl font-bold">${Number(calculos.ventas_efectivo || 0).toFixed(2)}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-purple-200 bg-purple-500/5">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100">
+                  <CreditCard className="h-5 w-5 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Transferencias</p>
+                  <p className="text-2xl font-bold">${Number(calculos.ventas_otros || 0).toFixed(2)}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-amber-200 bg-amber-500/5">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100">
+                  <Banknote className="h-5 w-5 text-amber-600" />
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Monedas Usadas</p>
+                  <p className="text-2xl font-bold">{monedasConPagos.length}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Resumen global */}
+        <Card className="border-slate-200 bg-gradient-to-r from-slate-500/5 to-slate-100/50">
+          <CardContent className="p-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100">
+                  <Calculator className="h-6 w-6 text-slate-600" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-muted-foreground text-sm">Saldo Esperado en Caja</p>
+                  </div>
+                  <p className="text-3xl font-bold text-slate-700">${Number(calculos.saldo_esperado_global || 0).toFixed(2)}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-6 text-sm">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-emerald-600" />
+                  <span className="text-muted-foreground">Total Productos:</span>
+                  <span className="font-semibold">{lineasProductos.length}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-4 w-4 text-blue-600" />
+                  <span className="text-muted-foreground">Métodos Pago:</span>
+                  <span className="font-semibold">{monedasConPagos.length}</span>
+                </div>
+              </div>
             </div>
-        </AppLayout>
-    );
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+          <div className="space-y-6 lg:col-span-8">
+            {/* Tabla Ventas (productos) */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Receipt className="h-5 w-5" /> Ventas</CardTitle>
+                <CardDescription>Productos vendidos en el turno. Importes en {moneda_referencia}.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-20">Cantidad</TableHead>
+                      <TableHead>Producto (detalles)</TableHead>
+                      <TableHead className="text-right">Precio</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {lineasProductos.length > 0 ? (
+                      lineasProductos.map((linea, idx) => (
+                        <TableRow key={idx}>
+                          <TableCell className="font-medium">{linea.cantidad}</TableCell>
+                          <TableCell>{linea.descripcion}</TableCell>
+                          <TableCell className="text-right">{(linea.total_equivalente !== undefined ? Number(linea.precio_equivalente) : Number(linea.precio_unitario)).toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-mono">{(linea.total_equivalente !== undefined ? Number(linea.total_equivalente) : Number(linea.total)).toFixed(2)}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-muted-foreground text-center italic">No hay ventas en este turno</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                  <TableFooter>
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-right font-bold">Total</TableCell>
+                      <TableCell className="text-right font-mono font-bold">{Number(totalVentasProductos).toFixed(2)} {moneda_referencia}</TableCell>
+                    </TableRow>
+                  </TableFooter>
+                </Table>
+              </CardContent>
+            </Card>
+
+            {/* Por dónde entraron */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Banknote className="h-5 w-5" /> Por dónde entraron</CardTitle>
+                <CardDescription>Cantidad de ventas y total por método, separado por moneda.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {monedasConPagos.length > 0 ? (
+                  monedasConPagos.map((moneda) => {
+                    const metodos = pagosPorMonedaYMetodo[moneda];
+                    const totalMoneda = Object.values(metodos).reduce((s, x) => s + (Number(x.total) || 0), 0);
+                    const cantidadMoneda = Object.values(metodos).reduce((s, x) => s + (x.cantidad || 0), 0);
+                    const totalEquivalenteMoneda = Object.values(metodos).reduce((s, x) => s + (x.totalEquivalente || 0), 0);
+                    const detalleMoneda = (calculos.detalles || []).find((d: any) => d.moneda === moneda);
+
+                    return (
+                      <div key={moneda} className="space-y-2">
+                        <h4 className="text-muted-foreground text-sm font-semibold">{moneda}</h4>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Método / Destino</TableHead>
+                              <TableHead className="w-20 text-center">Ventas</TableHead>
+                              <TableHead className="w-32 text-right">Total</TableHead>
+                              <TableHead className="w-32 text-right">Equiv. USD</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {Object.entries(metodos).map(([etiqueta, data]) => {
+                              const total = Number(data.total) || 0;
+                              const totalEquivalente = Number(data.totalEquivalente) || 0;
+                              const operacionesPorMetodo = (detalleMoneda?.operaciones_detalle || []).filter((op: any) => {
+                                const via = (op.via_pago || '').toString().trim().toUpperCase();
+                                const destino = (op.destino_nombre || '').toString().trim();
+                                let etiquetaMetodo: string;
+                                if (op.tipo_pago === 'efectivo') etiquetaMetodo = moneda;
+                                else etiquetaMetodo = via ? (destino ? `${via} ${destino}` : via) : destino ? `Transferencia ${destino}` : `Transferencia ${moneda}`;
+                                return etiquetaMetodo === etiqueta;
+                              });
+
+                              return (
+                                <Collapsible.Root key={`${moneda}-${etiqueta}`}>
+                                  <Collapsible.Trigger asChild>
+                                    <TableRow className="hover:bg-muted/50 cursor-pointer">
+                                      <TableCell className="flex items-center gap-2 font-medium">
+                                        <ChevronDown className="collapsible-trigger-icon h-4 w-4 transition-transform" />
+                                        <ChevronRight className="collapsible-trigger-icon[!hidden] h-4 w-4 transition-transform" />
+                                        {etiqueta}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono">{data.cantidad}</TableCell>
+                                      <TableCell className="text-right font-mono">{total.toFixed(2)}</TableCell>
+                                      <TableCell className="text-right font-mono font-medium text-green-600">${totalEquivalente.toFixed(2)}</TableCell>
+                                    </TableRow>
+                                  </Collapsible.Trigger>
+                                  <Collapsible.Content>
+                                    <TableRow>
+                                      <TableCell colSpan={4} className="bg-muted/30 p-0">
+                                        <div className="border-muted-foreground/20 ml-4 space-y-2 border-l-2 p-2">
+                                          {operacionesPorMetodo.length > 0 ? (
+                                            operacionesPorMetodo.map((operacion: any, idx: number) => (
+                                              <div key={idx} className="bg-card space-y-1 rounded-md border p-2 text-sm shadow-sm">
+                                                <div className="flex items-center justify-between font-medium">
+                                                  <span>Venta #{operacion.venta_id} - {operacion.cliente}</span>
+                                                  <span className="font-mono">${Number(operacion.monto).toFixed(2)} - {operacion.hora}</span>
+                                                </div>
+                                                {(operacion.productos?.length ?? 0) > 0 && (
+                                                  <div className="text-muted-foreground ml-4 space-y-1">
+                                                    {operacion.productos?.map((prod: any, pidx: number) => (
+                                                      <div key={pidx} className="flex justify-between text-xs">
+                                                        <span>{prod.cantidad}x {prod.descripcion}</span>
+                                                        <span className="font-mono">${Number(prod.total).toFixed(2)}</span>
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            ))
+                                          ) : (
+                                            <p className="text-muted-foreground px-2 text-xs italic">Sin detalle de operaciones</p>
+                                          )}
+                                        </div>
+                                      </TableCell>
+                                    </TableRow>
+                                  </Collapsible.Content>
+                                </Collapsible.Root>
+                              );
+                            })}
+                          </TableBody>
+                          <TableFooter>
+                            <TableRow>
+                              <TableCell className="font-bold">Total {moneda}</TableCell>
+                              <TableCell className="text-center font-mono font-bold">{cantidadMoneda}</TableCell>
+                              <TableCell className="text-right font-mono font-bold">{Number(totalMoneda).toFixed(2)} {moneda}</TableCell>
+                              <TableCell className="text-right font-mono font-bold text-green-600">${totalEquivalenteMoneda.toFixed(2)}</TableCell>
+                            </TableRow>
+                          </TableFooter>
+                        </Table>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-muted-foreground text-center italic">No hay pagos registrados</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <div className="grid grid-cols-3 gap-2">
+              <Card
+                className="cursor-pointer border-green-200 bg-green-500/5 transition-colors hover:bg-green-500/10"
+                onClick={() => setShowTransaccionesDialog(true)}
+              >
+                <CardContent className="p-3 text-center">
+                  <ArrowDown className="mx-auto mb-1 h-5 w-5 text-green-600" />
+                  <p className="text-muted-foreground text-[10px] uppercase">Ingresos</p>
+                  <p className="text-lg font-bold text-green-700">${Number(totalIngresos).toFixed(2)}</p>
+                  <p className="text-muted-foreground text-[9px]">{todosIngresos.length} oper.</p>
+                </CardContent>
+              </Card>
+
+              <Card
+                className="cursor-pointer border-red-200 bg-red-500/5 transition-colors hover:bg-red-500/10"
+                onClick={() => setShowTransaccionesDialog(true)}
+              >
+                <CardContent className="p-3 text-center">
+                  <ArrowUp className="mx-auto mb-1 h-5 w-5 text-red-600" />
+                  <p className="text-muted-foreground text-[10px] uppercase">Gastos</p>
+                  <p className="text-lg font-bold text-red-700">${Number(totalGastos).toFixed(2)}</p>
+                  <p className="text-muted-foreground text-[9px]">{todosGastos.length} oper.</p>
+                </CardContent>
+              </Card>
+
+              <Card
+                className="cursor-pointer border-blue-200 bg-blue-500/5 transition-colors hover:bg-blue-500/10"
+                onClick={() => setShowTransaccionesDialog(true)}
+              >
+                <CardContent className="p-3 text-center">
+                  <TrendingUp className="mx-auto mb-1 h-5 w-5 text-blue-600" />
+                  <p className="text-muted-foreground text-[10px] uppercase">Transfer.</p>
+                  <p className="text-lg font-bold text-blue-700">${Number(totalTransferencias).toFixed(2)}</p>
+                  <p className="text-muted-foreground text-[9px]">{todasTransferencias.length} oper.</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Dialog de Detalle de Transacciones */}
+            <Dialog open={showTransaccionesDialog} onOpenChange={setShowTransaccionesDialog}>
+              <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden p-0 sm:max-w-4xl">
+                <DialogHeader className="border-b px-6 pt-6 pb-4">
+                  <DialogTitle>Detalle de Transacciones del Turno</DialogTitle>
+                  <DialogDescription>
+                    Desglose completo de ingresos, gastos y transferencias realizadas durante tu turno.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="flex-1 overflow-y-auto px-6 py-4">
+                  <Tabs defaultValue="gastos" className="w-full">
+                    <TabsList className="mb-4 grid w-full grid-cols-3">
+                      <TabsTrigger value="ingresos">Ingresos ({todosIngresos.length})</TabsTrigger>
+                      <TabsTrigger value="gastos">Gastos ({todosGastos.length})</TabsTrigger>
+                      <TabsTrigger value="transferencias">Transferencias ({todasTransferencias.length})</TabsTrigger>
+                    </TabsList>
+
+                    {/* Tab Ingresos */}
+                    <TabsContent value="ingresos" className="mt-0">
+                      {todosIngresos.length > 0 ? (
+                        <div className="rounded-md border">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-16">Hora</TableHead>
+                                <TableHead>Descripción</TableHead>
+                                <TableHead>Origen</TableHead>
+                                <TableHead>Destino</TableHead>
+                                <TableHead className="w-28 text-right">Monto</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {todosIngresos.map((item: any, idx: number) => (
+                                <TableRow key={idx}>
+                                  <TableCell className="font-mono text-xs">{item.hora}</TableCell>
+                                  <TableCell className="text-sm">{item.desc}</TableCell>
+                                  <TableCell className="text-muted-foreground text-xs">{item.origen}</TableCell>
+                                  <TableCell className="text-muted-foreground text-xs">{item.destino}</TableCell>
+                                  <TableCell className="text-right font-mono font-medium text-green-600">
+                                    +${Number(item.monto).toFixed(2)}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                            <TableFooter>
+                              <TableRow>
+                                <TableCell colSpan={4} className="font-bold">
+                                  Total Ingresos
+                                </TableCell>
+                                <TableCell className="text-right font-bold text-green-600">
+                                  ${Number(totalIngresos).toFixed(2)}
+                                </TableCell>
+                              </TableRow>
+                            </TableFooter>
+                          </Table>
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground py-12 text-center italic">
+                          No hay ingresos registrados en este turno.
+                        </p>
+                      )}
+                    </TabsContent>
+
+                    {/* Tab Gastos */}
+                    <TabsContent value="gastos" className="mt-0">
+                      {todosGastos.length > 0 ? (
+                        <div className="rounded-md border">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-16">Hora</TableHead>
+                                <TableHead>Descripción</TableHead>
+                                <TableHead>Origen</TableHead>
+                                <TableHead>Destino</TableHead>
+                                <TableHead className="w-28 text-right">Monto</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {todosGastos.map((item: any, idx: number) => (
+                                <TableRow key={idx}>
+                                  <TableCell className="font-mono text-xs">{item.hora}</TableCell>
+                                  <TableCell className="text-sm">{item.desc}</TableCell>
+                                  <TableCell className="text-muted-foreground text-xs">{item.origen || ''}</TableCell>
+                                  <TableCell className="text-muted-foreground text-xs">{item.destino || ''}</TableCell>
+                                  <TableCell className="text-right font-mono font-medium text-red-600">
+                                    -${Number(item.monto).toFixed(2)}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                            <TableFooter>
+                              <TableRow>
+                                <TableCell colSpan={4} className="font-bold">
+                                  Total Gastos
+                                </TableCell>
+                                <TableCell className="text-right font-bold text-red-600">
+                                  ${Number(totalGastos).toFixed(2)}
+                                </TableCell>
+                              </TableRow>
+                            </TableFooter>
+                          </Table>
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground py-12 text-center italic">
+                          No hay gastos registrados en este turno.
+                        </p>
+                      )}
+                    </TabsContent>
+
+                    {/* Tab Transferencias */}
+                    <TabsContent value="transferencias" className="mt-0">
+                      {todasTransferencias.length > 0 ? (
+                        <div className="rounded-md border">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-16">Hora</TableHead>
+                                <TableHead>Descripción</TableHead>
+                                <TableHead>Origen</TableHead>
+                                <TableHead>Destino</TableHead>
+                                <TableHead className="w-32 text-right">Monto</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {todasTransferencias.map((item: TransferenciaItem, idx: number) => (
+                                <TableRow key={idx}>
+                                  <TableCell className="font-mono text-xs">{item.hora}</TableCell>
+                                  <TableCell className="max-w-xs truncate text-sm">{item.desc}</TableCell>
+                                  <TableCell className="text-muted-foreground text-xs">
+                                    <div className="max-w-[120px] truncate" title={item.origen_nombre}>
+                                      {item.origen_nombre}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-muted-foreground text-xs">
+                                    <div className="max-w-[120px] truncate" title={item.destino_nombre}>
+                                      {item.destino_nombre}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-right font-mono text-xs">
+                                    <span className="text-blue-600">
+                                      ${Number(item.monto_origen).toFixed(2)} {item.moneda_origen}
+                                    </span>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                            <TableFooter>
+                              <TableRow>
+                                <TableCell colSpan={4} className="font-bold">
+                                  Total Transferencias
+                                </TableCell>
+                                <TableCell className="text-right font-bold text-blue-600">
+                                  ${Number(totalTransferencias).toFixed(2)}
+                                </TableCell>
+                              </TableRow>
+                            </TableFooter>
+                          </Table>
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground py-12 text-center italic">
+                          No hay transferencias registradas en este turno.
+                        </p>
+                      )}
+                    </TabsContent>
+                  </Tabs>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          {/* Auditoría */}
+          <div className="space-y-6 lg:col-span-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <div className="flex items-center gap-2"><div className="rounded-lg bg-slate-500/10 p-2"><Wallet className="h-4 w-4 text-slate-600" /></div><span>Auditoría Final</span></div>
+                  <div className="px-3 text-[9px] font-bold uppercase">{cierre.estado}</div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="rounded-lg border p-3"><div className="flex items-center justify-between"><span className="text-xs font-bold">Saldo Inicial</span><span className="font-mono">{Number(calculos.saldo_inicial || 0).toFixed(2)}</span></div></div>
+                  <div className="rounded-lg border p-3"><div className="flex items-center justify-between"><span className="text-xs font-bold">Saldo Esperado</span><span className="font-mono">{Number(calculos.saldo_esperado_global || 0).toFixed(2)}</span></div></div>
+                  <div className="rounded-lg border p-3"><div className="flex items-center justify-between"><span className="text-xs font-bold">Saldo Contado</span><span className="font-mono">{Number(cierre.saldo_contado || 0).toFixed(2)}</span></div></div>
+                </div>
+
+                <div className={`rounded-lg border p-4 mt-3 ${Number(cierre.diferencia || 0) === 0 ? 'border-emerald-300' : 'border-rose-300'}`}>
+                  <div className="flex items-center justify-between"><div className="text-[10px] font-black uppercase">Diferencia Final</div><div className="font-mono text-xl">{Number(cierre.diferencia || 0) >= 0 ? '+' : ''}{Number(cierre.diferencia || 0).toFixed(2)}</div></div>
+                </div>
+
+                <div className="mt-4"><h4 className="text-[10px] font-black uppercase">Observaciones</h4><p className="italic text-xs">{cierre.observaciones || 'Sin notas adicionales.'}</p></div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </AppLayout>
+  );
 }
