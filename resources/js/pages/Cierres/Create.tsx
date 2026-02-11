@@ -648,46 +648,49 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
 
                     {/* Columna Derecha: Finalizar Cierre */}
                     <div className="space-y-6 lg:col-span-4">
-                        {/* Cards de Resumen de Transacciones */}
-                        <div className="grid grid-cols-3 gap-2">
-                            {/* Ingresos */}
-                            <Card
-                                className="cursor-pointer border-green-200 bg-green-500/5 transition-colors hover:bg-green-500/10"
-                                onClick={() => setShowTransaccionesDialog(true)}
-                            >
-                                <CardContent className="p-3 text-center">
-                                    <ArrowDown className="mx-auto mb-1 h-5 w-5 text-green-600" />
-                                    <p className="text-muted-foreground text-[10px] uppercase">Ingresos</p>
-                                    <p className="text-lg font-bold text-green-700">${Number(totalIngresos).toFixed(2)}</p>
-                                    <p className="text-muted-foreground text-[9px]">{todosIngresos.length} oper.</p>
-                                </CardContent>
-                            </Card>
+                        {/* Movimientos Financieros */}
+                        <div className="space-y-2">
+                            <h3 className="text-sm font-bold uppercase tracking-wide">Movimientos Financieros</h3>
+                            <div className="grid grid-cols-3 gap-2">
+                                {/* Gastos */}
+                                <Card
+                                    className="cursor-pointer border-red-200 bg-red-500/5 transition-colors hover:bg-red-500/10"
+                                    onClick={() => setShowTransaccionesDialog(true)}
+                                >
+                                    <CardContent className="p-3 text-center">
+                                        <ArrowUp className="mx-auto mb-1 h-5 w-5 text-red-600" />
+                                        <p className="text-muted-foreground text-[10px] uppercase">Gastos</p>
+                                        <p className="text-lg font-bold text-red-700">${Number(totalGastos).toFixed(2)}</p>
+                                        <p className="text-muted-foreground text-[9px]">{todosGastos.length} oper.</p>
+                                    </CardContent>
+                                </Card>
 
-                            {/* Gastos */}
-                            <Card
-                                className="cursor-pointer border-red-200 bg-red-500/5 transition-colors hover:bg-red-500/10"
-                                onClick={() => setShowTransaccionesDialog(true)}
-                            >
-                                <CardContent className="p-3 text-center">
-                                    <ArrowUp className="mx-auto mb-1 h-5 w-5 text-red-600" />
-                                    <p className="text-muted-foreground text-[10px] uppercase">Gastos</p>
-                                    <p className="text-lg font-bold text-red-700">${Number(totalGastos).toFixed(2)}</p>
-                                    <p className="text-muted-foreground text-[9px]">{todosGastos.length} oper.</p>
-                                </CardContent>
-                            </Card>
+                                {/* Ingresos */}
+                                <Card
+                                    className="cursor-pointer border-green-200 bg-green-500/5 transition-colors hover:bg-green-500/10"
+                                    onClick={() => setShowTransaccionesDialog(true)}
+                                >
+                                    <CardContent className="p-3 text-center">
+                                        <ArrowDown className="mx-auto mb-1 h-5 w-5 text-green-600" />
+                                        <p className="text-muted-foreground text-[10px] uppercase">Ingresos</p>
+                                        <p className="text-lg font-bold text-green-700">${Number(totalIngresos).toFixed(2)}</p>
+                                        <p className="text-muted-foreground text-[9px]">{todosIngresos.length} oper.</p>
+                                    </CardContent>
+                                </Card>
 
-                            {/* Transferencias */}
-                            <Card
-                                className="cursor-pointer border-blue-200 bg-blue-500/5 transition-colors hover:bg-blue-500/10"
-                                onClick={() => setShowTransaccionesDialog(true)}
-                            >
-                                <CardContent className="p-3 text-center">
-                                    <TrendingUp className="mx-auto mb-1 h-5 w-5 text-blue-600" />
-                                    <p className="text-muted-foreground text-[10px] uppercase">Transfer.</p>
-                                    <p className="text-lg font-bold text-blue-700">${Number(totalTransferencias).toFixed(2)}</p>
-                                    <p className="text-muted-foreground text-[9px]">{todasTransferencias.length} oper.</p>
-                                </CardContent>
-                            </Card>
+                                {/* Transferencias */}
+                                <Card
+                                    className="cursor-pointer border-blue-200 bg-blue-500/5 transition-colors hover:bg-blue-500/10"
+                                    onClick={() => setShowTransaccionesDialog(true)}
+                                >
+                                    <CardContent className="p-3 text-center">
+                                        <TrendingUp className="mx-auto mb-1 h-5 w-5 text-blue-600" />
+                                        <p className="text-muted-foreground text-[10px] uppercase">Transfer.</p>
+                                        <p className="text-lg font-bold text-blue-700">${Number(totalTransferencias).toFixed(2)}</p>
+                                        <p className="text-muted-foreground text-[9px]">{todasTransferencias.length} oper.</p>
+                                    </CardContent>
+                                </Card>
+                            </div>
                         </div>
 
                         {/* Dialog de Detalle de Transacciones */}
@@ -874,6 +877,13 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
                                 <CardTitle className="text-sm font-bold tracking-wider uppercase">Finalizar Cierre</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-4">
+                                {/* Total de Venta */}
+                                <div className="rounded-lg border border-primary bg-primary/10 p-4">
+                                    <p className="text-muted-foreground text-xs font-bold uppercase mb-1">Total de Ventas del Turno</p>
+                                    <p className="text-4xl font-black text-emerald-600">${Number(calculos.ventas_efectivo).toFixed(2)}</p>
+                                    <p className="text-muted-foreground mt-2 text-xs">Incluyendo todas las monedas y métodos de pago</p>
+                                </div>
+
                                 <div className="space-y-1">
                                     <Label className="text-muted-foreground text-xs font-bold uppercase">Observaciones del Turno</Label>
                                     <Input
