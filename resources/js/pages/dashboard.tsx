@@ -345,7 +345,7 @@ export default function Dashboard({
                         <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-green-800 to-green-400">
                             <CursorProvider>
                                 <CursorFollow>
-                                    <div className="rounded-lg bg-emerald-500 px-2 py-1 text-sm text-white shadow-lg">Movimientos Internos</div>
+                                    <div className="rounded-lg bg-emerald-500 px-2 py-1 text-sm text-white shadow-lg">Movimientos Internos de Dinero</div>
                                 </CursorFollow>
                             </CursorProvider>
                             {/* Ícono de fondo transparente */}
@@ -368,7 +368,7 @@ export default function Dashboard({
                                 {/* Botón pequeño */}
                                 <Link href={route('transacciones')}>
                                     <button className="absolute right-4 bottom-4 rounded-md bg-green-800 px-4 py-1 text-sm font-semibold text-white shadow-md transition duration-300 hover:animate-pulse hover:cursor-pointer hover:bg-white hover:text-green-800">
-                                        Transacciones
+                                        Movimiento Monetario
                                     </button>
                                 </Link>
                             </div>
@@ -381,6 +381,11 @@ export default function Dashboard({
                     {/* Widget de Cierres - Todos */}
                     <div>
                         <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-amber-800 to-amber-400">
+                            <CursorProvider>
+                                <CursorFollow>
+                                    <div className="rounded-lg bg-amber-500 px-2 py-1 text-sm text-white shadow-lg">Cierre del Día</div>
+                                </CursorFollow>
+                            </CursorProvider>
                             {/* Ícono de fondo transparente */}
                             <div className="absolute inset-0 flex items-center justify-center opacity-10">
                                 <LucideBoomBox className="h-48 w-48 text-white" />
@@ -678,11 +683,10 @@ export default function Dashboard({
                                     {monedas.map((moneda) => (
                                         <div
                                             key={moneda.id}
-                                            className={`rounded-lg border p-4 transition-all hover:shadow-md ${
-                                                moneda.principal
-                                                    ? 'border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-950'
-                                                    : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
-                                            }`}
+                                            className={`rounded-lg border p-4 transition-all hover:shadow-md ${moneda.principal
+                                                ? 'border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-950'
+                                                : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
+                                                }`}
                                         >
                                             {/* Header con símbolo y código */}
                                             <div className="mb-3 flex items-start justify-between">
@@ -959,8 +963,8 @@ export default function Dashboard({
                                                                         cambio.es_ganancia
                                                                             ? 'text-green-600 dark:text-green-400'
                                                                             : cambio.es_perdida
-                                                                              ? 'text-red-600 dark:text-red-400'
-                                                                              : 'text-gray-600 dark:text-gray-400'
+                                                                                ? 'text-red-600 dark:text-red-400'
+                                                                                : 'text-gray-600 dark:text-gray-400'
                                                                     }
                                                                 >
                                                                     {cambio.impacto_formateado}
@@ -972,15 +976,15 @@ export default function Dashboard({
                                                                         cambio.es_ganancia
                                                                             ? 'default'
                                                                             : cambio.es_perdida
-                                                                              ? 'destructive'
-                                                                              : 'secondary'
+                                                                                ? 'destructive'
+                                                                                : 'secondary'
                                                                     }
                                                                     className={
                                                                         cambio.es_ganancia
                                                                             ? 'bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900 dark:text-green-200'
                                                                             : cambio.es_perdida
-                                                                              ? 'bg-red-100 text-red-800 hover:bg-red-200 dark:bg-red-900 dark:text-red-200'
-                                                                              : ''
+                                                                                ? 'bg-red-100 text-red-800 hover:bg-red-200 dark:bg-red-900 dark:text-red-200'
+                                                                                : ''
                                                                     }
                                                                 >
                                                                     {cambio.es_ganancia ? 'Ganancia' : cambio.es_perdida ? 'Pérdida' : 'Neutro'}
@@ -1133,8 +1137,8 @@ export default function Dashboard({
                                                                     estado.tipo_cuenta === 'permanentes'
                                                                         ? 'border-blue-300 text-blue-800 dark:text-blue-300'
                                                                         : estado.tipo_cuenta === 'temporales'
-                                                                          ? 'border-green-300 text-green-800 dark:text-green-300'
-                                                                          : 'border-red-300 text-red-800 dark:text-red-300'
+                                                                            ? 'border-green-300 text-green-800 dark:text-green-300'
+                                                                            : 'border-red-300 text-red-800 dark:text-red-300'
                                                                 }
                                                             >
                                                                 {estado.tipo_cuenta}
