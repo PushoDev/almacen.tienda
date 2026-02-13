@@ -19,7 +19,7 @@ import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import { BadgeDollarSign, FileText, Sheet, Warehouse, Eye } from 'lucide-react';
+import { BadgeDollarSign, Eye, FileText, Sheet, Warehouse } from 'lucide-react';
 import { useState } from 'react';
 
 // Interfaces
@@ -34,6 +34,8 @@ interface Producto {
     stock_almacen: number;
     precio_venta: number | null;
     ganancia: number | null;
+    tiene_precio: boolean;
+    es_precio_otro: boolean;
     almacen_id: number;
 }
 
@@ -193,15 +195,12 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
         setPreciosVendedores(null);
 
         try {
-            const response = await fetch(
-                `/disponibles/${producto.id}/precios-vendedores/${producto.almacen_id}`,
-                {
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'Accept': 'application/json',
-                    },
-                }
-            );
+            const response = await fetch(`/disponibles/${producto.id}/precios-vendedores/${producto.almacen_id}`, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    Accept: 'application/json',
+                },
+            });
 
             const data = await response.json();
 
@@ -466,9 +465,11 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                                                     variant="ghost"
                                                                     size="sm"
                                                                     className={cn(
-                                                                        producto.precio_venta !== null
-                                                                            ? 'text-amber-600 hover:bg-amber-100 hover:text-amber-800'
-                                                                            : 'text-green-600 hover:bg-emerald-100 hover:text-green-800',
+                                                                        producto.es_precio_otro
+                                                                            ? 'text-blue-600 hover:bg-blue-100 hover:text-blue-800'
+                                                                            : producto.precio_venta !== null
+                                                                              ? 'text-amber-600 hover:bg-amber-100 hover:text-amber-800'
+                                                                              : 'text-green-600 hover:bg-emerald-100 hover:text-green-800',
                                                                     )}
                                                                     onClick={() => openEditModal(producto)}
                                                                 >
@@ -476,7 +477,13 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                                                 </Button>
                                                             </TooltipTrigger>
                                                             <TooltipContent>
-                                                                <p>{producto.precio_venta ? 'Editar precio' : 'Asignar precio'}</p>
+                                                                <p>
+                                                                    {producto.es_precio_otro
+                                                                        ? 'Precio de admin - Editar'
+                                                                        : producto.precio_venta
+                                                                          ? 'Editar precio'
+                                                                          : 'Asignar precio'}
+                                                                </p>
                                                             </TooltipContent>
                                                         </Tooltip>
                                                     </TooltipProvider>
@@ -685,19 +692,13 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                 </AlertDialogTitle>
                                 {preciosVendedores && (
                                     <div className="mt-3 space-y-1">
-                                        <p className="text-base font-semibold text-foreground">
-                                            {preciosVendedores.producto.nombre}
-                                        </p>
-                                        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                                        <p className="text-foreground text-base font-semibold">{preciosVendedores.producto.nombre}</p>
+                                        <div className="text-muted-foreground flex flex-wrap items-center gap-3 text-sm">
                                             <span className="flex items-center gap-1">
                                                 <Badge variant="outline">{preciosVendedores.producto.marca}</Badge>
                                             </span>
-                                            {preciosVendedores.producto.modelo && (
-                                                <span>Modelo: {preciosVendedores.producto.modelo}</span>
-                                            )}
-                                            {preciosVendedores.producto.capacidad && (
-                                                <span>• {preciosVendedores.producto.capacidad}</span>
-                                            )}
+                                            {preciosVendedores.producto.modelo && <span>Modelo: {preciosVendedores.producto.modelo}</span>}
+                                            {preciosVendedores.producto.capacidad && <span>• {preciosVendedores.producto.capacidad}</span>}
                                         </div>
                                         <div className="flex items-center gap-4 pt-2">
                                             <span className="flex items-center gap-2 text-sm">
@@ -725,7 +726,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                             <span className="absolute h-12 w-12 animate-ping rounded-full bg-blue-400 opacity-75" />
                                             <span className="relative flex h-12 w-12 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600" />
                                         </div>
-                                        <p className="text-sm font-medium text-muted-foreground">Cargando precios de vendedores...</p>
+                                        <p className="text-muted-foreground text-sm font-medium">Cargando precios de vendedores...</p>
                                     </div>
                                 </div>
                             ) : preciosVendedores && preciosVendedores.precios.length > 0 ? (
@@ -749,7 +750,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                             <p className="text-lg font-bold text-purple-900 dark:text-purple-100">
                                                 {formatCurrency(
                                                     preciosVendedores.precios.reduce((sum: number, p: any) => sum + p.precio_venta, 0) /
-                                                        preciosVendedores.precios.length
+                                                        preciosVendedores.precios.length,
                                                 )}
                                             </p>
                                         </div>
@@ -782,7 +783,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                                             key={precio.user_id}
                                                             className={cn(
                                                                 index % 2 === 0 ? 'bg-background' : 'bg-muted/30',
-                                                                'hover:bg-accent/50 transition-colors'
+                                                                'hover:bg-accent/50 transition-colors',
                                                             )}
                                                         >
                                                             <TableCell className="font-medium">
@@ -793,7 +794,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                                                     {precio.vendedor}
                                                                 </div>
                                                             </TableCell>
-                                                            <TableCell className="text-sm text-muted-foreground">{precio.email}</TableCell>
+                                                            <TableCell className="text-muted-foreground text-sm">{precio.email}</TableCell>
                                                             <TableCell className="text-right">
                                                                 <span className="font-semibold text-blue-600 dark:text-blue-400">
                                                                     {formatCurrency(precio.precio_venta)}
@@ -803,7 +804,9 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                                                 <span
                                                                     className={cn(
                                                                         'font-semibold',
-                                                                        precio.ganancia >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                                                                        precio.ganancia >= 0
+                                                                            ? 'text-green-600 dark:text-green-400'
+                                                                            : 'text-red-600 dark:text-red-400',
                                                                     )}
                                                                 >
                                                                     {formatCurrency(precio.ganancia)}
@@ -817,7 +820,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                                                     {margen}%
                                                                 </Badge>
                                                             </TableCell>
-                                                            <TableCell className="text-right text-xs text-muted-foreground">
+                                                            <TableCell className="text-muted-foreground text-right text-xs">
                                                                 {precio.ultima_actualizacion}
                                                             </TableCell>
                                                         </TableRow>
@@ -833,7 +836,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                         <BadgeDollarSign className="h-10 w-10 text-gray-400" />
                                     </div>
                                     <h3 className="mb-2 text-lg font-semibold">No hay precios registrados</h3>
-                                    <p className="text-sm text-muted-foreground">
+                                    <p className="text-muted-foreground text-sm">
                                         Ningún vendedor ha asignado precio a este producto en este almacén.
                                     </p>
                                 </div>

@@ -31,26 +31,46 @@ class ProductoVendedorController extends Controller
             'productos' => function ($query) use ($user) {
                 $query->withPivot('cantidad');
 
-                $query->leftJoin('producto_vendedors', function ($join) use ($user) {
-                    $join->on('productos.id', '=', 'producto_vendedors.producto_id')
-                        ->on('almacen_producto.almacen_id', '=', 'producto_vendedors.almacen_id')
-                        ->where('producto_vendedors.user_id', $user->id);
-                })
-                    ->select(
-                        'productos.*',
-                        'producto_vendedors.precio_venta',
-                        'producto_vendedors.venta_ganancia'
-                    )
+                // Join con precio del vendedor actual
+                $query->leftJoin('producto_vendedors as pv', function ($join) use ($user) {
+                    $join->on('productos.id', '=', 'pv.producto_id')
+                        ->on('almacen_producto.almacen_id', '=', 'pv.almacen_id')
+                        ->where('pv.user_id', $user->id);
+                });
+
+                // Join para traer precio de cualquier vendedor (incluyendo admin)
+                $query->leftJoin('producto_vendedors as pv_admin', function ($join) {
+                    $join->on('productos.id', '=', 'pv_admin.producto_id')
+                        ->on('almacen_producto.almacen_id', '=', 'pv_admin.almacen_id')
+                        ->whereNotNull('pv_admin.precio_venta');
+                });
+
+                $query->select(
+                    'productos.*',
+                    'pv.precio_venta',
+                    'pv.venta_ganancia',
+                    DB::raw('COALESCE(pv.precio_venta, pv_admin.precio_venta) as precio_venta'),
+                    DB::raw('COALESCE(pv.venta_ganancia, pv_admin.venta_ganancia) as venta_ganancia')
+                )
                     ->with('categoria');
             }
         ])->get();
 
-        $almacenesTransformados = $almacenes->map(function ($almacen) {
-            $productos = $almacen->productos->map(function ($producto) use ($almacen) {
+        $almacenesTransformados = $almacenes->map(function ($almacen) use ($user) {
+            $productos = $almacen->productos->map(function ($producto) use ($almacen, $user) {
 
                 $stockAlmacen = $producto->pivot->cantidad;
                 $precioVenta = $producto->precio_venta;
                 $ganancia = $producto->venta_ganancia;
+
+                // Verificar si es precio del admin u otro vendedor
+                $precioVendedor = DB::table('producto_vendedors')
+                    ->where('producto_id', $producto->id)
+                    ->where('almacen_id', $almacen->id)
+                    ->where('user_id', $user->id)
+                    ->value('precio_venta');
+
+                $esPrecioOtro = $precioVenta && is_null($precioVendedor);
 
                 return [
                     'id' => $producto->id,
@@ -63,7 +83,8 @@ class ProductoVendedorController extends Controller
                     'stock_almacen' => $stockAlmacen,
                     'precio_venta' => $precioVenta,
                     'ganancia' => $ganancia,
-                    'tiene_precio' => ($precioVenta ?? 0) > 0,
+                    'tiene_precio' => $precioVenta > 0,
+                    'es_precio_otro' => $esPrecioOtro,
                     'almacen_id' => $almacen->id,
                 ];
             });
@@ -147,6 +168,51 @@ class ProductoVendedorController extends Controller
             'new_profit' => $ganancia,
             'new_price' => $precioVenta,
             'history_recorded' => $precioCambio,
+        ]);
+    }
+
+    /**
+     * Establecer precio base por administrador para un producto en un almacén.
+     */
+    public function setPreciosBase(Request $request, $productoId)
+    {
+        $user = Auth::user();
+
+        if (!in_array($user->role, ['admin', 'moderador'])) {
+            return response()->json([
+                'error' => 'No tienes permisos para establecer precios base.',
+            ], 403);
+        }
+
+        $producto = Producto::findOrFail($productoId);
+
+        $validated = $request->validate([
+            'precio_admin' => ['required', 'numeric', 'min:0.01'],
+            'almacen_id' => ['required', 'integer', 'exists:almacens,id'],
+        ]);
+
+        $almacenId = $validated['almacen_id'];
+        $precioAdmin = round($validated['precio_admin'], 2);
+        $gananciaAdmin = round($precioAdmin - $producto->precio_compra_producto, 2);
+
+        DB::table('producto_vendedors')->updateOrInsert(
+            [
+                'producto_id' => $productoId,
+                'user_id' => $user->id,
+                'almacen_id' => $almacenId,
+            ],
+            [
+                'precio_admin' => $precioAdmin,
+                'ganancia_admin' => $gananciaAdmin,
+                'updated_at' => now(),
+            ]
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Precio base establecido correctamente',
+            'precio_admin' => $precioAdmin,
+            'ganancia_admin' => $gananciaAdmin,
         ]);
     }
 
