@@ -35,7 +35,6 @@ interface Producto {
     precio_venta: number | null;
     ganancia: number | null;
     tiene_precio: boolean;
-    es_precio_otro: boolean;
     almacen_id: number;
 }
 
@@ -465,11 +464,9 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                                                     variant="ghost"
                                                                     size="sm"
                                                                     className={cn(
-                                                                        producto.es_precio_otro
-                                                                            ? 'text-blue-600 hover:bg-blue-100 hover:text-blue-800'
-                                                                            : producto.precio_venta !== null
-                                                                              ? 'text-amber-600 hover:bg-amber-100 hover:text-amber-800'
-                                                                              : 'text-green-600 hover:bg-emerald-100 hover:text-green-800',
+                                                                        producto.precio_venta !== null
+                                                                            ? 'text-amber-600 hover:bg-amber-100 hover:text-amber-800'
+                                                                            : 'text-green-600 hover:bg-emerald-100 hover:text-green-800',
                                                                     )}
                                                                     onClick={() => openEditModal(producto)}
                                                                 >
@@ -477,13 +474,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                                                 </Button>
                                                             </TooltipTrigger>
                                                             <TooltipContent>
-                                                                <p>
-                                                                    {producto.es_precio_otro
-                                                                        ? 'Precio de admin - Editar'
-                                                                        : producto.precio_venta
-                                                                          ? 'Editar precio'
-                                                                          : 'Asignar precio'}
-                                                                </p>
+                                                                <p>{producto.precio_venta ? 'Editar precio' : 'Asignar precio'}</p>
                                                             </TooltipContent>
                                                         </Tooltip>
                                                     </TooltipProvider>

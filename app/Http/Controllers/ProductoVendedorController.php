@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Producto;
 use App\Models\PrecioHistorial;
 use App\Models\Almacen;
+use App\Models\User;
+use App\Notifications\CambioPrecioVendedorNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
@@ -28,49 +30,29 @@ class ProductoVendedorController extends Controller
         }
 
         $almacenes = $almacenesQuery->with([
-            'productos' => function ($query) use ($user) {
+            'productos' => function ($query) {
                 $query->withPivot('cantidad');
 
-                // Join con precio del vendedor actual
-                $query->leftJoin('producto_vendedors as pv', function ($join) use ($user) {
-                    $join->on('productos.id', '=', 'pv.producto_id')
-                        ->on('almacen_producto.almacen_id', '=', 'pv.almacen_id')
-                        ->where('pv.user_id', $user->id);
-                });
-
-                // Join para traer precio de cualquier vendedor (incluyendo admin)
-                $query->leftJoin('producto_vendedors as pv_admin', function ($join) {
-                    $join->on('productos.id', '=', 'pv_admin.producto_id')
-                        ->on('almacen_producto.almacen_id', '=', 'pv_admin.almacen_id')
-                        ->whereNotNull('pv_admin.precio_venta');
-                });
-
-                $query->select(
-                    'productos.*',
-                    'pv.precio_venta',
-                    'pv.venta_ganancia',
-                    DB::raw('COALESCE(pv.precio_venta, pv_admin.precio_venta) as precio_venta'),
-                    DB::raw('COALESCE(pv.venta_ganancia, pv_admin.venta_ganancia) as venta_ganancia')
-                )
+                $query->leftJoin('producto_vendedors', function ($join) {
+                    $join->on('productos.id', '=', 'producto_vendedors.producto_id')
+                        ->on('almacen_producto.almacen_id', '=', 'producto_vendedors.almacen_id')
+                        ->where('producto_vendedors.user_id', 1); // Siempre mostrar precio del admin
+                })
+                    ->select(
+                        'productos.*',
+                        'producto_vendedors.precio_venta',
+                        'producto_vendedors.venta_ganancia'
+                    )
                     ->with('categoria');
             }
         ])->get();
 
-        $almacenesTransformados = $almacenes->map(function ($almacen) use ($user) {
-            $productos = $almacen->productos->map(function ($producto) use ($almacen, $user) {
+        $almacenesTransformados = $almacenes->map(function ($almacen) {
+            $productos = $almacen->productos->map(function ($producto) use ($almacen) {
 
                 $stockAlmacen = $producto->pivot->cantidad;
                 $precioVenta = $producto->precio_venta;
                 $ganancia = $producto->venta_ganancia;
-
-                // Verificar si es precio del admin u otro vendedor
-                $precioVendedor = DB::table('producto_vendedors')
-                    ->where('producto_id', $producto->id)
-                    ->where('almacen_id', $almacen->id)
-                    ->where('user_id', $user->id)
-                    ->value('precio_venta');
-
-                $esPrecioOtro = $precioVenta && is_null($precioVendedor);
 
                 return [
                     'id' => $producto->id,
@@ -83,8 +65,7 @@ class ProductoVendedorController extends Controller
                     'stock_almacen' => $stockAlmacen,
                     'precio_venta' => $precioVenta,
                     'ganancia' => $ganancia,
-                    'tiene_precio' => $precioVenta > 0,
-                    'es_precio_otro' => $esPrecioOtro,
+                    'tiene_precio' => ($precioVenta ?? 0) > 0,
                     'almacen_id' => $almacen->id,
                 ];
             });
@@ -131,17 +112,17 @@ class ProductoVendedorController extends Controller
 
         $precioAnterior = DB::table('producto_vendedors')
             ->where('producto_id', $productoId)
-            ->where('user_id', $user->id)
             ->where('almacen_id', $almacenId)
             ->value('precio_venta');
 
         $precioCambio = $precioAnterior !== null &&
             round($precioAnterior, 2) != $precioVenta;
 
+        // Guardar siempre en la fila del admin (user_id = 1) para que todos vean el mismo precio
         DB::table('producto_vendedors')->updateOrInsert(
             [
                 'producto_id' => $productoId,
-                'user_id' => $user->id,
+                'user_id' => 1, // Siempre guardar como admin
                 'almacen_id' => $almacenId,
             ],
             [
@@ -160,6 +141,21 @@ class ProductoVendedorController extends Controller
                 'precio_nuevo' => $precioVenta,
                 'accion' => 'Venta Manual - Almacén ID ' . $almacenId,
             ]);
+
+            // Notificar al admin si el vendedor cambió el precio
+            if (!in_array($user->role, ['admin', 'moderador'])) {
+                $almacen = Almacen::find($almacenId);
+                $admins = User::where('role', 'admin')->get();
+                foreach ($admins as $admin) {
+                    $admin->notify(new CambioPrecioVendedorNotification(
+                        $producto,
+                        $almacen,
+                        $user,
+                        $precioAnterior ?? 0,
+                        $precioVenta
+                    ));
+                }
+            }
         }
 
         return response()->json([
