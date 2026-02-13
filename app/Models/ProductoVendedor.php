@@ -24,12 +24,16 @@ class ProductoVendedor extends Pivot
         'user_id',
         'almacen_id',
         'precio_venta',
-        'venta_ganancia'
+        'venta_ganancia',
+        'precio_admin',
+        'ganancia_admin',
     ];
 
     protected $casts = [
         'precio_venta' => 'decimal:2',
         'venta_ganancia' => 'decimal:2',
+        'precio_admin' => 'decimal:2',
+        'ganancia_admin' => 'decimal:2',
     ];
 
     // Relación con Producto

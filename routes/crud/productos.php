@@ -44,5 +44,11 @@ Route::middleware(['auth', 'verified'])->group(
             '/disponibles/{producto}/precios-vendedores/{almacen}',
             [ProductoVendedorController::class, 'preciosPorVendedor']
         )->name('disponibles.precios-vendedores');
+
+        // 🆕 NUEVA RUTA: Establecer precio base por administrador
+        Route::post(
+            '/disponibles/{producto}/precios-base',
+            [ProductoVendedorController::class, 'setPreciosBase']
+        )->name('disponibles.precios-base');
     }
 );

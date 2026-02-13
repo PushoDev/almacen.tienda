@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Producto;
 use App\Models\PrecioHistorial;
 use App\Models\Almacen;
+use App\Models\User;
+use App\Notifications\CambioPrecioVendedorNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
@@ -28,13 +30,13 @@ class ProductoVendedorController extends Controller
         }
 
         $almacenes = $almacenesQuery->with([
-            'productos' => function ($query) use ($user) {
+            'productos' => function ($query) {
                 $query->withPivot('cantidad');
 
-                $query->leftJoin('producto_vendedors', function ($join) use ($user) {
+                $query->leftJoin('producto_vendedors', function ($join) {
                     $join->on('productos.id', '=', 'producto_vendedors.producto_id')
                         ->on('almacen_producto.almacen_id', '=', 'producto_vendedors.almacen_id')
-                        ->where('producto_vendedors.user_id', $user->id);
+                        ->where('producto_vendedors.user_id', 1); // Siempre mostrar precio del admin
                 })
                     ->select(
                         'productos.*',
@@ -110,17 +112,17 @@ class ProductoVendedorController extends Controller
 
         $precioAnterior = DB::table('producto_vendedors')
             ->where('producto_id', $productoId)
-            ->where('user_id', $user->id)
             ->where('almacen_id', $almacenId)
             ->value('precio_venta');
 
         $precioCambio = $precioAnterior !== null &&
             round($precioAnterior, 2) != $precioVenta;
 
+        // Guardar siempre en la fila del admin (user_id = 1) para que todos vean el mismo precio
         DB::table('producto_vendedors')->updateOrInsert(
             [
                 'producto_id' => $productoId,
-                'user_id' => $user->id,
+                'user_id' => 1, // Siempre guardar como admin
                 'almacen_id' => $almacenId,
             ],
             [
@@ -139,6 +141,21 @@ class ProductoVendedorController extends Controller
                 'precio_nuevo' => $precioVenta,
                 'accion' => 'Venta Manual - Almacén ID ' . $almacenId,
             ]);
+
+            // Notificar al admin si el vendedor cambió el precio
+            if (!in_array($user->role, ['admin', 'moderador'])) {
+                $almacen = Almacen::find($almacenId);
+                $admins = User::where('role', 'admin')->get();
+                foreach ($admins as $admin) {
+                    $admin->notify(new CambioPrecioVendedorNotification(
+                        $producto,
+                        $almacen,
+                        $user,
+                        $precioAnterior ?? 0,
+                        $precioVenta
+                    ));
+                }
+            }
         }
 
         return response()->json([
@@ -147,6 +164,51 @@ class ProductoVendedorController extends Controller
             'new_profit' => $ganancia,
             'new_price' => $precioVenta,
             'history_recorded' => $precioCambio,
+        ]);
+    }
+
+    /**
+     * Establecer precio base por administrador para un producto en un almacén.
+     */
+    public function setPreciosBase(Request $request, $productoId)
+    {
+        $user = Auth::user();
+
+        if (!in_array($user->role, ['admin', 'moderador'])) {
+            return response()->json([
+                'error' => 'No tienes permisos para establecer precios base.',
+            ], 403);
+        }
+
+        $producto = Producto::findOrFail($productoId);
+
+        $validated = $request->validate([
+            'precio_admin' => ['required', 'numeric', 'min:0.01'],
+            'almacen_id' => ['required', 'integer', 'exists:almacens,id'],
+        ]);
+
+        $almacenId = $validated['almacen_id'];
+        $precioAdmin = round($validated['precio_admin'], 2);
+        $gananciaAdmin = round($precioAdmin - $producto->precio_compra_producto, 2);
+
+        DB::table('producto_vendedors')->updateOrInsert(
+            [
+                'producto_id' => $productoId,
+                'user_id' => $user->id,
+                'almacen_id' => $almacenId,
+            ],
+            [
+                'precio_admin' => $precioAdmin,
+                'ganancia_admin' => $gananciaAdmin,
+                'updated_at' => now(),
+            ]
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Precio base establecido correctamente',
+            'precio_admin' => $precioAdmin,
+            'ganancia_admin' => $gananciaAdmin,
         ]);
     }
 

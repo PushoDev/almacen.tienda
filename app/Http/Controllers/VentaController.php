@@ -127,8 +127,9 @@ class VentaController extends Controller
         })
             ->with([
                 'categoria',
-                'vendedores' => function ($q) use ($user) {
-                    $q->where('user_id', $user->id)
+                'vendedores' => function ($q) {
+                    // Buscar precio del admin (user_id = 1)
+                    $q->where('user_id', 1)
                         ->select('users.id', 'producto_vendedors.precio_venta', 'producto_vendedors.venta_ganancia');
                 },
                 'almacenes' => function ($q) use ($id) {
