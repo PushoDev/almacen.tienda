@@ -189,11 +189,10 @@ function ImportModal({ isOpen, onClose, onImport, almacenes }: ImportModalProps)
                     <div className="space-y-2">
                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">📄 Archivo Excel</label>
                         <div
-                            className={`cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-all ${
-                                isDragging
-                                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                                    : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700/30'
-                            } ${isImporting ? 'pointer-events-none opacity-50' : ''}`}
+                            className={`cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-all ${isDragging
+                                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                                : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700/30'
+                                } ${isImporting ? 'pointer-events-none opacity-50' : ''}`}
                             onDragOver={handleDragOver}
                             onDragLeave={handleDragLeave}
                             onDrop={handleDrop}
@@ -296,6 +295,7 @@ interface ProductosPageProps {
     categorias?: { id: number; nombre_categoria: string }[];
     filters?: ProductosFilters;
     sort?: ProductosSort;
+    canViewStockStats?: boolean;
 }
 
 const defaultPaginator = {
@@ -312,6 +312,7 @@ export default function ProductosPage({
     categorias = [],
     filters = {},
     sort = { field: 'nombre_producto', direction: 'asc' },
+    canViewStockStats = false,
 }: ProductosPageProps) {
     // Estados para gestión de stock
     const [searchTerm, setSearchTerm] = useState(filters.search || '');
@@ -532,39 +533,53 @@ export default function ProductosPage({
 
                 <Separator className="col-span-4" />
 
-                {/* Panel de Información de Stock */}
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                    <div className="flex items-center justify-between rounded-lg bg-blue-100 p-4 dark:bg-blue-900">
-                        <div>
-                            <h3 className="font-semibold">Total Productos</h3>
-                            <p className="text-2xl">{productos.total}</p>
+                {/* Contenedor de Widgets de Estadísticas */}
+                <div className={`grid gap-6 ${canViewStockStats ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'}`}>
+                    {/* Widget: Productos Totales */}
+                    <div className="rounded-lg border border-blue-500/20 bg-blue-50/50 p-6 shadow-sm dark:bg-blue-900/20">
+                        <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Productos Totales</p>
+                            <Package className="h-5 w-5 text-blue-500" />
                         </div>
-                        <BarChart3 className="text-blue-500" size={32} />
+                        <p className="mt-2 text-3xl font-bold text-blue-900 dark:text-blue-200">{productos.total}</p>
+                        <p className="mt-1 text-xs text-blue-500 dark:text-blue-400">Unidades únicas registradas</p>
                     </div>
 
-                    <div className="flex items-center justify-between rounded-lg bg-amber-100 p-4 dark:bg-amber-900">
-                        <div>
-                            <h3 className="font-semibold">Stock Bajo</h3>
-                            <p className="text-2xl">{productosConStockBajo.length}</p>
+                    {/* Widget: Valor Total del Inventario */}
+                    <div className="rounded-lg border border-green-500/20 bg-green-50/50 p-6 shadow-sm dark:bg-green-900/20">
+                        <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-green-600 dark:text-green-400">Valor Total del Inventario</p>
+                            <DollarSign className="h-5 w-5 text-green-500" />
                         </div>
-                        <AlertTriangle className="text-amber-500" size={32} />
+                        <p className="mt-2 text-3xl font-bold text-green-900 dark:text-green-200">
+                            ${valorTotalInventario.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                        <p className="mt-1 text-xs text-green-500 dark:text-green-400">Costo total de todos los productos</p>
                     </div>
 
-                    <div className="flex items-center justify-between rounded-lg bg-green-100 p-4 dark:bg-green-900">
-                        <div>
-                            <h3 className="font-semibold">Valor Total</h3>
-                            <p className="text-2xl">${valorTotalInventario.toFixed(2)}</p>
+                    {/* Widget: Productos con Stock Bajo */}
+                    <div className="rounded-lg border border-amber-500/20 bg-amber-50/50 p-6 shadow-sm dark:bg-amber-900/20">
+                        <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-amber-600 dark:text-amber-400">Productos con Stock Bajo</p>
+                            <AlertTriangle className="h-5 w-5 text-amber-500" />
                         </div>
-                        <DollarSign className="text-green-500" size={32} />
+                        <p className="mt-2 text-3xl font-bold text-amber-900 dark:text-amber-200">{productosConStockBajo.length}</p>
+                        <p className="mt-1 text-xs text-amber-500 dark:text-amber-400">Productos con menos de 3 unidades</p>
                     </div>
 
-                    <div className="flex items-center justify-between rounded-lg bg-red-100 p-4 dark:bg-red-900">
-                        <div>
-                            <h3 className="font-semibold">Valor Stock Bajo</h3>
-                            <p className="text-2xl">${valorStockBajo.toFixed(2)}</p>
+                    {/* Widget: Valor Stock Bajo (Condicional) */}
+                    {canViewStockStats && (
+                        <div className="rounded-lg border border-red-500/20 bg-red-50/50 p-6 shadow-sm dark:bg-red-900/20">
+                            <div className="flex items-center justify-between">
+                                <p className="text-sm font-medium text-red-600 dark:text-red-400">Valor Stock Bajo</p>
+                                <Wallet className="h-5 w-5 text-red-500" />
+                            </div>
+                            <p className="mt-2 text-3xl font-bold text-red-900 dark:text-red-200">
+                                ${valorStockBajo.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </p>
+                            <p className="mt-1 text-xs text-red-500 dark:text-red-400">Costo de productos con stock bajo</p>
                         </div>
-                        <DollarSign className="text-red-500" size={32} />
-                    </div>
+                    )}
                 </div>
 
                 {/* Controles de Filtro */}
