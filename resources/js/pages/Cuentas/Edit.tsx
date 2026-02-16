@@ -59,7 +59,7 @@ export default function EditarCuentasPage({ cuenta, monedas }: EditarCuentasPage
     // Manejo del formulario con useForm - ACTUALIZADO con nuevos campos
     const { data, setData, put, errors, processing } = useForm({
         nombre_cuenta: cuenta.nombre_cuenta,
-        tipo: cuenta.tipo as 'caja' | 'banco' | 'tarjeta' | 'efectivo' | 'otro',
+        tipo: cuenta.tipo as 'tarjeta' | 'efectivo' | 'otro',
         saldo_cuenta: cuenta.saldo_cuenta ?? 0,
         moneda_id: cuenta.moneda_id.toString(),
         tipo_cuenta: cuenta.tipo_cuenta as 'permanentes' | 'temporales' | 'deudas',
@@ -123,14 +123,12 @@ export default function EditarCuentasPage({ cuenta, monedas }: EditarCuentasPage
                                         <Label htmlFor="tipo">Tipo de Activo *</Label>
                                         <Select
                                             value={data.tipo}
-                                            onValueChange={(value: 'caja' | 'banco' | 'tarjeta' | 'efectivo' | 'otro') => setData('tipo', value)}
+                                            onValueChange={(value: 'tarjeta' | 'efectivo' | 'otro') => setData('tipo', value)}
                                         >
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Seleccione el tipo de activo" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="caja">Caja</SelectItem>
-                                                <SelectItem value="banco">Banco</SelectItem>
                                                 <SelectItem value="tarjeta">Tarjeta</SelectItem>
                                                 <SelectItem value="efectivo">Efectivo</SelectItem>
                                                 <SelectItem value="otro">Otro</SelectItem>

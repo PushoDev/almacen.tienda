@@ -18,7 +18,7 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // Usuarios
+        // Usuario Development
         User::factory()->create([
             'name' => 'Luis Alberto',
             'email' => 'pushodevs@posglorietashop.com',
@@ -38,18 +38,11 @@ class DatabaseSeeder extends Seeder
             'password' => Hash::make('angel2025'),
             'role' => 'admin',
         ]);
-        // Usuario Moderador
         User::factory()->create([
             'name' => 'Aylin',
             'email' => 'aylin2025@posglorietashop.com',
             'password' => Hash::make('aylin2025'),
-            'role' => 'moderador',
-        ]);
-        User::factory()->create([
-            'name' => 'Aylen',
-            'email' => 'aylen2025@posglorietashop.com',
-            'password' => Hash::make('aylen2025'),
-            'role' => 'moderador',
+            'role' => 'admin',
         ]);
         // Usuarios Vendedores
         User::factory()->create([
@@ -89,7 +82,7 @@ class DatabaseSeeder extends Seeder
                 'codigo_moneda' => 'CUP',
                 'nombre_moneda' => 'Peso Cubano MN',
                 'simbolo_moneda' => 'CUP',
-                'tasa_cambio' => 365.0,
+                'tasa_cambio' => 450.0,
                 'commission' => 0,
                 'estado' => true,
                 'principal' => false,

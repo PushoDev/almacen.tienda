@@ -42,7 +42,7 @@ export default function CreateCuentasPage({ monedas }: CreateCuentasPageProps) {
     // Manejo del formulario con useForm - Con notas pero sin deudas
     const { data, setData, post, reset, errors, processing } = useForm({
         nombre_cuenta: '',
-        tipo: 'caja' as 'caja' | 'banco' | 'tarjeta' | 'efectivo' | 'otro',
+        tipo: 'tarjeta' as 'tarjeta' | 'efectivo' | 'otro',
         saldo_cuenta: 0.0,
         moneda_id: '',
         tipo_cuenta: 'permanentes' as 'permanentes' | 'temporales' | 'deudas',
@@ -104,14 +104,12 @@ export default function CreateCuentasPage({ monedas }: CreateCuentasPageProps) {
                                         <Label htmlFor="tipo">Tipo de Activo *</Label>
                                         <Select
                                             value={data.tipo}
-                                            onValueChange={(value: 'caja' | 'banco' | 'tarjeta' | 'efectivo' | 'otro') => setData('tipo', value)}
+                                            onValueChange={(value: 'tarjeta' | 'efectivo' | 'otro') => setData('tipo', value)}
                                         >
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Seleccione el tipo de activo" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="caja">Caja</SelectItem>
-                                                <SelectItem value="banco">Banco</SelectItem>
                                                 <SelectItem value="tarjeta">Tarjeta</SelectItem>
                                                 <SelectItem value="efectivo">Efectivo</SelectItem>
                                                 <SelectItem value="otro">Otro</SelectItem>
