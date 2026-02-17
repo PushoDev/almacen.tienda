@@ -439,57 +439,68 @@ export default function MovimientosPage({
                                 </h3>
                                 <div className="overflow-x-auto rounded-lg border">
                                     <table className="w-full text-sm">
-                                        <thead className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+                                        <thead className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                                             <tr>
-                                                <th className="px-6 py-3 text-left font-semibold">Producto</th>
-                                                <th className="px-6 py-3 text-left font-semibold">Stock Total</th>
-                                                <th className="px-6 py-3 text-left font-semibold">En Tránsito</th>
-                                                <th className="px-6 py-3 text-left font-semibold">Disponible</th>
-                                                <th className="px-6 py-3 text-left font-semibold">Cantidad a Trasladar</th>
-                                                <th className="px-6 py-3 text-left font-semibold">Observaciones</th>
+                                                <th className="px-4 py-3 text-left font-semibold">Producto</th>
+                                                <th className="px-4 py-3 text-left font-semibold">Marca</th>
+                                                <th className="px-4 py-3 text-left font-semibold">Modelo</th>
+                                                <th className="px-4 py-3 text-left font-semibold">Categoría</th>
+                                                <th className="px-4 py-3 text-center font-semibold">Disponible</th>
+                                                <th className="px-4 py-3 text-center font-semibold">En Tránsito</th>
+                                                <th className="w-[150px] px-4 py-3 text-left font-semibold">Cantidad</th>
+                                                <th className="w-[200px] px-4 py-3 text-left font-semibold">Observaciones</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y">
+                                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                                             {productosEmisor.map((producto) => (
-                                                <tr key={producto.id} className="transition-colors">
-                                                    <td className="px-6 py-4 font-medium">
-                                                        <Button
-                                                            variant="link"
-                                                            className="h-auto cursor-pointer p-0 font-medium text-blue-600 underline-offset-4 hover:underline"
-                                                            onClick={() => handleProductClick(producto)}
-                                                        >
-                                                            {producto.nombre}
-                                                        </Button>
+                                                <tr key={producto.id} className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                                    <td className="px-4 py-2">
+                                                        <div className="flex items-center gap-3">
+                                                            <img
+                                                                src={producto.imagen_url || 'https://via.placeholder.com/40'}
+                                                                alt={producto.nombre}
+                                                                className="h-10 w-10 rounded-md object-cover"
+                                                            />
+                                                            <div>
+                                                                <div
+                                                                    className="cursor-pointer font-semibold text-gray-800 hover:text-blue-600 dark:text-gray-200 dark:hover:text-blue-400"
+                                                                    onClick={() => handleProductClick(producto)}
+                                                                >
+                                                                    {producto.nombre}
+                                                                </div>
+                                                                <div className="text-xs text-gray-500">{producto.codigo}</div>
+                                                            </div>
+                                                        </div>
                                                     </td>
-                                                    <td className="px-6 py-4">{producto.stock_total}</td>
-                                                    <td className="px-6 py-4">
-                                                        <span className="inline-flex items-center gap-1 font-medium text-orange-600">
-                                                            <Clock className="h-4 w-4" />
-                                                            {producto.stock_en_transito}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <span className="inline-flex items-center gap-1 font-semibold text-green-600">
-                                                            <CheckCircle2 className="h-4 w-4" />
+                                                    <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{producto.marca}</td>
+                                                    <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{producto.modelo}</td>
+                                                    <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{producto.categoria}</td>
+                                                    <td className="px-4 py-2 text-center">
+                                                        <span className="font-bold text-green-600 dark:text-green-400">
                                                             {producto.stock_disponible}
                                                         </span>
                                                     </td>
-                                                    <td className="px-6 py-4">
+                                                    <td className="px-4 py-2 text-center">
+                                                        <span className="font-medium text-amber-600 dark:text-amber-400">
+                                                            {producto.stock_en_transito}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-2">
                                                         <Input
-                                                            id={`cantidad-${producto.id}`}
                                                             type="number"
+                                                            id={`cantidad-${producto.id}`}
+                                                            className="w-full"
                                                             min="0"
                                                             max={producto.stock_disponible}
                                                             placeholder="0"
-                                                            className="w-24"
                                                         />
                                                     </td>
-                                                    <td className="px-6 py-4">
+                                                    <td className="px-4 py-2">
                                                         <Input
-                                                            id={`observaciones-${producto.id}`}
                                                             type="text"
-                                                            placeholder="Opcional"
-                                                            className="w-32"
+                                                            id={`observaciones-${producto.id}`}
+                                                            className="w-full"
+                                                            placeholder="Opcional..."
                                                         />
                                                     </td>
                                                 </tr>
