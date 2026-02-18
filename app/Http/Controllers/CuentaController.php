@@ -43,6 +43,9 @@ class CuentaController extends Controller
                     'updated_at' => $cuenta->updated_at->format('Y-m-d H:i:s'),
                 ];
             }),
+            'monedaPrincipal' => Moneda::where('principal', true)
+                ->select('id', 'nombre_moneda', 'codigo_moneda', 'simbolo_moneda', 'tasa_cambio', 'principal')
+                ->first(),
         ]);
     }
 

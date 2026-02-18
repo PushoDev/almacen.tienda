@@ -10,12 +10,12 @@ Laravel 12 + React 19 + Inertia.js + Tailwind CSS v4 inventory management system
 composer run dev        # Laravel server + queue + Vite dev server
 composer run dev:ssr    # Laravel server + queue + Vite + SSR dev server
 composer test           # Pest tests with config clear
-php artisan test       # Direct test command
-php artisan test --filter TestClassName         # Single test class
-php artisan test --filter "test method name"    # Single test
-php artisan test tests/Feature/                 # Run feature tests
-php artisan test tests/Unit/                    # Run unit tests
-php artisan pint        # Laravel Pint formatter (PSR-12)
+php artisan test                       # Run all tests
+php artisan test --filter TestClassName # Single test class
+php artisan test --filter "test name"   # Single test method
+php artisan test tests/Feature/         # Feature tests only
+php artisan test tests/Unit/           # Unit tests only
+php artisan pint        # Format code (PSR-12)
 php artisan migrate
 php artisan migrate:fresh --seed
 php artisan config:clear && php artisan cache:clear
@@ -24,13 +24,13 @@ php artisan config:clear && php artisan cache:clear
 ### Frontend
 
 ```bash
-npm run dev       # Vite dev server
-npm run build     # Production build
-npm run build:ssr # SSR build
-npm run lint      # ESLint with auto-fix
-npm run format    # Prettier formatting
-npm run format:check  # Check formatting without fixing
-npm run types     # TypeScript type checking
+npm run dev         # Vite dev server
+npm run build       # Production build
+npm run build:ssr   # SSR build
+npm run lint        # ESLint with auto-fix
+npm run format      # Prettier formatting
+npm run format:check # Check formatting
+npm run types       # TypeScript type checking
 ```
 
 ## Code Style
@@ -39,29 +39,14 @@ npm run types     # TypeScript type checking
 
 - **Standard**: PSR-12 via Laravel Pint
 - **Testing**: Pest PHP (Spanish test names)
-- **Models**: Eloquent with type hints and relationships
+- **PHPDoc**: Required on classes/methods with `@param`, `@return`
 - **Validation**: Form Request classes for complex validation
-- **PHPDoc**: Required on all classes/methods with `@param`, `@return`
 
 **Naming**: Classes `PascalCase`, methods/variables `camelCase`, constants `UPPER_SNAKE_CASE`, tables `snake_case`.
 
 ```php
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use App\Models\Producto;
-use App\Services\VentaService;
-```
-
-**Model Structure**:
-
-```php
-<?php
-
-namespace App\Models;
-
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Producto extends Model
 {
@@ -81,7 +66,7 @@ class Producto extends Model
 
 - **Framework**: React 19 + TypeScript + Inertia.js + Tailwind v4
 - **Formatter**: Prettier (150 char width, single quotes, semicolons, 4-space tabs)
-- **Linter**: ESLint with auto-fix
+- **Linter**: ESLint with auto-fix + prettier
 - **UI**: Radix UI + `cn()` utility for conditional classes
 - **Notifications**: Sonner (`import { toast } from 'sonner';`)
 
@@ -89,8 +74,8 @@ class Producto extends Model
 
 ```typescript
 import { Head, useForm } from '@inertiajs/react';
-import { LiquidButton } from '@/components/animated/liquid-button';
-import type { LoginForm } from '@/types/forms';
+import { toast } from 'sonner';
+import type { PageProps } from '@/types';
 ```
 
 ## Patterns
@@ -109,35 +94,13 @@ const submit: FormEventHandler = (e) => {
 };
 ```
 
-### Model Relationships
-
-```php
-public function productos(): BelongsToMany
-{
-    return $this->belongsToMany(Producto::class, 'producto_vendedors')
-        ->withPivot('precio_venta', 'venta_ganancia');
-}
-```
-
 ### Page Props
 
 ```typescript
-import type { PageProps } from '@/types';
-
 interface DashboardPageProps extends PageProps {
     productos: Producto[];
     ventas: Venta[];
 }
-```
-
-### Toast Notifications
-
-```typescript
-import { toast } from 'sonner';
-
-toast.success('Producto creado correctamente');
-toast.error('Error al guardar');
-toast.warning('Stock bajo');
 ```
 
 ## Structure
@@ -148,14 +111,10 @@ app/
 ├── Controllers/     # HTTP controllers
 ├── Requests/        # Form request validation
 ├── Services/        # Business logic
-├── Providers/       # Service providers
-├── Middleware/      # Custom middleware
 resources/js/
 ├── pages/           # Inertia pages
-├── components/
-│   ├── ui/          # Radix UI components
-│   └── animated/    # Animation components
-├── hooks/           # Custom React hooks
+├── components/      # React components
+├── hooks/           # Custom hooks
 └── types/           # TypeScript types
 tests/
 ├── Feature/         # Feature tests
@@ -175,23 +134,15 @@ tests/
 - Pivot tables: alphabetical order (`producto_vendedors`)
 - Foreign keys: `{model}_id` (e.g., `categoria_id`)
 
-## Security
+## Security & Performance
 
 - Validate input with Form Requests
 - Use Gates/Policies for authorization
 - Never commit secrets (.env, credentials)
-- Sanitize user input before database queries
-
-## Performance
-
 - Eager load relationships (`with()`, `load()`) to avoid N+1
-- Use React.memo for expensive components
 - Paginate large datasets (`paginate()`, `cursorPaginate()`)
-- Use `select()` to fetch only needed columns
 
 ## Testing
-
-### Pest PHP
 
 ```php
 it('creates a product', function () {
@@ -207,7 +158,12 @@ it('creates a product', function () {
 });
 ```
 
-### React Testing
+## Skills Available
 
-- Use `@testing-library/react` for component tests
-- Test user interactions, not implementation details
+Use `/skill` command to activate patterns:
+
+| Skill                          | Purpose                                       |
+| ------------------------------ | --------------------------------------------- |
+| `/skill laravel-inertia-react` | Laravel + Inertia.js + React patterns         |
+| `/skill shadcn-ui`             | Radix UI components, React Hook Form + Zod    |
+| `/skill laravel-specialist`    | Eloquent optimizations, API Resources, Queues |

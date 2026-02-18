@@ -12,8 +12,9 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/Components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { ScrollProgress } from '@/components/ui/scroll';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -52,10 +53,13 @@ interface CuentaConMoneda extends CuentaProps {
     moneda: MonedaInfo | null;
 }
 
-export default function CuentasPage({ cuentas }: { cuentas: CuentaConMoneda[] }) {
+export default function CuentasPage({ cuentas, monedaPrincipal }: { cuentas: CuentaConMoneda[]; monedaPrincipal: MonedaInfo | null }) {
     const { props } = usePage();
     const isAdmin = props.auth?.user?.role === 'admin';
     const isVendedor = props.auth?.user?.role === 'vendedor';
+
+    console.log('monedaPrincipal:', monedaPrincipal);
+    console.log('cuentas:', cuentas);
 
     const deleteCuenta = (id: number) => {
         router.delete(route('cuentas.destroy', { cuenta: id }), {
@@ -67,9 +71,6 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaConMoneda[] })
             },
         });
     };
-
-    // Encontrar la moneda principal
-    const monedaPrincipal = cuentas.find((c) => c.moneda?.principal)?.moneda;
 
     // Convertir saldo a moneda principal
     const convertirAMonedaPrincipal = (saldo: number, moneda: MonedaInfo | null): number => {
@@ -153,35 +154,41 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaConMoneda[] })
 
                 {/* Estadísticas y Filtros */}
                 <div className="grid gap-6 md:grid-cols-4">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Cuentas</CardTitle>
-                            <Landmark className="text-muted-foreground h-4 w-4" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{cuentas.length}</div>
-                            <p className="text-muted-foreground text-xs">{cuentasFiltradas.length} filtradas</p>
-                        </CardContent>
-                    </Card>
+                    {/* Widget: Total Cuentas */}
+                    <div className="rounded-lg border border-blue-500/20 bg-blue-50/50 p-6 shadow-sm dark:bg-blue-900/20">
+                        <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Total Cuentas</p>
+                            <Landmark className="h-5 w-5 text-blue-500" />
+                        </div>
+                        <p className="mt-2 text-3xl font-bold text-blue-900 dark:text-blue-200">{cuentas.length}</p>
+                        <p className="mt-1 text-xs text-blue-500 dark:text-blue-400">{cuentasFiltradas.length} filtradas</p>
+                    </div>
 
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Saldo Total</CardTitle>
-                            <Wallet className="text-muted-foreground h-4 w-4" />
-                        </CardHeader>
-                        <CardContent>
+                    {/* Widget: Saldo Total */}
+                    <div className="rounded-lg border border-green-500/20 bg-green-50/50 p-6 shadow-sm dark:bg-green-900/20">
+                        <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-green-600 dark:text-green-400">Saldo Total</p>
+                            <Wallet className="h-5 w-5 text-green-500" />
+                        </div>
+                        <CardContent className="p-0 pt-2">
                             <TooltipProvider>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
                                         <div className="cursor-help">
                                             <div className="flex items-baseline gap-2">
-                                                <div className="text-2xl font-bold text-emerald-600">
-                                                    {monedaPrincipal?.simbolo_moneda || '$'}
-                                                    {calcularSaldoTotal()}
-                                                </div>
-                                                <Badge variant="secondary" className="text-xs">
-                                                    {monedaPrincipal?.codigo_moneda || 'N/A'}
-                                                </Badge>
+                                                {cuentas.length === 0 ? (
+                                                    <div className="text-muted-foreground text-2xl font-bold">sin registros</div>
+                                                ) : (
+                                                    <>
+                                                        <div className="text-2xl font-bold text-green-900 dark:text-green-200">
+                                                            {monedaPrincipal?.simbolo_moneda || '$'}
+                                                            {calcularSaldoTotal()}
+                                                        </div>
+                                                        <Badge variant="secondary" className="text-xs">
+                                                            {monedaPrincipal?.codigo_moneda || 'N/A'}
+                                                        </Badge>
+                                                    </>
+                                                )}
                                             </div>
                                             <p className="text-muted-foreground mt-1 text-xs">En moneda principal • Hover para detalles</p>
                                         </div>
@@ -206,29 +213,29 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaConMoneda[] })
                                 </Tooltip>
                             </TooltipProvider>
                         </CardContent>
-                    </Card>
+                    </div>
 
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Cuentas Activas</CardTitle>
-                            <CreditCard className="text-muted-foreground h-4 w-4" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{cuentas.filter((c) => c.estado === 'activa').length}</div>
-                            <p className="text-muted-foreground text-xs">De {cuentas.length} totales</p>
-                        </CardContent>
-                    </Card>
+                    {/* Widget: Cuentas Activas */}
+                    <div className="rounded-lg border border-purple-500/20 bg-purple-50/50 p-6 shadow-sm dark:bg-purple-900/20">
+                        <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-purple-600 dark:text-purple-400">Cuentas Activas</p>
+                            <CreditCard className="h-5 w-5 text-purple-500" />
+                        </div>
+                        <p className="mt-2 text-3xl font-bold text-purple-900 dark:text-purple-200">
+                            {cuentas.filter((c) => c.estado === 'activa').length}
+                        </p>
+                        <p className="mt-1 text-xs text-purple-500 dark:text-purple-400">De {cuentas.length} totales</p>
+                    </div>
 
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Monedas</CardTitle>
-                            <Coins className="text-muted-foreground h-4 w-4" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{monedasUnicas.length}</div>
-                            <p className="text-muted-foreground text-xs">Diferentes monedas</p>
-                        </CardContent>
-                    </Card>
+                    {/* Widget: Monedas */}
+                    <div className="rounded-lg border border-amber-500/20 bg-amber-50/50 p-6 shadow-sm dark:bg-amber-900/20">
+                        <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-amber-600 dark:text-amber-400">Monedas</p>
+                            <Coins className="h-5 w-5 text-amber-500" />
+                        </div>
+                        <p className="mt-2 text-3xl font-bold text-amber-900 dark:text-amber-200">{monedasUnicas.length}</p>
+                        <p className="mt-1 text-xs text-amber-500 dark:text-amber-400">Diferentes monedas</p>
+                    </div>
                 </div>
 
                 {/* Barra de Acciones y Filtros */}
@@ -345,8 +352,8 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaConMoneda[] })
                                                             ? cuenta.saldo_cuenta > 0
                                                                 ? 'font-semibold text-emerald-600'
                                                                 : cuenta.saldo_cuenta < 0
-                                                                  ? 'font-semibold text-red-600'
-                                                                  : 'text-muted-foreground'
+                                                                    ? 'font-semibold text-red-600'
+                                                                    : 'text-muted-foreground'
                                                             : 'text-muted-foreground'
                                                     }
                                                 >
@@ -368,8 +375,8 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaConMoneda[] })
                                                     cuenta.tipo_cuenta === 'permanentes'
                                                         ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300'
                                                         : cuenta.tipo_cuenta === 'temporales'
-                                                          ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300'
-                                                          : 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300'
+                                                            ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300'
+                                                            : 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300'
                                                 }
                                             >
                                                 {cuenta.tipo_cuenta.charAt(0).toUpperCase() + cuenta.tipo_cuenta.slice(1)}
@@ -528,6 +535,7 @@ export default function CuentasPage({ cuentas }: { cuentas: CuentaConMoneda[] })
                 )}
             </div>
             <Toaster position="top-center" />
+            <ScrollProgress />
         </AppLayout>
     );
 }
