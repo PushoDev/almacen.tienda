@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, BreadcrumbItem, Movimiento, ProductoPorAlmacenDetalleRef } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { AlertCircle, CarFront, CheckCircle2, Clock, Eye, Package, Send, TrendingUp, XCircle } from 'lucide-react';
+import { AlertCircle, Caravan, CarFront, CheckCircle2, Clock, Eye, ListCheck, Package, Send, TrendingUp, Warehouse, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { toast, Toaster } from 'sonner';
 
@@ -181,10 +181,10 @@ export default function MovimientosPage({
 
                 return cantidad > 0
                     ? {
-                          id: producto.id,
-                          cantidad,
-                          observaciones: observacionesInput?.value || '',
-                      }
+                        id: producto.id,
+                        cantidad,
+                        observaciones: observacionesInput?.value || '',
+                    }
                     : null;
             })
             .filter((item) => item !== null);
@@ -374,12 +374,12 @@ export default function MovimientosPage({
             <Head title="Movimientos" />
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
-                <div className="relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     <HeadingSmall
-                        title="Sistema de Movimientos Logísticos"
-                        description="Gestión profesional de traslados entre almacenes con control de estados y aprobaciones."
+                        title="Movimientos Logísticos"
+                        description="Gestión y Solicitud de Movimientos de Mercancía entre Almacenes"
                     />
-                    <CarFront
+                    <Caravan
                         size={70}
                         color="#d6d3d1"
                         className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
@@ -565,17 +565,16 @@ export default function MovimientosPage({
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span
-                                                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${
-                                                        movimiento.estado === 'pendiente_confirmacion'
-                                                            ? 'bg-yellow-100 text-yellow-800'
-                                                            : movimiento.estado === 'en_transito'
-                                                              ? 'bg-orange-100 text-orange-800'
-                                                              : movimiento.estado === 'recibido_completo'
+                                                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${movimiento.estado === 'pendiente_confirmacion'
+                                                        ? 'bg-yellow-100 text-yellow-800'
+                                                        : movimiento.estado === 'en_transito'
+                                                            ? 'bg-orange-100 text-orange-800'
+                                                            : movimiento.estado === 'recibido_completo'
                                                                 ? 'bg-green-100 text-green-800'
                                                                 : movimiento.estado === 'recibido_parcial'
-                                                                  ? 'bg-cyan-100 text-cyan-800'
-                                                                  : 'bg-red-100 text-red-800'
-                                                    }`}
+                                                                    ? 'bg-cyan-100 text-cyan-800'
+                                                                    : 'bg-red-100 text-red-800'
+                                                        }`}
                                                 >
                                                     {movimiento.estado === 'pendiente_confirmacion' && <Clock className="h-3.5 w-3.5" />}
                                                     {movimiento.estado === 'en_transito' && <Send className="h-3.5 w-3.5" />}
@@ -593,9 +592,21 @@ export default function MovimientosPage({
                                                         size="sm"
                                                         onClick={() => handleVerSeguimiento(movimiento)}
                                                         title="Ver seguimiento"
+                                                        className='cursor-pointer'
                                                     >
                                                         <Eye className="h-4 w-4" />
                                                     </Button>
+
+                                                    {['recibido_completo', 'recibido_parcial', 'rechazado'].includes(movimiento.estado) && (
+                                                        <Link
+                                                            href={`/movimientos/${movimiento.id}`}
+
+                                                        >
+                                                            <Button variant='outline' size="sm" title="Ver movimientos" className='cursor-pointer'>
+                                                                <ListCheck className="h-4 w-4" />
+                                                            </Button>
+                                                        </Link>
+                                                    )}
 
                                                     {movimiento.estado === 'pendiente_confirmacion' && (
                                                         <>
@@ -681,17 +692,16 @@ export default function MovimientosPage({
                                     <div key={seguimiento.id} className="relative border-l-4 border-blue-300 pb-3 pl-4">
                                         <div className="mb-2 flex items-start justify-between">
                                             <span
-                                                className={`rounded-full px-2 py-1 text-sm font-semibold ${
-                                                    seguimiento.estado === 'pendiente_confirmacion'
-                                                        ? 'bg-yellow-100 text-yellow-800'
-                                                        : seguimiento.estado === 'en_transito'
-                                                          ? 'bg-orange-100 text-orange-800'
-                                                          : seguimiento.estado === 'recibido_completo'
+                                                className={`rounded-full px-2 py-1 text-sm font-semibold ${seguimiento.estado === 'pendiente_confirmacion'
+                                                    ? 'bg-yellow-100 text-yellow-800'
+                                                    : seguimiento.estado === 'en_transito'
+                                                        ? 'bg-orange-100 text-orange-800'
+                                                        : seguimiento.estado === 'recibido_completo'
                                                             ? 'bg-green-100 text-green-800'
                                                             : seguimiento.estado === 'recibido_parcial'
-                                                              ? 'bg-cyan-100 text-cyan-800'
-                                                              : 'bg-red-100 text-red-800'
-                                                }`}
+                                                                ? 'bg-cyan-100 text-cyan-800'
+                                                                : 'bg-red-100 text-red-800'
+                                                    }`}
                                             >
                                                 {estados[seguimiento.estado]}
                                             </span>

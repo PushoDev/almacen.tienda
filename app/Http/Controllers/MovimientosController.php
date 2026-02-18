@@ -543,4 +543,38 @@ class MovimientosController extends Controller
             'movimientosPage' => $discrepancias,
         ]);
     }
+
+    /**
+     * Muestra el detalle de un movimiento
+     */
+    public function show(Movimiento $movimiento)
+    {
+        $estadosPermitidos = ['recibido_completo', 'recibido_parcial', 'rechazado'];
+        
+        if (!in_array($movimiento->estado, $estadosPermitidos)) {
+            return back()->withErrors([
+                'general' => 'El movimiento aún está en proceso. Solo puedes ver detalles de movimientos recibidos o rechazados.'
+            ]);
+        }
+
+        $movimiento->load([
+            'almacenOrigen',
+            'almacenDestino',
+            'usuario',
+            'detalles.producto.categoria',
+            'seguimientos.usuario'
+        ]);
+
+        return Inertia::render('Movimientos/Show', [
+            'movimiento' => $movimiento,
+            'estados' => [
+                'pendiente_confirmacion' => 'Pendiente Confirmación',
+                'en_transito' => 'En Tránsito',
+                'recibido_parcial' => 'Recibido Parcial',
+                'recibido_completo' => 'Recibido Completo',
+                'rechazado' => 'Rechazado',
+                'cancelado' => 'Cancelado'
+            ]
+        ]);
+    }
 }
