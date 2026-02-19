@@ -24,11 +24,11 @@ class HistorialComparacionMensual extends Model
 
     protected $casts = [
         'mes_comparado' => 'date',
-        'monto_anterior' => 'decimal:6',
-        'monto_actual' => 'decimal:6',
-        'diferencia' => 'decimal:6',
+        'monto_anterior' => 'decimal:2',
+        'monto_actual' => 'decimal:2',
+        'diferencia' => 'decimal:2',
         'porcentaje_cambio' => 'decimal:2',
-        'tasa_cambio_usada' => 'decimal:6',
+        'tasa_cambio_usada' => 'decimal:2',
     ];
 
     public function user()

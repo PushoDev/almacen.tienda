@@ -28,12 +28,12 @@ class Venta extends Model
     ];
 
     protected $casts = [
-        'tasa_cambio_principal' => 'decimal:6',
-        'total_ganancia' => 'decimal:4',
-        'total_esperado_usd' => 'decimal:4',
-        'ganancia_perdida_cambiaria' => 'decimal:4',
-        'ganancia_real_total' => 'decimal:4',
-        'tasa_aplicada_venta' => 'decimal:6',
+        'tasa_cambio_principal' => 'decimal:2',
+        'total_ganancia' => 'decimal:2',
+        'total_esperado_usd' => 'decimal:2',
+        'ganancia_perdida_cambiaria' => 'decimal:2',
+        'ganancia_real_total' => 'decimal:2',
+        'tasa_aplicada_venta' => 'decimal:2',
         'monto_diferencia_cambiaria' => 'decimal:2', // ← AQUÍ SE ACEPTAN NEGATIVOS
     ];
 

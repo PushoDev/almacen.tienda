@@ -38,29 +38,12 @@ npm run types       # TypeScript type checking
 ### PHP (Backend)
 
 - **Standard**: PSR-12 via Laravel Pint
+- **PHP Version**: 8.2+ - use typed properties, readonly when applicable
 - **Testing**: Pest PHP (Spanish test names)
 - **PHPDoc**: Required on classes/methods with `@param`, `@return`
 - **Validation**: Form Request classes for complex validation
 
 **Naming**: Classes `PascalCase`, methods/variables `camelCase`, constants `UPPER_SNAKE_CASE`, tables `snake_case`.
-
-```php
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-
-class Producto extends Model
-{
-    use HasFactory, SoftDeletes;
-
-    protected $fillable = ['nombre', 'codigo', 'precio'];
-    protected $casts = ['precio' => 'decimal:2'];
-
-    public function categoria(): BelongsTo
-    {
-        return $this->belongsTo(Categoria::class);
-    }
-}
-```
 
 ### TypeScript/React (Frontend)
 
@@ -70,13 +53,9 @@ class Producto extends Model
 - **UI**: Radix UI + `cn()` utility for conditional classes
 - **Notifications**: Sonner (`import { toast } from 'sonner';`)
 
-**Naming**: Components `PascalCase`, hooks `useCamelCase`, types `PascalCase`, files `PascalCase` for components.
+**Naming**: Components `PascalCase`, hooks `useCamelCase`, types `PascalCase`, files `PascalCase`.
 
-```typescript
-import { Head, useForm } from '@inertiajs/react';
-import { toast } from 'sonner';
-import type { PageProps } from '@/types';
-```
+**Imports**: Use `@/` path alias (e.g., `@/components/ui/button`).
 
 ## Patterns
 
@@ -103,6 +82,16 @@ interface DashboardPageProps extends PageProps {
 }
 ```
 
+### Controller Pattern
+
+```php
+public function store(StoreProductoRequest $request): RedirectResponse
+{
+    $producto = Producto::create($request->validated());
+    return redirect()->route('productos.index')->with('success', 'Creado.');
+}
+```
+
 ## Structure
 
 ```
@@ -113,19 +102,13 @@ app/
 ├── Services/        # Business logic
 resources/js/
 ├── pages/           # Inertia pages
-├── components/      # React components
+├── components/      # React components (ui/ = Shadcn)
 ├── hooks/           # Custom hooks
 └── types/           # TypeScript types
 tests/
 ├── Feature/         # Feature tests
 └── Unit/            # Unit tests
 ```
-
-## Error Handling
-
-- Backend: Laravel exceptions, proper HTTP codes (400,401,403,404,422,500), Form Request validation
-- Frontend: Inertia error handling, `InputError` components, toast notifications
-- Use `try/catch` in services and bubble up exceptions with meaningful messages
 
 ## Database
 
@@ -140,6 +123,7 @@ tests/
 - Use Gates/Policies for authorization
 - Never commit secrets (.env, credentials)
 - Eager load relationships (`with()`, `load()`) to avoid N+1
+- Use scopes for reusable queries
 - Paginate large datasets (`paginate()`, `cursorPaginate()`)
 
 ## Testing
@@ -147,20 +131,24 @@ tests/
 ```php
 it('creates a product', function () {
     loginAsAdmin();
-
     $response = post(route('productos.store'), [
         'nombre' => 'Test Product',
         'precio' => 100.00,
     ]);
-
     $response->assertRedirect();
     $this->assertDatabaseHas('productos', ['nombre' => 'Test Product']);
 });
 ```
 
-## Skills Available
+## Error Handling
 
-Use `/skill` command to activate patterns:
+- Backend: Laravel exceptions, proper HTTP codes (400,401,403,404,422,500), Form Request validation
+- Frontend: Inertia error handling, `InputError` components, toast notifications
+- Use `try/catch` in services and bubble up exceptions with meaningful messages
+
+## Skills
+
+Use `/skill` command:
 
 | Skill                          | Purpose                                       |
 | ------------------------------ | --------------------------------------------- |

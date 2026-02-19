@@ -15,6 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ScrollProgress } from '@/components/ui/scroll';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
@@ -362,22 +363,6 @@ export default function PuntoVentaOficial({
         setClienteSeleccionado(value);
     };
 
-    const handleMonedaChange = (monedaId: string) => {
-        const selectedCurrency = currencies.find((c) => c.id === monedaId);
-        const automaticAmount = calculateAutomaticAmount(monedaId);
-
-        setCurrentPayment({
-            ...currentPayment,
-            moneda_id: monedaId,
-            exchangeRate: selectedCurrency ? selectedCurrency.exchangeRate.toString() : '',
-            amount: automaticAmount,
-            cuenta_id: '',
-            cliente_id: '',
-        });
-        // ✅ Pasar método de pago al cargar cuentas si está seleccionado
-        cargarCuentasFiltradas(monedaId, currentPayment.method || undefined);
-    };
-
     const productosFiltrados = useMemo(() => {
         if (!busqueda.trim()) return productos;
         const termino = busqueda.toLowerCase().trim();
@@ -416,10 +401,10 @@ export default function PuntoVentaOficial({
                 carrito.map((item) =>
                     item.id === idItem
                         ? {
-                              ...item,
-                              cantidad: nuevaCantidad,
-                              subtotal: nuevaCantidad * item.precio_venta,
-                          }
+                            ...item,
+                            cantidad: nuevaCantidad,
+                            subtotal: nuevaCantidad * item.precio_venta,
+                        }
                         : item,
                 ),
             );
@@ -449,10 +434,10 @@ export default function PuntoVentaOficial({
             carrito.map((itemCarrito) =>
                 itemCarrito.id === id
                     ? {
-                          ...itemCarrito,
-                          cantidad: nuevaCantidad,
-                          subtotal: nuevaCantidad * itemCarrito.precio_venta,
-                      }
+                        ...itemCarrito,
+                        cantidad: nuevaCantidad,
+                        subtotal: nuevaCantidad * itemCarrito.precio_venta,
+                    }
                     : itemCarrito,
             ),
         );
@@ -464,10 +449,10 @@ export default function PuntoVentaOficial({
             carrito.map((item) =>
                 item.id === id
                     ? {
-                          ...item,
-                          precio_venta: nuevoPrecio,
-                          subtotal: item.cantidad * nuevoPrecio,
-                      }
+                        ...item,
+                        precio_venta: nuevoPrecio,
+                        subtotal: item.cantidad * nuevoPrecio,
+                    }
                     : item,
             ),
         );
@@ -511,18 +496,37 @@ export default function PuntoVentaOficial({
         return amount / exchangeRate;
     };
 
-    const calculateAutomaticAmount = (monedaId: string): string => {
+    const calculateAutomaticAmount = (monedaId: string, exchangeRateOverride?: number): string => {
         if (remainingInUsd <= 0) {
             return '';
         }
 
         const selectedCurrency = currencies.find((c) => c.id === monedaId);
-        if (!selectedCurrency || !selectedCurrency.exchangeRate || selectedCurrency.exchangeRate <= 0) {
+        const exchangeRate = exchangeRateOverride ?? selectedCurrency?.exchangeRate;
+
+        if (!exchangeRate || exchangeRate <= 0) {
             return '';
         }
 
-        const automaticAmount = remainingInUsd * selectedCurrency.exchangeRate;
+        const automaticAmount = remainingInUsd * exchangeRate;
         return automaticAmount.toFixed(2);
+    };
+
+    const handleMonedaChange = (monedaId: string) => {
+        const selectedCurrency = currencies.find((c) => c.id === monedaId);
+        const newExchangeRate = selectedCurrency ? selectedCurrency.exchangeRate.toString() : '';
+        const automaticAmount = calculateAutomaticAmount(monedaId, parseFloat(newExchangeRate));
+
+        setCurrentPayment({
+            ...currentPayment,
+            moneda_id: monedaId,
+            exchangeRate: newExchangeRate,
+            amount: automaticAmount,
+            cuenta_id: '',
+            cliente_id: '',
+        });
+        // ✅ Pasar método de pago al cargar cuentas si está seleccionado
+        cargarCuentasFiltradas(monedaId, currentPayment.method || undefined);
     };
 
     const handleAddPayment = () => {
@@ -928,7 +932,7 @@ export default function PuntoVentaOficial({
                         <div className="space-y-4 lg:col-span-2 lg:space-y-6">
                             {/* Configuración */}
                             <Card className="overflow-hidden border-0 shadow-lg">
-                                <CardHeader className="from-secondary to-secondary/50 bg-linear-to-r pb-4">
+                                <CardHeader className="from-secondary to-secondary/50 border-b bg-linear-to-r px-6 pt-6 pb-4">
                                     <CardTitle className="flex items-center gap-2 text-base font-semibold">
                                         <Building2 className="text-primary h-5 w-5" />
                                         Configuración de Venta
@@ -1014,7 +1018,7 @@ export default function PuntoVentaOficial({
                             {/* Productos */}
                             {almacenSeleccionado && (
                                 <Card className="animate-fade-in min-h-[500px] overflow-hidden border-0 shadow-lg">
-                                    <CardHeader className="from-secondary to-secondary/50 bg-linear-to-r pb-4">
+                                    <CardHeader className="from-secondary to-secondary/50 border-b bg-linear-to-r px-6 pt-6 pb-4">
                                         <div className="flex items-center justify-between">
                                             <CardTitle className="flex items-center gap-2 text-base font-semibold">
                                                 <BoxesIcon className="text-success h-5 w-5" />
@@ -1181,7 +1185,7 @@ export default function PuntoVentaOficial({
                         {/* Right column - Carrito Sticky */}
                         <div className="space-y-6 lg:sticky lg:top-4 lg:self-start">
                             <Card className="overflow-hidden border-0 shadow-lg">
-                                <CardHeader className="from-primary/10 to-primary/5 bg-linear-to-r pb-4">
+                                <CardHeader className="from-primary/10 to-primary/5 bg-linear-to-r px-6 pt-6 pb-4">
                                     <div className="flex items-center justify-between">
                                         <CardTitle className="flex items-center gap-2 text-base font-semibold">
                                             <ShoppingCart className="text-primary h-5 w-5" />
@@ -1422,12 +1426,27 @@ export default function PuntoVentaOficial({
                                                                             <Input
                                                                                 type="number"
                                                                                 value={currentPayment.exchangeRate}
-                                                                                onChange={(e) =>
+                                                                                onChange={(e) => {
+                                                                                    const newRate = e.target.value;
+                                                                                    const newRateNum = parseFloat(newRate);
+                                                                                    // Recalcular monto automáticamente cuando cambia la tasa
+                                                                                    let newAmount = '';
+                                                                                    if (
+                                                                                        currentPayment.moneda_id &&
+                                                                                        newRateNum > 0 &&
+                                                                                        remainingInUsd > 0
+                                                                                    ) {
+                                                                                        newAmount = calculateAutomaticAmount(
+                                                                                            currentPayment.moneda_id,
+                                                                                            newRateNum,
+                                                                                        );
+                                                                                    }
                                                                                     setCurrentPayment({
                                                                                         ...currentPayment,
-                                                                                        exchangeRate: e.target.value,
-                                                                                    })
-                                                                                }
+                                                                                        exchangeRate: newRate,
+                                                                                        amount: newAmount,
+                                                                                    });
+                                                                                }}
                                                                                 placeholder="Tasa de cambio"
                                                                                 disabled={!currentPayment.moneda_id}
                                                                                 min="0.0001"
@@ -1442,8 +1461,8 @@ export default function PuntoVentaOficial({
                                                                                     currentPayment.cuenta_id
                                                                                         ? `cuenta_${currentPayment.cuenta_id}`
                                                                                         : currentPayment.cliente_id
-                                                                                          ? `cliente_${currentPayment.cliente_id}`
-                                                                                          : ''
+                                                                                            ? `cliente_${currentPayment.cliente_id}`
+                                                                                            : ''
                                                                                 }
                                                                                 onValueChange={(value) => {
                                                                                     let updatedPayment = { ...currentPayment };
@@ -1815,6 +1834,7 @@ export default function PuntoVentaOficial({
                     )}
                 </DialogContent>
             </Dialog>
+            <ScrollProgress />
         </AppLayout>
     );
 }

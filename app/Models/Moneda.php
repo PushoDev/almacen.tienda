@@ -20,8 +20,8 @@ class Moneda extends Model
     ];
 
     protected $casts = [
-        'tasa_cambio' => 'decimal:6',
-        'commission' => 'decimal:4',
+        'tasa_cambio' => 'decimal:2',
+        'commission' => 'decimal:2',
         'estado' => 'boolean',
         'principal' => 'boolean',
     ];
