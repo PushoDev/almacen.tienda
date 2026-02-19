@@ -286,7 +286,7 @@ export default function PuntoVentaOficial({
         }
     };
 
-    const cargarCuentasFiltradas = async (monedaId: string) => {
+    const cargarCuentasFiltradas = async (monedaId: string, metodoPago?: string) => {
         if (!monedaId) {
             console.log('No hay moneda ID, limpiando cuentas filtradas');
             setCuentasFiltradas([]);
@@ -294,10 +294,12 @@ export default function PuntoVentaOficial({
         }
         setCargandoCuentas(true);
         try {
-            console.log('Cargando cuentas filtradas para moneda ID:', monedaId);
-            const response = await axios.get(route('ventas.getCuentasFiltradas'), {
-                params: { moneda_id: monedaId },
-            });
+            console.log('Cargando cuentas filtradas para moneda ID:', monedaId, 'método:', metodoPago);
+            const params: { moneda_id: string; metodo_pago?: string } = { moneda_id: monedaId };
+            if (metodoPago) {
+                params.metodo_pago = metodoPago;
+            }
+            const response = await axios.get(route('ventas.getCuentasFiltradas'), { params });
             console.log('Cuentas filtradas cargadas:', response.data);
             setCuentasFiltradas(response.data);
         } catch (error: unknown) {
@@ -372,7 +374,8 @@ export default function PuntoVentaOficial({
             cuenta_id: '',
             cliente_id: '',
         });
-        cargarCuentasFiltradas(monedaId);
+        // ✅ Pasar método de pago al cargar cuentas si está seleccionado
+        cargarCuentasFiltradas(monedaId, currentPayment.method || undefined);
     };
 
     const productosFiltrados = useMemo(() => {
@@ -1374,9 +1377,15 @@ export default function PuntoVentaOficial({
                                                                                         via: value === 'efectivo' ? 'efectivo' : '',
                                                                                         referencia:
                                                                                             value === 'efectivo' ? '' : currentPayment.referencia,
+                                                                                        cuenta_id: '', // Limpiar cuenta seleccionada al cambiar método
+                                                                                        cliente_id: '', // Limpiar cliente seleccionado al cambiar método
                                                                                     };
                                                                                     console.log('Método de pago cambiado:', newPayment);
                                                                                     setCurrentPayment(newPayment);
+                                                                                    // ✅ Recargar cuentas filtradas si ya hay moneda seleccionada
+                                                                                    if (currentPayment.moneda_id && value) {
+                                                                                        cargarCuentasFiltradas(currentPayment.moneda_id, value);
+                                                                                    }
                                                                                 }}
                                                                             >
                                                                                 <SelectTrigger>

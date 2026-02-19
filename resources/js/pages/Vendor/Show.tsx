@@ -11,9 +11,11 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
@@ -63,6 +65,10 @@ interface Producto {
     id: number;
     nombre: string;
     marca: string;
+    modelo?: string;
+    capacidad?: string;
+    codigo?: string;
+    imagen_url?: string;
     categoria: string;
 }
 
@@ -130,6 +136,14 @@ interface MonedaPrincipal {
     simbolo?: string;
 }
 
+interface MonedaParaReporte {
+    id: number;
+    codigo: string;
+    nombre: string;
+    simbolo: string | null;
+    tasa: number;
+}
+
 // Nueva interfaz para el destinatario
 interface Destinatario {
     id: number;
@@ -160,6 +174,7 @@ interface Venta {
     estado: 'pendiente' | 'completada' | 'cancelada';
     moneda_principal: MonedaPrincipal | null;
     tasa_cambio_principal: number;
+    monedas_para_reporte: MonedaParaReporte[];
 }
 
 interface Props {
@@ -177,6 +192,9 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
     const [currentVenta, setCurrentVenta] = useState<Venta>(venta);
     const [isDestinatarioDialogOpen, setIsDestinatarioDialogOpen] = useState(false);
     const [isEditingDestinatario, setIsEditingDestinatario] = useState(false);
+    const [monedaReporteSeleccionada, setMonedaReporteSeleccionada] = useState<string>(
+        () => String(currentVenta.moneda_principal?.id ?? currentVenta.monedas_para_reporte?.[0]?.id ?? '')
+    );
 
     // Estado para el formulario del destinatario
     const [formDestinatario, setFormDestinatario] = useState({
@@ -241,6 +259,14 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
     const getCurrencySymbol = (moneda: MonedaPago | MonedaPrincipal | null) => {
         return moneda?.simbolo || moneda?.codigo || 'USD';
     };
+
+    // Monedas para el reporte (con tasas de la operación)
+    const monedasReporte = currentVenta.monedas_para_reporte ?? [];
+    const monedaReporte = monedasReporte.find((m) => String(m.id) === monedaReporteSeleccionada) ?? monedasReporte[0];
+    const tasaReporte = monedaReporte?.tasa ?? 1;
+    const codigoReporte = monedaReporte?.codigo || 'USD';
+
+    const convertirMontoReporte = (monto: number) => monto * tasaReporte;
 
     // Determinar estados
     const isVentaPendiente = currentVenta.estado === 'pendiente';
@@ -313,25 +339,24 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
             } else {
                 toast.error(response.data.message || 'Error al guardar la información');
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('💥 Error completo al guardar destinatario:', error);
 
-            if (error.response) {
+            if (axios.isAxiosError(error)) {
                 console.error('📋 Detalles del error del servidor:', {
-                    status: error.response.status,
-                    data: error.response.data,
-                    headers: error.response.headers,
+                    status: error.response?.status,
+                    data: error.response?.data,
+                    headers: error.response?.headers,
                 });
 
                 const errorMessage =
-                    error.response.data?.message || error.response.data?.error || `Error ${error.response.status}: ${error.response.statusText}`;
+                    error.response?.data?.message || error.response?.data?.error || `Error ${error.response?.status}: ${error.response?.statusText}`;
                 toast.error(errorMessage);
-            } else if (error.request) {
-                console.error('🌐 Error de conexión - No se recibió respuesta:', error.request);
-                toast.error('Error de conexión: No se pudo contactar al servidor');
-            } else {
+            } else if (error instanceof Error) {
                 console.error('⚙️ Error de configuración:', error.message);
                 toast.error('Error al configurar la petición');
+            } else {
+                toast.error('Error de conexión: No se pudo contactar al servidor');
             }
         } finally {
             setIsSavingDestinatario(false);
@@ -382,20 +407,19 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 console.error('❌ Error en respuesta del backend:', response.data);
                 toast.error(response.data.message || 'Error al aprobar la venta');
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('💥 Error completo al aprobar venta:', error);
 
-            if (error.response) {
-                console.error('📋 Detalles del error del servidor:', error.response.data);
+            if (axios.isAxiosError(error)) {
+                console.error('📋 Detalles del error del servidor:', error.response?.data);
                 const errorMessage =
-                    error.response.data?.message || error.response.data?.error || `Error ${error.response.status}: ${error.response.statusText}`;
+                    error.response?.data?.message || error.response?.data?.error || `Error ${error.response?.status}: ${error.response?.statusText}`;
                 toast.error(errorMessage);
-            } else if (error.request) {
-                console.error('🌐 Error de conexión:', error.request);
-                toast.error('Error de conexión: No se pudo contactar al servidor');
-            } else {
+            } else if (error instanceof Error) {
                 console.error('⚙️ Error de configuración:', error.message);
                 toast.error('Error al configurar la petición');
+            } else {
+                toast.error('Error de conexión: No se pudo contactar al servidor');
             }
         } finally {
             setIsApproving(false);
@@ -432,19 +456,18 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 console.error('❌ Error en respuesta del backend:', response.data);
                 toast.error(response.data.message || 'Error al anular la venta');
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('💥 Error completo al anular venta:', error);
 
-            if (error.response) {
-                console.error('📋 Detalles del error:', error.response.data);
-                const errorMessage = error.response.data?.message || error.response.data?.error || 'Ocurrió un error al intentar anular la venta.';
+            if (axios.isAxiosError(error)) {
+                console.error('📋 Detalles del error:', error.response?.data);
+                const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Ocurrió un error al intentar anular la venta.';
                 toast.error(errorMessage);
-            } else if (error.request) {
-                console.error('🌐 Error de conexión:', error.request);
-                toast.error('Error de conexión: No se pudo contactar al servidor');
-            } else {
+            } else if (error instanceof Error) {
                 console.error('⚙️ Error de configuración:', error.message);
                 toast.error('Error al configurar la petición');
+            } else {
+                toast.error('Error de conexión: No se pudo contactar al servidor');
             }
         } finally {
             setIsCancelling(false);
@@ -719,6 +742,23 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                     </h2>
                                 </AlertDialogDescription>
                             </AlertDialogHeader>
+                            {monedasReporte.length > 0 && (
+                                <div className="flex items-center gap-2 px-4 pb-2">
+                                    <Label htmlFor="moneda-reporte">Moneda del reporte</Label>
+                                    <Select value={monedaReporteSeleccionada} onValueChange={setMonedaReporteSeleccionada}>
+                                        <SelectTrigger id="moneda-reporte" className="w-[200px]">
+                                            <SelectValue placeholder="Seleccionar moneda" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {monedasReporte.map((m) => (
+                                                <SelectItem key={m.id} value={String(m.id)}>
+                                                    {m.nombre} ({m.codigo})
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
                             <div className="max-h-[70vh] overflow-y-auto">
                                 <div className="p-4 font-mono text-sm">
                                     {/* Formato para impresora térmica - Ticket para el cliente */}
@@ -762,7 +802,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                                     <tr key={index} className="border-b">
                                                         <td className="text-left">{item.producto.nombre}</td>
                                                         <td className="text-center">{item.cantidad}</td>
-                                                        <td className="text-right">{formatCurrency(item.subtotal, simboloMonedaPrincipal)}</td>
+                                                        <td className="text-right">{formatCurrency(convertirMontoReporte(item.subtotal), codigoReporte)}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
@@ -772,15 +812,15 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                     <div className="mb-2 border-t pt-2">
                                         <div className="flex justify-between">
                                             <span>Total:</span>
-                                            <span className="font-bold">{formatCurrency(currentVenta.total, simboloMonedaPrincipal)}</span>
+                                            <span className="font-bold">{formatCurrency(convertirMontoReporte(currentVenta.total), codigoReporte)}</span>
                                         </div>
                                         <div className="flex justify-between">
                                             <span>Pagado:</span>
-                                            <span>{formatCurrency(currentVenta.total_pagado, simboloMonedaPrincipal)}</span>
+                                            <span>{formatCurrency(convertirMontoReporte(currentVenta.total_pagado), codigoReporte)}</span>
                                         </div>
                                         <div className="flex justify-between">
                                             <span>Restante:</span>
-                                            <span>{formatCurrency(currentVenta.restante, simboloMonedaPrincipal)}</span>
+                                            <span>{formatCurrency(convertirMontoReporte(currentVenta.restante), codigoReporte)}</span>
                                         </div>
                                     </div>
 
@@ -1036,57 +1076,75 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                         Productos Vendidos
                     </h3>
 
-                    <div className="overflow-x-auto">
-                        <table className="w-full">
-                            <thead className="bg-muted">
-                                <tr className="border-b">
-                                    <th className="p-3 text-left">Producto</th>
-                                    <th className="p-3 text-left">Cantidad</th>
-                                    <th className="p-3 text-left">Precio Unitario</th>
-                                    {userRole !== 'vendedor' && <th className="p-3 text-left">Costo Unitario</th>}
-                                    {userRole !== 'vendedor' && <th className="p-3 text-left">Ganancia Unitaria</th>}
-                                    <th className="p-3 text-left">Subtotal</th>
+                    <div className="overflow-x-auto rounded-lg border">
+                        <table className="w-full text-sm">
+                            <thead className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                                <tr>
+                                    <th className="px-4 py-3 text-left font-semibold">Producto</th>
+                                    <th className="px-4 py-3 text-left font-semibold">Marca</th>
+                                    <th className="px-4 py-3 text-left font-semibold">Modelo</th>
+                                    <th className="px-4 py-3 text-left font-semibold">Capacidad</th>
+                                    <th className="px-4 py-3 text-left font-semibold">Categoría</th>
+                                    <th className="px-4 py-3 text-center font-semibold">Cantidad</th>
+                                    <th className="px-4 py-3 text-left font-semibold">Precio Unitario</th>
+                                    {userRole !== 'vendedor' && <th className="px-4 py-3 text-left font-semibold">Costo Unitario</th>}
+                                    {userRole !== 'vendedor' && <th className="px-4 py-3 text-left font-semibold">Ganancia Unitaria</th>}
+                                    <th className="px-4 py-3 text-left font-semibold">Subtotal</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                                 {currentVenta.items.map((item, index) => {
-                                    const gananciaUnitaria = item.precio_venta - item.costo_unitario;
-                                    const gananciaTotalItem = gananciaUnitaria * item.cantidad;
-
                                     return (
-                                        <tr key={index} className={index % 2 === 0 ? 'bg-background' : 'bg-muted/30'}>
-                                            <td className="p-3">
-                                                <div>
-                                                    <p className="font-medium">{item.producto.nombre}</p>
-                                                    <p className="text-muted-foreground text-sm">
-                                                        {item.producto.marca} - {item.producto.categoria}
-                                                    </p>
+                                        <tr key={index} className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                            <td className="px-4 py-2">
+                                                <div className="flex items-center gap-3">
+                                                    <img
+                                                        src={item.producto.imagen_url || 'https://via.placeholder.com/40'}
+                                                        alt={item.producto.nombre}
+                                                        className="h-10 w-10 rounded-md object-cover"
+                                                    />
+                                                    <div>
+                                                        <p className="font-semibold text-gray-800 dark:text-gray-200">{item.producto.nombre}</p>
+                                                        {item.producto.codigo && (
+                                                            <p className="text-xs text-gray-500">{item.producto.codigo}</p>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </td>
-                                            <td className="p-3">{item.cantidad}</td>
-                                            <td className="p-3">{formatCurrency(item.precio_venta, simboloMonedaPrincipal)}</td>
-                                            {userRole !== 'vendedor' && <td className="p-3 text-red-600">{formatCurrency(item.costo_unitario, simboloMonedaPrincipal)}</td>}
-                                            {userRole !== 'vendedor' && <td className="p-3 text-green-600">{formatCurrency(item.ganancia, simboloMonedaPrincipal)}</td>}
-                                            <td className="p-3 font-medium">{formatCurrency(item.subtotal, simboloMonedaPrincipal)}</td>
+                                            <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{item.producto.marca}</td>
+                                            <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{item.producto.modelo || 'N/A'}</td>
+                                            <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{item.producto.capacidad || 'N/A'}</td>
+                                            <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{item.producto.categoria}</td>
+                                            <td className="px-4 py-2 text-center">
+                                                <span className="font-semibold">{item.cantidad}</span>
+                                            </td>
+                                            <td className="px-4 py-2">{formatCurrency(item.precio_venta, simboloMonedaPrincipal)}</td>
+                                            {userRole !== 'vendedor' && (
+                                                <td className="px-4 py-2 text-red-600">{formatCurrency(item.costo_unitario, simboloMonedaPrincipal)}</td>
+                                            )}
+                                            {userRole !== 'vendedor' && (
+                                                <td className="px-4 py-2 text-green-600">{formatCurrency(item.ganancia, simboloMonedaPrincipal)}</td>
+                                            )}
+                                            <td className="px-4 py-2 font-medium">{formatCurrency(item.subtotal, simboloMonedaPrincipal)}</td>
                                         </tr>
                                     );
                                 })}
                             </tbody>
-                            <tfoot>
-                                <tr className="bg-sidebar-accent">
-                                    <td colSpan={userRole === 'vendedor' ? 3 : 5} className="py-3 text-right font-semibold text-white">
+                            <tfoot className="bg-sidebar-accent">
+                                <tr>
+                                    <td colSpan={userRole === 'vendedor' ? 7 : 9} className="px-4 py-3 text-right font-semibold text-white">
                                         Total Venta:
                                     </td>
-                                    <td className="py-3 text-center text-lg font-semibold text-white">
+                                    <td className="px-4 py-3 text-center text-lg font-semibold text-white">
                                         {formatCurrency(currentVenta.total, simboloMonedaPrincipal)}
                                     </td>
                                 </tr>
                                 {userRole !== 'vendedor' && (
-                                    <tr className="bg-green-50">
-                                        <td colSpan={5} className="py-3 text-right font-semibold text-green-800">
+                                    <tr className="bg-green-50 dark:bg-green-900/20">
+                                        <td colSpan={9} className="px-4 py-3 text-right font-semibold text-green-800 dark:text-green-400">
                                             Ganancia Total:
                                         </td>
-                                        <td className="py-3 text-center text-lg font-semibold text-green-800">
+                                        <td className="px-4 py-3 text-center text-lg font-semibold text-green-800 dark:text-green-400">
                                             {formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}
                                         </td>
                                     </tr>
@@ -1291,6 +1349,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                     </div>
                 )}
             </div>
+            <ScrollProgress />
         </AppLayout>
     );
 }

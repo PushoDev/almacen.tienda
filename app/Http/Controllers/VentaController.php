@@ -215,7 +215,10 @@ class VentaController extends Controller
     }
 
     /**
-     * Cargar cuentas filtradas por moneda y accesibles para el usuario - MEJORADO
+     * Cargar cuentas filtradas por moneda y método de pago - MEJORADO
+     * Filtra cuentas según el método de pago:
+     * - efectivo → tipo = 'efectivo'
+     * - transferencia → tipo = 'tarjeta'
      */
     public function getCuentasFiltradas(Request $request)
     {
@@ -225,7 +228,8 @@ class VentaController extends Controller
         }
 
         $request->validate([
-            'moneda_id' => 'required|exists:monedas,id'
+            'moneda_id' => 'required|exists:monedas,id',
+            'metodo_pago' => 'nullable|in:efectivo,transferencia'
         ]);
 
         $moneda = Moneda::find($request->moneda_id);
@@ -247,7 +251,16 @@ class VentaController extends Controller
                             ->where('tipo_moneda', $moneda->codigo_moneda);
                     });
             })
-            ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta');
+            ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta', 'tipo');
+
+        // ✅ NUEVO: Filtrar por tipo de cuenta según método de pago
+        if ($request->has('metodo_pago') && $request->metodo_pago) {
+            if ($request->metodo_pago === 'efectivo') {
+                $query->where('tipo', 'efectivo');
+            } elseif ($request->metodo_pago === 'transferencia') {
+                $query->where('tipo', 'tarjeta');
+            }
+        }
 
         // Filtrar por usuario si no es admin
         if (!in_array($user->role, ['admin', 'moderador'])) {
@@ -463,6 +476,10 @@ class VentaController extends Controller
                         'id' => $detalle->producto->id,
                         'nombre' => $detalle->producto->nombre_producto,
                         'marca' => $detalle->producto->marca_producto,
+                        'modelo' => $detalle->producto->modelo_producto,
+                        'capacidad' => $detalle->producto->capacidad_producto,
+                        'codigo' => $detalle->producto->codigo_producto,
+                        'imagen_url' => $detalle->producto->imagen_url,
                         'categoria' => $detalle->producto->categoria->nombre_categoria ?? 'Sin categoría',
                     ],
                     'cantidad' => $detalle->cantidad,
@@ -530,6 +547,7 @@ class VentaController extends Controller
                 'id' => $venta->moneda->id,
                 'codigo' => $venta->moneda->codigo_moneda,
                 'nombre' => $venta->moneda->nombre_moneda,
+                'simbolo' => $venta->moneda->simbolo_moneda,
             ] : null,
             'tasa_cambio_principal' => $venta->tasa_cambio_principal,
             'tasa_aplicada_venta' => $venta->tasa_aplicada_venta,
@@ -539,6 +557,7 @@ class VentaController extends Controller
                 'nombre' => $venta->monedaCobro->nombre_moneda,
                 'simbolo' => $venta->monedaCobro->simbolo_moneda,
             ] : null,
+            'monedas_para_reporte' => $this->buildMonedasParaReporte($venta),
             'monto_diferencia_cambiaria' => $venta->monto_diferencia_cambiaria,
         ];
 
@@ -546,6 +565,51 @@ class VentaController extends Controller
             'venta' => $ventaData,
             'userRole' => Auth::user()->role ?? 'vendedor'
         ]);
+    }
+
+    /**
+     * Construye la lista de monedas disponibles para el reporte con sus tasas de la operación.
+     *
+     * @param  \App\Models\Venta  $venta
+     * @return array<int, array{id: int, codigo: string, nombre: string, simbolo: string|null, tasa: float}>
+     */
+    private function buildMonedasParaReporte(Venta $venta): array
+    {
+        $map = [];
+
+        if ($venta->moneda) {
+            $map[$venta->moneda->id] = [
+                'id' => $venta->moneda->id,
+                'codigo' => $venta->moneda->codigo_moneda,
+                'nombre' => $venta->moneda->nombre_moneda,
+                'simbolo' => $venta->moneda->simbolo_moneda,
+                'tasa' => (float) $venta->tasa_cambio_principal,
+            ];
+        }
+
+        if ($venta->monedaCobro && $venta->tasa_aplicada_venta && !isset($map[$venta->monedaCobro->id])) {
+            $map[$venta->monedaCobro->id] = [
+                'id' => $venta->monedaCobro->id,
+                'codigo' => $venta->monedaCobro->codigo_moneda,
+                'nombre' => $venta->monedaCobro->nombre_moneda,
+                'simbolo' => $venta->monedaCobro->simbolo_moneda,
+                'tasa' => (float) $venta->tasa_aplicada_venta,
+            ];
+        }
+
+        foreach ($venta->pagos as $pago) {
+            if ($pago->moneda && $pago->tasa_cambio_aplicada && !isset($map[$pago->moneda->id])) {
+                $map[$pago->moneda->id] = [
+                    'id' => $pago->moneda->id,
+                    'codigo' => $pago->moneda->codigo_moneda,
+                    'nombre' => $pago->moneda->nombre_moneda,
+                    'simbolo' => $pago->moneda->simbolo_moneda,
+                    'tasa' => (float) $pago->tasa_cambio_aplicada,
+                ];
+            }
+        }
+
+        return array_values($map);
     }
 
     // ========================================================================
