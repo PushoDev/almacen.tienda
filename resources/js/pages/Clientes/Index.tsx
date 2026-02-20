@@ -14,6 +14,7 @@ import { Badge } from '@/Components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { ScrollProgress } from '@/components/ui/scroll';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -232,13 +233,12 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                             </CardHeader>
                             <CardContent>
                                 <div
-                                    className={`text-2xl font-bold ${
-                                        metricas.fondoTotal > metricas.deudaTotal
+                                    className={`text-2xl font-bold ${metricas.fondoTotal > metricas.deudaTotal
                                             ? 'text-green-600'
                                             : metricas.deudaTotal > metricas.fondoTotal
-                                              ? 'text-red-600'
-                                              : 'text-gray-600'
-                                    }`}
+                                                ? 'text-red-600'
+                                                : 'text-gray-600'
+                                        }`}
                                 >
                                     {formatearMoneda(metricas.fondoTotal - metricas.deudaTotal)}
                                 </div>
@@ -246,8 +246,8 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                     {metricas.fondoTotal > metricas.deudaTotal
                                         ? 'A favor empresa'
                                         : metricas.deudaTotal > metricas.fondoTotal
-                                          ? 'A favor clientes'
-                                          : 'Equilibrado'}
+                                            ? 'A favor clientes'
+                                            : 'Equilibrado'}
                                 </p>
                             </CardContent>
                         </Card>
@@ -406,18 +406,17 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                                                         <span className="text-muted-foreground">{estado.texto}</span>
                                                                     ) : (
                                                                         <div
-                                                                            className={`flex items-center gap-1 ${
-                                                                                estado.color === 'red'
+                                                                            className={`flex items-center gap-1 ${estado.color === 'red'
                                                                                     ? 'text-red-600'
                                                                                     : estado.color === 'green'
-                                                                                      ? 'text-green-600'
-                                                                                      : 'text-gray-500'
-                                                                            }`}
+                                                                                        ? 'text-green-600'
+                                                                                        : 'text-gray-500'
+                                                                                }`}
                                                                         >
                                                                             <IconComponent size={14} />
                                                                             <span className="font-medium">
                                                                                 {cliente.deuda_pago_cliente !== null &&
-                                                                                cliente.deuda_pago_cliente !== undefined
+                                                                                    cliente.deuda_pago_cliente !== undefined
                                                                                     ? estado.tipo === 'deuda'
                                                                                         ? formatearMoneda(Math.abs(cliente.deuda_pago_cliente))
                                                                                         : formatearMoneda(cliente.deuda_pago_cliente)
@@ -425,13 +424,12 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                                                             </span>
                                                                             <Badge
                                                                                 variant="outline"
-                                                                                className={`ml-2 ${
-                                                                                    estado.color === 'red'
+                                                                                className={`ml-2 ${estado.color === 'red'
                                                                                         ? 'border-red-200 bg-red-50 text-red-700'
                                                                                         : estado.color === 'green'
-                                                                                          ? 'border-green-200 bg-green-50 text-green-700'
-                                                                                          : 'border-gray-200 bg-gray-50 text-gray-700'
-                                                                                }`}
+                                                                                            ? 'border-green-200 bg-green-50 text-green-700'
+                                                                                            : 'border-gray-200 bg-gray-50 text-gray-700'
+                                                                                    }`}
                                                                             >
                                                                                 {estado.texto}
                                                                             </Badge>
@@ -622,6 +620,7 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                 </div>
             </TooltipProvider>
             <Toaster position="top-center" />
+            <ScrollProgress />
         </AppLayout>
     );
 }

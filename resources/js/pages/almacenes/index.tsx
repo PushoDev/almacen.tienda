@@ -11,6 +11,7 @@ import {
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -394,6 +395,7 @@ export default function AlmacenesPage({ almacenes }: { almacenes: AlmacenProps[]
                 </div>
             </div>
             <Toaster position="top-center" />
+            <ScrollProgress />
         </AppLayout>
     );
 }

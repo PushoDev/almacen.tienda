@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ScrollProgress } from '@/components/ui/scroll';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -164,10 +165,10 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                         productos: almacen.productos.map((p) =>
                             p.id === selectedProduct.id && p.almacen_id === selectedProduct.almacen_id
                                 ? {
-                                      ...p,
-                                      precio_venta: parsedPrice,
-                                      ganancia: parsedPrice - p.precio_compra,
-                                  }
+                                    ...p,
+                                    precio_venta: parsedPrice,
+                                    ganancia: parsedPrice - p.precio_compra,
+                                }
                                 : p,
                         ),
                     };
@@ -447,8 +448,8 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                                     producto.ganancia === null
                                                         ? 'text-gray-400 italic'
                                                         : producto.ganancia >= 0
-                                                          ? 'text-green-600'
-                                                          : 'text-red-600',
+                                                            ? 'text-green-600'
+                                                            : 'text-red-600',
                                                 )}
                                             >
                                                 {formatCurrency(producto.ganancia)}
@@ -741,7 +742,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                             <p className="text-lg font-bold text-purple-900 dark:text-purple-100">
                                                 {formatCurrency(
                                                     preciosVendedores.precios.reduce((sum: number, p: any) => sum + p.precio_venta, 0) /
-                                                        preciosVendedores.precios.length,
+                                                    preciosVendedores.precios.length,
                                                 )}
                                             </p>
                                         </div>
@@ -848,6 +849,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                     </AlertDialogContent>
                 </AlertDialog>
             </div>
+            <ScrollProgress />
         </AppLayout>
     );
 }

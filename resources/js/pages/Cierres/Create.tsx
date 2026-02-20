@@ -87,7 +87,19 @@ interface DetalleMoneda {
     items_transferencias: ItemMovimiento[];
     items_transferencias_salientes: TransferenciaItem[];
     items_transferencias_entrantes: TransferenciaItem[];
-    productos_resumen: Record<string, { id: number; nombre: string; detalles: string; cantidad: number; precio: number; total: number }>;
+    productos_resumen: Record<string, {
+        id: number;
+        nombre: string;
+        marca: string;
+        modelo: string;
+        capacidad: string;
+        codigo: string;
+        imagen_url: string;
+        categoria: string;
+        cantidad: number;
+        precio: number;
+        total: number
+    }>;
     operaciones_detalle: OperacionDetaile[];
 }
 
@@ -172,6 +184,19 @@ interface DetalleMoneda {
     items_transferencias: ItemMovimiento[];
     items_transferencias_salientes: TransferenciaItem[];
     items_transferencias_entrantes: TransferenciaItem[];
+    productos_resumen: Record<string, {
+        id: number;
+        nombre: string;
+        marca: string;
+        modelo: string;
+        capacidad: string;
+        codigo: string;
+        imagen_url: string;
+        categoria: string;
+        cantidad: number;
+        precio: number;
+        total: number
+    }>;
 }
 
 interface Calculos {
@@ -183,6 +208,13 @@ interface Calculos {
     saldo_esperado_global: number;
     detalles: DetalleMoneda[];
     transferencias_resumen?: TransferenciasResumen;
+    // NUEVO: Totales separados por destino
+    ventas_a_cuentas_total_usd?: number;
+    ventas_a_clientes_total_usd?: number;
+    ventas_a_cuentas_efectivo_usd?: number;
+    ventas_a_cuentas_transferencia_usd?: number;
+    ventas_a_clientes_efectivo_usd?: number;
+    ventas_a_clientes_transferencia_usd?: number;
 }
 
 const DENOMINACIONES = [
@@ -233,8 +265,15 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
     // Lista plana de productos vendidos desde productos_resumen (ya deduplicado por venta)
     const lineasProductosRaw = (calculos.detalles ?? []).flatMap((d) => Object.values(d.productos_resumen ?? {}));
     const lineasProductos = lineasProductosRaw.map((p) => ({
+        id: p.id,
+        nombre: p.nombre || '',
+        marca: p.marca || '',
+        modelo: p.modelo || '',
+        capacidad: p.capacidad || '',
+        codigo: p.codigo || '',
+        imagen_url: p.imagen_url || '',
+        categoria: p.categoria || '',
         cantidad: Number(p.cantidad) || 0,
-        descripcion: p.nombre + (p.detalles ? ` ${p.detalles}` : ''),
         precio_unitario: Number(p.precio) || 0,
         total: Number(p.total) || 0,
         precio_equivalente: Number(p.precio) || 0,
@@ -434,71 +473,182 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
                     </CardContent>
                 </Card>
 
+                {/* NUEVO: Widget de Resumen por Destino (Cuentas vs Clientes) */}
+                {(calculos.ventas_a_cuentas_total_usd !== undefined || calculos.ventas_a_clientes_total_usd !== undefined) && (
+                    <Card>
+                        <CardHeader className="pb-2">
+                            <CardTitle className="flex items-center gap-2 text-lg">
+                                <Wallet className="h-5 w-5 text-primary" />
+                                Distribución del Dinero
+                            </CardTitle>
+                            <CardDescription>
+                                Separación entre dinero que entró a tus cuentas y dinero que fue a deuda de clientes
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="p-4">
+                            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                                {/* Columna: Dinero en MIS CUENTAS */}
+                                <div className="space-y-3 rounded-lg border border-border bg-primary/5 p-4">
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+                                            <Banknote className="h-4 w-4 text-primary" />
+                                        </div>
+                                        <h4 className="font-semibold">Montos Depositados a mis Cuentas</h4>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="text-muted-foreground">En Efectivo:</span>
+                                            <span className="font-mono font-medium">
+                                                ${Number(calculos.ventas_a_cuentas_efectivo_usd || 0).toFixed(2)}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="text-muted-foreground">Por Transferencia:</span>
+                                            <span className="font-mono font-medium">
+                                                ${Number(calculos.ventas_a_cuentas_transferencia_usd || 0).toFixed(2)}
+                                            </span>
+                                        </div>
+                                        <div className="border-t border-border pt-2">
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-semibold">Total en Cuentas:</span>
+                                                <span className="text-xl font-bold text-primary">
+                                                    ${Number(calculos.ventas_a_cuentas_total_usd || 0).toFixed(2)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Columna: Dinero a DEUDA de CLIENTES */}
+                                <div className="space-y-3 rounded-lg border border-border bg-muted/50 p-4">
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
+                                            <CreditCard className="h-4 w-4 text-muted-foreground" />
+                                        </div>
+                                        <h4 className="font-semibold">Depósitos a Clientes</h4>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="text-muted-foreground">En Efectivo:</span>
+                                            <span className="font-mono font-medium">
+                                                ${Number(calculos.ventas_a_clientes_efectivo_usd || 0).toFixed(2)}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="text-muted-foreground">Por Transferencia:</span>
+                                            <span className="font-mono font-medium">
+                                                ${Number(calculos.ventas_a_clientes_transferencia_usd || 0).toFixed(2)}
+                                            </span>
+                                        </div>
+                                        <div className="border-t border-border pt-2">
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-semibold">Total a Clientes:</span>
+                                                <span className="text-xl font-bold text-muted-foreground">
+                                                    ${Number(calculos.ventas_a_clientes_total_usd || 0).toFixed(2)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+
+                {/* Tabla Ventas: todos los productos del turno */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Receipt className="h-5 w-5" />
+                            Ventas
+                        </CardTitle>
+                        <CardDescription>
+                            Productos vendidos en el turno. Importes en {moneda_referencia} (moneda de referencia).
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="overflow-x-auto rounded-lg border">
+                            <table className="w-full text-sm">
+                                <thead className="bg-muted text-muted-foreground">
+                                    <tr>
+                                        <th className="px-4 py-3 text-left font-semibold">Producto</th>
+                                        <th className="px-4 py-3 text-left font-semibold">Marca</th>
+                                        <th className="px-4 py-3 text-left font-semibold">Modelo</th>
+                                        <th className="px-4 py-3 text-left font-semibold">Capacidad</th>
+                                        <th className="px-4 py-3 text-left font-semibold">Categoría</th>
+                                        <th className="px-4 py-3 text-center font-semibold">Cantidad</th>
+                                        <th className="px-4 py-3 text-right font-semibold">Precio</th>
+                                        <th className="px-4 py-3 text-right font-semibold">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-border">
+                                    {lineasProductos.length > 0 ? (
+                                        lineasProductos.map((linea, idx) => (
+                                            <tr key={idx} className="transition-colors hover:bg-muted/50">
+                                                <td className="px-4 py-2">
+                                                    <div className="flex items-center gap-3">
+                                                        <img
+                                                            src={linea.imagen_url || 'https://via.placeholder.com/40'}
+                                                            alt={linea.nombre}
+                                                            className="h-10 w-10 rounded-md object-cover"
+                                                        />
+                                                        <div>
+                                                            <div className="font-semibold">{linea.nombre}</div>
+                                                            <div className="text-xs text-muted-foreground">{linea.codigo}</div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-2 text-muted-foreground">{linea.marca}</td>
+                                                <td className="px-4 py-2 text-muted-foreground">{linea.modelo}</td>
+                                                <td className="px-4 py-2 text-muted-foreground">{linea.capacidad || 'N/A'}</td>
+                                                <td className="px-4 py-2 text-muted-foreground">{linea.categoria}</td>
+                                                <td className="px-4 py-2 text-center">
+                                                    <span className="font-bold text-primary">{linea.cantidad}</span>
+                                                </td>
+                                                <td className="px-4 py-2 text-right font-mono">
+                                                    {(linea.total_equivalente !== undefined
+                                                        ? Number(linea.precio_equivalente)
+                                                        : Number(linea.precio_unitario)
+                                                    ).toFixed(2)}
+                                                </td>
+                                                <td className="px-4 py-2 text-right font-mono font-medium">
+                                                    {(linea.total_equivalente !== undefined
+                                                        ? Number(linea.total_equivalente)
+                                                        : Number(linea.total)
+                                                    ).toFixed(2)}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={8} className="text-muted-foreground px-4 py-8 text-center italic">
+                                                No hay ventas en este turno
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                                <tfoot className="bg-muted/50">
+                                    <tr>
+                                        <td colSpan={5} className="px-4 py-3 text-right font-bold">
+                                            Total
+                                        </td>
+                                        <td className="px-4 py-3 text-center font-bold">
+                                            {lineasProductos.reduce((sum, p) => sum + p.cantidad, 0)}
+                                        </td>
+                                        <td className="px-4 py-3"></td>
+                                        <td className="px-4 py-3 text-right font-mono font-bold">
+                                            {Number(totalVentasProductos).toFixed(2)} {moneda_referencia}
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </CardContent>
+                </Card>
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
                     {/* Columna Izquierda: Información del Sistema */}
                     <div className="space-y-6 lg:col-span-8">
-                        {/* Tabla Ventas: todos los productos del turno */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <Receipt className="h-5 w-5" />
-                                    Ventas
-                                </CardTitle>
-                                <CardDescription>
-                                    Productos vendidos en el turno. Importes en {moneda_referencia} (moneda de referencia).
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead className="w-20">Cantidad</TableHead>
-                                            <TableHead>Producto (detalles)</TableHead>
-                                            <TableHead className="text-right">Precio</TableHead>
-                                            <TableHead className="text-right">Total</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {lineasProductos.length > 0 ? (
-                                            lineasProductos.map((linea, idx) => (
-                                                <TableRow key={idx}>
-                                                    <TableCell className="font-medium">{linea.cantidad}</TableCell>
-                                                    <TableCell>{linea.descripcion}</TableCell>
-                                                    <TableCell className="text-right">
-                                                        {(linea.total_equivalente !== undefined
-                                                            ? Number(linea.precio_equivalente)
-                                                            : Number(linea.precio_unitario)
-                                                        ).toFixed(2)}
-                                                    </TableCell>
-                                                    <TableCell className="text-right font-mono">
-                                                        {(linea.total_equivalente !== undefined
-                                                            ? Number(linea.total_equivalente)
-                                                            : Number(linea.total)
-                                                        ).toFixed(2)}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))
-                                        ) : (
-                                            <TableRow>
-                                                <TableCell colSpan={4} className="text-muted-foreground text-center italic">
-                                                    No hay ventas en este turno
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </TableBody>
-                                    <TableFooter>
-                                        <TableRow>
-                                            <TableCell colSpan={3} className="text-right font-bold">
-                                                Total
-                                            </TableCell>
-                                            <TableCell className="text-right font-mono font-bold">
-                                                {Number(totalVentasProductos).toFixed(2)} {moneda_referencia}
-                                            </TableCell>
-                                        </TableRow>
-                                    </TableFooter>
-                                </Table>
-                            </CardContent>
-                        </Card>
+
 
                         {/* Por dónde entraron: una tabla por moneda con desglose de operaciones */}
                         <Card>

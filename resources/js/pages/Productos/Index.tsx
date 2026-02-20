@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
@@ -19,7 +20,6 @@ import { ProductosFilters, ProductosPaginados, ProductosSort, type BreadcrumbIte
 import { Head, Link, router } from '@inertiajs/react';
 import {
     AlertTriangle,
-    BarChart3,
     CloudUpload,
     CopyX,
     DollarSign,
@@ -875,6 +875,7 @@ export default function ProductosPage({
 
                 <Toaster position="top-center" />
             </div>
+            <ScrollProgress />
         </AppLayout>
     );
 }

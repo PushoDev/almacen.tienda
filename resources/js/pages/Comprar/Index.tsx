@@ -58,6 +58,7 @@ import { toast } from 'sonner';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
+import { ScrollProgress } from '@/components/ui/scroll';
 
 // =================================================================
 // 🚨 ATRIBUTOS DE PRODUCTO ACTUALIZADOS EN TYPESCRIPT
@@ -2312,6 +2313,7 @@ export default function ComprarPage() {
 
                 <Toaster position="top-center" />
             </div>
+            <ScrollProgress />
         </AppLayout>
     );
 }
