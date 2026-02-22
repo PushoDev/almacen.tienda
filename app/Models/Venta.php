@@ -25,6 +25,11 @@ class Venta extends Model
         'tasa_aplicada_venta',
         'moneda_cobro_id',
         'monto_diferencia_cambiaria',
+        // CAMPOS GESTOR
+        'es_venta_gestor',
+        'gestor_monto',
+        'gestor_cuenta_id',
+        'gestor_comentario',
     ];
 
     protected $casts = [
@@ -86,5 +91,11 @@ class Venta extends Model
     public function destinatario()
     {
         return $this->hasOne(DestinatarioVenta::class);
+    }
+
+    // RELACIÓN GESTOR
+    public function gestorCuenta()
+    {
+        return $this->belongsTo(Cuenta::class, 'gestor_cuenta_id');
     }
 }

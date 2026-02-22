@@ -70,6 +70,7 @@
         "tailwindcss": "^4.1.17",
         "tailwindcss-animate": "^1.0.7",
         "typescript": "^5.9.3",
+        "vaul": "^1.1.2",
         "vite": "^7.2"
     },
     "optionalDependencies": {

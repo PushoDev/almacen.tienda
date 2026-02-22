@@ -19,6 +19,7 @@ import { ScrollProgress } from '@/components/ui/scroll';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 import { Toaster } from '@/components/ui/sonner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
@@ -192,10 +193,17 @@ export default function PuntoVentaOficial({
         monedaSimbolo: string;
     } | null>(null);
 
-    const [isCrearClienteDialogOpen, setIsCrearClienteDialogOpen] = useState(false);
+    // Estados para Gestor
+    const [esVentaGestor, setEsVentaGestor] = useState<boolean>(false);
+    const [gestorMonto, setGestorMonto] = useState<string>('');
+    const [gestorCuentaId, setGestorCuentaId] = useState<string>('');
+    const [gestorComentario, setGestorComentario] = useState<string>('');
+    const [cuentasGestor, setCuentasGestor] = useState<Cuenta[]>([]);
+    const [cargandoCuentasGestor, setCargandoCuentasGestor] = useState<boolean>(false);
 
     const [productoVistaRapida, setProductoVistaRapida] = useState<Producto | null>(null);
     const [isVistaRapidaOpen, setIsVistaRapidaOpen] = useState(false);
+    const [isCrearClienteDialogOpen, setIsCrearClienteDialogOpen] = useState(false);
 
     const currencies = useMemo(() => {
         console.log('Monedas disponibles:', monedas);
@@ -315,6 +323,22 @@ export default function PuntoVentaOficial({
         }
     };
 
+    const cargarCuentasParaGestor = async () => {
+        setCargandoCuentasGestor(true);
+        try {
+            console.log('Cargando cuentas para gestor...');
+            const response = await axios.get(route('ventas.getCuentasParaGestor'));
+            console.log('Cuentas para gestor cargadas:', response.data);
+            setCuentasGestor(response.data);
+        } catch (error) {
+            console.error('Error al cargar cuentas para gestor:', error);
+            toast.error('Error al cargar cuentas para gestor');
+            setCuentasGestor([]);
+        } finally {
+            setCargandoCuentasGestor(false);
+        }
+    };
+
     const cargarProductos = async (almacenId: string) => {
         if (!almacenId) {
             setProductos([]);
@@ -348,6 +372,7 @@ export default function PuntoVentaOficial({
         cargarAlmacenes();
         cargarClientes();
         cargarClientesFisicos();
+        cargarCuentasParaGestor();
     }, []);
 
     const handleAlmacenChange = (value: string) => {

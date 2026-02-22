@@ -292,6 +292,39 @@ class VentaController extends Controller
     }
 
     /**
+     * Cargar Cuentas accesibles para gestores en ventas.
+     */
+    public function getCuentasParaGestor(Request $request)
+    {
+        $user = Auth::user();
+
+        $query = Cuenta::with('moneda')
+            ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta', 'tipo');
+
+        // No-admin: solo sus cuentas
+        if (!in_array($user->role, ['admin', 'moderador'])) {
+            $query->whereHas('users', function ($q) use ($user) {
+                $q->where('user_id', $user->id);
+            });
+        }
+
+        $cuentas = $query->get()->map(function ($cuenta) {
+            return [
+                'id' => $cuenta->id,
+                'nombre_cuenta' => $cuenta->nombre_cuenta,
+                'saldo_actual' => $cuenta->saldo_cuenta,
+                'moneda' => [
+                    'codigo' => $cuenta->moneda?->codigo_moneda ?? $cuenta->tipo_moneda,
+                    'simbolo' => $cuenta->moneda?->simbolo_moneda ?? $cuenta->tipo_moneda,
+                ],
+                'tipo' => $cuenta->tipo,
+            ];
+        });
+
+        return response()->json($cuentas);
+    }
+
+    /**
      * Cargar todas las monedas activas - MEJORADO
      */
     public function getMonedas()
@@ -661,6 +694,33 @@ class VentaController extends Controller
             }
         }
 
+        // ✅ VALIDACIÓN GESTOR
+        if ($validatedData['es_venta_gestor'] ?? false) {
+            $validator = Validator::make($request->all(), [
+                'gestor_monto' => 'required|numeric|min:0.01',
+                'gestor_cuenta_id' => 'required|exists:cuentas,id',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json(['errors' => $validator->errors()], 422);
+            }
+
+            // Validar acceso a la cuenta del gestor
+            $cuentaGestor = Cuenta::find($validatedData['gestor_cuenta_id']);
+            if (
+                !in_array($user->role, ['admin', 'moderador']) &&
+                !$user->cuentas->contains('id', $validatedData['gestor_cuenta_id'])
+            ) {
+                throw new \Exception('No tienes acceso a la cuenta del gestor');
+            }
+
+            // ✅ NUEVO: Validar compatibilidad de moneda (opcional: requerir que coincida con moneda de cobro si existe)
+            $monedaCobro = $validatedData['moneda_cobro_id'] ? Moneda::find($validatedData['moneda_cobro_id']) : null;
+            if ($monedaCobro && $cuentaGestor->moneda_id !== $monedaCobro->id && $cuentaGestor->tipo_moneda !== $monedaCobro->codigo_moneda) {
+                throw new \Exception('La moneda de la cuenta del gestor debe coincidir con la moneda de cobro seleccionada');
+            }
+        }
+
         DB::beginTransaction();
 
         try {
@@ -728,6 +788,11 @@ class VentaController extends Controller
                 'tasa_cambio_principal' => $validatedData['tasa_cambio_principal'],
                 'tasa_aplicada_venta' => $validatedData['tasa_aplicada_venta'] ?? null,
                 'moneda_cobro_id' => $validatedData['moneda_cobro_id'] ?? null,
+                // CAMPOS GESTOR
+                'es_venta_gestor' => $validatedData['es_venta_gestor'] ?? false,
+                'gestor_monto' => $validatedData['gestor_monto'] ?? 0,
+                'gestor_cuenta_id' => $validatedData['gestor_cuenta_id'] ?? null,
+                'gestor_comentario' => $validatedData['gestor_comentario'] ?? null,
             ]);
 
             HistorialStock::where('user_id', $user->id)->where('tipo', 'venta_pendiente')->whereNull('venta_id')->update(['venta_id' => $venta->id]);
@@ -936,6 +1001,23 @@ class VentaController extends Controller
                 'ganancia_perdida_cambiaria' => $gananciaExtraUSD,
                 'ganancia_real_total'        => $venta->total_ganancia + $gananciaExtraUSD,
             ]);
+
+            // ✅ DESCUENTO GESTOR
+            if ($venta->es_venta_gestor && $venta->gestor_cuenta_id && $venta->gestor_monto > 0) {
+                $cuentaGestor = $venta->gestorCuenta;
+
+                if ($cuentaGestor) {
+                    // ✅ NUEVO: Validar saldo suficiente antes de descontar
+                    if ($cuentaGestor->saldo_cuenta < $venta->gestor_monto) {
+                        throw new \Exception('La cuenta del gestor no tiene saldo suficiente para cubrir la comisión');
+                    }
+
+                    $cuentaGestor->decrement('saldo_cuenta', $venta->gestor_monto);
+
+                    // Opcional: Registrar en historial de cuenta
+                    // HistorialCuenta::create([...]);
+                }
+            }
         });
 
         return response()->json([
@@ -1029,6 +1111,8 @@ class VentaController extends Controller
                         'simbolo' => $venta->monedaCobro->simbolo_moneda,
                     ] : null,
                     'monto_diferencia_cambiaria' => $venta->monto_diferencia_cambiaria,
+                    // GESTOR
+                    'gestor' => $venta->es_venta_gestor ? ['monto' => $venta->gestor_monto] : null,
                 ];
             });
 
