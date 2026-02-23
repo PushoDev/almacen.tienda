@@ -15,11 +15,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ScrollProgress } from '@/components/ui/scroll';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Switch } from '@/components/ui/switch';
 import { Toaster } from '@/components/ui/sonner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
@@ -193,17 +191,10 @@ export default function PuntoVentaOficial({
         monedaSimbolo: string;
     } | null>(null);
 
-    // Estados para Gestor
-    const [esVentaGestor, setEsVentaGestor] = useState<boolean>(false);
-    const [gestorMonto, setGestorMonto] = useState<string>('');
-    const [gestorCuentaId, setGestorCuentaId] = useState<string>('');
-    const [gestorComentario, setGestorComentario] = useState<string>('');
-    const [cuentasGestor, setCuentasGestor] = useState<Cuenta[]>([]);
-    const [cargandoCuentasGestor, setCargandoCuentasGestor] = useState<boolean>(false);
+    const [isCrearClienteDialogOpen, setIsCrearClienteDialogOpen] = useState(false);
 
     const [productoVistaRapida, setProductoVistaRapida] = useState<Producto | null>(null);
     const [isVistaRapidaOpen, setIsVistaRapidaOpen] = useState(false);
-    const [isCrearClienteDialogOpen, setIsCrearClienteDialogOpen] = useState(false);
 
     const currencies = useMemo(() => {
         console.log('Monedas disponibles:', monedas);
@@ -295,7 +286,7 @@ export default function PuntoVentaOficial({
         }
     };
 
-    const cargarCuentasFiltradas = async (monedaId: string, metodoPago?: string) => {
+    const cargarCuentasFiltradas = async (monedaId: string) => {
         if (!monedaId) {
             console.log('No hay moneda ID, limpiando cuentas filtradas');
             setCuentasFiltradas([]);
@@ -303,12 +294,10 @@ export default function PuntoVentaOficial({
         }
         setCargandoCuentas(true);
         try {
-            console.log('Cargando cuentas filtradas para moneda ID:', monedaId, 'método:', metodoPago);
-            const params: { moneda_id: string; metodo_pago?: string } = { moneda_id: monedaId };
-            if (metodoPago) {
-                params.metodo_pago = metodoPago;
-            }
-            const response = await axios.get(route('ventas.getCuentasFiltradas'), { params });
+            console.log('Cargando cuentas filtradas para moneda ID:', monedaId);
+            const response = await axios.get(route('ventas.getCuentasFiltradas'), {
+                params: { moneda_id: monedaId },
+            });
             console.log('Cuentas filtradas cargadas:', response.data);
             setCuentasFiltradas(response.data);
         } catch (error: unknown) {
@@ -320,22 +309,6 @@ export default function PuntoVentaOficial({
             setCuentasFiltradas([]);
         } finally {
             setCargandoCuentas(false);
-        }
-    };
-
-    const cargarCuentasParaGestor = async () => {
-        setCargandoCuentasGestor(true);
-        try {
-            console.log('Cargando cuentas para gestor...');
-            const response = await axios.get(route('ventas.getCuentasParaGestor'));
-            console.log('Cuentas para gestor cargadas:', response.data);
-            setCuentasGestor(response.data);
-        } catch (error) {
-            console.error('Error al cargar cuentas para gestor:', error);
-            toast.error('Error al cargar cuentas para gestor');
-            setCuentasGestor([]);
-        } finally {
-            setCargandoCuentasGestor(false);
         }
     };
 
@@ -372,7 +345,6 @@ export default function PuntoVentaOficial({
         cargarAlmacenes();
         cargarClientes();
         cargarClientesFisicos();
-        cargarCuentasParaGestor();
     }, []);
 
     const handleAlmacenChange = (value: string) => {
@@ -386,6 +358,21 @@ export default function PuntoVentaOficial({
     const handleClienteChange = (value: string) => {
         console.log('Cliente seleccionado:', value);
         setClienteSeleccionado(value);
+    };
+
+    const handleMonedaChange = (monedaId: string) => {
+        const selectedCurrency = currencies.find((c) => c.id === monedaId);
+        const automaticAmount = calculateAutomaticAmount(monedaId);
+
+        setCurrentPayment({
+            ...currentPayment,
+            moneda_id: monedaId,
+            exchangeRate: selectedCurrency ? selectedCurrency.exchangeRate.toString() : '',
+            amount: automaticAmount,
+            cuenta_id: '',
+            cliente_id: '',
+        });
+        cargarCuentasFiltradas(monedaId);
     };
 
     const productosFiltrados = useMemo(() => {
@@ -521,37 +508,18 @@ export default function PuntoVentaOficial({
         return amount / exchangeRate;
     };
 
-    const calculateAutomaticAmount = (monedaId: string, exchangeRateOverride?: number): string => {
+    const calculateAutomaticAmount = (monedaId: string): string => {
         if (remainingInUsd <= 0) {
             return '';
         }
 
         const selectedCurrency = currencies.find((c) => c.id === monedaId);
-        const exchangeRate = exchangeRateOverride ?? selectedCurrency?.exchangeRate;
-
-        if (!exchangeRate || exchangeRate <= 0) {
+        if (!selectedCurrency || !selectedCurrency.exchangeRate || selectedCurrency.exchangeRate <= 0) {
             return '';
         }
 
-        const automaticAmount = remainingInUsd * exchangeRate;
+        const automaticAmount = remainingInUsd * selectedCurrency.exchangeRate;
         return automaticAmount.toFixed(2);
-    };
-
-    const handleMonedaChange = (monedaId: string) => {
-        const selectedCurrency = currencies.find((c) => c.id === monedaId);
-        const newExchangeRate = selectedCurrency ? selectedCurrency.exchangeRate.toString() : '';
-        const automaticAmount = calculateAutomaticAmount(monedaId, parseFloat(newExchangeRate));
-
-        setCurrentPayment({
-            ...currentPayment,
-            moneda_id: monedaId,
-            exchangeRate: newExchangeRate,
-            amount: automaticAmount,
-            cuenta_id: '',
-            cliente_id: '',
-        });
-        // ✅ Pasar método de pago al cargar cuentas si está seleccionado
-        cargarCuentasFiltradas(monedaId, currentPayment.method || undefined);
     };
 
     const handleAddPayment = () => {
@@ -957,7 +925,7 @@ export default function PuntoVentaOficial({
                         <div className="space-y-4 lg:col-span-2 lg:space-y-6">
                             {/* Configuración */}
                             <Card className="overflow-hidden border-0 shadow-lg">
-                                <CardHeader className="from-secondary to-secondary/50 border-b bg-linear-to-r px-6 pt-6 pb-4">
+                                <CardHeader className="from-secondary to-secondary/50 bg-linear-to-r pb-4">
                                     <CardTitle className="flex items-center gap-2 text-base font-semibold">
                                         <Building2 className="text-primary h-5 w-5" />
                                         Configuración de Venta
@@ -1043,7 +1011,7 @@ export default function PuntoVentaOficial({
                             {/* Productos */}
                             {almacenSeleccionado && (
                                 <Card className="animate-fade-in min-h-[500px] overflow-hidden border-0 shadow-lg">
-                                    <CardHeader className="from-secondary to-secondary/50 border-b bg-linear-to-r px-6 pt-6 pb-4">
+                                    <CardHeader className="from-secondary to-secondary/50 bg-linear-to-r pb-4">
                                         <div className="flex items-center justify-between">
                                             <CardTitle className="flex items-center gap-2 text-base font-semibold">
                                                 <BoxesIcon className="text-success h-5 w-5" />
@@ -1210,7 +1178,7 @@ export default function PuntoVentaOficial({
                         {/* Right column - Carrito Sticky */}
                         <div className="space-y-6 lg:sticky lg:top-4 lg:self-start">
                             <Card className="overflow-hidden border-0 shadow-lg">
-                                <CardHeader className="from-primary/10 to-primary/5 bg-linear-to-r px-6 pt-6 pb-4">
+                                <CardHeader className="from-primary/10 to-primary/5 bg-linear-to-r pb-4">
                                     <div className="flex items-center justify-between">
                                         <CardTitle className="flex items-center gap-2 text-base font-semibold">
                                             <ShoppingCart className="text-primary h-5 w-5" />
@@ -1406,15 +1374,9 @@ export default function PuntoVentaOficial({
                                                                                         via: value === 'efectivo' ? 'efectivo' : '',
                                                                                         referencia:
                                                                                             value === 'efectivo' ? '' : currentPayment.referencia,
-                                                                                        cuenta_id: '', // Limpiar cuenta seleccionada al cambiar método
-                                                                                        cliente_id: '', // Limpiar cliente seleccionado al cambiar método
                                                                                     };
                                                                                     console.log('Método de pago cambiado:', newPayment);
                                                                                     setCurrentPayment(newPayment);
-                                                                                    // ✅ Recargar cuentas filtradas si ya hay moneda seleccionada
-                                                                                    if (currentPayment.moneda_id && value) {
-                                                                                        cargarCuentasFiltradas(currentPayment.moneda_id, value);
-                                                                                    }
                                                                                 }}
                                                                             >
                                                                                 <SelectTrigger>
@@ -1451,27 +1413,12 @@ export default function PuntoVentaOficial({
                                                                             <Input
                                                                                 type="number"
                                                                                 value={currentPayment.exchangeRate}
-                                                                                onChange={(e) => {
-                                                                                    const newRate = e.target.value;
-                                                                                    const newRateNum = parseFloat(newRate);
-                                                                                    // Recalcular monto automáticamente cuando cambia la tasa
-                                                                                    let newAmount = '';
-                                                                                    if (
-                                                                                        currentPayment.moneda_id &&
-                                                                                        newRateNum > 0 &&
-                                                                                        remainingInUsd > 0
-                                                                                    ) {
-                                                                                        newAmount = calculateAutomaticAmount(
-                                                                                            currentPayment.moneda_id,
-                                                                                            newRateNum,
-                                                                                        );
-                                                                                    }
+                                                                                onChange={(e) =>
                                                                                     setCurrentPayment({
                                                                                         ...currentPayment,
-                                                                                        exchangeRate: newRate,
-                                                                                        amount: newAmount,
-                                                                                    });
-                                                                                }}
+                                                                                        exchangeRate: e.target.value,
+                                                                                    })
+                                                                                }
                                                                                 placeholder="Tasa de cambio"
                                                                                 disabled={!currentPayment.moneda_id}
                                                                                 min="0.0001"
@@ -1859,7 +1806,6 @@ export default function PuntoVentaOficial({
                     )}
                 </DialogContent>
             </Dialog>
-            <ScrollProgress />
         </AppLayout>
     );
 }
