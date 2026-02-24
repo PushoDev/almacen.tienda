@@ -246,7 +246,6 @@ export default function CompraShow({ compra, productos, success }: CompraShowPro
                     Esta compra ha sido registrada en el inventario general. Los productos ya están disponibles en sus respectivos almacenes.
                 </p>
             </div>
-            <ScrollProgress />
         </AppLayout>
     );
 }

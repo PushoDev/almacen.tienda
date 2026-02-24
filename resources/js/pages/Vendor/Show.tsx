@@ -11,12 +11,14 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { ScrollProgress } from '@/components/ui/scroll';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
@@ -100,6 +102,19 @@ interface ClienteDestino {
     nombre: string;
 }
 
+// Cuenta para Gestor
+interface Cuenta {
+    id: number;
+    nombre_cuenta: string;
+    saldo_actual: number;
+    moneda: {
+        codigo: string;
+        simbolo: string;
+    };
+    tipo: string;
+    tipo_moneda: string;
+}
+
 interface Pago {
     metodo: string;
     moneda: MonedaPago | null;
@@ -174,7 +189,16 @@ interface Venta {
     estado: 'pendiente' | 'completada' | 'cancelada';
     moneda_principal: MonedaPrincipal | null;
     tasa_cambio_principal: number;
+    tasa_aplicada_venta: number | null;
+    moneda_cobro: MonedaPrincipal | null;
     monedas_para_reporte: MonedaParaReporte[];
+    gestor: {
+        monto: number;
+        cuenta_id?: number;
+        comentario?: string;
+        cuenta_nombre?: string;
+        tasa_aplicada?: number;
+    } | null;
 }
 
 interface Props {
@@ -192,8 +216,9 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
     const [currentVenta, setCurrentVenta] = useState<Venta>(venta);
     const [isDestinatarioDialogOpen, setIsDestinatarioDialogOpen] = useState(false);
     const [isEditingDestinatario, setIsEditingDestinatario] = useState(false);
-    const [monedaReporteSeleccionada, setMonedaReporteSeleccionada] = useState<string>(
-        () => String(currentVenta.moneda_principal?.id ?? currentVenta.monedas_para_reporte?.[0]?.id ?? '')
+    const [isReceptorExpanded, setIsReceptorExpanded] = useState(true);
+    const [monedaReporteSeleccionada, setMonedaReporteSeleccionada] = useState<string>(() =>
+        String(currentVenta.moneda_principal?.id ?? currentVenta.monedas_para_reporte?.[0]?.id ?? ''),
     );
 
     // Estado para el formulario del destinatario
@@ -206,6 +231,37 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
         parentesco_cliente: '',
         observaciones: '',
     });
+
+    // Estados para el Gestor
+    const [esVentaGestor, setEsVentaGestor] = useState<boolean>(false);
+    const [gestorMonto, setGestorMonto] = useState<string>('');
+    const [gestorCuentaId, setGestorCuentaId] = useState<string>('');
+    const [gestorComentario, setGestorComentario] = useState<string>('');
+    const [cuentasGestor, setCuentasGestor] = useState<Cuenta[]>([]);
+    const [cuentaGestorSeleccionada, setCuentaGestorSeleccionada] = useState<Cuenta | null>(null);
+    const [tasaAplicadaVenta, setTasaAplicadaVenta] = useState<string>('');
+
+    // Cargar cuentas para gestor
+    useEffect(() => {
+        const cargarCuentasGestor = async () => {
+            try {
+                const response = await axios.get(route('ventas.getCuentasParaGestor'));
+                setCuentasGestor(response.data);
+            } catch (error) {
+                console.error('Error al cargar cuentas para gestor:', error);
+            }
+        };
+        cargarCuentasGestor();
+    }, []);
+
+    // Cargar datos del gestor existentes
+    useEffect(() => {
+        if (currentVenta.gestor) {
+            setEsVentaGestor(true);
+            setGestorMonto(String(currentVenta.gestor.monto || ''));
+            // La cuenta se cargará cuando estén disponibles las cuentas
+        }
+    }, [currentVenta.gestor, cuentasGestor]);
 
     // Cargar datos del destinatario existente cuando se abre el diálogo
     useEffect(() => {
@@ -305,7 +361,17 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
             const url = route('ventas.destinatario.store', currentVenta.id);
             console.log('🌐 URL de la petición:', url);
 
-            const response = await axios.post(url, formDestinatario);
+            // Enviar datos del destinatario + datos del gestor
+            const payload = {
+                ...formDestinatario,
+                es_venta_gestor: esVentaGestor,
+                gestor_monto: esVentaGestor ? parseFloat(gestorMonto) || 0 : 0,
+                gestor_cuenta_id: esVentaGestor ? gestorCuentaId : null,
+                gestor_comentario: esVentaGestor ? gestorComentario : null,
+                tasa_aplicada_venta: esVentaGestor && tasaAplicadaVenta ? parseFloat(tasaAplicadaVenta) : null,
+            };
+
+            const response = await axios.post(url, payload);
             console.log('✅ Respuesta del servidor:', response.data);
 
             if (response.data.success) {
@@ -319,6 +385,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 setCurrentVenta((prev) => ({
                     ...prev,
                     destinatario: response.data.destinatario,
+                    gestor: response.data.gestor,
                 }));
 
                 setIsDestinatarioDialogOpen(false);
@@ -334,6 +401,14 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                     parentesco_cliente: '',
                     observaciones: '',
                 });
+
+                // Limpiar estados del gestor
+                setEsVentaGestor(false);
+                setGestorMonto('');
+                setGestorCuentaId('');
+                setGestorComentario('');
+                setCuentaGestorSeleccionada(null);
+                setTasaAplicadaVenta('');
 
                 console.log('🎉 Destinatario guardado/actualizado exitosamente');
             } else {
@@ -591,80 +666,202 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                             </AlertDialogDescription>
                                         </AlertDialogHeader>
 
-                                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                            <div className="space-y-2">
-                                                <Label htmlFor="nombre">Nombre *</Label>
-                                                <Input
-                                                    id="nombre"
-                                                    value={formDestinatario.nombre}
-                                                    onChange={(e) => setFormDestinatario((prev) => ({ ...prev, nombre: e.target.value }))}
-                                                    placeholder="Ingrese el nombre"
+                                        <Collapsible open={isReceptorExpanded} onOpenChange={setIsReceptorExpanded}>
+                                            <CollapsibleTrigger asChild>
+                                                <Button variant="ghost" className="flex w-full items-center justify-between p-0 hover:bg-transparent">
+                                                    <span className="font-medium text-blue-600">Datos del Receptor</span>
+                                                    <span className="text-muted-foreground text-sm">
+                                                        {isReceptorExpanded ? '▲ Ocultar' : '▼ Mostrar'}
+                                                    </span>
+                                                </Button>
+                                            </CollapsibleTrigger>
+                                            <CollapsibleContent className="mt-4 space-y-4">
+                                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor="nombre">Nombre *</Label>
+                                                        <Input
+                                                            id="nombre"
+                                                            value={formDestinatario.nombre}
+                                                            onChange={(e) => setFormDestinatario((prev) => ({ ...prev, nombre: e.target.value }))}
+                                                            placeholder="Ingrese el nombre"
+                                                        />
+                                                    </div>
+
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor="apellidos">Apellidos *</Label>
+                                                        <Input
+                                                            id="apellidos"
+                                                            value={formDestinatario.apellidos}
+                                                            onChange={(e) => setFormDestinatario((prev) => ({ ...prev, apellidos: e.target.value }))}
+                                                            placeholder="Ingrese los apellidos"
+                                                        />
+                                                    </div>
+
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor="carnet_identidad">Carnet de Identidad</Label>
+                                                        <Input
+                                                            id="carnet_identidad"
+                                                            value={formDestinatario.carnet_identidad}
+                                                            onChange={(e) =>
+                                                                setFormDestinatario((prev) => ({ ...prev, carnet_identidad: e.target.value }))
+                                                            }
+                                                            placeholder="Número de carnet"
+                                                        />
+                                                    </div>
+
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor="telefono_contacto">Teléfono Contacto</Label>
+                                                        <Input
+                                                            id="telefono_contacto"
+                                                            value={formDestinatario.telefono_contacto}
+                                                            onChange={(e) =>
+                                                                setFormDestinatario((prev) => ({ ...prev, telefono_contacto: e.target.value }))
+                                                            }
+                                                            placeholder="Número de teléfono"
+                                                        />
+                                                    </div>
+
+                                                    <div className="space-y-2 md:col-span-2">
+                                                        <Label htmlFor="direccion_residencia">Dirección de Residencia</Label>
+                                                        <Textarea
+                                                            id="direccion_residencia"
+                                                            value={formDestinatario.direccion_residencia}
+                                                            onChange={(e) =>
+                                                                setFormDestinatario((prev) => ({ ...prev, direccion_residencia: e.target.value }))
+                                                            }
+                                                            placeholder="Dirección completa donde se entregará el producto"
+                                                            rows={3}
+                                                        />
+                                                    </div>
+
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor="parentesco_cliente">Parentesco con Cliente</Label>
+                                                        <Input
+                                                            id="parentesco_cliente"
+                                                            value={formDestinatario.parentesco_cliente}
+                                                            onChange={(e) =>
+                                                                setFormDestinatario((prev) => ({ ...prev, parentesco_cliente: e.target.value }))
+                                                            }
+                                                            placeholder="Ej: Familiar, Amigo, etc."
+                                                        />
+                                                    </div>
+
+                                                    <div className="space-y-2 md:col-span-2">
+                                                        <Label htmlFor="observaciones">Observaciones</Label>
+                                                        <Textarea
+                                                            id="observaciones"
+                                                            value={formDestinatario.observaciones}
+                                                            onChange={(e) =>
+                                                                setFormDestinatario((prev) => ({ ...prev, observaciones: e.target.value }))
+                                                            }
+                                                            placeholder="Observaciones adicionales"
+                                                            rows={2}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </CollapsibleContent>
+                                        </Collapsible>
+
+                                        {/* SECCIÓN DEL GESTOR */}
+                                        <div className="mt-4 border-t pt-4">
+                                            <div className="flex items-center justify-between rounded-lg border border-blue-100 bg-blue-50 p-4">
+                                                <div className="flex flex-col gap-1">
+                                                    <Label htmlFor="gestor-switch" className="font-bold text-blue-900">
+                                                        ¿Venta con Gestor?
+                                                    </Label>
+                                                    <span className="text-xs text-blue-700">Asignar comisión a un tercero</span>
+                                                </div>
+                                                <Switch
+                                                    id="gestor-switch"
+                                                    checked={esVentaGestor}
+                                                    onCheckedChange={(checked) => {
+                                                        setEsVentaGestor(checked);
+                                                        if (!checked) {
+                                                            setGestorCuentaId('');
+                                                            setCuentaGestorSeleccionada(null);
+                                                            setGestorMonto('');
+                                                            setGestorComentario('');
+                                                            setTasaAplicadaVenta('');
+                                                        }
+                                                    }}
                                                 />
                                             </div>
 
-                                            <div className="space-y-2">
-                                                <Label htmlFor="apellidos">Apellidos *</Label>
-                                                <Input
-                                                    id="apellidos"
-                                                    value={formDestinatario.apellidos}
-                                                    onChange={(e) => setFormDestinatario((prev) => ({ ...prev, apellidos: e.target.value }))}
-                                                    placeholder="Ingrese los apellidos"
-                                                />
-                                            </div>
+                                            {esVentaGestor && (
+                                                <div className="mt-4 space-y-4 rounded-lg border p-4">
+                                                    {/* Tasa Aplicada */}
+                                                    <div className="space-y-2">
+                                                        <Label>Tasa Aplicada para Comisión</Label>
+                                                        <Input
+                                                            type="number"
+                                                            step="0.0001"
+                                                            min="0.0001"
+                                                            value={tasaAplicadaVenta}
+                                                            onChange={(e) => setTasaAplicadaVenta(e.target.value)}
+                                                            placeholder="Ej: 365"
+                                                        />
+                                                    </div>
 
-                                            <div className="space-y-2">
-                                                <Label htmlFor="carnet_identidad">Carnet de Identidad</Label>
-                                                <Input
-                                                    id="carnet_identidad"
-                                                    value={formDestinatario.carnet_identidad}
-                                                    onChange={(e) => setFormDestinatario((prev) => ({ ...prev, carnet_identidad: e.target.value }))}
-                                                    placeholder="Número de carnet"
-                                                />
-                                            </div>
+                                                    <div className="grid gap-4 md:grid-cols-2">
+                                                        {/* Cuenta del Gestor */}
+                                                        <div className="space-y-2">
+                                                            <Label>Cuenta del Gestor</Label>
+                                                            <Select
+                                                                value={gestorCuentaId}
+                                                                onValueChange={(val) => {
+                                                                    setGestorCuentaId(val);
+                                                                    const account = cuentasGestor.find((c) => String(c.id) === val);
+                                                                    setCuentaGestorSeleccionada(account || null);
+                                                                    if (account?.moneda?.codigo && !tasaAplicadaVenta) {
+                                                                        // Podría auto-llenar con tasa de cambio
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <SelectTrigger>
+                                                                    <SelectValue placeholder="Seleccione cuenta..." />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {cuentasGestor.map((cuenta) => (
+                                                                        <SelectItem key={cuenta.id} value={String(cuenta.id)}>
+                                                                            {cuenta.nombre_cuenta} ({cuenta.moneda?.codigo || cuenta.tipo_moneda})
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
 
-                                            <div className="space-y-2">
-                                                <Label htmlFor="telefono_contacto">Teléfono Contacto</Label>
-                                                <Input
-                                                    id="telefono_contacto"
-                                                    value={formDestinatario.telefono_contacto}
-                                                    onChange={(e) => setFormDestinatario((prev) => ({ ...prev, telefono_contacto: e.target.value }))}
-                                                    placeholder="Número de teléfono"
-                                                />
-                                            </div>
+                                                        {/* Monto */}
+                                                        <div className="space-y-2">
+                                                            <Label>Monto de Comisión</Label>
+                                                            <div className="relative">
+                                                                <span className="text-muted-foreground absolute top-2.5 left-3 text-sm">
+                                                                    {cuentaGestorSeleccionada?.moneda?.simbolo || '$'}
+                                                                </span>
+                                                                <Input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    className="pl-8"
+                                                                    value={gestorMonto}
+                                                                    onChange={(e) => setGestorMonto(e.target.value)}
+                                                                    placeholder="0.00"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
 
-                                            <div className="space-y-2 md:col-span-2">
-                                                <Label htmlFor="direccion_residencia">Dirección de Residencia</Label>
-                                                <Textarea
-                                                    id="direccion_residencia"
-                                                    value={formDestinatario.direccion_residencia}
-                                                    onChange={(e) =>
-                                                        setFormDestinatario((prev) => ({ ...prev, direccion_residencia: e.target.value }))
-                                                    }
-                                                    placeholder="Dirección completa donde se entregará el producto"
-                                                    rows={3}
-                                                />
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <Label htmlFor="parentesco_cliente">Parentesco con Cliente</Label>
-                                                <Input
-                                                    id="parentesco_cliente"
-                                                    value={formDestinatario.parentesco_cliente}
-                                                    onChange={(e) => setFormDestinatario((prev) => ({ ...prev, parentesco_cliente: e.target.value }))}
-                                                    placeholder="Ej: Familiar, Amigo, etc."
-                                                />
-                                            </div>
-
-                                            <div className="space-y-2 md:col-span-2">
-                                                <Label htmlFor="observaciones">Observaciones</Label>
-                                                <Textarea
-                                                    id="observaciones"
-                                                    value={formDestinatario.observaciones}
-                                                    onChange={(e) => setFormDestinatario((prev) => ({ ...prev, observaciones: e.target.value }))}
-                                                    placeholder="Observaciones adicionales"
-                                                    rows={2}
-                                                />
-                                            </div>
+                                                    {/* Comentario */}
+                                                    <div className="space-y-2">
+                                                        <Label>Comentario</Label>
+                                                        <Textarea
+                                                            placeholder="Ej: Gestor externo, acuerdo 50/50..."
+                                                            value={gestorComentario}
+                                                            onChange={(e) => setGestorComentario(e.target.value)}
+                                                            rows={2}
+                                                            className="resize-none"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
 
                                         <AlertDialogFooter>
@@ -681,6 +878,13 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                                         parentesco_cliente: '',
                                                         observaciones: '',
                                                     });
+                                                    // Limpiar estados del gestor
+                                                    setEsVentaGestor(false);
+                                                    setGestorMonto('');
+                                                    setGestorCuentaId('');
+                                                    setGestorComentario('');
+                                                    setCuentaGestorSeleccionada(null);
+                                                    setTasaAplicadaVenta('');
                                                 }}
                                             >
                                                 Cancelar
@@ -802,7 +1006,9 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                                     <tr key={index} className="border-b">
                                                         <td className="text-left">{item.producto.nombre}</td>
                                                         <td className="text-center">{item.cantidad}</td>
-                                                        <td className="text-right">{formatCurrency(convertirMontoReporte(item.subtotal), codigoReporte)}</td>
+                                                        <td className="text-right">
+                                                            {formatCurrency(convertirMontoReporte(item.subtotal), codigoReporte)}
+                                                        </td>
                                                     </tr>
                                                 ))}
                                             </tbody>
@@ -812,7 +1018,9 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                     <div className="mb-2 border-t pt-2">
                                         <div className="flex justify-between">
                                             <span>Total:</span>
-                                            <span className="font-bold">{formatCurrency(convertirMontoReporte(currentVenta.total), codigoReporte)}</span>
+                                            <span className="font-bold">
+                                                {formatCurrency(convertirMontoReporte(currentVenta.total), codigoReporte)}
+                                            </span>
                                         </div>
                                         <div className="flex justify-between">
                                             <span>Pagado:</span>
@@ -1032,6 +1240,42 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                     </div>
                 )}
 
+                {/* Información del Gestor */}
+                {currentVenta.gestor && (
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+                        <div className="flex items-center gap-2">
+                            <DollarSign className="h-5 w-5 text-blue-600" />
+                            <h3 className="font-semibold text-blue-800">Gestor - Comisión</h3>
+                        </div>
+                        <div className="mt-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-blue-700">Monto:</span>
+                                <span className="text-sm font-bold text-blue-900">
+                                    {currentVenta.gestor.monto || 0} {currentVenta.moneda_cobro?.simbolo || ''}
+                                </span>
+                            </div>
+                            {currentVenta.gestor.cuenta_nombre && (
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium text-blue-700">Cuenta:</span>
+                                    <span className="text-sm text-blue-900">{currentVenta.gestor.cuenta_nombre}</span>
+                                </div>
+                            )}
+                            {currentVenta.gestor.tasa_aplicada && (
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium text-blue-700">Tasa Aplicada:</span>
+                                    <span className="text-sm text-blue-900">{currentVenta.gestor.tasa_aplicada}</span>
+                                </div>
+                            )}
+                            {currentVenta.gestor.comentario && (
+                                <div className="flex items-start justify-between">
+                                    <span className="text-sm font-medium text-blue-700">Comentario:</span>
+                                    <span className="max-w-[60%] text-right text-sm text-blue-900">{currentVenta.gestor.comentario}</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 {/* Información general de la venta */}
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                     <div className="bg-card rounded-lg p-4 shadow-sm">
@@ -1105,9 +1349,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                                     />
                                                     <div>
                                                         <p className="font-semibold text-gray-800 dark:text-gray-200">{item.producto.nombre}</p>
-                                                        {item.producto.codigo && (
-                                                            <p className="text-xs text-gray-500">{item.producto.codigo}</p>
-                                                        )}
+                                                        {item.producto.codigo && <p className="text-xs text-gray-500">{item.producto.codigo}</p>}
                                                     </div>
                                                 </div>
                                             </td>
@@ -1120,7 +1362,9 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                             </td>
                                             <td className="px-4 py-2">{formatCurrency(item.precio_venta, simboloMonedaPrincipal)}</td>
                                             {userRole !== 'vendedor' && (
-                                                <td className="px-4 py-2 text-red-600">{formatCurrency(item.costo_unitario, simboloMonedaPrincipal)}</td>
+                                                <td className="px-4 py-2 text-red-600">
+                                                    {formatCurrency(item.costo_unitario, simboloMonedaPrincipal)}
+                                                </td>
                                             )}
                                             {userRole !== 'vendedor' && (
                                                 <td className="px-4 py-2 text-green-600">{formatCurrency(item.ganancia, simboloMonedaPrincipal)}</td>
@@ -1157,10 +1401,8 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 {/* Información de pagos y resumen */}
 
                 <div
-                    className={`animate__animated animate__flipInX grid gap-6 auto-rows-min
-                        ${userRole === 'vendedor' ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'}`}
+                    className={`animate__animated animate__flipInX grid auto-rows-min gap-6 ${userRole === 'vendedor' ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'}`}
                 >
-
                     {/* Detalles de pagos */}
                     <div className="bg-card rounded-lg p-6 shadow-sm">
                         <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold">
@@ -1203,8 +1445,8 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                                     {pago.cliente_destino?.nombre
                                                         ? `Cliente: ${pago.cliente_destino.nombre}`
                                                         : pago.cuenta?.nombre
-                                                            ? `${pago.cuenta.nombre} (${pago.cuenta.moneda?.nombre || simboloMonedaCuenta})`
-                                                            : 'No especificado'}
+                                                          ? `${pago.cuenta.nombre} (${pago.cuenta.moneda?.nombre || simboloMonedaCuenta})`
+                                                          : 'No especificado'}
                                                 </p>
                                             </div>
                                             {pago.via && (
@@ -1264,8 +1506,9 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                         <div className="flex justify-between">
                                             <span className="text-muted-foreground">Ganancia/Pérdida Cambiaria:</span>
                                             <span
-                                                className={`font-semibold ${currentVenta.ganancia_perdida_cambiaria < 0 ? 'text-red-500' : 'text-green-600'
-                                                    }`}
+                                                className={`font-semibold ${
+                                                    currentVenta.ganancia_perdida_cambiaria < 0 ? 'text-red-500' : 'text-green-600'
+                                                }`}
                                             >
                                                 {formatCurrency(currentVenta.ganancia_perdida_cambiaria, simboloMonedaPrincipal)}
                                             </span>

@@ -480,7 +480,8 @@ class VentaController extends Controller
             'almacen',
             'usuario',
             'moneda',
-            'monedaCobro'
+            'monedaCobro',
+            'gestorCuenta',
         ])->findOrFail($id);
 
         $ventaData = [
@@ -904,21 +905,48 @@ class VentaController extends Controller
             'nombre' => 'required|string|max:100',
             'apellidos' => 'required|string|max:100',
             'carnet_identidad' => 'nullable|string|size:11|regex:/^\d+$/',
-            'direccion_residencia' => 'nullable|string|max:500', // Modificado a nullable
+            'direccion_residencia' => 'nullable|string|max:500',
             'telefono_contacto' => 'nullable|string|max:20',
             'parentesco_cliente' => 'nullable|string|max:100',
             'observaciones' => 'nullable|string|max:500',
+            // Campos opcionales del gestor
+            'es_venta_gestor' => 'nullable|boolean',
+            'gestor_monto' => 'nullable|numeric|min:0',
+            'gestor_cuenta_id' => 'nullable|exists:cuentas,id',
+            'gestor_comentario' => 'nullable|string|max:500',
+            'tasa_aplicada_venta' => 'nullable|numeric|min:0.0001',
         ]);
 
         if ($request->filled('carnet_identidad')) {
             $validated['carnet_identidad'] = preg_replace('/\D/', '', $validated['carnet_identidad']);
         }
 
-        DB::transaction(function () use ($venta, $validated) {
+        DB::transaction(function () use ($venta, $validated, $request) {
+            // Guardar destinatario
             if ($venta->destinatario) {
                 $venta->destinatario->update($validated);
             } else {
                 $venta->destinatario()->create($validated);
+            }
+
+            // Guardar datos del gestor si es que vienen
+            if ($request->boolean('es_venta_gestor')) {
+                $venta->update([
+                    'es_venta_gestor' => true,
+                    'gestor_monto' => $validated['gestor_monto'] ?? 0,
+                    'gestor_cuenta_id' => !empty($validated['gestor_cuenta_id']) ? (int) $validated['gestor_cuenta_id'] : null,
+                    'gestor_comentario' => $validated['gestor_comentario'] ?? null,
+                    'tasa_aplicada_venta' => !empty($validated['tasa_aplicada_venta']) ? (float) $validated['tasa_aplicada_venta'] : null,
+                ]);
+            } else {
+                // Si no es venta con gestor, limpiar los datos
+                $venta->update([
+                    'es_venta_gestor' => false,
+                    'gestor_monto' => 0,
+                    'gestor_cuenta_id' => null,
+                    'gestor_comentario' => null,
+                    'tasa_aplicada_venta' => null,
+                ]);
             }
         });
 
@@ -928,6 +956,12 @@ class VentaController extends Controller
             'success' => true,
             'message' => 'Información del receptor guardada correctamente',
             'destinatario' => $venta->destinatario,
+            'gestor' => [
+                'es_venta_gestor' => $venta->es_venta_gestor,
+                'monto' => $venta->gestor_monto,
+                'cuenta_id' => $venta->gestor_cuenta_id,
+                'comentario' => $venta->gestor_comentario,
+            ],
         ]);
     }
 
@@ -1112,7 +1146,13 @@ class VentaController extends Controller
                     ] : null,
                     'monto_diferencia_cambiaria' => $venta->monto_diferencia_cambiaria,
                     // GESTOR
-                    'gestor' => $venta->es_venta_gestor ? ['monto' => $venta->gestor_monto] : null,
+                    'gestor' => [
+                        'monto' => $venta->gestor_monto,
+                        'cuenta_id' => $venta->gestor_cuenta_id,
+                        'comentario' => $venta->gestor_comentario,
+                        'cuenta_nombre' => $venta->gestorCuenta?->nombre_cuenta,
+                        'tasa_aplicada' => $venta->tasa_aplicada_venta,
+                    ],
                 ];
             });
 

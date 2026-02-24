@@ -1,0 +1,22 @@
+
+  [41;1m InvalidArgumentException [49;22m
+
+[39;1m  Unexpected end of input[39;22m
+
+  at [32mvendor\psy\psysh\src\Shell.php[39m:[32m1028[39m
+    1024▕ 
+    1025▕         if (!$this->hasValidCode()) {
+    1026▕             $this->popCodeStack();
+    1027▕ 
+  ➜ 1028▕             throw new \InvalidArgumentException('Unexpected end of input');
+    1029▕         }
+    1030▕     }
+    1031▕ 
+    1032▕     /**
+
+  [33m1   [39m[39;1mvendor\psy\psysh\src\Shell.php[39;22m:[39;1m1562[39;22m
+  [90m    Psy\Shell::setCode("print_r(App\Models\Venta::find(1)-")[39m
+
+  [33m2   [39m[39;1mvendor\laravel\tinker\src\Console\TinkerCommand.php[39;22m:[39;1m76[39;22m
+  [90m    Psy\Shell::execute("print_r(App\Models\Venta::find(1)-")[39m
+
