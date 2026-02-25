@@ -72,6 +72,98 @@ class CierreCajaController extends Controller
         // Moneda de referencia (principal) para que total productos = total cobrado
         $monedaRef = Moneda::where('principal', true)->first();
 
+        // ============================================
+        // NUEVO: COMPARATIVA CON CIERRE ANTERIOR
+        // ============================================
+        $comparativaCuentas = [];
+        $comparativaClientes = [];
+        
+        if ($ultimoCierre) {
+            // Obtener saldos actuales de TODAS las cuentas accesibles por el usuario
+            $cuentasQuery = \App\Models\Cuenta::with('moneda');
+            if (!in_array($user->role, ['admin', 'moderador'])) {
+                $cuentasQuery->whereHas('users', function($q) use ($user) {
+                    $q->where('user_id', $user->id);
+                });
+            }
+            $cuentasActuales = $cuentasQuery->get();
+            
+            // Obtener saldos del cierre anterior (de los detalles)
+            $cuentasCierreAnterior = [];
+            if ($ultimoCierre->detalles && is_array($ultimoCierre->detalles)) {
+                foreach ($ultimoCierre->detalles as $detalle) {
+                    if (isset($detalle['items_ventas_cuentas'])) {
+                        foreach ($detalle['items_ventas_cuentas'] as $item) {
+                            if (isset($item['cuenta_nombre'])) {
+                                $cuentaNombre = $item['cuenta_nombre'];
+                                if (!isset($cuentasCierreAnterior[$cuentaNombre])) {
+                                    $cuentasCierreAnterior[$cuentaNombre] = 0;
+                                }
+                                // Sumar montos de ventas a cuentas
+                                $cuentasCierreAnterior[$cuentaNombre] += $item['monto_equivalente'] ?? $item['monto'] ?? 0;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Comparar cuentas
+            foreach ($cuentasActuales as $cuenta) {
+                $nombreCuenta = $cuenta->nombre_cuenta;
+                $saldoActual = $cuenta->saldo_cuenta;
+                $saldoAnterior = $cuentasCierreAnterior[$nombreCuenta] ?? 0;
+                $diferencia = $saldoActual - $saldoAnterior;
+                
+                $comparativaCuentas[] = [
+                    'id' => $cuenta->id,
+                    'nombre' => $nombreCuenta,
+                    'moneda' => $cuenta->moneda?->codigo_moneda ?? $cuenta->tipo_moneda,
+                    'saldo_anterior' => round($saldoAnterior, 2),
+                    'saldo_actual' => round($saldoActual, 2),
+                    'diferencia' => round($diferencia, 2),
+                    'estado' => $diferencia > 0 ? 'subio' : ($diferencia < 0 ? 'bajo' : 'igual'),
+                ];
+            }
+            
+            // Obtener deudas actuales de TODOS los clientes
+            $clientesActuales = \App\Models\Cliente::all();
+            
+            // Obtener deudas del cierre anterior
+            $clientesCierreAnterior = [];
+            if ($ultimoCierre->detalles && is_array($ultimoCierre->detalles)) {
+                foreach ($ultimoCierre->detalles as $detalle) {
+                    if (isset($detalle['items_ventas_clientes'])) {
+                        foreach ($detalle['items_ventas_clientes'] as $item) {
+                            if (isset($item['cliente_nombre'])) {
+                                $clienteNombre = $item['cliente_nombre'];
+                                if (!isset($clientesCierreAnterior[$clienteNombre])) {
+                                    $clientesCierreAnterior[$clienteNombre] = 0;
+                                }
+                                $clientesCierreAnterior[$clienteNombre] += $item['monto_equivalente'] ?? $item['monto'] ?? 0;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Comparar clientes (deuda)
+            foreach ($clientesActuales as $cliente) {
+                $nombreCliente = $cliente->nombre_cliente;
+                $deudaActual = $cliente->deuda_pago_cliente;
+                $deudaAnterior = $clientesCierreAnterior[$nombreCliente] ?? 0;
+                $diferencia = $deudaActual - $deudaAnterior;
+                
+                $comparativaClientes[] = [
+                    'id' => $cliente->id,
+                    'nombre' => $nombreCliente,
+                    'deuda_anterior' => round($deudaAnterior, 2),
+                    'deuda_actual' => round($deudaActual, 2),
+                    'diferencia' => round($diferencia, 2),
+                    'estado' => $diferencia < 0 ? 'mejoro' : ($diferencia > 0 ? 'empeoro' : 'igual'),
+                ];
+            }
+        }
+
         // Preparar respuesta para Inertia con detalles mejorados de transferencias y claridad en pagos
         return Inertia::render('Cierres/Create', [
             'fecha_apertura' => $inicioTurno instanceof Carbon ? $inicioTurno->toDateTimeString() : $inicioTurno,
@@ -94,7 +186,14 @@ class CierreCajaController extends Controller
                 'ventas_a_cuentas_transferencia_usd' => $calculos['ventas_a_cuentas_transferencia_usd'],
                 'ventas_a_clientes_efectivo_usd' => $calculos['ventas_a_clientes_efectivo_usd'],
                 'ventas_a_clientes_transferencia_usd' => $calculos['ventas_a_clientes_transferencia_usd'],
-            ]
+                // NUEVO: Comisiones a gestores
+                'comisiones_gestor_total' => $calculos['comisiones_gestor_total'] ?? 0,
+                'comisiones_gestor_detalles' => $calculos['comisiones_gestor_detalles'] ?? [],
+            ],
+            // NUEVO: Comparativa con cierre anterior
+            'comparativa_cuentas' => $comparativaCuentas,
+            'comparativa_clientes' => $comparativaClientes,
+            'tiene_cierre_anterior' => $ultimoCierre !== null,
         ]);
     }
 
@@ -127,12 +226,16 @@ class CierreCajaController extends Controller
         try {
             $calculos = $this->obtenerDetallesCierre($user, $inicioTurno);
             $detallesJson = $calculos['detalles'];
+            $comisionesGestorDetalles = $calculos['comisiones_gestor_detalles'] ?? [];
+            $comisionesGestorTotal = $calculos['comisiones_gestor_total'] ?? 0;
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::error('Fallo obtenerDetallesCierre: ' . $e->getMessage());
             $detallesJson = [];
+            $comisionesGestorDetalles = [];
+            $comisionesGestorTotal = 0;
         }
 
-        $saldoEsperado = round($saldoInicial + $ventasEfectivo - $totalGastos - $totalDevoluciones, 2);
+        $saldoEsperado = round($saldoInicial + $ventasEfectivo - $totalGastos - $totalDevoluciones - $comisionesGestorTotal, 2);
         $diferencia = round($saldoContado - $saldoEsperado, 2);
 
         DB::beginTransaction();
@@ -147,6 +250,8 @@ class CierreCajaController extends Controller
                 'ventas_otros' => $ventasOtros,
                 'total_gastos' => $totalGastos,
                 'total_devoluciones' => $totalDevoluciones,
+                'comisiones_gestor' => $comisionesGestorTotal,
+                'comisiones_gestor_detalles' => $comisionesGestorDetalles,
                 'saldo_esperado' => $saldoEsperado,
                 'saldo_contado' => $saldoContado,
                 'diferencia' => $diferencia,
@@ -503,6 +608,57 @@ class CierreCajaController extends Controller
             }
         }
 
+        // --- PROCESAR COMISIONES A GESTORES (Ventas con es_venta_gestor = true) ---
+        $comisionesGestorTotalUSD = 0;
+        $comisionesGestorDetalles = [];
+        
+        // Buscar ventas con gestor en el turno actual
+        $ventasConGestor = Venta::where('user_id', $user->id)
+            ->where('created_at', '>=', $inicioTurno)
+            ->where('es_venta_gestor', true)
+            ->whereNotNull('gestor_cuenta_id')
+            ->where('gestor_monto', '>', 0)
+            ->with(['gestorCuenta.moneda', 'monedaCobro'])
+            ->get();
+
+        foreach ($ventasConGestor as $venta) {
+            $montoComision = (float) $venta->gestor_monto;
+            $monedaCodigo = $venta->monedaCobro?->codigo_moneda ?? 'USD';
+            $tasaCambio = $venta->monedaCobro?->tasa_cambio ?? 1;
+            $montoEnUSD = $montoComision / $tasaCambio;
+            
+            // Agregar al total
+            $comisionesGestorTotalUSD += $montoEnUSD;
+            
+            // Crear detalle para la UI
+            $comisionesGestorDetalles[] = [
+                'venta_id' => $venta->id,
+                'monto' => $montoComision,
+                'moneda_codigo' => $monedaCodigo,
+                'monto_usd' => round($montoEnUSD, 2),
+                'cuenta_nombre' => $venta->gestorCuenta?->nombre_cuenta ?? 'N/A',
+                'cuenta_tipo' => $venta->gestorCuenta?->tipo ?? 'N/A',
+                'comentario' => $venta->gestor_comentario ?? '',
+                'fecha' => $venta->created_at->format('Y-m-d H:i'),
+            ];
+            
+            // Restar del saldo calculado de la moneda correspondiente
+            if (isset($resumenPorMoneda[$monedaCodigo])) {
+                $resumenPorMoneda[$monedaCodigo]['comisiones_gestor'] = ($resumenPorMoneda[$monedaCodigo]['comisiones_gestor'] ?? 0) + $montoComision;
+                $resumenPorMoneda[$monedaCodigo]['saldo_calculado'] -= $montoComision; // Comisión sale de caja
+            }
+        }
+
+        // Agregar comisiones_gestor al resumen por moneda
+        foreach ($resumenPorMoneda as $monedaCodigo => &$monedaData) {
+            $monedaData['comisiones_gestor'] = $monedaData['comisiones_gestor'] ?? 0;
+            $monedaData['comisiones_gestor_detalles'] = array_filter(
+                $comisionesGestorDetalles,
+                fn($d) => $d['moneda_codigo'] === $monedaCodigo
+            );
+        }
+        unset($monedaData); // Romper referencia
+
         // --- CALCULAR TOTALES GLOBALES (EQUIVALENTE USD) ---
         $ventasEfectivoTotalUSD = 0;
         $ventasOtrosTotalUSD = 0;
@@ -558,6 +714,9 @@ class CierreCajaController extends Controller
             'ventas_a_cuentas_transferencia_usd' => round($ventasACuentasTransferenciaUSD, 2),
             'ventas_a_clientes_efectivo_usd' => round($ventasAClientesEfectivoUSD, 2),
             'ventas_a_clientes_transferencia_usd' => round($ventasAClientesTransferenciaUSD, 2),
+            // NUEVO: Comisiones a gestores
+            'comisiones_gestor_total' => round($comisionesGestorTotalUSD, 2),
+            'comisiones_gestor_detalles' => $comisionesGestorDetalles,
         ];
 
         Log::info('CIERRE: Resultado', [
@@ -598,6 +757,9 @@ class CierreCajaController extends Controller
             'transferencias_salientes' => 0,
             'transferencias_entrantes' => 0,
             'saldo_calculado' => 0,
+            // NUEVO: Comisiones a gestores
+            'comisiones_gestor' => 0,
+            'comisiones_gestor_detalles' => [],
             // Resumen directo solicitado
             'productos_resumen' => [],
             'pagos_resumen' => [

@@ -22,6 +22,8 @@ class CierreCaja extends Model
         'ventas_otros',
         'total_gastos',
         'total_devoluciones',
+        'comisiones_gestor',
+        'comisiones_gestor_detalles',
         'saldo_esperado',
         'saldo_contado',
         'diferencia',
@@ -41,12 +43,14 @@ class CierreCaja extends Model
         'ventas_otros' => 'float',
         'total_gastos' => 'float',
         'total_devoluciones' => 'float',
+        'comisiones_gestor' => 'float',
         'saldo_esperado' => 'float',
         'saldo_contado' => 'float',
         'diferencia' => 'float',
         'detalles' => 'array',
         'arqueo_detalles' => 'array',
         'confirmacion_transferencias' => 'array',
+        'comisiones_gestor_detalles' => 'array',
     ];
 
     public function usuario()
