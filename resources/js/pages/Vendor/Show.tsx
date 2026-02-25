@@ -250,6 +250,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
     const [cuentasGestor, setCuentasGestor] = useState<Cuenta[]>([]);
     const [cuentaGestorSeleccionada, setCuentaGestorSeleccionada] = useState<Cuenta | null>(null);
     const [tasaAplicadaVenta, setTasaAplicadaVenta] = useState<string>('');
+    const [isGestorExpanded, setIsGestorExpanded] = useState<boolean>(false); // Para colapsable del gestor
 
     // Cargar cuentas para gestor
     useEffect(() => {
@@ -309,6 +310,8 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                     carnet_identidad: currentVenta.destinatario.carnet_identidad,
                 }
             });
+            
+            // Cargar datos del destinatario
             setFormDestinatario({
                 nombre: currentVenta.destinatario.nombre,
                 apellidos: currentVenta.destinatario.apellidos,
@@ -318,6 +321,28 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 parentesco_cliente: currentVenta.destinatario.parentesco_cliente || '',
                 observaciones: currentVenta.destinatario.observaciones || '',
             });
+            
+            // Cargar datos del gestor si existen
+            if (currentVenta.gestor) {
+                console.log('  📦 Cargando datos del gestor:', currentVenta.gestor);
+                setEsVentaGestor(true);
+                setGestorMonto(String(currentVenta.gestor.monto || ''));
+                setGestorCuentaId(String(currentVenta.gestor.cuenta_id || ''));
+                setGestorComentario(currentVenta.gestor.comentario || '');
+                setTasaAplicadaVenta(currentVenta.gestor.tasa_aplicada ? String(currentVenta.gestor.tasa_aplicada) : '');
+                setIsGestorExpanded(true); // Expandir automáticamente el colapsable del gestor
+                
+                // Buscar la cuenta en la lista de cuentas disponibles
+                if (currentVenta.gestor.cuenta_id && cuentasGestor.length > 0) {
+                    const cuentaEncontrada = cuentasGestor.find(c => String(c.id) === String(currentVenta.gestor.cuenta_id));
+                    if (cuentaEncontrada) {
+                        setCuentaGestorSeleccionada(cuentaEncontrada);
+                        console.log('  ✅ Cuenta del gestor encontrada:', cuentaEncontrada);
+                    } else {
+                        console.log('  ⚠️ Cuenta del gestor NO encontrada en la lista:', currentVenta.gestor.cuenta_id);
+                    }
+                }
+            }
         } else if (isDestinatarioDialogOpen && !isEditingDestinatario) {
             // Limpiar formulario para nuevo destinatario
             setFormDestinatario({
@@ -329,8 +354,15 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 parentesco_cliente: '',
                 observaciones: '',
             });
+            // Limpiar datos del gestor para nuevo destinatario
+            setEsVentaGestor(false);
+            setGestorMonto('');
+            setGestorCuentaId('');
+            setGestorComentario('');
+            setTasaAplicadaVenta('');
+            setCuentaGestorSeleccionada(null);
         }
-    }, [isDestinatarioDialogOpen, currentVenta.destinatario, isEditingDestinatario]);
+    }, [isDestinatarioDialogOpen, currentVenta.destinatario, isEditingDestinatario, currentVenta.gestor, cuentasGestor]);
 
     // Formatear fechas
     const formatDate = (dateString: string) => {
@@ -737,27 +769,54 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                     {isVentaPendiente && (
                         <>
                             {!currentVenta.destinatario ? (
-                                <AlertDialog open={isDestinatarioDialogOpen} onOpenChange={setIsDestinatarioDialogOpen}>
-                                    <AlertDialogTrigger asChild>
-                                        <Button
-                                            variant="outline"
-                                            className="flex cursor-pointer items-center gap-2 border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
-                                            onClick={handleNuevoDestinatario}
-                                        >
-                                            <Users size={16} />
-                                            Agregar Receptor
-                                        </Button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent className="max-w-2xl">
-                                        <AlertDialogHeader>
-                                            <AlertDialogTitle className="flex items-center gap-2 text-blue-600">
-                                                <Users size={20} />
-                                                Información del Receptor
-                                            </AlertDialogTitle>
-                                            <AlertDialogDescription>
-                                                Complete los datos de la persona que recibirá el producto en casa.
-                                            </AlertDialogDescription>
-                                        </AlertDialogHeader>
+                                <Button
+                                    variant="outline"
+                                    className="flex cursor-pointer items-center gap-2 border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                                    onClick={handleNuevoDestinatario}
+                                >
+                                    <Users size={16} />
+                                    Agregar Receptor
+                                </Button>
+                            ) : (
+                                <Button
+                                    variant="outline"
+                                    className="flex cursor-pointer items-center gap-2 border-green-300 bg-green-50 text-green-700 hover:bg-green-100"
+                                    onClick={(e) => {
+                                        console.log('🔴 CLICK EN BOTÓN EDITAR RECEPTOR');
+                                        console.log('  - Evento:', e);
+                                        console.log('  - Estados actuales:', {
+                                            isDestinatarioDialogOpen,
+                                            isEditingDestinatario,
+                                            destinatarioExiste: !!currentVenta.destinatario,
+                                        });
+                                        handleEditarDestinatario();
+                                    }}
+                                >
+                                    <Edit size={16} />
+                                    Editar Receptor
+                                </Button>
+                            )}
+                        </>
+                    )}
+
+                    {/* AlertDialog para agregar/editar destinatario - SIEMPRE PRESENTE */}
+                    <AlertDialog open={isDestinatarioDialogOpen} onOpenChange={setIsDestinatarioDialogOpen}>
+                        {/* Trigger invisible - los botones reales están arriba */}
+                        <AlertDialogTrigger asChild>
+                            <span className="hidden" />
+                        </AlertDialogTrigger>
+                        <AlertDialogContent className="max-w-2xl">
+                            <AlertDialogHeader>
+                                <AlertDialogTitle className="flex items-center gap-2 text-blue-600">
+                                    <Users size={20} />
+                                    {isEditingDestinatario ? 'Editar Información del Receptor' : 'Información del Receptor'}
+                                </AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    {isEditingDestinatario
+                                        ? 'Actualice los datos de la persona que recibirá el producto en casa.'
+                                        : 'Complete los datos de la persona que recibirá el producto en casa.'}
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
 
                                         <Collapsible open={isReceptorExpanded} onOpenChange={setIsReceptorExpanded}>
                                             <CollapsibleTrigger asChild>
@@ -855,113 +914,127 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                             </CollapsibleContent>
                                         </Collapsible>
 
-                                        {/* SECCIÓN DEL GESTOR */}
-                                        <div className="mt-4 border-t pt-4">
-                                            <div className="flex items-center justify-between rounded-lg border border-blue-100 bg-blue-50 p-4">
-                                                <div className="flex flex-col gap-1">
-                                                    <Label htmlFor="gestor-switch" className="font-bold text-blue-900">
-                                                        ¿Venta con Gestor?
-                                                    </Label>
-                                                    <span className="text-xs text-blue-700">Asignar comisión a un tercero</span>
-                                                </div>
-                                                <Switch
-                                                    id="gestor-switch"
-                                                    checked={esVentaGestor}
-                                                    onCheckedChange={(checked) => {
-                                                        setEsVentaGestor(checked);
-                                                        if (!checked) {
-                                                            setGestorCuentaId('');
-                                                            setCuentaGestorSeleccionada(null);
-                                                            setGestorMonto('');
-                                                            setGestorComentario('');
-                                                            setTasaAplicadaVenta('');
-                                                        }
-                                                    }}
-                                                />
-                                            </div>
-
-                                            {esVentaGestor && (
-                                                <div className="mt-4 space-y-4 rounded-lg border p-4">
-                                                    {/* Tasa Aplicada */}
-                                                    <div className="space-y-2">
-                                                        <Label>Tasa Aplicada para Comisión</Label>
-                                                        <Input
-                                                            type="number"
-                                                            step="0.0001"
-                                                            min="0.0001"
-                                                            value={tasaAplicadaVenta}
-                                                            onChange={(e) => setTasaAplicadaVenta(e.target.value)}
-                                                            placeholder="Ej: 365"
+                                        {/* SECCIÓN DEL GESTOR - AHORA COLLAPSABLE */}
+                                        <Collapsible open={isGestorExpanded} onOpenChange={setIsGestorExpanded} className="mt-4 border-t pt-4">
+                                            <CollapsibleTrigger asChild>
+                                                <Button variant="ghost" className="flex w-full items-center justify-between p-0 hover:bg-transparent">
+                                                    <div className="flex items-center gap-2">
+                                                        <DollarSign className="h-4 w-4 text-blue-600" />
+                                                        <span className="font-medium text-blue-600">Gestor / Comisión</span>
+                                                    </div>
+                                                    <span className="text-muted-foreground text-sm">
+                                                        {isGestorExpanded ? '▲ Ocultar' : '▼ Mostrar'}
+                                                    </span>
+                                                </Button>
+                                            </CollapsibleTrigger>
+                                            <CollapsibleContent className="mt-4 space-y-4">
+                                                <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex flex-col gap-1">
+                                                            <Label htmlFor="gestor-switch" className="font-bold text-blue-900">
+                                                                ¿Venta con Gestor?
+                                                            </Label>
+                                                            <span className="text-xs text-blue-700">Asignar comisión a un tercero</span>
+                                                        </div>
+                                                        <Switch
+                                                            id="gestor-switch"
+                                                            checked={esVentaGestor}
+                                                            onCheckedChange={(checked) => {
+                                                                setEsVentaGestor(checked);
+                                                                if (!checked) {
+                                                                    setGestorCuentaId('');
+                                                                    setCuentaGestorSeleccionada(null);
+                                                                    setGestorMonto('');
+                                                                    setGestorComentario('');
+                                                                    setTasaAplicadaVenta('');
+                                                                }
+                                                            }}
                                                         />
                                                     </div>
+                                                </div>
 
-                                                    <div className="grid gap-4 md:grid-cols-2">
-                                                        {/* Cuenta del Gestor */}
+                                                {esVentaGestor && (
+                                                    <div className="space-y-4 rounded-lg border p-4">
+                                                        {/* Tasa Aplicada */}
                                                         <div className="space-y-2">
-                                                            <Label>Cuenta del Gestor</Label>
-                                                            <Select
-                                                                value={gestorCuentaId}
-                                                                onValueChange={(val) => {
-                                                                    setGestorCuentaId(val);
-                                                                    const account = cuentasGestor.find((c) => String(c.id) === val);
-                                                                    setCuentaGestorSeleccionada(account || null);
-                                                                    if (account?.moneda?.codigo && !tasaAplicadaVenta) {
-                                                                        // Podría auto-llenar con tasa de cambio
-                                                                    }
-                                                                }}
-                                                            >
-                                                                <SelectTrigger>
-                                                                    <SelectValue placeholder="Seleccione cuenta..." />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {cuentasGestor.map((cuenta) => (
-                                                                        <SelectItem key={cuenta.id} value={String(cuenta.id)}>
-                                                                            {cuenta.nombre_cuenta} ({cuenta.moneda?.codigo || cuenta.tipo_moneda})
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
+                                                            <Label>Tasa Aplicada para Comisión</Label>
+                                                            <Input
+                                                                type="number"
+                                                                step="0.0001"
+                                                                min="0.0001"
+                                                                value={tasaAplicadaVenta}
+                                                                onChange={(e) => setTasaAplicadaVenta(e.target.value)}
+                                                                placeholder="Ej: 365"
+                                                            />
                                                         </div>
 
-                                                        {/* Monto */}
-                                                        <div className="space-y-2">
-                                                            <Label>Monto de Comisión</Label>
-                                                            <div className="relative">
-                                                                <span className="text-muted-foreground absolute top-2.5 left-3 text-sm">
-                                                                    {cuentaGestorSeleccionada?.moneda?.simbolo || '$'}
-                                                                </span>
-                                                                <Input
-                                                                    type="number"
-                                                                    step="0.01"
-                                                                    className="pl-8"
-                                                                    value={gestorMonto}
-                                                                    onChange={(e) => setGestorMonto(e.target.value)}
-                                                                    placeholder="0.00"
-                                                                />
+                                                        <div className="grid gap-4 md:grid-cols-2">
+                                                            {/* Cuenta del Gestor */}
+                                                            <div className="space-y-2">
+                                                                <Label>Cuenta del Gestor</Label>
+                                                                <Select
+                                                                    value={gestorCuentaId}
+                                                                    onValueChange={(val) => {
+                                                                        setGestorCuentaId(val);
+                                                                        const account = cuentasGestor.find((c) => String(c.id) === val);
+                                                                        setCuentaGestorSeleccionada(account || null);
+                                                                    }}
+                                                                >
+                                                                    <SelectTrigger>
+                                                                        <SelectValue placeholder="Seleccione cuenta..." />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        {cuentasGestor.map((cuenta) => (
+                                                                            <SelectItem key={cuenta.id} value={String(cuenta.id)}>
+                                                                                {cuenta.nombre_cuenta} ({cuenta.moneda?.codigo || cuenta.tipo_moneda})
+                                                                            </SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            </div>
+
+                                                            {/* Monto */}
+                                                            <div className="space-y-2">
+                                                                <Label>Monto de Comisión</Label>
+                                                                <div className="relative">
+                                                                    <span className="text-muted-foreground absolute top-2.5 left-3 text-sm">
+                                                                        {cuentaGestorSeleccionada?.moneda?.simbolo || '$'}
+                                                                    </span>
+                                                                    <Input
+                                                                        type="number"
+                                                                        step="0.01"
+                                                                        className="pl-8"
+                                                                        value={gestorMonto}
+                                                                        onChange={(e) => setGestorMonto(e.target.value)}
+                                                                        placeholder="0.00"
+                                                                    />
+                                                                </div>
                                                             </div>
                                                         </div>
-                                                    </div>
 
-                                                    {/* Comentario */}
-                                                    <div className="space-y-2">
-                                                        <Label>Comentario</Label>
-                                                        <Textarea
-                                                            placeholder="Ej: Gestor externo, acuerdo 50/50..."
-                                                            value={gestorComentario}
-                                                            onChange={(e) => setGestorComentario(e.target.value)}
-                                                            rows={2}
-                                                            className="resize-none"
-                                                        />
+                                                        {/* Comentario */}
+                                                        <div className="space-y-2">
+                                                            <Label>Comentario</Label>
+                                                            <Textarea
+                                                                placeholder="Ej: Gestor externo, acuerdo 50/50..."
+                                                                value={gestorComentario}
+                                                                onChange={(e) => setGestorComentario(e.target.value)}
+                                                                rows={2}
+                                                                className="resize-none"
+                                                            />
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            )}
-                                        </div>
+                                                )}
+                                            </CollapsibleContent>
+                                        </Collapsible>
 
                                         <AlertDialogFooter>
                                             <AlertDialogCancel
                                                 disabled={isSavingDestinatario}
                                                 onClick={() => {
                                                     setIsEditingDestinatario(false);
+                                                    setIsReceptorExpanded(true); // Resetear colapsable del destinatario
+                                                    setIsGestorExpanded(false); // Resetear colapsable del gestor
                                                     setFormDestinatario({
                                                         nombre: '',
                                                         apellidos: '',
@@ -976,8 +1049,8 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                                     setGestorMonto('');
                                                     setGestorCuentaId('');
                                                     setGestorComentario('');
-                                                    setCuentaGestorSeleccionada(null);
                                                     setTasaAplicadaVenta('');
+                                                    setCuentaGestorSeleccionada(null);
                                                 }}
                                             >
                                                 Cancelar
@@ -999,27 +1072,6 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                         </AlertDialogFooter>
                                     </AlertDialogContent>
                                 </AlertDialog>
-                            ) : (
-                                <Button
-                                    variant="outline"
-                                    className="flex cursor-pointer items-center gap-2 border-green-300 bg-green-50 text-green-700 hover:bg-green-100"
-                                    onClick={(e) => {
-                                        console.log('🔴 CLICK EN BOTÓN EDITAR RECEPTOR (en el AlertDialog)');
-                                        console.log('  - Evento:', e);
-                                        console.log('  - Estados actuales:', {
-                                            isDestinatarioDialogOpen,
-                                            isEditingDestinatario,
-                                            destinatarioExiste: !!currentVenta.destinatario,
-                                        });
-                                        handleEditarDestinatario();
-                                    }}
-                                >
-                                    <Edit size={16} />
-                                    Editar Receptor
-                                </Button>
-                            )}
-                        </>
-                    )}
 
                     {/* Botón para exportar a PDF */}
                     <Button variant="outline" className="hover:bg-chart-5 flex cursor-pointer items-center gap-2">
