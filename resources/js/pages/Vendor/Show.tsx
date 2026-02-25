@@ -12,9 +12,14 @@ import {
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ScrollProgress } from '@/components/ui/scroll';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
@@ -29,11 +34,13 @@ import {
     FileText,
     IdCard,
     MapPin,
+    MessageSquare,
     Package,
     Phone,
     Printer,
     ShoppingBag,
     Store,
+    TrendingUp,
     User,
     UserCheck,
     Users,
@@ -63,6 +70,10 @@ interface Producto {
     id: number;
     nombre: string;
     marca: string;
+    modelo?: string;
+    capacidad?: string;
+    codigo?: string;
+    imagen_url?: string;
     categoria: string;
 }
 
@@ -92,6 +103,19 @@ interface CuentaPago {
 interface ClienteDestino {
     id: number;
     nombre: string;
+}
+
+// Cuenta para Gestor
+interface Cuenta {
+    id: number;
+    nombre_cuenta: string;
+    saldo_actual: number;
+    moneda: {
+        codigo: string;
+        simbolo: string;
+    };
+    tipo: string;
+    tipo_moneda: string;
 }
 
 interface Pago {
@@ -130,6 +154,14 @@ interface MonedaPrincipal {
     simbolo?: string;
 }
 
+interface MonedaParaReporte {
+    id: number;
+    codigo: string;
+    nombre: string;
+    simbolo: string | null;
+    tasa: number;
+}
+
 // Nueva interfaz para el destinatario
 interface Destinatario {
     id: number;
@@ -160,6 +192,16 @@ interface Venta {
     estado: 'pendiente' | 'completada' | 'cancelada';
     moneda_principal: MonedaPrincipal | null;
     tasa_cambio_principal: number;
+    tasa_aplicada_venta: number | null;
+    moneda_cobro: MonedaPrincipal | null;
+    monedas_para_reporte: MonedaParaReporte[];
+    gestor: {
+        monto: number;
+        cuenta_id?: number;
+        comentario?: string;
+        cuenta_nombre?: string;
+        tasa_aplicada?: number;
+    } | null;
 }
 
 interface Props {
@@ -168,7 +210,17 @@ interface Props {
 }
 
 export default function ResultadoCarrito({ venta, userRole }: Props) {
-    console.log('🔍 Venta recibida en el frontend:', venta);
+    // ========================================================================
+    // CONSOLE.LOG 1: DATOS QUE LLEGAN DEL BACKEND AL CARGAR LA PÁGINA
+    // ========================================================================
+    console.log('📦 DATOS DE VENTA RECIBIDOS DEL BACKEND:', {
+        venta,
+        destinatario: venta.destinatario,
+        gestor: venta.gestor,
+        todos_los_campos_venta: Object.keys(venta),
+        campos_gestor: venta.gestor ? Object.keys(venta.gestor) : 'NO HAY GESTOR',
+        campos_destinatario: venta.destinatario ? Object.keys(venta.destinatario) : 'NO HAY DESTINATARIO',
+    });
 
     // Estados para gestionar las acciones
     const [isCancelling, setIsCancelling] = useState(false);
@@ -177,6 +229,10 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
     const [currentVenta, setCurrentVenta] = useState<Venta>(venta);
     const [isDestinatarioDialogOpen, setIsDestinatarioDialogOpen] = useState(false);
     const [isEditingDestinatario, setIsEditingDestinatario] = useState(false);
+    const [isReceptorExpanded, setIsReceptorExpanded] = useState(true);
+    const [monedaReporteSeleccionada, setMonedaReporteSeleccionada] = useState<string>(() =>
+        String(currentVenta.moneda_principal?.id ?? currentVenta.monedas_para_reporte?.[0]?.id ?? ''),
+    );
 
     // Estado para el formulario del destinatario
     const [formDestinatario, setFormDestinatario] = useState({
@@ -189,10 +245,76 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
         observaciones: '',
     });
 
+    // Estados para el Gestor
+    const [esVentaGestor, setEsVentaGestor] = useState<boolean>(false);
+    const [gestorMonto, setGestorMonto] = useState<string>('');
+    const [gestorCuentaId, setGestorCuentaId] = useState<string>('');
+    const [gestorComentario, setGestorComentario] = useState<string>('');
+    const [cuentasGestor, setCuentasGestor] = useState<Cuenta[]>([]);
+    const [cuentaGestorSeleccionada, setCuentaGestorSeleccionada] = useState<Cuenta | null>(null);
+    const [tasaAplicadaVenta, setTasaAplicadaVenta] = useState<string>('');
+    const [isGestorExpanded, setIsGestorExpanded] = useState<boolean>(false); // Para colapsable del gestor
+
+    // Cargar cuentas para gestor
+    useEffect(() => {
+        const cargarCuentasGestor = async () => {
+            try {
+                const response = await axios.get(route('ventas.getCuentasParaGestor'));
+                setCuentasGestor(response.data);
+            } catch (error) {
+                console.error('Error al cargar cuentas para gestor:', error);
+            }
+        };
+        cargarCuentasGestor();
+    }, []);
+
+    // Cargar datos del gestor existentes
+    useEffect(() => {
+        // ====================================================================
+        // CONSOLE.LOG 5: USEFFECT - CARGANDO DATOS DEL GESTOR
+        // ====================================================================
+        console.log('🔄 USEFFECT - Cargando datos del gestor:', {
+            ventaGestor: currentVenta.gestor,
+            cuentasGestorDisponibles: cuentasGestor.length,
+            gestorMontoSet: gestorMonto,
+            gestorCuentaIdSet: gestorCuentaId,
+            hayDatosGestor: !!currentVenta.gestor,
+        });
+        
+        if (currentVenta.gestor) {
+            setEsVentaGestor(true);
+            setGestorMonto(String(currentVenta.gestor.monto || ''));
+            console.log('  ✅ Gestor encontrado, configurando estados:', {
+                monto: currentVenta.gestor.monto,
+                cuenta_id: currentVenta.gestor.cuenta_id,
+            });
+            // La cuenta se cargará cuando estén disponibles las cuentas
+        } else {
+            console.log('  ❌ No hay datos de gestor en la venta');
+        }
+    }, [currentVenta.gestor, cuentasGestor]);
+
     // Cargar datos del destinatario existente cuando se abre el diálogo
     useEffect(() => {
         if (isDestinatarioDialogOpen && currentVenta.destinatario && isEditingDestinatario) {
             console.log('📝 Cargando datos del destinatario existente para edición:', currentVenta.destinatario);
+            // ==================================================================
+            // CONSOLE.LOG 6: DATOS DEL DESTINATARIO AL EDITAR
+            // ==================================================================
+            console.log('👁️ USEFFECT EDITAR - Datos cargados:', {
+                isDestinatarioDialogOpen,
+                isEditingDestinatario,
+                destinatarioExiste: !!currentVenta.destinatario,
+                destinatarioData: currentVenta.destinatario,
+                gestorData: currentVenta.gestor,
+                formularioSeLlenaraCon: {
+                    nombre: currentVenta.destinatario.nombre,
+                    apellidos: currentVenta.destinatario.apellidos,
+                    carnet_identidad: currentVenta.destinatario.carnet_identidad,
+                }
+            });
+            
+            // Cargar datos del destinatario
             setFormDestinatario({
                 nombre: currentVenta.destinatario.nombre,
                 apellidos: currentVenta.destinatario.apellidos,
@@ -202,6 +324,28 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 parentesco_cliente: currentVenta.destinatario.parentesco_cliente || '',
                 observaciones: currentVenta.destinatario.observaciones || '',
             });
+            
+            // Cargar datos del gestor si existen
+            if (currentVenta.gestor) {
+                console.log('  📦 Cargando datos del gestor:', currentVenta.gestor);
+                setEsVentaGestor(true);
+                setGestorMonto(String(currentVenta.gestor.monto || ''));
+                setGestorCuentaId(String(currentVenta.gestor.cuenta_id || ''));
+                setGestorComentario(currentVenta.gestor.comentario || '');
+                setTasaAplicadaVenta(currentVenta.gestor.tasa_aplicada ? String(currentVenta.gestor.tasa_aplicada) : '');
+                setIsGestorExpanded(true); // Expandir automáticamente el colapsable del gestor
+                
+                // Buscar la cuenta en la lista de cuentas disponibles
+                if (currentVenta.gestor.cuenta_id && cuentasGestor.length > 0) {
+                    const cuentaEncontrada = cuentasGestor.find(c => String(c.id) === String(currentVenta.gestor.cuenta_id));
+                    if (cuentaEncontrada) {
+                        setCuentaGestorSeleccionada(cuentaEncontrada);
+                        console.log('  ✅ Cuenta del gestor encontrada:', cuentaEncontrada);
+                    } else {
+                        console.log('  ⚠️ Cuenta del gestor NO encontrada en la lista:', currentVenta.gestor.cuenta_id);
+                    }
+                }
+            }
         } else if (isDestinatarioDialogOpen && !isEditingDestinatario) {
             // Limpiar formulario para nuevo destinatario
             setFormDestinatario({
@@ -213,8 +357,15 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 parentesco_cliente: '',
                 observaciones: '',
             });
+            // Limpiar datos del gestor para nuevo destinatario
+            setEsVentaGestor(false);
+            setGestorMonto('');
+            setGestorCuentaId('');
+            setGestorComentario('');
+            setTasaAplicadaVenta('');
+            setCuentaGestorSeleccionada(null);
         }
-    }, [isDestinatarioDialogOpen, currentVenta.destinatario, isEditingDestinatario]);
+    }, [isDestinatarioDialogOpen, currentVenta.destinatario, isEditingDestinatario, currentVenta.gestor, cuentasGestor]);
 
     // Formatear fechas
     const formatDate = (dateString: string) => {
@@ -241,6 +392,14 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
     const getCurrencySymbol = (moneda: MonedaPago | MonedaPrincipal | null) => {
         return moneda?.simbolo || moneda?.codigo || 'USD';
     };
+
+    // Monedas para el reporte (con tasas de la operación)
+    const monedasReporte = currentVenta.monedas_para_reporte ?? [];
+    const monedaReporte = monedasReporte.find((m) => String(m.id) === monedaReporteSeleccionada) ?? monedasReporte[0];
+    const tasaReporte = monedaReporte?.tasa ?? 1;
+    const codigoReporte = monedaReporte?.codigo || 'USD';
+
+    const convertirMontoReporte = (monto: number) => monto * tasaReporte;
 
     // Determinar estados
     const isVentaPendiente = currentVenta.estado === 'pendiente';
@@ -272,6 +431,29 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
         console.log('🆔 ID de venta:', currentVenta.id);
         console.log('✏️ Modo edición:', isEditingDestinatario);
 
+        // ====================================================================
+        // CONSOLE.LOG 2: ANTES DE ENVIAR AL BACKEND
+        // ====================================================================
+        console.log('📤 ENVIANDO AL BACKEND:', {
+            url: route('ventas.destinatario.store', currentVenta.id),
+            payload: {
+                ...formDestinatario,
+                es_venta_gestor: esVentaGestor,
+                gestor_monto: esVentaGestor ? parseFloat(gestorMonto) || 0 : 0,
+                gestor_cuenta_id: esVentaGestor ? gestorCuentaId : null,
+                gestor_comentario: esVentaGestor ? gestorComentario : null,
+                tasa_aplicada_venta: esVentaGestor && tasaAplicadaVenta ? parseFloat(tasaAplicadaVenta) : null,
+            },
+            estados: {
+                esVentaGestor,
+                gestorMonto,
+                gestorCuentaId,
+                gestorComentario,
+                tasaAplicadaVenta,
+                formDestinatario,
+            }
+        });
+
         setIsSavingDestinatario(true);
 
         try {
@@ -279,8 +461,28 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
             const url = route('ventas.destinatario.store', currentVenta.id);
             console.log('🌐 URL de la petición:', url);
 
-            const response = await axios.post(url, formDestinatario);
-            console.log('✅ Respuesta del servidor:', response.data);
+            // Enviar datos del destinatario + datos del gestor
+            const payload = {
+                ...formDestinatario,
+                es_venta_gestor: esVentaGestor,
+                gestor_monto: esVentaGestor ? parseFloat(gestorMonto) || 0 : 0,
+                gestor_cuenta_id: esVentaGestor ? gestorCuentaId : null,
+                gestor_comentario: esVentaGestor ? gestorComentario : null,
+                tasa_aplicada_venta: esVentaGestor && tasaAplicadaVenta ? parseFloat(tasaAplicadaVenta) : null,
+            };
+
+            const response = await axios.post(url, payload);
+            
+            // ==================================================================
+            // CONSOLE.LOG 3: DESPUÉS DE RECIBIR RESPUESTA DEL BACKEND
+            // ==================================================================
+            console.log('📥 RESPUESTA DEL BACKEND:', {
+                success: response.data.success,
+                message: response.data.message,
+                destinatario: response.data.destinatario,
+                gestor: response.data.gestor,
+                respuesta_completa: response.data,
+            });
 
             if (response.data.success) {
                 const message = isEditingDestinatario
@@ -293,6 +495,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 setCurrentVenta((prev) => ({
                     ...prev,
                     destinatario: response.data.destinatario,
+                    gestor: response.data.gestor,
                 }));
 
                 setIsDestinatarioDialogOpen(false);
@@ -309,29 +512,36 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                     observaciones: '',
                 });
 
+                // Limpiar estados del gestor
+                setEsVentaGestor(false);
+                setGestorMonto('');
+                setGestorCuentaId('');
+                setGestorComentario('');
+                setCuentaGestorSeleccionada(null);
+                setTasaAplicadaVenta('');
+
                 console.log('🎉 Destinatario guardado/actualizado exitosamente');
             } else {
                 toast.error(response.data.message || 'Error al guardar la información');
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('💥 Error completo al guardar destinatario:', error);
 
-            if (error.response) {
+            if (axios.isAxiosError(error)) {
                 console.error('📋 Detalles del error del servidor:', {
-                    status: error.response.status,
-                    data: error.response.data,
-                    headers: error.response.headers,
+                    status: error.response?.status,
+                    data: error.response?.data,
+                    headers: error.response?.headers,
                 });
 
                 const errorMessage =
-                    error.response.data?.message || error.response.data?.error || `Error ${error.response.status}: ${error.response.statusText}`;
+                    error.response?.data?.message || error.response?.data?.error || `Error ${error.response?.status}: ${error.response?.statusText}`;
                 toast.error(errorMessage);
-            } else if (error.request) {
-                console.error('🌐 Error de conexión - No se recibió respuesta:', error.request);
-                toast.error('Error de conexión: No se pudo contactar al servidor');
-            } else {
+            } else if (error instanceof Error) {
                 console.error('⚙️ Error de configuración:', error.message);
                 toast.error('Error al configurar la petición');
+            } else {
+                toast.error('Error de conexión: No se pudo contactar al servidor');
             }
         } finally {
             setIsSavingDestinatario(false);
@@ -340,9 +550,27 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
 
     // FUNCIÓN: Abrir diálogo para editar destinatario
     const handleEditarDestinatario = () => {
+        // ====================================================================
+        // CONSOLE.LOG 4: CLICK EN EDITAR - DEPURACIÓN
+        // ====================================================================
+        console.log('✏️ CLICK EN EDITAR - Estados antes:', {
+            isDestinatarioDialogOpen,
+            isEditingDestinatario,
+            destinatarioExiste: !!currentVenta.destinatario,
+            gestorExiste: !!currentVenta.gestor,
+            formDestinatarioActual: formDestinatario,
+        });
+        console.log('🔴 CAMBIANDO ESTADOS:');
+        console.log('  - isEditingDestinatario: false → true');
+        console.log('  - isDestinatarioDialogOpen: false → true');
+        
         console.log('✏️ Abriendo editor de destinatario');
         setIsEditingDestinatario(true);
         setIsDestinatarioDialogOpen(true);
+        
+        console.log('🟢 ESTADOS DESPUÉS DEL CAMBIO:');
+        console.log('  - isEditingDestinatario:', true);
+        console.log('  - isDestinatarioDialogOpen:', true);
     };
 
     // FUNCIÓN: Abrir diálogo para nuevo destinatario
@@ -382,20 +610,19 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 console.error('❌ Error en respuesta del backend:', response.data);
                 toast.error(response.data.message || 'Error al aprobar la venta');
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('💥 Error completo al aprobar venta:', error);
 
-            if (error.response) {
-                console.error('📋 Detalles del error del servidor:', error.response.data);
+            if (axios.isAxiosError(error)) {
+                console.error('📋 Detalles del error del servidor:', error.response?.data);
                 const errorMessage =
-                    error.response.data?.message || error.response.data?.error || `Error ${error.response.status}: ${error.response.statusText}`;
+                    error.response?.data?.message || error.response?.data?.error || `Error ${error.response?.status}: ${error.response?.statusText}`;
                 toast.error(errorMessage);
-            } else if (error.request) {
-                console.error('🌐 Error de conexión:', error.request);
-                toast.error('Error de conexión: No se pudo contactar al servidor');
-            } else {
+            } else if (error instanceof Error) {
                 console.error('⚙️ Error de configuración:', error.message);
                 toast.error('Error al configurar la petición');
+            } else {
+                toast.error('Error de conexión: No se pudo contactar al servidor');
             }
         } finally {
             setIsApproving(false);
@@ -432,19 +659,18 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 console.error('❌ Error en respuesta del backend:', response.data);
                 toast.error(response.data.message || 'Error al anular la venta');
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('💥 Error completo al anular venta:', error);
 
-            if (error.response) {
-                console.error('📋 Detalles del error:', error.response.data);
-                const errorMessage = error.response.data?.message || error.response.data?.error || 'Ocurrió un error al intentar anular la venta.';
+            if (axios.isAxiosError(error)) {
+                console.error('📋 Detalles del error:', error.response?.data);
+                const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Ocurrió un error al intentar anular la venta.';
                 toast.error(errorMessage);
-            } else if (error.request) {
-                console.error('🌐 Error de conexión:', error.request);
-                toast.error('Error de conexión: No se pudo contactar al servidor');
-            } else {
+            } else if (error instanceof Error) {
                 console.error('⚙️ Error de configuración:', error.message);
                 toast.error('Error al configurar la petición');
+            } else {
+                toast.error('Error de conexión: No se pudo contactar al servidor');
             }
         } finally {
             setIsCancelling(false);
@@ -542,113 +768,254 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                         Ver Todas las Ventas
                     </Link>
 
-                    {/* Botón para agregar/editar destinatario (solo para ventas pendientes) */}
-                    {isVentaPendiente && (
-                        <>
-                            {!currentVenta.destinatario ? (
-                                <AlertDialog open={isDestinatarioDialogOpen} onOpenChange={setIsDestinatarioDialogOpen}>
-                                    <AlertDialogTrigger asChild>
-                                        <Button
-                                            variant="outline"
-                                            className="flex cursor-pointer items-center gap-2 border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
-                                            onClick={handleNuevoDestinatario}
-                                        >
-                                            <Users size={16} />
-                                            Agregar Receptor
-                                        </Button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent className="max-w-2xl">
-                                        <AlertDialogHeader>
-                                            <AlertDialogTitle className="flex items-center gap-2 text-blue-600">
-                                                <Users size={20} />
-                                                Información del Receptor
-                                            </AlertDialogTitle>
-                                            <AlertDialogDescription>
-                                                Complete los datos de la persona que recibirá el producto en casa.
-                                            </AlertDialogDescription>
-                                        </AlertDialogHeader>
+                    {/* Botón para agregar destinatario (solo cuando NO hay destinatario) */}
+                    {isVentaPendiente && !currentVenta.destinatario && (
+                        <Button
+                            variant="outline"
+                            className="flex cursor-pointer items-center gap-2"
+                            onClick={handleNuevoDestinatario}
+                        >
+                            <Users size={16} />
+                            Agregar Receptor
+                        </Button>
+                    )}
 
-                                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                            <div className="space-y-2">
-                                                <Label htmlFor="nombre">Nombre *</Label>
-                                                <Input
-                                                    id="nombre"
-                                                    value={formDestinatario.nombre}
-                                                    onChange={(e) => setFormDestinatario((prev) => ({ ...prev, nombre: e.target.value }))}
-                                                    placeholder="Ingrese el nombre"
-                                                />
-                                            </div>
+                    {/* AlertDialog para agregar/editar destinatario - SIEMPRE PRESENTE */}
+                    <AlertDialog open={isDestinatarioDialogOpen} onOpenChange={setIsDestinatarioDialogOpen}>
+                        {/* Trigger invisible - los botones reales están arriba */}
+                        <AlertDialogTrigger asChild>
+                            <span className="hidden" />
+                        </AlertDialogTrigger>
+                        <AlertDialogContent className="max-w-2xl">
+                            <AlertDialogHeader>
+                                <AlertDialogTitle className="flex items-center gap-2 text-blue-600">
+                                    <Users size={20} />
+                                    {isEditingDestinatario ? 'Editar Información del Receptor' : 'Información del Receptor'}
+                                </AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    {isEditingDestinatario
+                                        ? 'Actualice los datos de la persona que recibirá el producto en casa.'
+                                        : 'Complete los datos de la persona que recibirá el producto en casa.'}
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
 
-                                            <div className="space-y-2">
-                                                <Label htmlFor="apellidos">Apellidos *</Label>
-                                                <Input
-                                                    id="apellidos"
-                                                    value={formDestinatario.apellidos}
-                                                    onChange={(e) => setFormDestinatario((prev) => ({ ...prev, apellidos: e.target.value }))}
-                                                    placeholder="Ingrese los apellidos"
-                                                />
-                                            </div>
+                                        <Collapsible open={isReceptorExpanded} onOpenChange={setIsReceptorExpanded}>
+                                            <CollapsibleTrigger asChild>
+                                                <Button variant="ghost" className="flex w-full items-center justify-between p-0 hover:bg-transparent">
+                                                    <span className="font-medium text-blue-600">Datos del Receptor</span>
+                                                    <span className="text-muted-foreground text-sm">
+                                                        {isReceptorExpanded ? '▲ Ocultar' : '▼ Mostrar'}
+                                                    </span>
+                                                </Button>
+                                            </CollapsibleTrigger>
+                                            <CollapsibleContent className="mt-4 space-y-4">
+                                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor="nombre">Nombre *</Label>
+                                                        <Input
+                                                            id="nombre"
+                                                            value={formDestinatario.nombre}
+                                                            onChange={(e) => setFormDestinatario((prev) => ({ ...prev, nombre: e.target.value }))}
+                                                            placeholder="Ingrese el nombre"
+                                                        />
+                                                    </div>
 
-                                            <div className="space-y-2">
-                                                <Label htmlFor="carnet_identidad">Carnet de Identidad</Label>
-                                                <Input
-                                                    id="carnet_identidad"
-                                                    value={formDestinatario.carnet_identidad}
-                                                    onChange={(e) => setFormDestinatario((prev) => ({ ...prev, carnet_identidad: e.target.value }))}
-                                                    placeholder="Número de carnet"
-                                                />
-                                            </div>
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor="apellidos">Apellidos *</Label>
+                                                        <Input
+                                                            id="apellidos"
+                                                            value={formDestinatario.apellidos}
+                                                            onChange={(e) => setFormDestinatario((prev) => ({ ...prev, apellidos: e.target.value }))}
+                                                            placeholder="Ingrese los apellidos"
+                                                        />
+                                                    </div>
 
-                                            <div className="space-y-2">
-                                                <Label htmlFor="telefono_contacto">Teléfono Contacto</Label>
-                                                <Input
-                                                    id="telefono_contacto"
-                                                    value={formDestinatario.telefono_contacto}
-                                                    onChange={(e) => setFormDestinatario((prev) => ({ ...prev, telefono_contacto: e.target.value }))}
-                                                    placeholder="Número de teléfono"
-                                                />
-                                            </div>
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor="carnet_identidad">Carnet de Identidad</Label>
+                                                        <Input
+                                                            id="carnet_identidad"
+                                                            value={formDestinatario.carnet_identidad}
+                                                            onChange={(e) =>
+                                                                setFormDestinatario((prev) => ({ ...prev, carnet_identidad: e.target.value }))
+                                                            }
+                                                            placeholder="Número de carnet"
+                                                        />
+                                                    </div>
 
-                                            <div className="space-y-2 md:col-span-2">
-                                                <Label htmlFor="direccion_residencia">Dirección de Residencia</Label>
-                                                <Textarea
-                                                    id="direccion_residencia"
-                                                    value={formDestinatario.direccion_residencia}
-                                                    onChange={(e) =>
-                                                        setFormDestinatario((prev) => ({ ...prev, direccion_residencia: e.target.value }))
-                                                    }
-                                                    placeholder="Dirección completa donde se entregará el producto"
-                                                    rows={3}
-                                                />
-                                            </div>
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor="telefono_contacto">Teléfono Contacto</Label>
+                                                        <Input
+                                                            id="telefono_contacto"
+                                                            value={formDestinatario.telefono_contacto}
+                                                            onChange={(e) =>
+                                                                setFormDestinatario((prev) => ({ ...prev, telefono_contacto: e.target.value }))
+                                                            }
+                                                            placeholder="Número de teléfono"
+                                                        />
+                                                    </div>
 
-                                            <div className="space-y-2">
-                                                <Label htmlFor="parentesco_cliente">Parentesco con Cliente</Label>
-                                                <Input
-                                                    id="parentesco_cliente"
-                                                    value={formDestinatario.parentesco_cliente}
-                                                    onChange={(e) => setFormDestinatario((prev) => ({ ...prev, parentesco_cliente: e.target.value }))}
-                                                    placeholder="Ej: Familiar, Amigo, etc."
-                                                />
-                                            </div>
+                                                    <div className="space-y-2 md:col-span-2">
+                                                        <Label htmlFor="direccion_residencia">Dirección de Residencia</Label>
+                                                        <Textarea
+                                                            id="direccion_residencia"
+                                                            value={formDestinatario.direccion_residencia}
+                                                            onChange={(e) =>
+                                                                setFormDestinatario((prev) => ({ ...prev, direccion_residencia: e.target.value }))
+                                                            }
+                                                            placeholder="Dirección completa donde se entregará el producto"
+                                                            rows={3}
+                                                        />
+                                                    </div>
 
-                                            <div className="space-y-2 md:col-span-2">
-                                                <Label htmlFor="observaciones">Observaciones</Label>
-                                                <Textarea
-                                                    id="observaciones"
-                                                    value={formDestinatario.observaciones}
-                                                    onChange={(e) => setFormDestinatario((prev) => ({ ...prev, observaciones: e.target.value }))}
-                                                    placeholder="Observaciones adicionales"
-                                                    rows={2}
-                                                />
-                                            </div>
-                                        </div>
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor="parentesco_cliente">Parentesco con Cliente</Label>
+                                                        <Input
+                                                            id="parentesco_cliente"
+                                                            value={formDestinatario.parentesco_cliente}
+                                                            onChange={(e) =>
+                                                                setFormDestinatario((prev) => ({ ...prev, parentesco_cliente: e.target.value }))
+                                                            }
+                                                            placeholder="Ej: Familiar, Amigo, etc."
+                                                        />
+                                                    </div>
+
+                                                    <div className="space-y-2 md:col-span-2">
+                                                        <Label htmlFor="observaciones">Observaciones</Label>
+                                                        <Textarea
+                                                            id="observaciones"
+                                                            value={formDestinatario.observaciones}
+                                                            onChange={(e) =>
+                                                                setFormDestinatario((prev) => ({ ...prev, observaciones: e.target.value }))
+                                                            }
+                                                            placeholder="Observaciones adicionales"
+                                                            rows={2}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </CollapsibleContent>
+                                        </Collapsible>
+
+                                        {/* SECCIÓN DEL GESTOR - AHORA COLLAPSABLE */}
+                                        <Collapsible open={isGestorExpanded} onOpenChange={setIsGestorExpanded} className="mt-4 border-t pt-4">
+                                            <CollapsibleTrigger asChild>
+                                                <Button variant="ghost" className="flex w-full items-center justify-between p-0 hover:bg-transparent">
+                                                    <div className="flex items-center gap-2">
+                                                        <DollarSign className="h-4 w-4 text-blue-600" />
+                                                        <span className="font-medium text-blue-600">Gestor / Comisión</span>
+                                                    </div>
+                                                    <span className="text-muted-foreground text-sm">
+                                                        {isGestorExpanded ? '▲ Ocultar' : '▼ Mostrar'}
+                                                    </span>
+                                                </Button>
+                                            </CollapsibleTrigger>
+                                            <CollapsibleContent className="mt-4 space-y-4">
+                                                <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex flex-col gap-1">
+                                                            <Label htmlFor="gestor-switch" className="font-bold text-blue-900">
+                                                                ¿Venta con Gestor?
+                                                            </Label>
+                                                            <span className="text-xs text-blue-700">Asignar comisión a un tercero</span>
+                                                        </div>
+                                                        <Switch
+                                                            id="gestor-switch"
+                                                            checked={esVentaGestor}
+                                                            onCheckedChange={(checked) => {
+                                                                setEsVentaGestor(checked);
+                                                                if (!checked) {
+                                                                    setGestorCuentaId('');
+                                                                    setCuentaGestorSeleccionada(null);
+                                                                    setGestorMonto('');
+                                                                    setGestorComentario('');
+                                                                    setTasaAplicadaVenta('');
+                                                                }
+                                                            }}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                {esVentaGestor && (
+                                                    <div className="space-y-4 rounded-lg border p-4">
+                                                        {/* Tasa Aplicada */}
+                                                        <div className="space-y-2">
+                                                            <Label>Tasa Aplicada para Comisión</Label>
+                                                            <Input
+                                                                type="number"
+                                                                step="0.0001"
+                                                                min="0.0001"
+                                                                value={tasaAplicadaVenta}
+                                                                onChange={(e) => setTasaAplicadaVenta(e.target.value)}
+                                                                placeholder="Ej: 365"
+                                                            />
+                                                        </div>
+
+                                                        <div className="grid gap-4 md:grid-cols-2">
+                                                            {/* Cuenta del Gestor */}
+                                                            <div className="space-y-2">
+                                                                <Label>Cuenta del Gestor</Label>
+                                                                <Select
+                                                                    value={gestorCuentaId}
+                                                                    onValueChange={(val) => {
+                                                                        setGestorCuentaId(val);
+                                                                        const account = cuentasGestor.find((c) => String(c.id) === val);
+                                                                        setCuentaGestorSeleccionada(account || null);
+                                                                    }}
+                                                                >
+                                                                    <SelectTrigger>
+                                                                        <SelectValue placeholder="Seleccione cuenta..." />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        {cuentasGestor.map((cuenta) => (
+                                                                            <SelectItem key={cuenta.id} value={String(cuenta.id)}>
+                                                                                {cuenta.nombre_cuenta} ({cuenta.moneda?.codigo || cuenta.tipo_moneda})
+                                                                            </SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            </div>
+
+                                                            {/* Monto */}
+                                                            <div className="space-y-2">
+                                                                <Label>Monto de Comisión</Label>
+                                                                <div className="relative">
+                                                                    <span className="text-muted-foreground absolute top-2.5 left-3 text-sm">
+                                                                        {cuentaGestorSeleccionada?.moneda?.simbolo || '$'}
+                                                                    </span>
+                                                                    <Input
+                                                                        type="number"
+                                                                        step="0.01"
+                                                                        className="pl-8"
+                                                                        value={gestorMonto}
+                                                                        onChange={(e) => setGestorMonto(e.target.value)}
+                                                                        placeholder="0.00"
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Comentario */}
+                                                        <div className="space-y-2">
+                                                            <Label>Comentario</Label>
+                                                            <Textarea
+                                                                placeholder="Ej: Gestor externo, acuerdo 50/50..."
+                                                                value={gestorComentario}
+                                                                onChange={(e) => setGestorComentario(e.target.value)}
+                                                                rows={2}
+                                                                className="resize-none"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </CollapsibleContent>
+                                        </Collapsible>
 
                                         <AlertDialogFooter>
                                             <AlertDialogCancel
                                                 disabled={isSavingDestinatario}
                                                 onClick={() => {
                                                     setIsEditingDestinatario(false);
+                                                    setIsReceptorExpanded(true); // Resetear colapsable del destinatario
+                                                    setIsGestorExpanded(false); // Resetear colapsable del gestor
                                                     setFormDestinatario({
                                                         nombre: '',
                                                         apellidos: '',
@@ -658,6 +1025,13 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                                         parentesco_cliente: '',
                                                         observaciones: '',
                                                     });
+                                                    // Limpiar estados del gestor
+                                                    setEsVentaGestor(false);
+                                                    setGestorMonto('');
+                                                    setGestorCuentaId('');
+                                                    setGestorComentario('');
+                                                    setTasaAplicadaVenta('');
+                                                    setCuentaGestorSeleccionada(null);
                                                 }}
                                             >
                                                 Cancelar
@@ -679,18 +1053,6 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                         </AlertDialogFooter>
                                     </AlertDialogContent>
                                 </AlertDialog>
-                            ) : (
-                                <Button
-                                    variant="outline"
-                                    className="flex cursor-pointer items-center gap-2 border-green-300 bg-green-50 text-green-700 hover:bg-green-100"
-                                    onClick={handleEditarDestinatario}
-                                >
-                                    <Edit size={16} />
-                                    Editar Receptor
-                                </Button>
-                            )}
-                        </>
-                    )}
 
                     {/* Botón para exportar a PDF */}
                     <Button variant="outline" className="hover:bg-chart-5 flex cursor-pointer items-center gap-2">
@@ -719,6 +1081,23 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                     </h2>
                                 </AlertDialogDescription>
                             </AlertDialogHeader>
+                            {monedasReporte.length > 0 && (
+                                <div className="flex items-center gap-2 px-4 pb-2">
+                                    <Label htmlFor="moneda-reporte">Moneda del reporte</Label>
+                                    <Select value={monedaReporteSeleccionada} onValueChange={setMonedaReporteSeleccionada}>
+                                        <SelectTrigger id="moneda-reporte" className="w-[200px]">
+                                            <SelectValue placeholder="Seleccionar moneda" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {monedasReporte.map((m) => (
+                                                <SelectItem key={m.id} value={String(m.id)}>
+                                                    {m.nombre} ({m.codigo})
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
                             <div className="max-h-[70vh] overflow-y-auto">
                                 <div className="p-4 font-mono text-sm">
                                     {/* Formato para impresora térmica - Ticket para el cliente */}
@@ -762,7 +1141,9 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                                     <tr key={index} className="border-b">
                                                         <td className="text-left">{item.producto.nombre}</td>
                                                         <td className="text-center">{item.cantidad}</td>
-                                                        <td className="text-right">{formatCurrency(item.subtotal, simboloMonedaPrincipal)}</td>
+                                                        <td className="text-right">
+                                                            {formatCurrency(convertirMontoReporte(item.subtotal), codigoReporte)}
+                                                        </td>
                                                     </tr>
                                                 ))}
                                             </tbody>
@@ -772,15 +1153,17 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                     <div className="mb-2 border-t pt-2">
                                         <div className="flex justify-between">
                                             <span>Total:</span>
-                                            <span className="font-bold">{formatCurrency(currentVenta.total, simboloMonedaPrincipal)}</span>
+                                            <span className="font-bold">
+                                                {formatCurrency(convertirMontoReporte(currentVenta.total), codigoReporte)}
+                                            </span>
                                         </div>
                                         <div className="flex justify-between">
                                             <span>Pagado:</span>
-                                            <span>{formatCurrency(currentVenta.total_pagado, simboloMonedaPrincipal)}</span>
+                                            <span>{formatCurrency(convertirMontoReporte(currentVenta.total_pagado), codigoReporte)}</span>
                                         </div>
                                         <div className="flex justify-between">
                                             <span>Restante:</span>
-                                            <span>{formatCurrency(currentVenta.restante, simboloMonedaPrincipal)}</span>
+                                            <span>{formatCurrency(convertirMontoReporte(currentVenta.restante), codigoReporte)}</span>
                                         </div>
                                     </div>
 
@@ -920,75 +1303,147 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                     )}
                 </div>
 
-                {/* Sección de Información del Destinatario */}
-                {currentVenta.destinatario && (
-                    <div className="rounded-lg border border-green-200 p-6 shadow-sm">
-                        <div className="mb-4 flex items-center justify-between">
-                            <h3 className="flex items-center gap-2 text-lg font-semibold text-green-800">
-                                <Users className="h-5 w-5" />✅ Receptor Registrado
-                            </h3>
-                            {isVentaPendiente && (
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="flex items-center gap-2 border-green-300 text-green-700 hover:bg-green-100"
-                                    onClick={handleEditarDestinatario}
-                                >
-                                    <Edit size={14} />
-                                    Editar
-                                </Button>
-                            )}
-                        </div>
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                            <div className="space-y-1">
-                                <div className="flex items-center gap-2">
-                                    <User className="h-4 w-4 text-green-600" />
-                                    <span className="text-sm font-medium text-green-700">Nombre Completo:</span>
+                {/* Sección de Información del Destinatario y Gestor - GRID */}
+                {(currentVenta.destinatario || currentVenta.gestor) && (
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        {/* Tarjeta de Destinatario */}
+                        {currentVenta.destinatario && (
+                            <div className="bg-card rounded-lg border border-sidebar-accent p-6 shadow-sm">
+                                <div className="mb-4 flex items-center justify-between">
+                                    <h3 className="flex items-center gap-2 text-base font-semibold">
+                                        <Users className="h-5 w-5 text-green-600" />
+                                        <span className="text-foreground">✅ Receptor Registrado</span>
+                                    </h3>
+                                    {isVentaPendiente && (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={(e) => {
+                                                console.log('🔴 CLICK EN BOTÓN EDITAR');
+                                                handleEditarDestinatario();
+                                            }}
+                                        >
+                                            <Edit size={14} />
+                                            <span className="ml-1">Editar</span>
+                                        </Button>
+                                    )}
                                 </div>
-                                <p className="text-sm">
-                                    {currentVenta.destinatario.nombre} {currentVenta.destinatario.apellidos}
-                                </p>
-                            </div>
+                                <div className="space-y-3">
+                                    <div className="flex items-start gap-2">
+                                        <User className="mt-0.5 h-4 w-4 text-green-600 shrink-0" />
+                                        <div className="flex-1">
+                                            <p className="text-xs font-medium text-muted-foreground">Nombre Completo:</p>
+                                            <p className="text-sm">
+                                                {currentVenta.destinatario.nombre} {currentVenta.destinatario.apellidos}
+                                            </p>
+                                        </div>
+                                    </div>
 
-                            <div className="space-y-1">
-                                <div className="flex items-center gap-2">
-                                    <IdCard className="h-4 w-4 text-green-600" />
-                                    <span className="text-sm font-medium text-green-700">Carnet de Identidad:</span>
-                                </div>
-                                <p className="text-sm">{currentVenta.destinatario.carnet_identidad}</p>
-                            </div>
+                                    {currentVenta.destinatario.carnet_identidad && (
+                                        <div className="flex items-start gap-2">
+                                            <IdCard className="mt-0.5 h-4 w-4 text-green-600 shrink-0" />
+                                            <div className="flex-1">
+                                                <p className="text-xs font-medium text-muted-foreground">Carnet de Identidad:</p>
+                                                <p className="text-sm">{currentVenta.destinatario.carnet_identidad}</p>
+                                            </div>
+                                        </div>
+                                    )}
 
-                            <div className="space-y-1">
-                                <div className="flex items-center gap-2">
-                                    <Phone className="h-4 w-4 text-green-600" />
-                                    <span className="text-sm font-medium text-green-700">Teléfono Contacto:</span>
-                                </div>
-                                <p className="text-sm">{currentVenta.destinatario.telefono_contacto || 'No especificado'}</p>
-                            </div>
+                                    {currentVenta.destinatario.telefono_contacto && (
+                                        <div className="flex items-start gap-2">
+                                            <Phone className="mt-0.5 h-4 w-4 text-green-600 shrink-0" />
+                                            <div className="flex-1">
+                                                <p className="text-xs font-medium text-muted-foreground">Teléfono Contacto:</p>
+                                                <p className="text-sm">{currentVenta.destinatario.telefono_contacto}</p>
+                                            </div>
+                                        </div>
+                                    )}
 
-                            <div className="space-y-1 md:col-span-2">
-                                <div className="flex items-center gap-2">
-                                    <MapPin className="h-4 w-4 text-green-600" />
-                                    <span className="text-sm font-medium text-green-700">Dirección de Residencia:</span>
-                                </div>
-                                <p className="text-sm">{currentVenta.destinatario.direccion_residencia}</p>
-                            </div>
+                                    {currentVenta.destinatario.direccion_residencia && (
+                                        <div className="flex items-start gap-2">
+                                            <MapPin className="mt-0.5 h-4 w-4 text-green-600 shrink-0" />
+                                            <div className="flex-1">
+                                                <p className="text-xs font-medium text-muted-foreground">Dirección de Residencia:</p>
+                                                <p className="text-sm">{currentVenta.destinatario.direccion_residencia}</p>
+                                            </div>
+                                        </div>
+                                    )}
 
-                            <div className="space-y-1">
-                                <div className="flex items-center gap-2">
-                                    <Users className="h-4 w-4 text-green-600" />
-                                    <span className="text-sm font-medium text-green-700">Parentesco:</span>
-                                </div>
-                                <p className="text-sm">{currentVenta.destinatario.parentesco_cliente || 'No especificado'}</p>
-                            </div>
+                                    {currentVenta.destinatario.parentesco_cliente && (
+                                        <div className="flex items-start gap-2">
+                                            <Users className="mt-0.5 h-4 w-4 text-green-600 shrink-0" />
+                                            <div className="flex-1">
+                                                <p className="text-xs font-medium text-muted-foreground">Parentesco:</p>
+                                                <p className="text-sm">{currentVenta.destinatario.parentesco_cliente}</p>
+                                            </div>
+                                        </div>
+                                    )}
 
-                            {currentVenta.destinatario.observaciones && (
-                                <div className="space-y-1 md:col-span-3">
-                                    <span className="text-sm font-medium text-green-700">Observaciones:</span>
-                                    <p className="text-sm">{currentVenta.destinatario.observaciones}</p>
+                                    {currentVenta.destinatario.observaciones && (
+                                        <div className="flex items-start gap-2">
+                                            <FileText className="mt-0.5 h-4 w-4 text-green-600 shrink-0" />
+                                            <div className="flex-1">
+                                                <p className="text-xs font-medium text-muted-foreground">Observaciones:</p>
+                                                <p className="text-sm">{currentVenta.destinatario.observaciones}</p>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
-                            )}
-                        </div>
+                            </div>
+                        )}
+
+                        {/* Tarjeta de Gestor */}
+                        {currentVenta.gestor && (
+                            <div className="bg-card rounded-lg border border-sidebar-accent p-6 shadow-sm">
+                                <div className="mb-4 flex items-center gap-2">
+                                    <DollarSign className="h-5 w-5 text-blue-600" />
+                                    <h3 className="text-base font-semibold text-foreground">💼 Gestor - Comisión</h3>
+                                </div>
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <DollarSign className="h-4 w-4 text-blue-600" />
+                                            <span className="text-xs font-medium text-muted-foreground">Monto:</span>
+                                        </div>
+                                        <Badge variant="secondary" className="font-bold">
+                                            {currentVenta.gestor.monto || 0} {currentVenta.moneda_cobro?.simbolo || ''}
+                                        </Badge>
+                                    </div>
+
+                                    {currentVenta.gestor.cuenta_nombre && (
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <CreditCard className="h-4 w-4 text-blue-600" />
+                                                <span className="text-xs font-medium text-muted-foreground">Cuenta:</span>
+                                            </div>
+                                            <span className="text-sm font-medium">{currentVenta.gestor.cuenta_nombre}</span>
+                                        </div>
+                                    )}
+
+                                    {currentVenta.gestor.tasa_aplicada && (
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <TrendingUp className="h-4 w-4 text-blue-600" />
+                                                <span className="text-xs font-medium text-muted-foreground">Tasa Aplicada:</span>
+                                            </div>
+                                            <span className="text-sm font-medium">{currentVenta.gestor.tasa_aplicada}</span>
+                                        </div>
+                                    )}
+
+                                    {currentVenta.gestor.comentario && (
+                                        <div className="rounded-md bg-muted p-3">
+                                            <div className="flex items-start gap-2">
+                                                <MessageSquare className="mt-0.5 h-4 w-4 text-blue-600 shrink-0" />
+                                                <div className="flex-1">
+                                                    <p className="text-xs font-medium text-muted-foreground">Comentario:</p>
+                                                    <p className="text-sm italic">{currentVenta.gestor.comentario}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -1036,57 +1491,75 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                         Productos Vendidos
                     </h3>
 
-                    <div className="overflow-x-auto">
-                        <table className="w-full">
-                            <thead className="bg-muted">
-                                <tr className="border-b">
-                                    <th className="p-3 text-left">Producto</th>
-                                    <th className="p-3 text-left">Cantidad</th>
-                                    <th className="p-3 text-left">Precio Unitario</th>
-                                    {userRole !== 'vendedor' && <th className="p-3 text-left">Costo Unitario</th>}
-                                    {userRole !== 'vendedor' && <th className="p-3 text-left">Ganancia Unitaria</th>}
-                                    <th className="p-3 text-left">Subtotal</th>
+                    <div className="overflow-x-auto rounded-lg border">
+                        <table className="w-full text-sm">
+                            <thead className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                                <tr>
+                                    <th className="px-4 py-3 text-left font-semibold">Producto</th>
+                                    <th className="px-4 py-3 text-left font-semibold">Marca</th>
+                                    <th className="px-4 py-3 text-left font-semibold">Modelo</th>
+                                    <th className="px-4 py-3 text-left font-semibold">Capacidad</th>
+                                    <th className="px-4 py-3 text-left font-semibold">Categoría</th>
+                                    <th className="px-4 py-3 text-center font-semibold">Cantidad</th>
+                                    <th className="px-4 py-3 text-left font-semibold">Precio Unitario</th>
+                                    {userRole !== 'vendedor' && <th className="px-4 py-3 text-left font-semibold">Costo Unitario</th>}
+                                    {userRole !== 'vendedor' && <th className="px-4 py-3 text-left font-semibold">Ganancia Unitaria</th>}
+                                    <th className="px-4 py-3 text-left font-semibold">Subtotal</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                                 {currentVenta.items.map((item, index) => {
-                                    const gananciaUnitaria = item.precio_venta - item.costo_unitario;
-                                    const gananciaTotalItem = gananciaUnitaria * item.cantidad;
-
                                     return (
-                                        <tr key={index} className={index % 2 === 0 ? 'bg-background' : 'bg-muted/30'}>
-                                            <td className="p-3">
-                                                <div>
-                                                    <p className="font-medium">{item.producto.nombre}</p>
-                                                    <p className="text-muted-foreground text-sm">
-                                                        {item.producto.marca} - {item.producto.categoria}
-                                                    </p>
+                                        <tr key={index} className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                            <td className="px-4 py-2">
+                                                <div className="flex items-center gap-3">
+                                                    <img
+                                                        src={item.producto.imagen_url || 'https://via.placeholder.com/40'}
+                                                        alt={item.producto.nombre}
+                                                        className="h-10 w-10 rounded-md object-cover"
+                                                    />
+                                                    <div>
+                                                        <p className="font-semibold text-gray-800 dark:text-gray-200">{item.producto.nombre}</p>
+                                                        {item.producto.codigo && <p className="text-xs text-gray-500">{item.producto.codigo}</p>}
+                                                    </div>
                                                 </div>
                                             </td>
-                                            <td className="p-3">{item.cantidad}</td>
-                                            <td className="p-3">{formatCurrency(item.precio_venta, simboloMonedaPrincipal)}</td>
-                                            {userRole !== 'vendedor' && <td className="p-3 text-red-600">{formatCurrency(item.costo_unitario, simboloMonedaPrincipal)}</td>}
-                                            {userRole !== 'vendedor' && <td className="p-3 text-green-600">{formatCurrency(item.ganancia, simboloMonedaPrincipal)}</td>}
-                                            <td className="p-3 font-medium">{formatCurrency(item.subtotal, simboloMonedaPrincipal)}</td>
+                                            <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{item.producto.marca}</td>
+                                            <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{item.producto.modelo || 'N/A'}</td>
+                                            <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{item.producto.capacidad || 'N/A'}</td>
+                                            <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{item.producto.categoria}</td>
+                                            <td className="px-4 py-2 text-center">
+                                                <span className="font-semibold">{item.cantidad}</span>
+                                            </td>
+                                            <td className="px-4 py-2">{formatCurrency(item.precio_venta, simboloMonedaPrincipal)}</td>
+                                            {userRole !== 'vendedor' && (
+                                                <td className="px-4 py-2 text-red-600">
+                                                    {formatCurrency(item.costo_unitario, simboloMonedaPrincipal)}
+                                                </td>
+                                            )}
+                                            {userRole !== 'vendedor' && (
+                                                <td className="px-4 py-2 text-green-600">{formatCurrency(item.ganancia, simboloMonedaPrincipal)}</td>
+                                            )}
+                                            <td className="px-4 py-2 font-medium">{formatCurrency(item.subtotal, simboloMonedaPrincipal)}</td>
                                         </tr>
                                     );
                                 })}
                             </tbody>
-                            <tfoot>
-                                <tr className="bg-sidebar-accent">
-                                    <td colSpan={userRole === 'vendedor' ? 3 : 5} className="py-3 text-right font-semibold text-white">
+                            <tfoot className="bg-sidebar-accent">
+                                <tr>
+                                    <td colSpan={userRole === 'vendedor' ? 7 : 9} className="px-4 py-3 text-right font-semibold text-white">
                                         Total Venta:
                                     </td>
-                                    <td className="py-3 text-center text-lg font-semibold text-white">
+                                    <td className="px-4 py-3 text-center text-lg font-semibold text-white">
                                         {formatCurrency(currentVenta.total, simboloMonedaPrincipal)}
                                     </td>
                                 </tr>
                                 {userRole !== 'vendedor' && (
-                                    <tr className="bg-green-50">
-                                        <td colSpan={5} className="py-3 text-right font-semibold text-green-800">
+                                    <tr className="bg-green-50 dark:bg-green-900/20">
+                                        <td colSpan={9} className="px-4 py-3 text-right font-semibold text-green-800 dark:text-green-400">
                                             Ganancia Total:
                                         </td>
-                                        <td className="py-3 text-center text-lg font-semibold text-green-800">
+                                        <td className="px-4 py-3 text-center text-lg font-semibold text-green-800 dark:text-green-400">
                                             {formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}
                                         </td>
                                     </tr>
@@ -1099,10 +1572,8 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 {/* Información de pagos y resumen */}
 
                 <div
-                    className={`animate__animated animate__flipInX grid gap-6 auto-rows-min
-                        ${userRole === 'vendedor' ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'}`}
+                    className={`animate__animated animate__flipInX grid auto-rows-min gap-6 ${userRole === 'vendedor' ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'}`}
                 >
-
                     {/* Detalles de pagos */}
                     <div className="bg-card rounded-lg p-6 shadow-sm">
                         <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold">
@@ -1145,8 +1616,8 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                                     {pago.cliente_destino?.nombre
                                                         ? `Cliente: ${pago.cliente_destino.nombre}`
                                                         : pago.cuenta?.nombre
-                                                            ? `${pago.cuenta.nombre} (${pago.cuenta.moneda?.nombre || simboloMonedaCuenta})`
-                                                            : 'No especificado'}
+                                                          ? `${pago.cuenta.nombre} (${pago.cuenta.moneda?.nombre || simboloMonedaCuenta})`
+                                                          : 'No especificado'}
                                                 </p>
                                             </div>
                                             {pago.via && (
@@ -1206,8 +1677,9 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                         <div className="flex justify-between">
                                             <span className="text-muted-foreground">Ganancia/Pérdida Cambiaria:</span>
                                             <span
-                                                className={`font-semibold ${currentVenta.ganancia_perdida_cambiaria < 0 ? 'text-red-500' : 'text-green-600'
-                                                    }`}
+                                                className={`font-semibold ${
+                                                    currentVenta.ganancia_perdida_cambiaria < 0 ? 'text-red-500' : 'text-green-600'
+                                                }`}
                                             >
                                                 {formatCurrency(currentVenta.ganancia_perdida_cambiaria, simboloMonedaPrincipal)}
                                             </span>
@@ -1291,6 +1763,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                     </div>
                 )}
             </div>
+            <ScrollProgress />
         </AppLayout>
     );
 }

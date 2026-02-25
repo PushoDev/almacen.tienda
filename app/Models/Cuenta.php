@@ -23,7 +23,6 @@ class Cuenta extends Model
         'tipo_cuenta',
         'moneda_id',
         'notas_cuenta',
-        // NUEVOS CAMPOS
         'tipo',
         'estado',
     ];

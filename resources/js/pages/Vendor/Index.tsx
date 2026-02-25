@@ -286,7 +286,7 @@ export default function PuntoVentaOficial({
         }
     };
 
-    const cargarCuentasFiltradas = async (monedaId: string) => {
+    const cargarCuentasFiltradas = async (monedaId: string, metodoPago: string) => {
         if (!monedaId) {
             console.log('No hay moneda ID, limpiando cuentas filtradas');
             setCuentasFiltradas([]);
@@ -294,9 +294,12 @@ export default function PuntoVentaOficial({
         }
         setCargandoCuentas(true);
         try {
-            console.log('Cargando cuentas filtradas para moneda ID:', monedaId);
+            console.log(`Cargando cuentas filtradas para moneda ID: ${monedaId}, método: ${metodoPago}`);
             const response = await axios.get(route('ventas.getCuentasFiltradas'), {
-                params: { moneda_id: monedaId },
+                params: { 
+                    moneda_id: monedaId,
+                    metodo_pago: metodoPago || undefined
+                },
             });
             console.log('Cuentas filtradas cargadas:', response.data);
             setCuentasFiltradas(response.data);
@@ -372,7 +375,7 @@ export default function PuntoVentaOficial({
             cuenta_id: '',
             cliente_id: '',
         });
-        cargarCuentasFiltradas(monedaId);
+        cargarCuentasFiltradas(monedaId, currentPayment.method);
     };
 
     const productosFiltrados = useMemo(() => {
@@ -413,10 +416,10 @@ export default function PuntoVentaOficial({
                 carrito.map((item) =>
                     item.id === idItem
                         ? {
-                              ...item,
-                              cantidad: nuevaCantidad,
-                              subtotal: nuevaCantidad * item.precio_venta,
-                          }
+                            ...item,
+                            cantidad: nuevaCantidad,
+                            subtotal: nuevaCantidad * item.precio_venta,
+                        }
                         : item,
                 ),
             );
@@ -446,10 +449,10 @@ export default function PuntoVentaOficial({
             carrito.map((itemCarrito) =>
                 itemCarrito.id === id
                     ? {
-                          ...itemCarrito,
-                          cantidad: nuevaCantidad,
-                          subtotal: nuevaCantidad * itemCarrito.precio_venta,
-                      }
+                        ...itemCarrito,
+                        cantidad: nuevaCantidad,
+                        subtotal: nuevaCantidad * itemCarrito.precio_venta,
+                    }
                     : itemCarrito,
             ),
         );
@@ -461,10 +464,10 @@ export default function PuntoVentaOficial({
             carrito.map((item) =>
                 item.id === id
                     ? {
-                          ...item,
-                          precio_venta: nuevoPrecio,
-                          subtotal: item.cantidad * nuevoPrecio,
-                      }
+                        ...item,
+                        precio_venta: nuevoPrecio,
+                        subtotal: item.cantidad * nuevoPrecio,
+                    }
                     : item,
             ),
         );
@@ -1374,9 +1377,14 @@ export default function PuntoVentaOficial({
                                                                                         via: value === 'efectivo' ? 'efectivo' : '',
                                                                                         referencia:
                                                                                             value === 'efectivo' ? '' : currentPayment.referencia,
+                                                                                        cuenta_id: '',
                                                                                     };
                                                                                     console.log('Método de pago cambiado:', newPayment);
                                                                                     setCurrentPayment(newPayment);
+
+                                                                                    if (currentPayment.moneda_id) {
+                                                                                        cargarCuentasFiltradas(currentPayment.moneda_id, value);
+                                                                                    }
                                                                                 }}
                                                                             >
                                                                                 <SelectTrigger>
@@ -1433,8 +1441,8 @@ export default function PuntoVentaOficial({
                                                                                     currentPayment.cuenta_id
                                                                                         ? `cuenta_${currentPayment.cuenta_id}`
                                                                                         : currentPayment.cliente_id
-                                                                                          ? `cliente_${currentPayment.cliente_id}`
-                                                                                          : ''
+                                                                                            ? `cliente_${currentPayment.cliente_id}`
+                                                                                            : ''
                                                                                 }
                                                                                 onValueChange={(value) => {
                                                                                     let updatedPayment = { ...currentPayment };

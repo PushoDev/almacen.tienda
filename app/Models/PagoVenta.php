@@ -23,7 +23,7 @@ class PagoVenta extends Model
     ];
 
     protected $casts = [
-        'tasa_cambio_aplicada' => 'decimal:6',
+        'tasa_cambio_aplicada' => 'decimal:2',
         'monto' => 'decimal:2',
         'monto_equivalente' => 'decimal:2',
     ];

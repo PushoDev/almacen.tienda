@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
@@ -233,6 +234,7 @@ export default function CategoriasPage({ categorias }: { categorias: CategoriasP
                 </div>
             </div>
             <Toaster position="top-center" />
+            <ScrollProgress />
         </AppLayout>
     );
 }

@@ -31,6 +31,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/ventas/almacenes/{id}/productos', [VentaController::class, 'getProductosPorAlmacen'])->name('ventas.getProductosPorAlmacen');
     Route::get('/ventas/cuentas', [VentaController::class, 'getCuentas'])->name('ventas.getCuentas');
     Route::get('/ventas/cuentas/filtradas', [VentaController::class, 'getCuentasFiltradas'])->name('ventas.getCuentasFiltradas');
+    Route::get('/ventas/cuentas/gestor', [VentaController::class, 'getCuentasParaGestor'])->name('ventas.getCuentasParaGestor');
     Route::get('/ventas/monedas', [VentaController::class, 'getMonedas'])->name('ventas.getMonedas');
 
     Route::get('/ventas/clientes', [VentaController::class, 'getClientes'])->name('ventas.getClientes');

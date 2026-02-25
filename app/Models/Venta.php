@@ -25,15 +25,20 @@ class Venta extends Model
         'tasa_aplicada_venta',
         'moneda_cobro_id',
         'monto_diferencia_cambiaria',
+        // CAMPOS GESTOR
+        'es_venta_gestor',
+        'gestor_monto',
+        'gestor_cuenta_id',
+        'gestor_comentario',
     ];
 
     protected $casts = [
-        'tasa_cambio_principal' => 'decimal:6',
-        'total_ganancia' => 'decimal:4',
-        'total_esperado_usd' => 'decimal:4',
-        'ganancia_perdida_cambiaria' => 'decimal:4',
-        'ganancia_real_total' => 'decimal:4',
-        'tasa_aplicada_venta' => 'decimal:6',
+        'tasa_cambio_principal' => 'decimal:2',
+        'total_ganancia' => 'decimal:2',
+        'total_esperado_usd' => 'decimal:2',
+        'ganancia_perdida_cambiaria' => 'decimal:2',
+        'ganancia_real_total' => 'decimal:2',
+        'tasa_aplicada_venta' => 'decimal:2',
         'monto_diferencia_cambiaria' => 'decimal:2', // ← AQUÍ SE ACEPTAN NEGATIVOS
     ];
 
@@ -86,5 +91,11 @@ class Venta extends Model
     public function destinatario()
     {
         return $this->hasOne(DestinatarioVenta::class);
+    }
+
+    // RELACIÓN GESTOR
+    public function gestorCuenta()
+    {
+        return $this->belongsTo(Cuenta::class, 'gestor_cuenta_id');
     }
 }

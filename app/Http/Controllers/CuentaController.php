@@ -43,6 +43,9 @@ class CuentaController extends Controller
                     'updated_at' => $cuenta->updated_at->format('Y-m-d H:i:s'),
                 ];
             }),
+            'monedaPrincipal' => Moneda::where('principal', true)
+                ->select('id', 'nombre_moneda', 'codigo_moneda', 'simbolo_moneda', 'tasa_cambio', 'principal')
+                ->first(),
         ]);
     }
 
@@ -75,7 +78,7 @@ class CuentaController extends Controller
         // Validamos los datos del formulario
         $validated = $request->validate([
             'nombre_cuenta' => ['required', 'string', 'max:255', 'unique:cuentas,nombre_cuenta'],
-            'tipo' => ['required', 'in:caja,banco,tarjeta,efectivo,otro'],
+            'tipo' => ['required', 'in:tarjeta,efectivo,otro'],
             'saldo_cuenta' => ['nullable', 'numeric', 'min:0'],
             'moneda_id' => ['required', 'exists:monedas,id'], // Cambiamos tipo_moneda por moneda_id
             'deuda' => ['nullable', 'numeric', 'min:0'],
@@ -186,7 +189,7 @@ class CuentaController extends Controller
                 'max:255',
                 'unique:cuentas,nombre_cuenta,' . $cuenta->id,
             ],
-            'tipo' => ['required', 'in:caja,banco,tarjeta,efectivo,otro'],
+            'tipo' => ['required', 'in:tarjeta,efectivo,otro'],
             'saldo_cuenta' => ['nullable', 'numeric', 'min:0'],
             'moneda_id' => ['required', 'exists:monedas,id'], // Cambiamos tipo_moneda por moneda_id
             'deuda' => ['nullable', 'numeric', 'min:0'],

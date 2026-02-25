@@ -13,11 +13,12 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ScrollProgress } from '@/components/ui/scroll';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, BreadcrumbItem, Movimiento, ProductoPorAlmacenDetalleRef } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { AlertCircle, CarFront, CheckCircle2, Clock, Eye, Package, Send, TrendingUp, XCircle } from 'lucide-react';
+import { AlertCircle, Caravan, CarFront, CheckCircle2, Clock, Eye, ListCheck, Package, Send, TrendingUp, Warehouse, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { toast, Toaster } from 'sonner';
 
@@ -181,10 +182,10 @@ export default function MovimientosPage({
 
                 return cantidad > 0
                     ? {
-                          id: producto.id,
-                          cantidad,
-                          observaciones: observacionesInput?.value || '',
-                      }
+                        id: producto.id,
+                        cantidad,
+                        observaciones: observacionesInput?.value || '',
+                    }
                     : null;
             })
             .filter((item) => item !== null);
@@ -372,14 +373,14 @@ export default function MovimientosPage({
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Movimientos" />
-            <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
+            <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
-                <div className="relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     <HeadingSmall
-                        title="Sistema de Movimientos Logísticos"
-                        description="Gestión profesional de traslados entre almacenes con control de estados y aprobaciones."
+                        title="Movimientos Logísticos"
+                        description="Gestión y Solicitud de Movimientos de Mercancía entre Almacenes"
                     />
-                    <CarFront
+                    <Caravan
                         size={70}
                         color="#d6d3d1"
                         className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
@@ -439,57 +440,70 @@ export default function MovimientosPage({
                                 </h3>
                                 <div className="overflow-x-auto rounded-lg border">
                                     <table className="w-full text-sm">
-                                        <thead className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+                                        <thead className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                                             <tr>
-                                                <th className="px-6 py-3 text-left font-semibold">Producto</th>
-                                                <th className="px-6 py-3 text-left font-semibold">Stock Total</th>
-                                                <th className="px-6 py-3 text-left font-semibold">En Tránsito</th>
-                                                <th className="px-6 py-3 text-left font-semibold">Disponible</th>
-                                                <th className="px-6 py-3 text-left font-semibold">Cantidad a Trasladar</th>
-                                                <th className="px-6 py-3 text-left font-semibold">Observaciones</th>
+                                                <th className="px-4 py-3 text-left font-semibold">Producto</th>
+                                                <th className="px-4 py-3 text-left font-semibold">Marca</th>
+                                                <th className="px-4 py-3 text-left font-semibold">Modelo</th>
+                                                <th className="px-4 py-3 text-left font-semibold">Capacidad</th>
+                                                <th className="px-4 py-3 text-left font-semibold">Categoría</th>
+                                                <th className="px-4 py-3 text-center font-semibold">Disponible</th>
+                                                <th className="px-4 py-3 text-center font-semibold">En Tránsito</th>
+                                                <th className="w-[150px] px-4 py-3 text-left font-semibold">Cantidad</th>
+                                                <th className="w-[200px] px-4 py-3 text-left font-semibold">Observaciones</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y">
+                                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                                             {productosEmisor.map((producto) => (
-                                                <tr key={producto.id} className="transition-colors">
-                                                    <td className="px-6 py-4 font-medium">
-                                                        <Button
-                                                            variant="link"
-                                                            className="h-auto cursor-pointer p-0 font-medium text-blue-600 underline-offset-4 hover:underline"
-                                                            onClick={() => handleProductClick(producto)}
-                                                        >
-                                                            {producto.nombre}
-                                                        </Button>
+                                                <tr key={producto.id} className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                                    <td className="px-4 py-2">
+                                                        <div className="flex items-center gap-3">
+                                                            <img
+                                                                src={producto.imagen_url || 'https://via.placeholder.com/40'}
+                                                                alt={producto.nombre}
+                                                                className="h-10 w-10 rounded-md object-cover"
+                                                            />
+                                                            <div>
+                                                                <div
+                                                                    className="cursor-pointer font-semibold text-gray-800 hover:text-blue-600 dark:text-gray-200 dark:hover:text-blue-400"
+                                                                    onClick={() => handleProductClick(producto)}
+                                                                >
+                                                                    {producto.nombre}
+                                                                </div>
+                                                                <div className="text-xs text-gray-500">{producto.codigo}</div>
+                                                            </div>
+                                                        </div>
                                                     </td>
-                                                    <td className="px-6 py-4">{producto.stock_total}</td>
-                                                    <td className="px-6 py-4">
-                                                        <span className="inline-flex items-center gap-1 font-medium text-orange-600">
-                                                            <Clock className="h-4 w-4" />
-                                                            {producto.stock_en_transito}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <span className="inline-flex items-center gap-1 font-semibold text-green-600">
-                                                            <CheckCircle2 className="h-4 w-4" />
+                                                    <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{producto.marca}</td>
+                                                    <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{producto.modelo}</td>
+                                                    <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{producto.capacidad || 'N/A'}</td>
+                                                    <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{producto.categoria}</td>
+                                                    <td className="px-4 py-2 text-center">
+                                                        <span className="font-bold text-green-600 dark:text-green-400">
                                                             {producto.stock_disponible}
                                                         </span>
                                                     </td>
-                                                    <td className="px-6 py-4">
+                                                    <td className="px-4 py-2 text-center">
+                                                        <span className="font-medium text-amber-600 dark:text-amber-400">
+                                                            {producto.stock_en_transito}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-2">
                                                         <Input
-                                                            id={`cantidad-${producto.id}`}
                                                             type="number"
+                                                            id={`cantidad-${producto.id}`}
+                                                            className="w-full"
                                                             min="0"
                                                             max={producto.stock_disponible}
                                                             placeholder="0"
-                                                            className="w-24"
                                                         />
                                                     </td>
-                                                    <td className="px-6 py-4">
+                                                    <td className="px-4 py-2">
                                                         <Input
-                                                            id={`observaciones-${producto.id}`}
                                                             type="text"
-                                                            placeholder="Opcional"
-                                                            className="w-32"
+                                                            id={`observaciones-${producto.id}`}
+                                                            className="w-full"
+                                                            placeholder="Opcional..."
                                                         />
                                                     </td>
                                                 </tr>
@@ -552,17 +566,16 @@ export default function MovimientosPage({
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span
-                                                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${
-                                                        movimiento.estado === 'pendiente_confirmacion'
-                                                            ? 'bg-yellow-100 text-yellow-800'
-                                                            : movimiento.estado === 'en_transito'
-                                                              ? 'bg-orange-100 text-orange-800'
-                                                              : movimiento.estado === 'recibido_completo'
+                                                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${movimiento.estado === 'pendiente_confirmacion'
+                                                        ? 'bg-yellow-100 text-yellow-800'
+                                                        : movimiento.estado === 'en_transito'
+                                                            ? 'bg-orange-100 text-orange-800'
+                                                            : movimiento.estado === 'recibido_completo'
                                                                 ? 'bg-green-100 text-green-800'
                                                                 : movimiento.estado === 'recibido_parcial'
-                                                                  ? 'bg-cyan-100 text-cyan-800'
-                                                                  : 'bg-red-100 text-red-800'
-                                                    }`}
+                                                                    ? 'bg-cyan-100 text-cyan-800'
+                                                                    : 'bg-red-100 text-red-800'
+                                                        }`}
                                                 >
                                                     {movimiento.estado === 'pendiente_confirmacion' && <Clock className="h-3.5 w-3.5" />}
                                                     {movimiento.estado === 'en_transito' && <Send className="h-3.5 w-3.5" />}
@@ -580,9 +593,21 @@ export default function MovimientosPage({
                                                         size="sm"
                                                         onClick={() => handleVerSeguimiento(movimiento)}
                                                         title="Ver seguimiento"
+                                                        className='cursor-pointer'
                                                     >
                                                         <Eye className="h-4 w-4" />
                                                     </Button>
+
+                                                    {['recibido_completo', 'recibido_parcial', 'rechazado'].includes(movimiento.estado) && (
+                                                        <Link
+                                                            href={`/movimientos/${movimiento.id}`}
+
+                                                        >
+                                                            <Button variant='outline' size="sm" title="Ver movimientos" className='cursor-pointer'>
+                                                                <ListCheck className="h-4 w-4" />
+                                                            </Button>
+                                                        </Link>
+                                                    )}
 
                                                     {movimiento.estado === 'pendiente_confirmacion' && (
                                                         <>
@@ -668,17 +693,16 @@ export default function MovimientosPage({
                                     <div key={seguimiento.id} className="relative border-l-4 border-blue-300 pb-3 pl-4">
                                         <div className="mb-2 flex items-start justify-between">
                                             <span
-                                                className={`rounded-full px-2 py-1 text-sm font-semibold ${
-                                                    seguimiento.estado === 'pendiente_confirmacion'
-                                                        ? 'bg-yellow-100 text-yellow-800'
-                                                        : seguimiento.estado === 'en_transito'
-                                                          ? 'bg-orange-100 text-orange-800'
-                                                          : seguimiento.estado === 'recibido_completo'
+                                                className={`rounded-full px-2 py-1 text-sm font-semibold ${seguimiento.estado === 'pendiente_confirmacion'
+                                                    ? 'bg-yellow-100 text-yellow-800'
+                                                    : seguimiento.estado === 'en_transito'
+                                                        ? 'bg-orange-100 text-orange-800'
+                                                        : seguimiento.estado === 'recibido_completo'
                                                             ? 'bg-green-100 text-green-800'
                                                             : seguimiento.estado === 'recibido_parcial'
-                                                              ? 'bg-cyan-100 text-cyan-800'
-                                                              : 'bg-red-100 text-red-800'
-                                                }`}
+                                                                ? 'bg-cyan-100 text-cyan-800'
+                                                                : 'bg-red-100 text-red-800'
+                                                    }`}
                                             >
                                                 {estados[seguimiento.estado]}
                                             </span>
@@ -866,6 +890,7 @@ export default function MovimientosPage({
                 </Dialog>
             </div>
             <Toaster position="top-center" />
+            <ScrollProgress />
         </AppLayout>
     );
 }

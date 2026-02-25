@@ -15,7 +15,7 @@ import SettingsLayout from '@/layouts/settings/layout';
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Opciones Generales',
-        href: '/dashborad',
+        href: '/dashboard',
     },
     {
         title: 'Configuación de Perfil',

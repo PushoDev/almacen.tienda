@@ -13,6 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
@@ -289,8 +290,8 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                                                             ? proveedor.saldo_proveedor < 0
                                                                 ? 'text-red-600 dark:text-red-400'
                                                                 : proveedor.saldo_proveedor === 0
-                                                                  ? 'text-green-600 dark:text-green-400'
-                                                                  : 'text-green-600 dark:text-green-400'
+                                                                    ? 'text-green-600 dark:text-green-400'
+                                                                    : 'text-green-600 dark:text-green-400'
                                                             : 'text-gray-400 italic'
                                                     }
                                                 >
@@ -298,8 +299,8 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                                                         ? proveedor.saldo_proveedor < 0
                                                             ? `- ${formatearMoneda(Math.abs(proveedor.saldo_proveedor))}`
                                                             : proveedor.saldo_proveedor === 0
-                                                              ? 'Sin saldo'
-                                                              : formatearMoneda(proveedor.saldo_proveedor)
+                                                                ? 'Sin saldo'
+                                                                : formatearMoneda(proveedor.saldo_proveedor)
                                                         : 'Sin dato'}
                                                 </span>
                                             </div>
@@ -394,6 +395,7 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                     </Button>
                 </div>
             </div>
+            <ScrollProgress />
         </AppLayout>
     );
 }

@@ -35,6 +35,9 @@ import {
     ShoppingCart,
     TrendingUp,
     Wallet,
+    Users,
+    Briefcase,
+    MessageSquare,
 } from 'lucide-react';
 import { useState } from 'react';
 import { toast, Toaster } from 'sonner';
@@ -47,6 +50,29 @@ interface Props extends PageProps {
     calculos: Calculos;
     fecha_apertura: string;
     moneda_referencia?: string;
+    // NUEVO: Comparativa con cierre anterior
+    comparativa_cuentas?: ComparativaItem[];
+    comparativa_clientes?: ComparativaClienteItem[];
+    tiene_cierre_anterior?: boolean;
+}
+
+interface ComparativaItem {
+    id: number;
+    nombre: string;
+    moneda: string;
+    saldo_anterior: number;
+    saldo_actual: number;
+    diferencia: number;
+    estado: 'subio' | 'bajo' | 'igual';
+}
+
+interface ComparativaClienteItem {
+    id: number;
+    nombre: string;
+    deuda_anterior: number;
+    deuda_actual: number;
+    diferencia: number;
+    estado: 'mejoro' | 'empeoro' | 'igual';
 }
 
 interface ProductItem {
@@ -87,7 +113,19 @@ interface DetalleMoneda {
     items_transferencias: ItemMovimiento[];
     items_transferencias_salientes: TransferenciaItem[];
     items_transferencias_entrantes: TransferenciaItem[];
-    productos_resumen: Record<string, { id: number; nombre: string; detalles: string; cantidad: number; precio: number; total: number }>;
+    productos_resumen: Record<string, {
+        id: number;
+        nombre: string;
+        marca: string;
+        modelo: string;
+        capacidad: string;
+        codigo: string;
+        imagen_url: string;
+        categoria: string;
+        cantidad: number;
+        precio: number;
+        total: number
+    }>;
     operaciones_detalle: OperacionDetaile[];
 }
 
@@ -172,6 +210,19 @@ interface DetalleMoneda {
     items_transferencias: ItemMovimiento[];
     items_transferencias_salientes: TransferenciaItem[];
     items_transferencias_entrantes: TransferenciaItem[];
+    productos_resumen: Record<string, {
+        id: number;
+        nombre: string;
+        marca: string;
+        modelo: string;
+        capacidad: string;
+        codigo: string;
+        imagen_url: string;
+        categoria: string;
+        cantidad: number;
+        precio: number;
+        total: number
+    }>;
 }
 
 interface Calculos {
@@ -183,6 +234,27 @@ interface Calculos {
     saldo_esperado_global: number;
     detalles: DetalleMoneda[];
     transferencias_resumen?: TransferenciasResumen;
+    // NUEVO: Totales separados por destino
+    ventas_a_cuentas_total_usd?: number;
+    ventas_a_clientes_total_usd?: number;
+    ventas_a_cuentas_efectivo_usd?: number;
+    ventas_a_cuentas_transferencia_usd?: number;
+    ventas_a_clientes_efectivo_usd?: number;
+    ventas_a_clientes_transferencia_usd?: number;
+    // NUEVO: Comisiones a gestores
+    comisiones_gestor_total?: number;
+    comisiones_gestor_detalles?: ComisionGestorItem[];
+}
+
+interface ComisionGestorItem {
+    venta_id: number;
+    monto: number;
+    moneda_codigo: string;
+    monto_usd: number;
+    cuenta_nombre: string;
+    cuenta_tipo: string;
+    comentario: string;
+    fecha: string;
 }
 
 const DENOMINACIONES = [
@@ -208,7 +280,14 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Nuevo Cierre', href: '#' },
 ];
 
-export default function Create({ calculos, fecha_apertura, moneda_referencia = 'USD' }: Props) {
+export default function Create({ 
+    calculos, 
+    fecha_apertura, 
+    moneda_referencia = 'USD',
+    comparativa_cuentas = [],
+    comparativa_clientes = [],
+    tiene_cierre_anterior = false,
+}: Props) {
     const { data, setData, post, processing } = useForm({
         saldo_inicial: calculos.saldo_inicial || 0,
         ventas_efectivo: calculos.ventas_efectivo || 0,
@@ -233,8 +312,15 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
     // Lista plana de productos vendidos desde productos_resumen (ya deduplicado por venta)
     const lineasProductosRaw = (calculos.detalles ?? []).flatMap((d) => Object.values(d.productos_resumen ?? {}));
     const lineasProductos = lineasProductosRaw.map((p) => ({
+        id: p.id,
+        nombre: p.nombre || '',
+        marca: p.marca || '',
+        modelo: p.modelo || '',
+        capacidad: p.capacidad || '',
+        codigo: p.codigo || '',
+        imagen_url: p.imagen_url || '',
+        categoria: p.categoria || '',
         cantidad: Number(p.cantidad) || 0,
-        descripcion: p.nombre + (p.detalles ? ` ${p.detalles}` : ''),
         precio_unitario: Number(p.precio) || 0,
         total: Number(p.total) || 0,
         precio_equivalente: Number(p.precio) || 0,
@@ -278,6 +364,10 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
     const totalGastos = (calculos.detalles ?? []).reduce((sum, d) => sum + (d.gastos ?? 0), 0);
     const totalIngresos = (calculos.detalles ?? []).reduce((sum, d) => sum + (d.ingresos_extra ?? 0), 0);
     const totalTransferencias = (calculos.detalles ?? []).reduce((sum, d) => sum + (d.transferencias_salientes ?? 0), 0);
+    
+    // NUEVO: Calcular total de comisiones a gestores
+    const totalComisionesGestor = calculos.comisiones_gestor_total ?? 0;
+    const comisionesGestorDetalles = calculos.comisiones_gestor_detalles ?? [];
 
     // Obtener todos los items de transacciones
     const todosGastos = (calculos.detalles ?? []).flatMap((d) => d.items_gastos ?? []);
@@ -434,71 +524,182 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
                     </CardContent>
                 </Card>
 
+                {/* NUEVO: Widget de Resumen por Destino (Cuentas vs Clientes) */}
+                {(calculos.ventas_a_cuentas_total_usd !== undefined || calculos.ventas_a_clientes_total_usd !== undefined) && (
+                    <Card>
+                        <CardHeader className="pb-2">
+                            <CardTitle className="flex items-center gap-2 text-lg">
+                                <Wallet className="h-5 w-5 text-primary" />
+                                Distribución del Dinero
+                            </CardTitle>
+                            <CardDescription>
+                                Separación entre dinero que entró a tus cuentas y dinero que fue a deuda de clientes
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="p-4">
+                            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                                {/* Columna: Dinero en MIS CUENTAS */}
+                                <div className="space-y-3 rounded-lg border border-border bg-primary/5 p-4">
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+                                            <Banknote className="h-4 w-4 text-primary" />
+                                        </div>
+                                        <h4 className="font-semibold">Montos Depositados a mis Cuentas</h4>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="text-muted-foreground">En Efectivo:</span>
+                                            <span className="font-mono font-medium">
+                                                ${Number(calculos.ventas_a_cuentas_efectivo_usd || 0).toFixed(2)}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="text-muted-foreground">Por Transferencia:</span>
+                                            <span className="font-mono font-medium">
+                                                ${Number(calculos.ventas_a_cuentas_transferencia_usd || 0).toFixed(2)}
+                                            </span>
+                                        </div>
+                                        <div className="border-t border-border pt-2">
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-semibold">Total en Cuentas:</span>
+                                                <span className="text-xl font-bold text-primary">
+                                                    ${Number(calculos.ventas_a_cuentas_total_usd || 0).toFixed(2)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Columna: Dinero a DEUDA de CLIENTES */}
+                                <div className="space-y-3 rounded-lg border border-border bg-muted/50 p-4">
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
+                                            <CreditCard className="h-4 w-4 text-muted-foreground" />
+                                        </div>
+                                        <h4 className="font-semibold">Depósitos a Clientes</h4>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="text-muted-foreground">En Efectivo:</span>
+                                            <span className="font-mono font-medium">
+                                                ${Number(calculos.ventas_a_clientes_efectivo_usd || 0).toFixed(2)}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="text-muted-foreground">Por Transferencia:</span>
+                                            <span className="font-mono font-medium">
+                                                ${Number(calculos.ventas_a_clientes_transferencia_usd || 0).toFixed(2)}
+                                            </span>
+                                        </div>
+                                        <div className="border-t border-border pt-2">
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-semibold">Total a Clientes:</span>
+                                                <span className="text-xl font-bold text-muted-foreground">
+                                                    ${Number(calculos.ventas_a_clientes_total_usd || 0).toFixed(2)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+
+                {/* Tabla Ventas: todos los productos del turno */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Receipt className="h-5 w-5" />
+                            Ventas
+                        </CardTitle>
+                        <CardDescription>
+                            Productos vendidos en el turno. Importes en {moneda_referencia} (moneda de referencia).
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="overflow-x-auto rounded-lg border">
+                            <table className="w-full text-sm">
+                                <thead className="bg-muted text-muted-foreground">
+                                    <tr>
+                                        <th className="px-4 py-3 text-left font-semibold">Producto</th>
+                                        <th className="px-4 py-3 text-left font-semibold">Marca</th>
+                                        <th className="px-4 py-3 text-left font-semibold">Modelo</th>
+                                        <th className="px-4 py-3 text-left font-semibold">Capacidad</th>
+                                        <th className="px-4 py-3 text-left font-semibold">Categoría</th>
+                                        <th className="px-4 py-3 text-center font-semibold">Cantidad</th>
+                                        <th className="px-4 py-3 text-right font-semibold">Precio</th>
+                                        <th className="px-4 py-3 text-right font-semibold">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-border">
+                                    {lineasProductos.length > 0 ? (
+                                        lineasProductos.map((linea, idx) => (
+                                            <tr key={idx} className="transition-colors hover:bg-muted/50">
+                                                <td className="px-4 py-2">
+                                                    <div className="flex items-center gap-3">
+                                                        <img
+                                                            src={linea.imagen_url || 'https://via.placeholder.com/40'}
+                                                            alt={linea.nombre}
+                                                            className="h-10 w-10 rounded-md object-cover"
+                                                        />
+                                                        <div>
+                                                            <div className="font-semibold">{linea.nombre}</div>
+                                                            <div className="text-xs text-muted-foreground">{linea.codigo}</div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-2 text-muted-foreground">{linea.marca}</td>
+                                                <td className="px-4 py-2 text-muted-foreground">{linea.modelo}</td>
+                                                <td className="px-4 py-2 text-muted-foreground">{linea.capacidad || 'N/A'}</td>
+                                                <td className="px-4 py-2 text-muted-foreground">{linea.categoria}</td>
+                                                <td className="px-4 py-2 text-center">
+                                                    <span className="font-bold text-primary">{linea.cantidad}</span>
+                                                </td>
+                                                <td className="px-4 py-2 text-right font-mono">
+                                                    {(linea.total_equivalente !== undefined
+                                                        ? Number(linea.precio_equivalente)
+                                                        : Number(linea.precio_unitario)
+                                                    ).toFixed(2)}
+                                                </td>
+                                                <td className="px-4 py-2 text-right font-mono font-medium">
+                                                    {(linea.total_equivalente !== undefined
+                                                        ? Number(linea.total_equivalente)
+                                                        : Number(linea.total)
+                                                    ).toFixed(2)}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={8} className="text-muted-foreground px-4 py-8 text-center italic">
+                                                No hay ventas en este turno
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                                <tfoot className="bg-muted/50">
+                                    <tr>
+                                        <td colSpan={5} className="px-4 py-3 text-right font-bold">
+                                            Total
+                                        </td>
+                                        <td className="px-4 py-3 text-center font-bold">
+                                            {lineasProductos.reduce((sum, p) => sum + p.cantidad, 0)}
+                                        </td>
+                                        <td className="px-4 py-3"></td>
+                                        <td className="px-4 py-3 text-right font-mono font-bold">
+                                            {Number(totalVentasProductos).toFixed(2)} {moneda_referencia}
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </CardContent>
+                </Card>
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
                     {/* Columna Izquierda: Información del Sistema */}
                     <div className="space-y-6 lg:col-span-8">
-                        {/* Tabla Ventas: todos los productos del turno */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <Receipt className="h-5 w-5" />
-                                    Ventas
-                                </CardTitle>
-                                <CardDescription>
-                                    Productos vendidos en el turno. Importes en {moneda_referencia} (moneda de referencia).
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead className="w-20">Cantidad</TableHead>
-                                            <TableHead>Producto (detalles)</TableHead>
-                                            <TableHead className="text-right">Precio</TableHead>
-                                            <TableHead className="text-right">Total</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {lineasProductos.length > 0 ? (
-                                            lineasProductos.map((linea, idx) => (
-                                                <TableRow key={idx}>
-                                                    <TableCell className="font-medium">{linea.cantidad}</TableCell>
-                                                    <TableCell>{linea.descripcion}</TableCell>
-                                                    <TableCell className="text-right">
-                                                        {(linea.total_equivalente !== undefined
-                                                            ? Number(linea.precio_equivalente)
-                                                            : Number(linea.precio_unitario)
-                                                        ).toFixed(2)}
-                                                    </TableCell>
-                                                    <TableCell className="text-right font-mono">
-                                                        {(linea.total_equivalente !== undefined
-                                                            ? Number(linea.total_equivalente)
-                                                            : Number(linea.total)
-                                                        ).toFixed(2)}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))
-                                        ) : (
-                                            <TableRow>
-                                                <TableCell colSpan={4} className="text-muted-foreground text-center italic">
-                                                    No hay ventas en este turno
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </TableBody>
-                                    <TableFooter>
-                                        <TableRow>
-                                            <TableCell colSpan={3} className="text-right font-bold">
-                                                Total
-                                            </TableCell>
-                                            <TableCell className="text-right font-mono font-bold">
-                                                {Number(totalVentasProductos).toFixed(2)} {moneda_referencia}
-                                            </TableCell>
-                                        </TableRow>
-                                    </TableFooter>
-                                </Table>
-                            </CardContent>
-                        </Card>
+
 
                         {/* Por dónde entraron: una tabla por moneda con desglose de operaciones */}
                         <Card>
@@ -651,7 +852,7 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
                         {/* Movimientos Financieros */}
                         <div className="space-y-2">
                             <h3 className="text-sm font-bold uppercase tracking-wide">Movimientos Financieros</h3>
-                            <div className="grid grid-cols-3 gap-2">
+                            <div className="grid grid-cols-4 gap-2">
                                 {/* Gastos */}
                                 <Card
                                     className="cursor-pointer border-red-200 bg-red-500/5 transition-colors hover:bg-red-500/10"
@@ -690,6 +891,21 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
                                         <p className="text-muted-foreground text-[9px]">{todasTransferencias.length} oper.</p>
                                     </CardContent>
                                 </Card>
+
+                                {/* Gestores - NUEVO */}
+                                {totalComisionesGestor > 0 && (
+                                    <Card
+                                        className="cursor-pointer border-purple-200 bg-purple-500/5 transition-colors hover:bg-purple-500/10"
+                                        onClick={() => setShowTransaccionesDialog(true)}
+                                    >
+                                        <CardContent className="p-3 text-center">
+                                            <Briefcase className="mx-auto mb-1 h-5 w-5 text-purple-600" />
+                                            <p className="text-muted-foreground text-[10px] uppercase">Gestores</p>
+                                            <p className="text-lg font-bold text-purple-700">-${Number(totalComisionesGestor).toFixed(2)}</p>
+                                            <p className="text-muted-foreground text-[9px]">{comisionesGestorDetalles.length} oper.</p>
+                                        </CardContent>
+                                    </Card>
+                                )}
                             </div>
                         </div>
 
@@ -710,9 +926,10 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
 
                                 <div className="flex-1 overflow-y-auto px-6 py-4">
                                     <Tabs defaultValue="gastos" className="w-full">
-                                        <TabsList className="mb-4 grid w-full grid-cols-3">
+                                        <TabsList className="mb-4 grid w-full grid-cols-4">
                                             <TabsTrigger value="ingresos">Ingresos ({todosIngresos.length})</TabsTrigger>
                                             <TabsTrigger value="gastos">Gastos ({todosGastos.length})</TabsTrigger>
+                                            <TabsTrigger value="gestores">Gestores ({comisionesGestorDetalles.length})</TabsTrigger>
                                             <TabsTrigger value="transferencias">Transferencias ({todasTransferencias.length})</TabsTrigger>
                                         </TabsList>
 
@@ -808,6 +1025,64 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
                                             )}
                                         </TabsContent>
 
+                                        {/* Tab Gestores - NUEVO */}
+                                        <TabsContent value="gestores" className="mt-0">
+                                            {comisionesGestorDetalles.length > 0 ? (
+                                                <div className="rounded-md border">
+                                                    <Table>
+                                                        <TableHeader>
+                                                            <TableRow>
+                                                                <TableHead>Venta #</TableHead>
+                                                                <TableHead>Cuenta</TableHead>
+                                                                <TableHead>Comentario</TableHead>
+                                                                <TableHead className="w-28 text-right">Monto</TableHead>
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                            {comisionesGestorDetalles.map((item: ComisionGestorItem) => (
+                                                                <TableRow key={item.venta_id}>
+                                                                    <TableCell className="font-mono text-xs">
+                                                                        <a
+                                                                            href={`/ventas/${item.venta_id}`}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            className="text-blue-600 hover:underline"
+                                                                        >
+                                                                            #{item.venta_id}
+                                                                        </a>
+                                                                    </TableCell>
+                                                                    <TableCell className="text-sm">
+                                                                        <div className="font-medium">{item.cuenta_nombre}</div>
+                                                                        <div className="text-muted-foreground text-xs">{item.cuenta_tipo}</div>
+                                                                    </TableCell>
+                                                                    <TableCell className="max-w-xs text-sm">
+                                                                        {item.comentario || <span className="text-muted-foreground italic">Sin comentario</span>}
+                                                                    </TableCell>
+                                                                    <TableCell className="text-right font-mono font-medium text-red-600">
+                                                                        -${Number(item.monto).toFixed(2)} {item.moneda_codigo}
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            ))}
+                                                        </TableBody>
+                                                        <TableFooter>
+                                                            <TableRow>
+                                                                <TableCell colSpan={3} className="font-bold">
+                                                                    Total Comisiones
+                                                                </TableCell>
+                                                                <TableCell className="text-right font-bold text-red-600">
+                                                                    -${Number(totalComisionesGestor).toFixed(2)} USD
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        </TableFooter>
+                                                    </Table>
+                                                </div>
+                                            ) : (
+                                                <p className="text-muted-foreground py-12 text-center italic">
+                                                    No hay comisiones a gestores en este turno.
+                                                </p>
+                                            )}
+                                        </TabsContent>
+
                                         {/* Tab Transferencias */}
                                         <TabsContent value="transferencias" className="mt-0">
                                             {todasTransferencias.length > 0 ? (
@@ -871,6 +1146,126 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
                             </DialogContent>
                         </Dialog>
 
+                        {/* NUEVO: Comparativa con Cierre Anterior */}
+                        {tiene_cierre_anterior && comparativa_cuentas && comparativa_cuentas.length > 0 && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2 text-base">
+                                        <TrendingUp className="h-5 w-5 text-blue-600" />
+                                        Comparativa con Cierre Anterior
+                                    </CardTitle>
+                                    <CardDescription>
+                                        Comparación de saldos y deudas respecto al cierre anterior
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-6">
+                                    {/* Pestañas Cuentas / Clientes */}
+                                    <Tabs defaultValue="cuentas" className="w-full">
+                                        <TabsList className="grid w-full grid-cols-2">
+                                            <TabsTrigger value="cuentas">Cuentas ({comparativa_cuentas.length})</TabsTrigger>
+                                            <TabsTrigger value="clientes">Clientes ({comparativa_clientes?.length ?? 0})</TabsTrigger>
+                                        </TabsList>
+
+                                        {/* Tab Cuentas */}
+                                        <TabsContent value="cuentas" className="mt-4">
+                                            <div className="rounded-md border">
+                                                <Table>
+                                                    <TableHeader>
+                                                        <TableRow>
+                                                            <TableHead>Cuenta</TableHead>
+                                                            <TableHead>Moneda</TableHead>
+                                                            <TableHead className="text-right">Anterior</TableHead>
+                                                            <TableHead className="text-right">Actual</TableHead>
+                                                            <TableHead className="text-right">Diferencia</TableHead>
+                                                        </TableRow>
+                                                    </TableHeader>
+                                                    <TableBody>
+                                                        {comparativa_cuentas.map((item: ComparativaItem) => (
+                                                            <TableRow key={item.id}>
+                                                                <TableCell className="font-medium">{item.nombre}</TableCell>
+                                                                <TableCell>
+                                                                    <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium">
+                                                                        {item.moneda}
+                                                                    </span>
+                                                                </TableCell>
+                                                                <TableCell className="text-right font-mono">
+                                                                    ${Number(item.saldo_anterior).toFixed(2)}
+                                                                </TableCell>
+                                                                <TableCell className="text-right font-mono font-medium">
+                                                                    ${Number(item.saldo_actual).toFixed(2)}
+                                                                </TableCell>
+                                                                <TableCell className="text-right font-mono">
+                                                                    {item.diferencia > 0 ? (
+                                                                        <span className="text-green-600">
+                                                                            +${Number(item.diferencia).toFixed(2)} 📈
+                                                                        </span>
+                                                                    ) : item.diferencia < 0 ? (
+                                                                        <span className="text-red-600">
+                                                                            ${Number(item.diferencia).toFixed(2)} 📉
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-muted-foreground">-</span>
+                                                                    )}
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        ))}
+                                                    </TableBody>
+                                                </Table>
+                                            </div>
+                                        </TabsContent>
+
+                                        {/* Tab Clientes */}
+                                        <TabsContent value="clientes" className="mt-4">
+                                            {comparativa_clientes && comparativa_clientes.length > 0 ? (
+                                                <div className="rounded-md border">
+                                                    <Table>
+                                                        <TableHeader>
+                                                            <TableRow>
+                                                                <TableHead>Cliente</TableHead>
+                                                                <TableHead className="text-right">Deuda Anterior</TableHead>
+                                                                <TableHead className="text-right">Deuda Actual</TableHead>
+                                                                <TableHead className="text-right">Diferencia</TableHead>
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                            {comparativa_clientes.map((item: ComparativaClienteItem) => (
+                                                                <TableRow key={item.id}>
+                                                                    <TableCell className="font-medium">{item.nombre}</TableCell>
+                                                                    <TableCell className="text-right font-mono">
+                                                                        ${Number(item.deuda_anterior).toFixed(2)}
+                                                                    </TableCell>
+                                                                    <TableCell className="text-right font-mono font-medium">
+                                                                        ${Number(item.deuda_actual).toFixed(2)}
+                                                                    </TableCell>
+                                                                    <TableCell className="text-right font-mono">
+                                                                        {item.diferencia < 0 ? (
+                                                                            <span className="text-green-600">
+                                                                                ${Number(item.diferencia).toFixed(2)} ✅
+                                                                            </span>
+                                                                        ) : item.diferencia > 0 ? (
+                                                                            <span className="text-red-600">
+                                                                                +${Number(item.diferencia).toFixed(2)} ⚠️
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span className="text-muted-foreground">-</span>
+                                                                        )}
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            ))}
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            ) : (
+                                                <p className="text-muted-foreground py-8 text-center italic">
+                                                    No hay clientes con deuda registrada.
+                                                </p>
+                                            )}
+                                        </TabsContent>
+                                    </Tabs>
+                                </CardContent>
+                            </Card>
+                        )}
+
                         {/* Acción Final */}
                         <Card className="border-primary/20 bg-primary/5">
                             <CardHeader>
@@ -883,6 +1278,17 @@ export default function Create({ calculos, fecha_apertura, moneda_referencia = '
                                     <p className="text-4xl font-black text-emerald-600">${Number(calculos.ventas_efectivo).toFixed(2)}</p>
                                     <p className="text-muted-foreground mt-2 text-xs">Incluyendo todas las monedas y métodos de pago</p>
                                 </div>
+
+                                {/* Comisiones a Gestores - Si existen */}
+                                {totalComisionesGestor > 0 && (
+                                    <div className="rounded-lg border border-purple-200 bg-purple-50 p-4">
+                                        <p className="text-muted-foreground text-xs font-bold uppercase mb-1">- Comisiones a Gestores</p>
+                                        <p className="text-2xl font-black text-purple-700">-${Number(totalComisionesGestor).toFixed(2)}</p>
+                                        <p className="text-muted-foreground mt-1 text-xs">
+                                            {comisionesGestorDetalles.length} venta{comisionesGestorDetalles.length !== 1 ? 's' : ''} con gestor
+                                        </p>
+                                    </div>
+                                )}
 
                                 <div className="space-y-1">
                                     <Label className="text-muted-foreground text-xs font-bold uppercase">Observaciones del Turno</Label>

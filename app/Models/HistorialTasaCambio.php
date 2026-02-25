@@ -21,13 +21,13 @@ class HistorialTasaCambio extends Model
     ];
 
     protected $casts = [
-        'tasa_anterior' => 'decimal:6',
-        'tasa_nueva' => 'decimal:6',
-        'diferencia_tasa' => 'decimal:6',
-        'porcentaje_cambio' => 'decimal:4',
-        'total_cuentas_afectadas' => 'decimal:6',
-        'impacto_financiero' => 'decimal:6',
-        'impacto_porcentaje' => 'decimal:4',
+        'tasa_anterior' => 'decimal:2',
+        'tasa_nueva' => 'decimal:2',
+        'diferencia_tasa' => 'decimal:2',
+        'porcentaje_cambio' => 'decimal:2',
+        'total_cuentas_afectadas' => 'decimal:2',
+        'impacto_financiero' => 'decimal:2',
+        'impacto_porcentaje' => 'decimal:2',
         'numero_cuentas_afectadas' => 'integer',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',

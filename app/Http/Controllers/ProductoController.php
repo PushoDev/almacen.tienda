@@ -100,12 +100,15 @@ class ProductoController extends Controller
             ];
         });
 
+        $canViewStockStats = in_array($user->role, ['admin', 'moderador']);
+
         return Inertia::render('Productos/Index', [
             'productos' => $paginatedProducts,
             'almacenes' => Almacen::select('id', 'nombre_almacen')->get(),
             'categorias' => Categoria::select('id', 'nombre_categoria')->get(),
             'filters' => $request->only(['search', 'categoria_id', 'stock_bajo']),
             'sort' => ['field' => $sortField, 'direction' => $sortDirection],
+            'canViewStockStats' => $canViewStockStats,
         ]);
     }
 
