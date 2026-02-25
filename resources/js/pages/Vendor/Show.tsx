@@ -207,7 +207,17 @@ interface Props {
 }
 
 export default function ResultadoCarrito({ venta, userRole }: Props) {
-    console.log('🔍 Venta recibida en el frontend:', venta);
+    // ========================================================================
+    // CONSOLE.LOG 1: DATOS QUE LLEGAN DEL BACKEND AL CARGAR LA PÁGINA
+    // ========================================================================
+    console.log('📦 DATOS DE VENTA RECIBIDOS DEL BACKEND:', {
+        venta,
+        destinatario: venta.destinatario,
+        gestor: venta.gestor,
+        todos_los_campos_venta: Object.keys(venta),
+        campos_gestor: venta.gestor ? Object.keys(venta.gestor) : 'NO HAY GESTOR',
+        campos_destinatario: venta.destinatario ? Object.keys(venta.destinatario) : 'NO HAY DESTINATARIO',
+    });
 
     // Estados para gestionar las acciones
     const [isCancelling, setIsCancelling] = useState(false);
@@ -256,10 +266,27 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
 
     // Cargar datos del gestor existentes
     useEffect(() => {
+        // ====================================================================
+        // CONSOLE.LOG 5: USEFFECT - CARGANDO DATOS DEL GESTOR
+        // ====================================================================
+        console.log('🔄 USEFFECT - Cargando datos del gestor:', {
+            ventaGestor: currentVenta.gestor,
+            cuentasGestorDisponibles: cuentasGestor.length,
+            gestorMontoSet: gestorMonto,
+            gestorCuentaIdSet: gestorCuentaId,
+            hayDatosGestor: !!currentVenta.gestor,
+        });
+        
         if (currentVenta.gestor) {
             setEsVentaGestor(true);
             setGestorMonto(String(currentVenta.gestor.monto || ''));
+            console.log('  ✅ Gestor encontrado, configurando estados:', {
+                monto: currentVenta.gestor.monto,
+                cuenta_id: currentVenta.gestor.cuenta_id,
+            });
             // La cuenta se cargará cuando estén disponibles las cuentas
+        } else {
+            console.log('  ❌ No hay datos de gestor en la venta');
         }
     }, [currentVenta.gestor, cuentasGestor]);
 
@@ -267,6 +294,21 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
     useEffect(() => {
         if (isDestinatarioDialogOpen && currentVenta.destinatario && isEditingDestinatario) {
             console.log('📝 Cargando datos del destinatario existente para edición:', currentVenta.destinatario);
+            // ==================================================================
+            // CONSOLE.LOG 6: DATOS DEL DESTINATARIO AL EDITAR
+            // ==================================================================
+            console.log('👁️ USEFFECT EDITAR - Datos cargados:', {
+                isDestinatarioDialogOpen,
+                isEditingDestinatario,
+                destinatarioExiste: !!currentVenta.destinatario,
+                destinatarioData: currentVenta.destinatario,
+                gestorData: currentVenta.gestor,
+                formularioSeLlenaraCon: {
+                    nombre: currentVenta.destinatario.nombre,
+                    apellidos: currentVenta.destinatario.apellidos,
+                    carnet_identidad: currentVenta.destinatario.carnet_identidad,
+                }
+            });
             setFormDestinatario({
                 nombre: currentVenta.destinatario.nombre,
                 apellidos: currentVenta.destinatario.apellidos,
@@ -354,6 +396,29 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
         console.log('🆔 ID de venta:', currentVenta.id);
         console.log('✏️ Modo edición:', isEditingDestinatario);
 
+        // ====================================================================
+        // CONSOLE.LOG 2: ANTES DE ENVIAR AL BACKEND
+        // ====================================================================
+        console.log('📤 ENVIANDO AL BACKEND:', {
+            url: route('ventas.destinatario.store', currentVenta.id),
+            payload: {
+                ...formDestinatario,
+                es_venta_gestor: esVentaGestor,
+                gestor_monto: esVentaGestor ? parseFloat(gestorMonto) || 0 : 0,
+                gestor_cuenta_id: esVentaGestor ? gestorCuentaId : null,
+                gestor_comentario: esVentaGestor ? gestorComentario : null,
+                tasa_aplicada_venta: esVentaGestor && tasaAplicadaVenta ? parseFloat(tasaAplicadaVenta) : null,
+            },
+            estados: {
+                esVentaGestor,
+                gestorMonto,
+                gestorCuentaId,
+                gestorComentario,
+                tasaAplicadaVenta,
+                formDestinatario,
+            }
+        });
+
         setIsSavingDestinatario(true);
 
         try {
@@ -372,7 +437,17 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
             };
 
             const response = await axios.post(url, payload);
-            console.log('✅ Respuesta del servidor:', response.data);
+            
+            // ==================================================================
+            // CONSOLE.LOG 3: DESPUÉS DE RECIBIR RESPUESTA DEL BACKEND
+            // ==================================================================
+            console.log('📥 RESPUESTA DEL BACKEND:', {
+                success: response.data.success,
+                message: response.data.message,
+                destinatario: response.data.destinatario,
+                gestor: response.data.gestor,
+                respuesta_completa: response.data,
+            });
 
             if (response.data.success) {
                 const message = isEditingDestinatario
@@ -440,9 +515,27 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
 
     // FUNCIÓN: Abrir diálogo para editar destinatario
     const handleEditarDestinatario = () => {
+        // ====================================================================
+        // CONSOLE.LOG 4: CLICK EN EDITAR - DEPURACIÓN
+        // ====================================================================
+        console.log('✏️ CLICK EN EDITAR - Estados antes:', {
+            isDestinatarioDialogOpen,
+            isEditingDestinatario,
+            destinatarioExiste: !!currentVenta.destinatario,
+            gestorExiste: !!currentVenta.gestor,
+            formDestinatarioActual: formDestinatario,
+        });
+        console.log('🔴 CAMBIANDO ESTADOS:');
+        console.log('  - isEditingDestinatario: false → true');
+        console.log('  - isDestinatarioDialogOpen: false → true');
+        
         console.log('✏️ Abriendo editor de destinatario');
         setIsEditingDestinatario(true);
         setIsDestinatarioDialogOpen(true);
+        
+        console.log('🟢 ESTADOS DESPUÉS DEL CAMBIO:');
+        console.log('  - isEditingDestinatario:', true);
+        console.log('  - isDestinatarioDialogOpen:', true);
     };
 
     // FUNCIÓN: Abrir diálogo para nuevo destinatario
@@ -910,7 +1003,16 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                 <Button
                                     variant="outline"
                                     className="flex cursor-pointer items-center gap-2 border-green-300 bg-green-50 text-green-700 hover:bg-green-100"
-                                    onClick={handleEditarDestinatario}
+                                    onClick={(e) => {
+                                        console.log('🔴 CLICK EN BOTÓN EDITAR RECEPTOR (en el AlertDialog)');
+                                        console.log('  - Evento:', e);
+                                        console.log('  - Estados actuales:', {
+                                            isDestinatarioDialogOpen,
+                                            isEditingDestinatario,
+                                            destinatarioExiste: !!currentVenta.destinatario,
+                                        });
+                                        handleEditarDestinatario();
+                                    }}
                                 >
                                     <Edit size={16} />
                                     Editar Receptor
@@ -1180,7 +1282,17 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                     variant="outline"
                                     size="sm"
                                     className="flex items-center gap-2 border-green-300 text-green-700 hover:bg-green-100"
-                                    onClick={handleEditarDestinatario}
+                                    onClick={(e) => {
+                                        console.log('🔴 CLICK EN BOTÓN EDITAR (en el card del destinatario)');
+                                        console.log('  - Evento:', e);
+                                        console.log('  - Estados actuales:', {
+                                            isDestinatarioDialogOpen,
+                                            isEditingDestinatario,
+                                            destinatarioExiste: !!currentVenta.destinatario,
+                                            isVentaPendiente,
+                                        });
+                                        handleEditarDestinatario();
+                                    }}
                                 >
                                     <Edit size={14} />
                                     Editar
@@ -1243,6 +1355,17 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 {/* Información del Gestor */}
                 {currentVenta.gestor && (
                     <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+                        {console.log('👁️ RENDERIZANDO GESTOR - Datos disponibles:', {
+                            gestorExiste: !!currentVenta.gestor,
+                            gestorData: currentVenta.gestor,
+                            campos: {
+                                monto: currentVenta.gestor?.monto,
+                                cuenta_id: currentVenta.gestor?.cuenta_id,
+                                cuenta_nombre: currentVenta.gestor?.cuenta_nombre,
+                                comentario: currentVenta.gestor?.comentario,
+                                tasa_aplicada: currentVenta.gestor?.tasa_aplicada,
+                            }
+                        })}
                         <div className="flex items-center gap-2">
                             <DollarSign className="h-5 w-5 text-blue-600" />
                             <h3 className="font-semibold text-blue-800">Gestor - Comisión</h3>

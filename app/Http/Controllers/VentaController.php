@@ -593,6 +593,20 @@ class VentaController extends Controller
             ] : null,
             'monedas_para_reporte' => $this->buildMonedasParaReporte($venta),
             'monto_diferencia_cambiaria' => $venta->monto_diferencia_cambiaria,
+            'gestor' => $venta->es_venta_gestor && $venta->gestor_cuenta_id ? [
+                'monto' => (float) $venta->gestor_monto,
+                'cuenta_id' => $venta->gestor_cuenta_id,
+                'comentario' => $venta->gestor_comentario,
+                'cuenta_nombre' => $venta->gestorCuenta?->nombre_cuenta,
+                'tasa_aplicada' => $venta->tasa_aplicada_venta ? (float) $venta->tasa_aplicada_venta : null,
+                'moneda' => $venta->gestorCuenta?->moneda ? [
+                    'codigo' => $venta->gestorCuenta->moneda->codigo_moneda,
+                    'simbolo' => $venta->gestorCuenta->moneda->simbolo_moneda,
+                    'nombre' => $venta->gestorCuenta->moneda->nombre_moneda,
+                    'tasa_cambio' => (float) $venta->gestorCuenta->moneda->tasa_cambio,
+                ] : null,
+                'tipo_cuenta' => $venta->gestorCuenta?->tipo,
+            ] : null,
         ];
 
         return Inertia::render('Vendor/Show', [
@@ -950,18 +964,26 @@ class VentaController extends Controller
             }
         });
 
-        $venta->load('destinatario');
+        $venta->load('gestorCuenta');
 
         return response()->json([
             'success' => true,
             'message' => 'Información del receptor guardada correctamente',
             'destinatario' => $venta->destinatario,
-            'gestor' => [
-                'es_venta_gestor' => $venta->es_venta_gestor,
-                'monto' => $venta->gestor_monto,
+            'gestor' => $venta->es_venta_gestor && $venta->gestor_cuenta_id ? [
+                'monto' => (float) $venta->gestor_monto,
                 'cuenta_id' => $venta->gestor_cuenta_id,
                 'comentario' => $venta->gestor_comentario,
-            ],
+                'cuenta_nombre' => $venta->gestorCuenta?->nombre_cuenta,
+                'tasa_aplicada' => $venta->tasa_aplicada_venta ? (float) $venta->tasa_aplicada_venta : null,
+                'moneda' => $venta->gestorCuenta?->moneda ? [
+                    'codigo' => $venta->gestorCuenta->moneda->codigo_moneda,
+                    'simbolo' => $venta->gestorCuenta->moneda->simbolo_moneda,
+                    'nombre' => $venta->gestorCuenta->moneda->nombre_moneda,
+                    'tasa_cambio' => (float) $venta->gestorCuenta->moneda->tasa_cambio,
+                ] : null,
+                'tipo_cuenta' => $venta->gestorCuenta?->tipo,
+            ] : null,
         ]);
     }
 
@@ -1071,7 +1093,7 @@ class VentaController extends Controller
         }
 
         // Construir query base
-        $query = Venta::with(['cliente', 'almacen', 'usuario', 'pagos', 'moneda', 'destinatario', 'monedaCobro'])
+        $query = Venta::with(['cliente', 'almacen', 'usuario', 'pagos', 'moneda', 'destinatario', 'monedaCobro', 'gestorCuenta'])
             ->withCount('detalles');
 
         // Filtrar por usuario (excepto admin y moderador)
@@ -1146,13 +1168,17 @@ class VentaController extends Controller
                     ] : null,
                     'monto_diferencia_cambiaria' => $venta->monto_diferencia_cambiaria,
                     // GESTOR
-                    'gestor' => [
-                        'monto' => $venta->gestor_monto,
+                    'gestor' => $venta->es_venta_gestor && $venta->gestor_cuenta_id ? [
+                        'monto' => (float) $venta->gestor_monto,
                         'cuenta_id' => $venta->gestor_cuenta_id,
                         'comentario' => $venta->gestor_comentario,
                         'cuenta_nombre' => $venta->gestorCuenta?->nombre_cuenta,
-                        'tasa_aplicada' => $venta->tasa_aplicada_venta,
-                    ],
+                        'tasa_aplicada' => $venta->tasa_aplicada_venta ? (float) $venta->tasa_aplicada_venta : null,
+                        'moneda' => $venta->gestorCuenta?->moneda ? [
+                            'codigo' => $venta->gestorCuenta->moneda->codigo_moneda,
+                            'simbolo' => $venta->gestorCuenta->moneda->simbolo_moneda,
+                        ] : null,
+                    ] : null,
                 ];
             });
 
