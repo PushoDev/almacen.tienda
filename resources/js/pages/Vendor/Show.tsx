@@ -12,6 +12,7 @@ import {
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,11 +34,13 @@ import {
     FileText,
     IdCard,
     MapPin,
+    MessageSquare,
     Package,
     Phone,
     Printer,
     ShoppingBag,
     Store,
+    TrendingUp,
     User,
     UserCheck,
     Users,
@@ -765,38 +768,16 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                         Ver Todas las Ventas
                     </Link>
 
-                    {/* Botón para agregar/editar destinatario (solo para ventas pendientes) */}
-                    {isVentaPendiente && (
-                        <>
-                            {!currentVenta.destinatario ? (
-                                <Button
-                                    variant="outline"
-                                    className="flex cursor-pointer items-center gap-2 border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
-                                    onClick={handleNuevoDestinatario}
-                                >
-                                    <Users size={16} />
-                                    Agregar Receptor
-                                </Button>
-                            ) : (
-                                <Button
-                                    variant="outline"
-                                    className="flex cursor-pointer items-center gap-2 border-green-300 bg-green-50 text-green-700 hover:bg-green-100"
-                                    onClick={(e) => {
-                                        console.log('🔴 CLICK EN BOTÓN EDITAR RECEPTOR');
-                                        console.log('  - Evento:', e);
-                                        console.log('  - Estados actuales:', {
-                                            isDestinatarioDialogOpen,
-                                            isEditingDestinatario,
-                                            destinatarioExiste: !!currentVenta.destinatario,
-                                        });
-                                        handleEditarDestinatario();
-                                    }}
-                                >
-                                    <Edit size={16} />
-                                    Editar Receptor
-                                </Button>
-                            )}
-                        </>
+                    {/* Botón para agregar destinatario (solo cuando NO hay destinatario) */}
+                    {isVentaPendiente && !currentVenta.destinatario && (
+                        <Button
+                            variant="outline"
+                            className="flex cursor-pointer items-center gap-2"
+                            onClick={handleNuevoDestinatario}
+                        >
+                            <Users size={16} />
+                            Agregar Receptor
+                        </Button>
                     )}
 
                     {/* AlertDialog para agregar/editar destinatario - SIEMPRE PRESENTE */}
@@ -1322,132 +1303,147 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                     )}
                 </div>
 
-                {/* Sección de Información del Destinatario */}
-                {currentVenta.destinatario && (
-                    <div className="rounded-lg border border-green-200 p-6 shadow-sm">
-                        <div className="mb-4 flex items-center justify-between">
-                            <h3 className="flex items-center gap-2 text-lg font-semibold text-green-800">
-                                <Users className="h-5 w-5" />✅ Receptor Registrado
-                            </h3>
-                            {isVentaPendiente && (
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="flex items-center gap-2 border-green-300 text-green-700 hover:bg-green-100"
-                                    onClick={(e) => {
-                                        console.log('🔴 CLICK EN BOTÓN EDITAR (en el card del destinatario)');
-                                        console.log('  - Evento:', e);
-                                        console.log('  - Estados actuales:', {
-                                            isDestinatarioDialogOpen,
-                                            isEditingDestinatario,
-                                            destinatarioExiste: !!currentVenta.destinatario,
-                                            isVentaPendiente,
-                                        });
-                                        handleEditarDestinatario();
-                                    }}
-                                >
-                                    <Edit size={14} />
-                                    Editar
-                                </Button>
-                            )}
-                        </div>
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                            <div className="space-y-1">
-                                <div className="flex items-center gap-2">
-                                    <User className="h-4 w-4 text-green-600" />
-                                    <span className="text-sm font-medium text-green-700">Nombre Completo:</span>
+                {/* Sección de Información del Destinatario y Gestor - GRID */}
+                {(currentVenta.destinatario || currentVenta.gestor) && (
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        {/* Tarjeta de Destinatario */}
+                        {currentVenta.destinatario && (
+                            <div className="bg-card rounded-lg border border-sidebar-accent p-6 shadow-sm">
+                                <div className="mb-4 flex items-center justify-between">
+                                    <h3 className="flex items-center gap-2 text-base font-semibold">
+                                        <Users className="h-5 w-5 text-green-600" />
+                                        <span className="text-foreground">✅ Receptor Registrado</span>
+                                    </h3>
+                                    {isVentaPendiente && (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={(e) => {
+                                                console.log('🔴 CLICK EN BOTÓN EDITAR');
+                                                handleEditarDestinatario();
+                                            }}
+                                        >
+                                            <Edit size={14} />
+                                            <span className="ml-1">Editar</span>
+                                        </Button>
+                                    )}
                                 </div>
-                                <p className="text-sm">
-                                    {currentVenta.destinatario.nombre} {currentVenta.destinatario.apellidos}
-                                </p>
-                            </div>
+                                <div className="space-y-3">
+                                    <div className="flex items-start gap-2">
+                                        <User className="mt-0.5 h-4 w-4 text-green-600 shrink-0" />
+                                        <div className="flex-1">
+                                            <p className="text-xs font-medium text-muted-foreground">Nombre Completo:</p>
+                                            <p className="text-sm">
+                                                {currentVenta.destinatario.nombre} {currentVenta.destinatario.apellidos}
+                                            </p>
+                                        </div>
+                                    </div>
 
-                            <div className="space-y-1">
-                                <div className="flex items-center gap-2">
-                                    <IdCard className="h-4 w-4 text-green-600" />
-                                    <span className="text-sm font-medium text-green-700">Carnet de Identidad:</span>
-                                </div>
-                                <p className="text-sm">{currentVenta.destinatario.carnet_identidad}</p>
-                            </div>
+                                    {currentVenta.destinatario.carnet_identidad && (
+                                        <div className="flex items-start gap-2">
+                                            <IdCard className="mt-0.5 h-4 w-4 text-green-600 shrink-0" />
+                                            <div className="flex-1">
+                                                <p className="text-xs font-medium text-muted-foreground">Carnet de Identidad:</p>
+                                                <p className="text-sm">{currentVenta.destinatario.carnet_identidad}</p>
+                                            </div>
+                                        </div>
+                                    )}
 
-                            <div className="space-y-1">
-                                <div className="flex items-center gap-2">
-                                    <Phone className="h-4 w-4 text-green-600" />
-                                    <span className="text-sm font-medium text-green-700">Teléfono Contacto:</span>
-                                </div>
-                                <p className="text-sm">{currentVenta.destinatario.telefono_contacto || 'No especificado'}</p>
-                            </div>
+                                    {currentVenta.destinatario.telefono_contacto && (
+                                        <div className="flex items-start gap-2">
+                                            <Phone className="mt-0.5 h-4 w-4 text-green-600 shrink-0" />
+                                            <div className="flex-1">
+                                                <p className="text-xs font-medium text-muted-foreground">Teléfono Contacto:</p>
+                                                <p className="text-sm">{currentVenta.destinatario.telefono_contacto}</p>
+                                            </div>
+                                        </div>
+                                    )}
 
-                            <div className="space-y-1 md:col-span-2">
-                                <div className="flex items-center gap-2">
-                                    <MapPin className="h-4 w-4 text-green-600" />
-                                    <span className="text-sm font-medium text-green-700">Dirección de Residencia:</span>
-                                </div>
-                                <p className="text-sm">{currentVenta.destinatario.direccion_residencia}</p>
-                            </div>
+                                    {currentVenta.destinatario.direccion_residencia && (
+                                        <div className="flex items-start gap-2">
+                                            <MapPin className="mt-0.5 h-4 w-4 text-green-600 shrink-0" />
+                                            <div className="flex-1">
+                                                <p className="text-xs font-medium text-muted-foreground">Dirección de Residencia:</p>
+                                                <p className="text-sm">{currentVenta.destinatario.direccion_residencia}</p>
+                                            </div>
+                                        </div>
+                                    )}
 
-                            <div className="space-y-1">
-                                <div className="flex items-center gap-2">
-                                    <Users className="h-4 w-4 text-green-600" />
-                                    <span className="text-sm font-medium text-green-700">Parentesco:</span>
-                                </div>
-                                <p className="text-sm">{currentVenta.destinatario.parentesco_cliente || 'No especificado'}</p>
-                            </div>
+                                    {currentVenta.destinatario.parentesco_cliente && (
+                                        <div className="flex items-start gap-2">
+                                            <Users className="mt-0.5 h-4 w-4 text-green-600 shrink-0" />
+                                            <div className="flex-1">
+                                                <p className="text-xs font-medium text-muted-foreground">Parentesco:</p>
+                                                <p className="text-sm">{currentVenta.destinatario.parentesco_cliente}</p>
+                                            </div>
+                                        </div>
+                                    )}
 
-                            {currentVenta.destinatario.observaciones && (
-                                <div className="space-y-1 md:col-span-3">
-                                    <span className="text-sm font-medium text-green-700">Observaciones:</span>
-                                    <p className="text-sm">{currentVenta.destinatario.observaciones}</p>
+                                    {currentVenta.destinatario.observaciones && (
+                                        <div className="flex items-start gap-2">
+                                            <FileText className="mt-0.5 h-4 w-4 text-green-600 shrink-0" />
+                                            <div className="flex-1">
+                                                <p className="text-xs font-medium text-muted-foreground">Observaciones:</p>
+                                                <p className="text-sm">{currentVenta.destinatario.observaciones}</p>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
-                            )}
-                        </div>
-                    </div>
-                )}
-
-                {/* Información del Gestor */}
-                {currentVenta.gestor && (
-                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
-                        {console.log('👁️ RENDERIZANDO GESTOR - Datos disponibles:', {
-                            gestorExiste: !!currentVenta.gestor,
-                            gestorData: currentVenta.gestor,
-                            campos: {
-                                monto: currentVenta.gestor?.monto,
-                                cuenta_id: currentVenta.gestor?.cuenta_id,
-                                cuenta_nombre: currentVenta.gestor?.cuenta_nombre,
-                                comentario: currentVenta.gestor?.comentario,
-                                tasa_aplicada: currentVenta.gestor?.tasa_aplicada,
-                            }
-                        })}
-                        <div className="flex items-center gap-2">
-                            <DollarSign className="h-5 w-5 text-blue-600" />
-                            <h3 className="font-semibold text-blue-800">Gestor - Comisión</h3>
-                        </div>
-                        <div className="mt-3 space-y-2">
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium text-blue-700">Monto:</span>
-                                <span className="text-sm font-bold text-blue-900">
-                                    {currentVenta.gestor.monto || 0} {currentVenta.moneda_cobro?.simbolo || ''}
-                                </span>
                             </div>
-                            {currentVenta.gestor.cuenta_nombre && (
-                                <div className="flex items-center justify-between">
-                                    <span className="text-sm font-medium text-blue-700">Cuenta:</span>
-                                    <span className="text-sm text-blue-900">{currentVenta.gestor.cuenta_nombre}</span>
+                        )}
+
+                        {/* Tarjeta de Gestor */}
+                        {currentVenta.gestor && (
+                            <div className="bg-card rounded-lg border border-sidebar-accent p-6 shadow-sm">
+                                <div className="mb-4 flex items-center gap-2">
+                                    <DollarSign className="h-5 w-5 text-blue-600" />
+                                    <h3 className="text-base font-semibold text-foreground">💼 Gestor - Comisión</h3>
                                 </div>
-                            )}
-                            {currentVenta.gestor.tasa_aplicada && (
-                                <div className="flex items-center justify-between">
-                                    <span className="text-sm font-medium text-blue-700">Tasa Aplicada:</span>
-                                    <span className="text-sm text-blue-900">{currentVenta.gestor.tasa_aplicada}</span>
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <DollarSign className="h-4 w-4 text-blue-600" />
+                                            <span className="text-xs font-medium text-muted-foreground">Monto:</span>
+                                        </div>
+                                        <Badge variant="secondary" className="font-bold">
+                                            {currentVenta.gestor.monto || 0} {currentVenta.moneda_cobro?.simbolo || ''}
+                                        </Badge>
+                                    </div>
+
+                                    {currentVenta.gestor.cuenta_nombre && (
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <CreditCard className="h-4 w-4 text-blue-600" />
+                                                <span className="text-xs font-medium text-muted-foreground">Cuenta:</span>
+                                            </div>
+                                            <span className="text-sm font-medium">{currentVenta.gestor.cuenta_nombre}</span>
+                                        </div>
+                                    )}
+
+                                    {currentVenta.gestor.tasa_aplicada && (
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <TrendingUp className="h-4 w-4 text-blue-600" />
+                                                <span className="text-xs font-medium text-muted-foreground">Tasa Aplicada:</span>
+                                            </div>
+                                            <span className="text-sm font-medium">{currentVenta.gestor.tasa_aplicada}</span>
+                                        </div>
+                                    )}
+
+                                    {currentVenta.gestor.comentario && (
+                                        <div className="rounded-md bg-muted p-3">
+                                            <div className="flex items-start gap-2">
+                                                <MessageSquare className="mt-0.5 h-4 w-4 text-blue-600 shrink-0" />
+                                                <div className="flex-1">
+                                                    <p className="text-xs font-medium text-muted-foreground">Comentario:</p>
+                                                    <p className="text-sm italic">{currentVenta.gestor.comentario}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
-                            )}
-                            {currentVenta.gestor.comentario && (
-                                <div className="flex items-start justify-between">
-                                    <span className="text-sm font-medium text-blue-700">Comentario:</span>
-                                    <span className="max-w-[60%] text-right text-sm text-blue-900">{currentVenta.gestor.comentario}</span>
-                                </div>
-                            )}
-                        </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
