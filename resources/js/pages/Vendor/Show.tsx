@@ -13,11 +13,11 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
@@ -221,6 +221,14 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
         campos_gestor: venta.gestor ? Object.keys(venta.gestor) : 'NO HAY GESTOR',
         campos_destinatario: venta.destinatario ? Object.keys(venta.destinatario) : 'NO HAY DESTINATARIO',
     });
+    console.log('=====================================');
+    console.log('🔍 ANÁLISIS INICIAL DE DATOS:');
+    console.log('  • ¿venta.destinatario existe?', !!venta.destinatario);
+    console.log('  • ¿venta.gestor existe?', !!venta.gestor);
+    console.log('  • ¿Ambos existen?', !!venta.destinatario && !!venta.gestor);
+    console.log('  • ¿Solo destinatario existe?', !!venta.destinatario && !venta.gestor);
+    console.log('  • ¿Solo gestor existe?', !venta.destinatario && !!venta.gestor);
+    console.log('=====================================');
 
     // Estados para gestionar las acciones
     const [isCancelling, setIsCancelling] = useState(false);
@@ -229,7 +237,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
     const [currentVenta, setCurrentVenta] = useState<Venta>(venta);
     const [isDestinatarioDialogOpen, setIsDestinatarioDialogOpen] = useState(false);
     const [isEditingDestinatario, setIsEditingDestinatario] = useState(false);
-    const [isReceptorExpanded, setIsReceptorExpanded] = useState(true);
+    const [activeTab, setActiveTab] = useState<'receptor' | 'gestor'>('receptor');
     const [monedaReporteSeleccionada, setMonedaReporteSeleccionada] = useState<string>(() =>
         String(currentVenta.moneda_principal?.id ?? currentVenta.monedas_para_reporte?.[0]?.id ?? ''),
     );
@@ -253,7 +261,6 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
     const [cuentasGestor, setCuentasGestor] = useState<Cuenta[]>([]);
     const [cuentaGestorSeleccionada, setCuentaGestorSeleccionada] = useState<Cuenta | null>(null);
     const [tasaAplicadaVenta, setTasaAplicadaVenta] = useState<string>('');
-    const [isGestorExpanded, setIsGestorExpanded] = useState<boolean>(false); // Para colapsable del gestor
 
     // Cargar cuentas para gestor
     useEffect(() => {
@@ -297,7 +304,15 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
     // Cargar datos del destinatario existente cuando se abre el diálogo
     useEffect(() => {
         if (isDestinatarioDialogOpen && currentVenta.destinatario && isEditingDestinatario) {
-            console.log('📝 Cargando datos del destinatario existente para edición:', currentVenta.destinatario);
+            console.log('📝 CARGANDO DATOS DEL DESTINATARIO EXISTENTE PARA EDICIÓN');
+            console.log('=====================================');
+            console.log('  • isDestinatarioDialogOpen:', isDestinatarioDialogOpen);
+            console.log('  • isEditingDestinatario:', isEditingDestinatario);
+            console.log('  • currentVenta.destinatario:', currentVenta.destinatario);
+            console.log('  • currentVenta.gestor:', currentVenta.gestor);
+            console.log('  • ¿Hay gestor?', !!currentVenta.gestor);
+            console.log('=====================================');
+            
             // ==================================================================
             // CONSOLE.LOG 6: DATOS DEL DESTINATARIO AL EDITAR
             // ==================================================================
@@ -313,7 +328,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                     carnet_identidad: currentVenta.destinatario.carnet_identidad,
                 }
             });
-            
+
             // Cargar datos del destinatario
             setFormDestinatario({
                 nombre: currentVenta.destinatario.nombre,
@@ -324,29 +339,42 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 parentesco_cliente: currentVenta.destinatario.parentesco_cliente || '',
                 observaciones: currentVenta.destinatario.observaciones || '',
             });
-            
+
             // Cargar datos del gestor si existen
             if (currentVenta.gestor) {
-                console.log('  📦 Cargando datos del gestor:', currentVenta.gestor);
+                console.log('  📦 CARGANDO DATOS DEL GESTOR:', currentVenta.gestor);
+                console.log('  • monto:', currentVenta.gestor.monto);
+                console.log('  • cuenta_id:', currentVenta.gestor.cuenta_id);
+                console.log('  • comentario:', currentVenta.gestor.comentario);
+                console.log('  • tasa_aplicada:', currentVenta.gestor.tasa_aplicada);
+                
                 setEsVentaGestor(true);
                 setGestorMonto(String(currentVenta.gestor.monto || ''));
                 setGestorCuentaId(String(currentVenta.gestor.cuenta_id || ''));
                 setGestorComentario(currentVenta.gestor.comentario || '');
                 setTasaAplicadaVenta(currentVenta.gestor.tasa_aplicada ? String(currentVenta.gestor.tasa_aplicada) : '');
-                setIsGestorExpanded(true); // Expandir automáticamente el colapsable del gestor
-                
+                setActiveTab('gestor'); // Cambiar automáticamente al tab del gestor si hay datos
+
                 // Buscar la cuenta en la lista de cuentas disponibles
                 if (currentVenta.gestor.cuenta_id && cuentasGestor.length > 0) {
                     const cuentaEncontrada = cuentasGestor.find(c => String(c.id) === String(currentVenta.gestor.cuenta_id));
                     if (cuentaEncontrada) {
                         setCuentaGestorSeleccionada(cuentaEncontrada);
-                        console.log('  ✅ Cuenta del gestor encontrada:', cuentaEncontrada);
+                        console.log('  ✅ CUENTA DEL GESTOR ENCONTRADA:', cuentaEncontrada);
                     } else {
-                        console.log('  ⚠️ Cuenta del gestor NO encontrada en la lista:', currentVenta.gestor.cuenta_id);
+                        console.log('  ⚠️ CUENTA DEL GESTOR NO ENCONTRADA EN LA LISTA:', currentVenta.gestor.cuenta_id);
+                        console.log('  • Lista de cuentas disponibles:', cuentasGestor);
                     }
                 }
             }
         } else if (isDestinatarioDialogOpen && !isEditingDestinatario) {
+            console.log('🧹 LIMPIANDO FORMULARIO PARA NUEVO DESTINATARIO');
+            console.log('=====================================');
+            console.log('  • isDestinatarioDialogOpen:', isDestinatarioDialogOpen);
+            console.log('  • isEditingDestinatario:', isEditingDestinatario);
+            console.log('  • Limpiando formDestinatario y estados del gestor');
+            console.log('  • activeTab se mantiene en:', activeTab);
+            console.log('=====================================');
             // Limpiar formulario para nuevo destinatario
             setFormDestinatario({
                 nombre: '',
@@ -427,7 +455,55 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
 
     // FUNCIÓN CORREGIDA: Guardar información del destinatario
     const handleGuardarDestinatario = async () => {
-        console.log('📦 Guardando destinatario:', formDestinatario);
+        console.log('📦 GUARDANDO DESTINATARIO - INICIO');
+        console.log('=====================================');
+        console.log('📋 ESTADO ACTUAL DEL FORMULARIO:');
+        console.log('  • formDestinatario:', formDestinatario);
+        console.log('  • esVentaGestor:', esVentaGestor);
+        console.log('  • gestorMonto:', gestorMonto);
+        console.log('  • gestorCuentaId:', gestorCuentaId);
+        console.log('  • gestorComentario:', gestorComentario);
+        console.log('  • tasaAplicadaVenta:', tasaAplicadaVenta);
+        console.log('  • cuentaGestorSeleccionada:', cuentaGestorSeleccionada);
+        console.log('  • activeTab:', activeTab);
+        console.log('  • currentVenta.destinatario existe:', !!currentVenta.destinatario);
+        console.log('=====================================');
+        
+        // ====================================================================
+        // ✅ VALIDACIÓN 1: Verificar que el destinatario esté completo
+        // ====================================================================
+        if (!formDestinatario.nombre?.trim() || !formDestinatario.apellidos?.trim()) {
+            console.log('❌ VALIDACIÓN FALLIDA: Faltan nombre o apellidos del destinatario');
+            toast.error('❌ Complete el nombre y apellidos del destinatario');
+            setActiveTab('receptor');
+            return;
+        }
+
+        // ====================================================================
+        // ✅ VALIDACIÓN 2: Si el gestor está activo, validar sus campos
+        // ====================================================================
+        if (esVentaGestor) {
+            console.log('🔍 VALIDANDO DATOS DEL GESTOR...');
+            
+            if (!gestorCuentaId) {
+                console.log('❌ VALIDACIÓN FALLIDA: No se seleccionó cuenta del gestor');
+                toast.error('❌ Seleccione una cuenta para el gestor');
+                setActiveTab('gestor');
+                return;
+            }
+            
+            if (!gestorMonto || parseFloat(gestorMonto) <= 0) {
+                console.log('❌ VALIDACIÓN FALLIDA: Monto del gestor inválido');
+                toast.error('❌ Ingrese el monto de la comisión');
+                setActiveTab('gestor');
+                return;
+            }
+            
+            console.log('✅ VALIDACIÓN DEL GESTOR EXITOSA');
+        }
+        
+        console.log('✅ TODAS LAS VALIDACIONES PASARON');
+        
         console.log('🆔 ID de venta:', currentVenta.id);
         console.log('✏️ Modo edición:', isEditingDestinatario);
 
@@ -453,6 +529,14 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 formDestinatario,
             }
         });
+        
+        console.log('=====================================');
+        console.log('🔍 VALIDACIÓN DE DATOS ANTES DE ENVIAR:');
+        console.log('  • ¿es_venta_gestor es true?', esVentaGestor);
+        console.log('  • ¿gestor_cuenta_id tiene valor?', gestorCuentaId);
+        console.log('  • ¿gestor_monto tiene valor?', gestorMonto);
+        console.log('  • ¿Se enviarán datos de gestor?', esVentaGestor && gestorCuentaId);
+        console.log('=====================================');
 
         setIsSavingDestinatario(true);
 
@@ -470,6 +554,8 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 gestor_comentario: esVentaGestor ? gestorComentario : null,
                 tasa_aplicada_venta: esVentaGestor && tasaAplicadaVenta ? parseFloat(tasaAplicadaVenta) : null,
             };
+            
+            console.log('📦 PAYLOAD FINAL ENVIADO:', JSON.stringify(payload, null, 2));
 
             const response = await axios.post(url, payload);
             
@@ -483,14 +569,37 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 gestor: response.data.gestor,
                 respuesta_completa: response.data,
             });
+            console.log('=====================================');
+            console.log('🔍 ANÁLISIS DE LA RESPUESTA:');
+            console.log('  • ¿success?:', response.data.success);
+            console.log('  • destinatario devuelto:', response.data.destinatario);
+            console.log('  • gestor devuelto:', response.data.gestor);
+            console.log('  • ¿gestor es null?', response.data.gestor === null);
+            console.log('  • ¿destinatario es null?', response.data.destinatario === null);
+            console.log('=====================================');
 
             if (response.data.success) {
-                const message = isEditingDestinatario
-                    ? 'Información del receptor actualizada correctamente'
-                    : 'Información del receptor guardada correctamente';
+                // Mensaje personalizado según qué se guardó
+                let message = response.data.message;
+                
+                if (!message) {
+                    if (response.data.destinatario && response.data.gestor) {
+                        message = '✅ Destinatario y Gestor guardados correctamente';
+                    } else if (response.data.destinatario) {
+                        message = isEditingDestinatario
+                            ? 'Información del receptor actualizada correctamente'
+                            : 'Información del receptor guardada correctamente';
+                    } else if (response.data.gestor) {
+                        message = 'Información del gestor guardada correctamente';
+                    }
+                }
 
-                toast.success(response.data.message || message);
+                toast.success(message);
 
+                console.log('🔄 ACTUALIZANDO currentVenta CON:');
+                console.log('  • destinatario:', response.data.destinatario);
+                console.log('  • gestor:', response.data.gestor);
+                
                 // Actualizar el estado local con el nuevo destinatario
                 setCurrentVenta((prev) => ({
                     ...prev,
@@ -521,6 +630,19 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 setTasaAplicadaVenta('');
 
                 console.log('🎉 Destinatario guardado/actualizado exitosamente');
+                console.log('=====================================');
+                console.log('✅ RESUMEN DEL GUARDADO:');
+                console.log('  • ¿Se guardó destinatario?', !!response.data.destinatario);
+                console.log('  • ¿Se guardó gestor?', !!response.data.gestor);
+                console.log('  • ¿Ambos se guardaron?', !!response.data.destinatario && !!response.data.gestor);
+                console.log('=====================================');
+                
+                console.log('🔍 VERIFICANDO currentVenta DESPUÉS DE ACTUALIZAR:');
+                console.log('  • currentVenta.destinatario:', response.data.destinatario);
+                console.log('  • currentVenta.gestor:', response.data.gestor);
+                console.log('  • ¿destinatario existe?', !!response.data.destinatario);
+                console.log('  • ¿gestor existe?', !!response.data.gestor);
+                console.log('=====================================');
             } else {
                 toast.error(response.data.message || 'Error al guardar la información');
             }
@@ -559,15 +681,16 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
             destinatarioExiste: !!currentVenta.destinatario,
             gestorExiste: !!currentVenta.gestor,
             formDestinatarioActual: formDestinatario,
+            activeTabActual: activeTab,
         });
         console.log('🔴 CAMBIANDO ESTADOS:');
         console.log('  - isEditingDestinatario: false → true');
         console.log('  - isDestinatarioDialogOpen: false → true');
-        
+
         console.log('✏️ Abriendo editor de destinatario');
         setIsEditingDestinatario(true);
         setIsDestinatarioDialogOpen(true);
-        
+
         console.log('🟢 ESTADOS DESPUÉS DEL CAMBIO:');
         console.log('  - isEditingDestinatario:', true);
         console.log('  - isDestinatarioDialogOpen:', true);
@@ -575,6 +698,13 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
 
     // FUNCIÓN: Abrir diálogo para nuevo destinatario
     const handleNuevoDestinatario = () => {
+        console.log('➕ ABRIENDO DIÁLOGO PARA NUEVO DESTINATARIO');
+        console.log('=====================================');
+        console.log('📋 ESTADO ACTUAL ANTES DE ABRIR:');
+        console.log('  • currentVenta.destinatario:', currentVenta.destinatario);
+        console.log('  • currentVenta.gestor:', currentVenta.gestor);
+        console.log('  • activeTab:', activeTab);
+        console.log('=====================================');
         console.log('➕ Abriendo formulario para nuevo destinatario');
         setIsEditingDestinatario(false);
         setIsDestinatarioDialogOpen(true);
@@ -797,225 +927,269 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                         ? 'Actualice los datos de la persona que recibirá el producto en casa.'
                                         : 'Complete los datos de la persona que recibirá el producto en casa.'}
                                 </AlertDialogDescription>
+                                {/* Mensaje de ayuda cuando el gestor está activo */}
+                                {esVentaGestor && (
+                                    <div className="mt-3 rounded-lg bg-blue-50 border border-blue-200 p-3">
+                                        <div className="flex items-start gap-2">
+                                            <DollarSign className="h-4 w-4 text-blue-600 mt-0.5" />
+                                            <div className="flex-1">
+                                                <p className="text-sm font-medium text-blue-900">
+                                                    📦 Venta con Gestor activada
+                                                </p>
+                                                <p className="text-xs text-blue-700 mt-1">
+                                                    Al guardar, se guardarán tanto los datos del destinatario como los del gestor.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </AlertDialogHeader>
 
-                                        <Collapsible open={isReceptorExpanded} onOpenChange={setIsReceptorExpanded}>
-                                            <CollapsibleTrigger asChild>
-                                                <Button variant="ghost" className="flex w-full items-center justify-between p-0 hover:bg-transparent">
-                                                    <span className="font-medium text-blue-600">Datos del Receptor</span>
-                                                    <span className="text-muted-foreground text-sm">
-                                                        {isReceptorExpanded ? '▲ Ocultar' : '▼ Mostrar'}
-                                                    </span>
-                                                </Button>
-                                            </CollapsibleTrigger>
-                                            <CollapsibleContent className="mt-4 space-y-4">
-                                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="nombre">Nombre *</Label>
-                                                        <Input
-                                                            id="nombre"
-                                                            value={formDestinatario.nombre}
-                                                            onChange={(e) => setFormDestinatario((prev) => ({ ...prev, nombre: e.target.value }))}
-                                                            placeholder="Ingrese el nombre"
-                                                        />
-                                                    </div>
+                            {/* NUEVO: Tabs para separar Receptor y Gestor */}
+                            <Tabs value={activeTab} onValueChange={(v) => {
+                                console.log('🔄 CAMBIANDO TAB ACTIVO:', activeTab, '→', v);
+                                setActiveTab(v as 'receptor' | 'gestor');
+                            }} className="w-full">
+                                <TabsList className="grid w-full grid-cols-2">
+                                    <TabsTrigger value="receptor" className="flex items-center gap-2">
+                                        <Users className="h-4 w-4" />
+                                        Receptor
+                                    </TabsTrigger>
+                                    <TabsTrigger value="gestor" className="flex items-center gap-2">
+                                        <DollarSign className="h-4 w-4" />
+                                        Gestor
+                                        {/* Indicador visual si el gestor está activo pero incompleto */}
+                                        {esVentaGestor && !gestorCuentaId && (
+                                            <Badge variant="destructive" className="h-5 w-5 p-0 text-xs ml-1">!</Badge>
+                                        )}
+                                        {/* Indicador visual si el gestor está completo */}
+                                        {esVentaGestor && gestorCuentaId && gestorMonto && parseFloat(gestorMonto) > 0 && (
+                                            <Badge variant="default" className="h-5 w-5 p-0 text-xs ml-1 bg-green-600">✓</Badge>
+                                        )}
+                                    </TabsTrigger>
+                                </TabsList>
 
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="apellidos">Apellidos *</Label>
-                                                        <Input
-                                                            id="apellidos"
-                                                            value={formDestinatario.apellidos}
-                                                            onChange={(e) => setFormDestinatario((prev) => ({ ...prev, apellidos: e.target.value }))}
-                                                            placeholder="Ingrese los apellidos"
-                                                        />
-                                                    </div>
+                                {/* TAB 1: RECEPTOR */}
+                                <TabsContent value="receptor" className="mt-4">
+                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="nombre">Nombre *</Label>
+                                            <Input
+                                                id="nombre"
+                                                value={formDestinatario.nombre}
+                                                onChange={(e) => {
+                                                    console.log('📝 ESCRIBIENDO EN NOMBRE:', e.target.value);
+                                                    setFormDestinatario((prev) => ({ ...prev, nombre: e.target.value }));
+                                                }}
+                                                placeholder="Ingrese el nombre"
+                                            />
+                                        </div>
 
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="carnet_identidad">Carnet de Identidad</Label>
-                                                        <Input
-                                                            id="carnet_identidad"
-                                                            value={formDestinatario.carnet_identidad}
-                                                            onChange={(e) =>
-                                                                setFormDestinatario((prev) => ({ ...prev, carnet_identidad: e.target.value }))
-                                                            }
-                                                            placeholder="Número de carnet"
-                                                        />
-                                                    </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="apellidos">Apellidos *</Label>
+                                            <Input
+                                                id="apellidos"
+                                                value={formDestinatario.apellidos}
+                                                onChange={(e) => {
+                                                    console.log('📝 ESCRIBIENDO EN APELLIDOS:', e.target.value);
+                                                    setFormDestinatario((prev) => ({ ...prev, apellidos: e.target.value }));
+                                                }}
+                                                placeholder="Ingrese los apellidos"
+                                            />
+                                        </div>
 
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="telefono_contacto">Teléfono Contacto</Label>
-                                                        <Input
-                                                            id="telefono_contacto"
-                                                            value={formDestinatario.telefono_contacto}
-                                                            onChange={(e) =>
-                                                                setFormDestinatario((prev) => ({ ...prev, telefono_contacto: e.target.value }))
-                                                            }
-                                                            placeholder="Número de teléfono"
-                                                        />
-                                                    </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="carnet_identidad">Carnet de Identidad</Label>
+                                            <Input
+                                                id="carnet_identidad"
+                                                value={formDestinatario.carnet_identidad}
+                                                onChange={(e) => {
+                                                    console.log('📝 ESCRIBIENDO EN CARNET:', e.target.value);
+                                                    setFormDestinatario((prev) => ({ ...prev, carnet_identidad: e.target.value }))
+                                                }}
+                                                placeholder="Número de carnet"
+                                            />
+                                        </div>
 
-                                                    <div className="space-y-2 md:col-span-2">
-                                                        <Label htmlFor="direccion_residencia">Dirección de Residencia</Label>
-                                                        <Textarea
-                                                            id="direccion_residencia"
-                                                            value={formDestinatario.direccion_residencia}
-                                                            onChange={(e) =>
-                                                                setFormDestinatario((prev) => ({ ...prev, direccion_residencia: e.target.value }))
-                                                            }
-                                                            placeholder="Dirección completa donde se entregará el producto"
-                                                            rows={3}
-                                                        />
-                                                    </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="telefono_contacto">Teléfono Contacto</Label>
+                                            <Input
+                                                id="telefono_contacto"
+                                                value={formDestinatario.telefono_contacto}
+                                                onChange={(e) => {
+                                                    console.log('📝 ESCRIBIENDO EN TELÉFONO:', e.target.value);
+                                                    setFormDestinatario((prev) => ({ ...prev, telefono_contacto: e.target.value }))
+                                                }}
+                                                placeholder="Número de teléfono"
+                                            />
+                                        </div>
 
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="parentesco_cliente">Parentesco con Cliente</Label>
-                                                        <Input
-                                                            id="parentesco_cliente"
-                                                            value={formDestinatario.parentesco_cliente}
-                                                            onChange={(e) =>
-                                                                setFormDestinatario((prev) => ({ ...prev, parentesco_cliente: e.target.value }))
-                                                            }
-                                                            placeholder="Ej: Familiar, Amigo, etc."
-                                                        />
-                                                    </div>
+                                        <div className="space-y-2 md:col-span-2">
+                                            <Label htmlFor="direccion_residencia">Dirección de Residencia</Label>
+                                            <Textarea
+                                                id="direccion_residencia"
+                                                value={formDestinatario.direccion_residencia}
+                                                onChange={(e) => {
+                                                    console.log('📝 ESCRIBIENDO EN DIRECCIÓN:', e.target.value);
+                                                    setFormDestinatario((prev) => ({ ...prev, direccion_residencia: e.target.value }))
+                                                }}
+                                                placeholder="Dirección completa donde se entregará el producto"
+                                                rows={3}
+                                            />
+                                        </div>
 
-                                                    <div className="space-y-2 md:col-span-2">
-                                                        <Label htmlFor="observaciones">Observaciones</Label>
-                                                        <Textarea
-                                                            id="observaciones"
-                                                            value={formDestinatario.observaciones}
-                                                            onChange={(e) =>
-                                                                setFormDestinatario((prev) => ({ ...prev, observaciones: e.target.value }))
-                                                            }
-                                                            placeholder="Observaciones adicionales"
-                                                            rows={2}
-                                                        />
-                                                    </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="parentesco_cliente">Parentesco con Cliente</Label>
+                                            <Input
+                                                id="parentesco_cliente"
+                                                value={formDestinatario.parentesco_cliente}
+                                                onChange={(e) => {
+                                                    console.log('📝 ESCRIBIENDO EN PARENTESCO:', e.target.value);
+                                                    setFormDestinatario((prev) => ({ ...prev, parentesco_cliente: e.target.value }))
+                                                }}
+                                                placeholder="Ej: Familiar, Amigo, etc."
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2 md:col-span-2">
+                                            <Label htmlFor="observaciones">Observaciones</Label>
+                                            <Textarea
+                                                id="observaciones"
+                                                value={formDestinatario.observaciones}
+                                                onChange={(e) => {
+                                                    console.log('📝 ESCRIBIENDO EN OBSERVACIONES:', e.target.value);
+                                                    setFormDestinatario((prev) => ({ ...prev, observaciones: e.target.value }))
+                                                }}
+                                                placeholder="Observaciones adicionales"
+                                                rows={2}
+                                            />
+                                        </div>
+                                    </div>
+                                </TabsContent>
+
+                                {/* TAB 2: GESTOR */}
+                                <TabsContent value="gestor" className="mt-4">
+                                    <div className="space-y-4">
+                                        {/* Switch Venta con Gestor */}
+                                        <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex flex-col gap-1">
+                                                    <Label htmlFor="gestor-switch" className="font-bold text-blue-900">
+                                                        ¿Venta con Gestor?
+                                                    </Label>
+                                                    <span className="text-xs text-blue-700">Asignar comisión a un tercero</span>
                                                 </div>
-                                            </CollapsibleContent>
-                                        </Collapsible>
+                                                <Switch
+                                                    id="gestor-switch"
+                                                    checked={esVentaGestor}
+                                                    onCheckedChange={(checked) => {
+                                                        console.log('🔘 SWITCH GESTOR CAMBIADO:', checked ? 'ACTIVADO' : 'DESACTIVADO');
+                                                        setEsVentaGestor(checked);
+                                                        if (!checked) {
+                                                            setGestorCuentaId('');
+                                                            setCuentaGestorSeleccionada(null);
+                                                            setGestorMonto('');
+                                                            setGestorComentario('');
+                                                            setTasaAplicadaVenta('');
+                                                        }
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
 
-                                        {/* SECCIÓN DEL GESTOR - AHORA COLLAPSABLE */}
-                                        <Collapsible open={isGestorExpanded} onOpenChange={setIsGestorExpanded} className="mt-4 border-t pt-4">
-                                            <CollapsibleTrigger asChild>
-                                                <Button variant="ghost" className="flex w-full items-center justify-between p-0 hover:bg-transparent">
-                                                    <div className="flex items-center gap-2">
-                                                        <DollarSign className="h-4 w-4 text-blue-600" />
-                                                        <span className="font-medium text-blue-600">Gestor / Comisión</span>
-                                                    </div>
-                                                    <span className="text-muted-foreground text-sm">
-                                                        {isGestorExpanded ? '▲ Ocultar' : '▼ Mostrar'}
-                                                    </span>
-                                                </Button>
-                                            </CollapsibleTrigger>
-                                            <CollapsibleContent className="mt-4 space-y-4">
-                                                <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="flex flex-col gap-1">
-                                                            <Label htmlFor="gestor-switch" className="font-bold text-blue-900">
-                                                                ¿Venta con Gestor?
-                                                            </Label>
-                                                            <span className="text-xs text-blue-700">Asignar comisión a un tercero</span>
-                                                        </div>
-                                                        <Switch
-                                                            id="gestor-switch"
-                                                            checked={esVentaGestor}
-                                                            onCheckedChange={(checked) => {
-                                                                setEsVentaGestor(checked);
-                                                                if (!checked) {
-                                                                    setGestorCuentaId('');
-                                                                    setCuentaGestorSeleccionada(null);
-                                                                    setGestorMonto('');
-                                                                    setGestorComentario('');
-                                                                    setTasaAplicadaVenta('');
-                                                                }
+                                        {esVentaGestor && (
+                                            <div className="space-y-4 rounded-lg border p-4">
+                                                {/* Tasa Aplicada */}
+                                                <div className="space-y-2">
+                                                    <Label>Tasa Aplicada para Comisión</Label>
+                                                    <Input
+                                                        type="number"
+                                                        step="0.0001"
+                                                        min="0.0001"
+                                                        value={tasaAplicadaVenta}
+                                                        onChange={(e) => {
+                                                            console.log('📊 TASA APLICADA ESCRITA:', e.target.value);
+                                                            setTasaAplicadaVenta(e.target.value)}
+                                                        }
+                                                        placeholder="Ej: 365"
+                                                    />
+                                                </div>
+
+                                                <div className="grid gap-4 md:grid-cols-2">
+                                                    {/* Cuenta del Gestor */}
+                                                    <div className="space-y-2">
+                                                        <Label>Cuenta del Gestor</Label>
+                                                        <Select
+                                                            value={gestorCuentaId}
+                                                            onValueChange={(val) => {
+                                                                console.log('🏦 CUENTA GESTOR SELECCIONADA:', val);
+                                                                setGestorCuentaId(val);
+                                                                const account = cuentasGestor.find((c) => String(c.id) === val);
+                                                                setCuentaGestorSeleccionada(account || null);
+                                                                console.log('  → Cuenta objeto:', account);
                                                             }}
-                                                        />
+                                                        >
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="Seleccione cuenta..." />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {cuentasGestor.map((cuenta) => (
+                                                                    <SelectItem key={cuenta.id} value={String(cuenta.id)}>
+                                                                        {cuenta.nombre_cuenta} ({cuenta.moneda?.codigo || cuenta.tipo_moneda})
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
                                                     </div>
-                                                </div>
 
-                                                {esVentaGestor && (
-                                                    <div className="space-y-4 rounded-lg border p-4">
-                                                        {/* Tasa Aplicada */}
-                                                        <div className="space-y-2">
-                                                            <Label>Tasa Aplicada para Comisión</Label>
+                                                    {/* Monto */}
+                                                    <div className="space-y-2">
+                                                        <Label>Monto de Comisión</Label>
+                                                        <div className="relative">
+                                                            <span className="text-muted-foreground absolute top-2.5 left-3 text-sm">
+                                                                {cuentaGestorSeleccionada?.moneda?.simbolo || '$'}
+                                                            </span>
                                                             <Input
                                                                 type="number"
-                                                                step="0.0001"
-                                                                min="0.0001"
-                                                                value={tasaAplicadaVenta}
-                                                                onChange={(e) => setTasaAplicadaVenta(e.target.value)}
-                                                                placeholder="Ej: 365"
-                                                            />
-                                                        </div>
-
-                                                        <div className="grid gap-4 md:grid-cols-2">
-                                                            {/* Cuenta del Gestor */}
-                                                            <div className="space-y-2">
-                                                                <Label>Cuenta del Gestor</Label>
-                                                                <Select
-                                                                    value={gestorCuentaId}
-                                                                    onValueChange={(val) => {
-                                                                        setGestorCuentaId(val);
-                                                                        const account = cuentasGestor.find((c) => String(c.id) === val);
-                                                                        setCuentaGestorSeleccionada(account || null);
-                                                                    }}
-                                                                >
-                                                                    <SelectTrigger>
-                                                                        <SelectValue placeholder="Seleccione cuenta..." />
-                                                                    </SelectTrigger>
-                                                                    <SelectContent>
-                                                                        {cuentasGestor.map((cuenta) => (
-                                                                            <SelectItem key={cuenta.id} value={String(cuenta.id)}>
-                                                                                {cuenta.nombre_cuenta} ({cuenta.moneda?.codigo || cuenta.tipo_moneda})
-                                                                            </SelectItem>
-                                                                        ))}
-                                                                    </SelectContent>
-                                                                </Select>
-                                                            </div>
-
-                                                            {/* Monto */}
-                                                            <div className="space-y-2">
-                                                                <Label>Monto de Comisión</Label>
-                                                                <div className="relative">
-                                                                    <span className="text-muted-foreground absolute top-2.5 left-3 text-sm">
-                                                                        {cuentaGestorSeleccionada?.moneda?.simbolo || '$'}
-                                                                    </span>
-                                                                    <Input
-                                                                        type="number"
-                                                                        step="0.01"
-                                                                        className="pl-8"
-                                                                        value={gestorMonto}
-                                                                        onChange={(e) => setGestorMonto(e.target.value)}
-                                                                        placeholder="0.00"
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Comentario */}
-                                                        <div className="space-y-2">
-                                                            <Label>Comentario</Label>
-                                                            <Textarea
-                                                                placeholder="Ej: Gestor externo, acuerdo 50/50..."
-                                                                value={gestorComentario}
-                                                                onChange={(e) => setGestorComentario(e.target.value)}
-                                                                rows={2}
-                                                                className="resize-none"
+                                                                step="0.01"
+                                                                className="pl-8"
+                                                                value={gestorMonto}
+                                                                onChange={(e) => {
+                                                                    console.log('💰 MONTO GESTOR ESCRITO:', e.target.value);
+                                                                    setGestorMonto(e.target.value)}
+                                                                }
+                                                                placeholder="0.00"
                                                             />
                                                         </div>
                                                     </div>
-                                                )}
-                                            </CollapsibleContent>
-                                        </Collapsible>
+                                                </div>
+
+                                                {/* Comentario */}
+                                                <div className="space-y-2">
+                                                    <Label>Comentario</Label>
+                                                    <Textarea
+                                                        placeholder="Ej: Gestor externo, acuerdo 50/50..."
+                                                        value={gestorComentario}
+                                                        onChange={(e) => {
+                                                            console.log('💬 COMENTARIO GESTOR ESCRITO:', e.target.value);
+                                                            setGestorComentario(e.target.value)}
+                                                        }
+                                                        rows={2}
+                                                        className="resize-none"
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </TabsContent>
+                            </Tabs>
 
                                         <AlertDialogFooter>
                                             <AlertDialogCancel
                                                 disabled={isSavingDestinatario}
                                                 onClick={() => {
                                                     setIsEditingDestinatario(false);
-                                                    setIsReceptorExpanded(true); // Resetear colapsable del destinatario
-                                                    setIsGestorExpanded(false); // Resetear colapsable del gestor
+                                                    setActiveTab('receptor'); // Resetear al tab de receptor
                                                     setFormDestinatario({
                                                         nombre: '',
                                                         apellidos: '',
@@ -1039,15 +1213,23 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                             <AlertDialogAction
                                                 onClick={handleGuardarDestinatario}
                                                 className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
-                                                disabled={isSavingDestinatario || !formDestinatario.nombre || !formDestinatario.apellidos}
+                                                disabled={isSavingDestinatario || !formDestinatario.nombre?.trim() || !formDestinatario.apellidos?.trim()}
                                             >
                                                 {isSavingDestinatario ? (
                                                     <div className="flex items-center gap-2">
                                                         <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
                                                         Guardando...
                                                     </div>
+                                                ) : esVentaGestor ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <CheckCircle className="h-4 w-4" />
+                                                        Guardar Todo
+                                                    </div>
                                                 ) : (
-                                                    'Guardar Receptor'
+                                                    <div className="flex items-center gap-2">
+                                                        <Users className="h-4 w-4" />
+                                                        Guardar Receptor
+                                                    </div>
                                                 )}
                                             </AlertDialogAction>
                                         </AlertDialogFooter>
@@ -1304,6 +1486,12 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 </div>
 
                 {/* Sección de Información del Destinatario y Gestor - GRID */}
+                {console.log('🖼️ RENDERIZANDO CARDS - Estado actual:', {
+                    destinatarioExiste: !!currentVenta.destinatario,
+                    gestorExiste: !!currentVenta.gestor,
+                    destinatario: currentVenta.destinatario,
+                    gestor: currentVenta.gestor,
+                })}
                 {(currentVenta.destinatario || currentVenta.gestor) && (
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                         {/* Tarjeta de Destinatario */}
