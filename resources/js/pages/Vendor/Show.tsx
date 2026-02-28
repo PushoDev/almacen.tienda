@@ -455,25 +455,21 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
 
     // FUNCIÓN CORREGIDA: Guardar información del destinatario
     const handleGuardarDestinatario = async () => {
-        console.log('📦 GUARDANDO DESTINATARIO - INICIO');
+        console.log('📦 GUARDANDO - INICIO');
         console.log('=====================================');
-        console.log('📋 ESTADO ACTUAL DEL FORMULARIO:');
-        console.log('  • formDestinatario:', formDestinatario);
+        console.log('📋 ESTADO ACTUAL:');
+        console.log('  • currentVenta.destinatario existe:', !!currentVenta.destinatario);
         console.log('  • esVentaGestor:', esVentaGestor);
         console.log('  • gestorMonto:', gestorMonto);
         console.log('  • gestorCuentaId:', gestorCuentaId);
-        console.log('  • gestorComentario:', gestorComentario);
-        console.log('  • tasaAplicadaVenta:', tasaAplicadaVenta);
-        console.log('  • cuentaGestorSeleccionada:', cuentaGestorSeleccionada);
-        console.log('  • activeTab:', activeTab);
-        console.log('  • currentVenta.destinatario existe:', !!currentVenta.destinatario);
+        console.log('  • formDestinatario:', formDestinatario);
         console.log('=====================================');
         
         // ====================================================================
         // ✅ VALIDACIÓN 1: Verificar que el destinatario esté completo
         // ====================================================================
         if (!formDestinatario.nombre?.trim() || !formDestinatario.apellidos?.trim()) {
-            console.log('❌ VALIDACIÓN FALLIDA: Faltan nombre o apellidos del destinatario');
+            console.log('❌ VALIDACIÓN FALLIDA: Faltan nombre o apellidos');
             toast.error('❌ Complete el nombre y apellidos del destinatario');
             setActiveTab('receptor');
             return;
@@ -486,14 +482,14 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
             console.log('🔍 VALIDANDO DATOS DEL GESTOR...');
             
             if (!gestorCuentaId) {
-                console.log('❌ VALIDACIÓN FALLIDA: No se seleccionó cuenta del gestor');
+                console.log('❌ VALIDACIÓN FALLIDA: No se seleccionó cuenta');
                 toast.error('❌ Seleccione una cuenta para el gestor');
                 setActiveTab('gestor');
                 return;
             }
             
             if (!gestorMonto || parseFloat(gestorMonto) <= 0) {
-                console.log('❌ VALIDACIÓN FALLIDA: Monto del gestor inválido');
+                console.log('❌ VALIDACIÓN FALLIDA: Monto inválido');
                 toast.error('❌ Ingrese el monto de la comisión');
                 setActiveTab('gestor');
                 return;
@@ -504,48 +500,19 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
         
         console.log('✅ TODAS LAS VALIDACIONES PASARON');
         
-        console.log('🆔 ID de venta:', currentVenta.id);
-        console.log('✏️ Modo edición:', isEditingDestinatario);
-
-        // ====================================================================
-        // CONSOLE.LOG 2: ANTES DE ENVIAR AL BACKEND
-        // ====================================================================
-        console.log('📤 ENVIANDO AL BACKEND:', {
-            url: route('ventas.destinatario.store', currentVenta.id),
-            payload: {
-                ...formDestinatario,
-                es_venta_gestor: esVentaGestor,
-                gestor_monto: esVentaGestor ? parseFloat(gestorMonto) || 0 : 0,
-                gestor_cuenta_id: esVentaGestor ? gestorCuentaId : null,
-                gestor_comentario: esVentaGestor ? gestorComentario : null,
-                tasa_aplicada_venta: esVentaGestor && tasaAplicadaVenta ? parseFloat(tasaAplicadaVenta) : null,
-            },
-            estados: {
-                esVentaGestor,
-                gestorMonto,
-                gestorCuentaId,
-                gestorComentario,
-                tasaAplicadaVenta,
-                formDestinatario,
-            }
-        });
-        
-        console.log('=====================================');
-        console.log('🔍 VALIDACIÓN DE DATOS ANTES DE ENVIAR:');
-        console.log('  • ¿es_venta_gestor es true?', esVentaGestor);
-        console.log('  • ¿gestor_cuenta_id tiene valor?', gestorCuentaId);
-        console.log('  • ¿gestor_monto tiene valor?', gestorMonto);
-        console.log('  • ¿Se enviarán datos de gestor?', esVentaGestor && gestorCuentaId);
-        console.log('=====================================');
-
         setIsSavingDestinatario(true);
 
         try {
-            // ✅ CORRECCIÓN: Usar la ruta correcta según Laravel
             const url = route('ventas.destinatario.store', currentVenta.id);
-            console.log('🌐 URL de la petición:', url);
+            console.log('🌐 URL:', url);
 
-            // Enviar datos del destinatario + datos del gestor
+            // Si el destinatario YA existe, solo actualizar gestor
+            if (currentVenta.destinatario && esVentaGestor) {
+                console.log('📝 ACTUALIZANDO SOLO GESTOR (destinatario ya existe)');
+            } else {
+                console.log('💾 GUARDANDO DESTINATARIO + GESTOR');
+            }
+
             const payload = {
                 ...formDestinatario,
                 es_venta_gestor: esVentaGestor,
@@ -555,7 +522,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 tasa_aplicada_venta: esVentaGestor && tasaAplicadaVenta ? parseFloat(tasaAplicadaVenta) : null,
             };
             
-            console.log('📦 PAYLOAD FINAL ENVIADO:', JSON.stringify(payload, null, 2));
+            console.log('📦 PAYLOAD:', JSON.stringify(payload, null, 2));
 
             const response = await axios.post(url, payload);
             
@@ -946,9 +913,62 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                             </AlertDialogHeader>
 
                             {/* NUEVO: Tabs para separar Receptor y Gestor */}
-                            <Tabs value={activeTab} onValueChange={(v) => {
+                            <Tabs value={activeTab} onValueChange={async (v) => {
                                 console.log('🔄 CAMBIANDO TAB ACTIVO:', activeTab, '→', v);
-                                setActiveTab(v as 'receptor' | 'gestor');
+                                
+                                // Si está cambiando al tab de Gestor
+                                if (v === 'gestor') {
+                                    // Verificar si hay datos del destinatario
+                                    if (!formDestinatario.nombre?.trim() || !formDestinatario.apellidos?.trim()) {
+                                        toast.warning('⚠️ Primero complete el nombre y apellidos del destinatario');
+                                        setActiveTab('receptor');
+                                        return;
+                                    }
+                                    
+                                    // AUTO-GUARDAR DESTINATARIO PRIMERO
+                                    console.log('💾 AUTO-GUARDANDO DESTINATARIO ANTES DE CAMBIAR A GESTOR...');
+                                    
+                                    try {
+                                        const payload = {
+                                            ...formDestinatario,
+                                            es_venta_gestor: false,
+                                            gestor_monto: 0,
+                                            gestor_cuenta_id: null,
+                                            gestor_comentario: null,
+                                            tasa_aplicada_venta: null,
+                                        };
+                                        
+                                        const url = route('ventas.destinatario.store', currentVenta.id);
+                                        const response = await axios.post(url, payload);
+                                        
+                                        if (response.data.success) {
+                                            console.log('✅ Destinatario auto-guardado exitosamente');
+                                            console.log('📥 RESPUESTA:', response.data);
+                                            
+                                            // Recargar la página para actualizar currentVenta
+                                            setCurrentVenta((prev) => ({
+                                                ...prev,
+                                                destinatario: response.data.destinatario,
+                                            }));
+                                            
+                                            toast.success('✅ Destinatario guardado. Ahora llene los datos del gestor.');
+                                            
+                                            // Esperar un poco y cambiar al tab
+                                            setTimeout(() => {
+                                                setActiveTab('gestor');
+                                            }, 500);
+                                        } else {
+                                            toast.error('Error al guardar destinatario: ' + response.data.message);
+                                        }
+                                    } catch (error: any) {
+                                        console.error('❌ Error al auto-guardar destinatario:', error);
+                                        const errorMsg = error?.response?.data?.message || 'Error al guardar destinatario';
+                                        toast.error(errorMsg);
+                                    }
+                                } else {
+                                    // Cambio normal a receptor
+                                    setActiveTab('receptor');
+                                }
                             }} className="w-full">
                                 <TabsList className="grid w-full grid-cols-2">
                                     <TabsTrigger value="receptor" className="flex items-center gap-2">
@@ -1220,6 +1240,16 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                                         <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
                                                         Guardando...
                                                     </div>
+                                                ) : currentVenta.destinatario && esVentaGestor ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <DollarSign className="h-4 w-4" />
+                                                        Guardar Gestor
+                                                    </div>
+                                                ) : currentVenta.destinatario ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <Users className="h-4 w-4" />
+                                                        Actualizar
+                                                    </div>
                                                 ) : esVentaGestor ? (
                                                     <div className="flex items-center gap-2">
                                                         <CheckCircle className="h-4 w-4" />
@@ -1228,7 +1258,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                                 ) : (
                                                     <div className="flex items-center gap-2">
                                                         <Users className="h-4 w-4" />
-                                                        Guardar Receptor
+                                                        Guardar
                                                     </div>
                                                 )}
                                             </AlertDialogAction>

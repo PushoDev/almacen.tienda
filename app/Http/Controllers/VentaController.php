@@ -1198,4 +1198,76 @@ class VentaController extends Controller
             ]
         ]);
     }
+
+    /**
+     * Anular venta (pendiente o completada)
+     */
+    public function anularVenta(Venta $venta)
+    {
+        if ($venta->estado === 'cancelada') {
+            return response()->json(['success' => false, 'message' => 'La venta ya está anulada'], 400);
+        }
+
+        DB::transaction(function () use ($venta) {
+            // Si está completada, revertir stock y saldos
+            if ($venta->estado === 'completada') {
+                // Revertir stock
+                foreach ($venta->detalles as $detalle) {
+                    $almacenProducto = AlmacenProducto::where('almacen_id', $venta->almacen_id)
+                        ->where('producto_id', $detalle->producto_id)->first();
+                    
+                    if ($almacenProducto) {
+                        $almacenProducto->increment('cantidad', $detalle->cantidad);
+                    }
+
+                    HistorialStock::create([
+                        'producto_id' => $detalle->producto_id,
+                        'almacen_id' => $venta->almacen_id,
+                        'venta_id' => $venta->id,
+                        'cantidad_anterior' => $almacenProducto?->cantidad ?? 0,
+                        'cantidad_nueva' => ($almacenProducto?->cantidad ?? 0) + $detalle->cantidad,
+                        'diferencia' => $detalle->cantidad,
+                        'tipo' => 'venta_anulada',
+                        'observaciones' => 'Stock revertido por anulación de venta',
+                        'user_id' => Auth::id(),
+                    ]);
+                }
+
+                // Revertir saldos de cuentas y deudas de clientes
+                foreach ($venta->pagos as $pago) {
+                    // Si el pago fue a un cliente, revertir deuda
+                    if ($pago->cliente_id) {
+                        $cliente = $pago->cliente;
+                        if ($cliente) {
+                            $cliente->decrement('deuda_pago_cliente', $pago->monto);
+                        }
+                    }
+                    
+                    // Si el pago fue a una cuenta, revertir saldo
+                    if ($pago->cuenta_id) {
+                        $cuenta = $pago->cuenta;
+                        if ($cuenta) {
+                            $cuenta->decrement('saldo_cuenta', $pago->monto);
+                        }
+                    }
+                }
+
+                // Revertir descuento del gestor si existía
+                if ($venta->es_venta_gestor && $venta->gestor_cuenta_id && $venta->gestor_monto > 0) {
+                    $cuentaGestor = $venta->gestorCuenta;
+                    if ($cuentaGestor) {
+                        $cuentaGestor->increment('saldo_cuenta', $venta->gestor_monto);
+                    }
+                }
+            }
+
+            // Cambiar estado a cancelada
+            $venta->update(['estado' => 'cancelada']);
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Venta anulada correctamente'
+        ]);
+    }
 }
