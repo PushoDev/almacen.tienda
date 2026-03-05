@@ -599,6 +599,10 @@ class VentaController extends Controller
                 'comentario' => $venta->gestor_comentario,
                 'cuenta_nombre' => $venta->gestorCuenta?->nombre_cuenta,
                 'tasa_aplicada' => $venta->tasa_aplicada_venta ? (float) $venta->tasa_aplicada_venta : null,
+                'tasa_aplicada_gestor' => $venta->tasa_aplicada_gestor ? (float) $venta->tasa_aplicada_gestor : null,
+                'monto_usd' => $venta->gestor_monto && $venta->tasa_aplicada_gestor 
+                    ? round($venta->gestor_monto / $venta->tasa_aplicada_gestor, 2) 
+                    : null,
                 'moneda' => $venta->gestorCuenta?->moneda ? [
                     'codigo' => $venta->gestorCuenta->moneda->codigo_moneda,
                     'simbolo' => $venta->gestorCuenta->moneda->simbolo_moneda,
@@ -714,6 +718,7 @@ class VentaController extends Controller
             $validator = Validator::make($request->all(), [
                 'gestor_monto' => 'required|numeric|min:0.01',
                 'gestor_cuenta_id' => 'required|exists:cuentas,id',
+                'tasa_aplicada_gestor' => 'required|numeric|min:0.0001',
             ]);
 
             if ($validator->fails()) {
@@ -808,6 +813,7 @@ class VentaController extends Controller
                 'gestor_monto' => $validatedData['gestor_monto'] ?? 0,
                 'gestor_cuenta_id' => $validatedData['gestor_cuenta_id'] ?? null,
                 'gestor_comentario' => $validatedData['gestor_comentario'] ?? null,
+                'tasa_aplicada_gestor' => $validatedData['tasa_aplicada_gestor'] ?? null,
             ]);
 
             HistorialStock::where('user_id', $user->id)->where('tipo', 'venta_pendiente')->whereNull('venta_id')->update(['venta_id' => $venta->id]);
@@ -929,6 +935,7 @@ class VentaController extends Controller
             'gestor_cuenta_id' => 'nullable|exists:cuentas,id',
             'gestor_comentario' => 'nullable|string|max:500',
             'tasa_aplicada_venta' => 'nullable|numeric|min:0.0001',
+            'tasa_aplicada_gestor' => 'nullable|numeric|min:0.0001',
         ]);
 
         if ($request->filled('carnet_identidad')) {
@@ -951,6 +958,7 @@ class VentaController extends Controller
                     'gestor_cuenta_id' => !empty($validated['gestor_cuenta_id']) ? (int) $validated['gestor_cuenta_id'] : null,
                     'gestor_comentario' => $validated['gestor_comentario'] ?? null,
                     'tasa_aplicada_venta' => !empty($validated['tasa_aplicada_venta']) ? (float) $validated['tasa_aplicada_venta'] : null,
+                    'tasa_aplicada_gestor' => !empty($validated['tasa_aplicada_gestor']) ? (float) $validated['tasa_aplicada_gestor'] : null,
                 ]);
             } else {
                 // Si no es venta con gestor, limpiar los datos
@@ -960,6 +968,7 @@ class VentaController extends Controller
                     'gestor_cuenta_id' => null,
                     'gestor_comentario' => null,
                     'tasa_aplicada_venta' => null,
+                    'tasa_aplicada_gestor' => null,
                 ]);
             }
         });
@@ -976,6 +985,10 @@ class VentaController extends Controller
                 'comentario' => $venta->gestor_comentario,
                 'cuenta_nombre' => $venta->gestorCuenta?->nombre_cuenta,
                 'tasa_aplicada' => $venta->tasa_aplicada_venta ? (float) $venta->tasa_aplicada_venta : null,
+                'tasa_aplicada_gestor' => $venta->tasa_aplicada_gestor ? (float) $venta->tasa_aplicada_gestor : null,
+                'monto_usd' => $venta->gestor_monto && $venta->tasa_aplicada_gestor 
+                    ? round($venta->gestor_monto / $venta->tasa_aplicada_gestor, 2) 
+                    : null,
                 'moneda' => $venta->gestorCuenta?->moneda ? [
                     'codigo' => $venta->gestorCuenta->moneda->codigo_moneda,
                     'simbolo' => $venta->gestorCuenta->moneda->simbolo_moneda,
@@ -1174,6 +1187,10 @@ class VentaController extends Controller
                         'comentario' => $venta->gestor_comentario,
                         'cuenta_nombre' => $venta->gestorCuenta?->nombre_cuenta,
                         'tasa_aplicada' => $venta->tasa_aplicada_venta ? (float) $venta->tasa_aplicada_venta : null,
+                        'tasa_aplicada_gestor' => $venta->tasa_aplicada_gestor ? (float) $venta->tasa_aplicada_gestor : null,
+                        'monto_usd' => $venta->gestor_monto && $venta->tasa_aplicada_gestor 
+                            ? round($venta->gestor_monto / $venta->tasa_aplicada_gestor, 2) 
+                            : null,
                         'moneda' => $venta->gestorCuenta?->moneda ? [
                             'codigo' => $venta->gestorCuenta->moneda->codigo_moneda,
                             'simbolo' => $venta->gestorCuenta->moneda->simbolo_moneda,

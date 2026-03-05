@@ -2,6 +2,8 @@
 
 Laravel 12 + React 19 + Inertia.js + Tailwind CSS v4 inventory management system.
 
+**Cursor Rules**: Additional patterns in `.cursor/rules/` (laravel-inertia-shadcn.mdc, laravel-backend.mdc, react-inertia-shadcn.mdc)
+
 ## Commands
 
 ### PHP/Laravel
@@ -10,11 +12,13 @@ Laravel 12 + React 19 + Inertia.js + Tailwind CSS v4 inventory management system
 composer run dev        # Laravel server + queue + Vite dev server
 composer run dev:ssr    # Laravel server + queue + Vite + SSR dev server
 composer test           # Pest tests with config clear
+
 php artisan test                       # Run all tests
 php artisan test --filter TestClassName # Single test class
 php artisan test --filter "test name"   # Single test method
 php artisan test tests/Feature/         # Feature tests only
-php artisan test tests/Unit/           # Unit tests only
+php artisan test tests/Unit/            # Unit tests only
+
 php artisan pint        # Format code (PSR-12)
 php artisan migrate
 php artisan migrate:fresh --seed
@@ -38,7 +42,7 @@ npm run types       # TypeScript type checking
 ### PHP (Backend)
 
 - **Standard**: PSR-12 via Laravel Pint
-- **PHP Version**: 8.2+ - use typed properties, readonly when applicable
+- **PHP Version**: 8.2+ - use typed properties, `readonly` when applicable
 - **Testing**: Pest PHP (Spanish test names)
 - **PHPDoc**: Required on classes/methods with `@param`, `@return`
 - **Validation**: Form Request classes for complex validation
@@ -55,7 +59,7 @@ npm run types       # TypeScript type checking
 
 **Naming**: Components `PascalCase`, hooks `useCamelCase`, types `PascalCase`, files `PascalCase`.
 
-**Imports**: Use `@/` path alias (e.g., `@/components/ui/button`).
+**Imports**: Use `@/` path alias (e.g., `@/components/ui/button`). Use `route()` from Ziggy for internal routes.
 
 ## Patterns
 
@@ -92,22 +96,36 @@ public function store(StoreProductoRequest $request): RedirectResponse
 }
 ```
 
+### UI Components (Shadcn)
+
+```tsx
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+
+<Button variant="default" size="sm" className={cn('base-class', condition && 'conditional')}>
+    Click me
+</Button>;
+```
+
 ## Structure
 
 ```
 app/
 ├── Models/          # Eloquent models
 ├── Controllers/     # HTTP controllers
-├── Requests/        # Form request validation
-├── Services/        # Business logic
+├── Requests/         # Form request validation
+├── Services/         # Business logic
 resources/js/
-├── pages/           # Inertia pages
-├── components/      # React components (ui/ = Shadcn)
+├── pages/            # Inertia pages
+├── components/       # React components (ui/ = Shadcn)
+│   └── ui/          # Shadcn/Radix components
 ├── hooks/           # Custom hooks
 └── types/           # TypeScript types
 tests/
 ├── Feature/         # Feature tests
-└── Unit/            # Unit tests
+└── Unit/           # Unit tests
 ```
 
 ## Database
@@ -142,8 +160,8 @@ it('creates a product', function () {
 
 ## Error Handling
 
-- Backend: Laravel exceptions, proper HTTP codes (400,401,403,404,422,500), Form Request validation
-- Frontend: Inertia error handling, `InputError` components, toast notifications
+- **Backend**: Laravel exceptions, proper HTTP codes (400,401,403,404,422,500), Form Request validation
+- **Frontend**: Inertia error handling, `errors` from `useForm`, toast notifications for success/error
 - Use `try/catch` in services and bubble up exceptions with meaningful messages
 
 ## Skills
