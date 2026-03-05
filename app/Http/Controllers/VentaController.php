@@ -942,6 +942,28 @@ class VentaController extends Controller
             $validated['carnet_identidad'] = preg_replace('/\D/', '', $validated['carnet_identidad']);
         }
 
+        // Validar datos del gestor si está activado
+        if ($request->boolean('es_venta_gestor')) {
+            if (empty($validated['gestor_cuenta_id'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Debe seleccionar una cuenta del gestor'
+                ], 422);
+            }
+            if (empty($validated['gestor_monto']) || $validated['gestor_monto'] <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'El monto del gestor debe ser mayor a 0'
+                ], 422);
+            }
+            if (empty($validated['tasa_aplicada_gestor'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Debe ingresar la tasa aplicada del gestor'
+                ], 422);
+            }
+        }
+
         DB::transaction(function () use ($venta, $validated, $request) {
             // Guardar destinatario
             if ($venta->destinatario) {
@@ -1226,33 +1248,31 @@ class VentaController extends Controller
         }
 
         DB::transaction(function () use ($venta) {
-            // Si está completada, revertir stock y saldos
-            if ($venta->estado === 'completada') {
-                // Revertir stock
-                foreach ($venta->detalles as $detalle) {
-                    $almacenProducto = AlmacenProducto::where('almacen_id', $venta->almacen_id)
-                        ->where('producto_id', $detalle->producto_id)->first();
-                    
-                    if ($almacenProducto) {
-                        $almacenProducto->increment('cantidad', $detalle->cantidad);
-                    }
-
-                    HistorialStock::create([
-                        'producto_id' => $detalle->producto_id,
-                        'almacen_id' => $venta->almacen_id,
-                        'venta_id' => $venta->id,
-                        'cantidad_anterior' => $almacenProducto?->cantidad ?? 0,
-                        'cantidad_nueva' => ($almacenProducto?->cantidad ?? 0) + $detalle->cantidad,
-                        'diferencia' => $detalle->cantidad,
-                        'tipo' => 'venta_anulada',
-                        'observaciones' => 'Stock revertido por anulación de venta',
-                        'user_id' => Auth::id(),
-                    ]);
+            // ✅ SIEMPRE revertir stock (pendiente o completada)
+            foreach ($venta->detalles as $detalle) {
+                $almacenProducto = AlmacenProducto::where('almacen_id', $venta->almacen_id)
+                    ->where('producto_id', $detalle->producto_id)->first();
+                
+                if ($almacenProducto) {
+                    $almacenProducto->increment('cantidad', $detalle->cantidad);
                 }
 
-                // Revertir saldos de cuentas y deudas de clientes
+                HistorialStock::create([
+                    'producto_id' => $detalle->producto_id,
+                    'almacen_id' => $venta->almacen_id,
+                    'venta_id' => $venta->id,
+                    'cantidad_anterior' => $almacenProducto?->cantidad ?? 0,
+                    'cantidad_nueva' => ($almacenProducto?->cantidad ?? 0) + $detalle->cantidad,
+                    'diferencia' => $detalle->cantidad,
+                    'tipo' => 'venta_anulada',
+                    'observaciones' => 'Stock revertido por anulación de venta',
+                    'user_id' => Auth::id(),
+                ]);
+            }
+
+            // ✅ SIEMPRE revertir pagos (solo si estaba completada)
+            if ($venta->estado === 'completada') {
                 foreach ($venta->pagos as $pago) {
-                    // Si el pago fue a un cliente, revertir deuda
                     if ($pago->cliente_id) {
                         $cliente = $pago->cliente;
                         if ($cliente) {
@@ -1260,7 +1280,6 @@ class VentaController extends Controller
                         }
                     }
                     
-                    // Si el pago fue a una cuenta, revertir saldo
                     if ($pago->cuenta_id) {
                         $cuenta = $pago->cuenta;
                         if ($cuenta) {
@@ -1278,7 +1297,6 @@ class VentaController extends Controller
                 }
             }
 
-            // Cambiar estado a cancelada
             $venta->update(['estado' => 'cancelada']);
         });
 

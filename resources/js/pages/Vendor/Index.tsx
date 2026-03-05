@@ -416,10 +416,10 @@ export default function PuntoVentaOficial({
                 carrito.map((item) =>
                     item.id === idItem
                         ? {
-                              ...item,
-                              cantidad: nuevaCantidad,
-                              subtotal: nuevaCantidad * item.precio_venta,
-                          }
+                            ...item,
+                            cantidad: nuevaCantidad,
+                            subtotal: nuevaCantidad * item.precio_venta,
+                        }
                         : item,
                 ),
             );
@@ -449,10 +449,10 @@ export default function PuntoVentaOficial({
             carrito.map((itemCarrito) =>
                 itemCarrito.id === id
                     ? {
-                          ...itemCarrito,
-                          cantidad: nuevaCantidad,
-                          subtotal: nuevaCantidad * itemCarrito.precio_venta,
-                      }
+                        ...itemCarrito,
+                        cantidad: nuevaCantidad,
+                        subtotal: nuevaCantidad * itemCarrito.precio_venta,
+                    }
                     : itemCarrito,
             ),
         );
@@ -464,10 +464,10 @@ export default function PuntoVentaOficial({
             carrito.map((item) =>
                 item.id === id
                     ? {
-                          ...item,
-                          precio_venta: nuevoPrecio,
-                          subtotal: item.cantidad * nuevoPrecio,
-                      }
+                        ...item,
+                        precio_venta: nuevoPrecio,
+                        subtotal: item.cantidad * nuevoPrecio,
+                    }
                     : item,
             ),
         );
@@ -1473,8 +1473,8 @@ export default function PuntoVentaOficial({
                                                                                     currentPayment.cuenta_id
                                                                                         ? `cuenta_${currentPayment.cuenta_id}`
                                                                                         : currentPayment.cliente_id
-                                                                                          ? `cliente_${currentPayment.cliente_id}`
-                                                                                          : ''
+                                                                                            ? `cliente_${currentPayment.cliente_id}`
+                                                                                            : ''
                                                                                 }
                                                                                 onValueChange={(value) => {
                                                                                     let updatedPayment = { ...currentPayment };
