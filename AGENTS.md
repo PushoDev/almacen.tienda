@@ -14,10 +14,6 @@ composer run dev:ssr    # Laravel server + queue + Vite + SSR dev server
 composer test           # Pest tests with config clear
 
 php artisan test                       # Run all tests
-php artisan test --filter TestClassName # Single test class
-php artisan test --filter "test name"   # Single test method
-php artisan test tests/Feature/         # Feature tests only
-php artisan test tests/Unit/            # Unit tests only
 
 php artisan pint        # Format code (PSR-12)
 php artisan migrate
@@ -35,6 +31,22 @@ npm run lint        # ESLint with auto-fix
 npm run format      # Prettier formatting
 npm run format:check # Check formatting
 npm run types       # TypeScript type checking
+```
+
+### Single Test Commands
+
+```bash
+# Single test class
+php artisan test --filter TestClassName
+
+# Single test method
+php artisan test --filter "test name"
+
+# Feature tests only
+php artisan test tests/Feature/
+
+# Unit tests only
+php artisan test tests/Unit/
 ```
 
 ## Code Style
