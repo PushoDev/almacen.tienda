@@ -64,7 +64,8 @@ class CierreCajaController extends Controller
             ->orderBy('fecha_cierre', 'desc')
             ->first();
 
-        $inicioTurno = $ultimoCierre ? $ultimoCierre->fecha_cierre : Carbon::today();
+        // Calcular inicio de turno de forma robusta
+        $inicioTurno = $this->calcularInicioTurno($user, $ultimoCierre);
 
         // Calcular detalles usando método compartido
         $calculos = $this->obtenerDetallesCierre($user, $inicioTurno);
@@ -209,33 +210,44 @@ class CierreCajaController extends Controller
             'data_keys' => array_keys($request->all())
         ]);
 
-        // Validación flexible: si fallan los secundarios, permitimos 0
         $data = $request->all();
-
-        $saldoInicial = $data['saldo_inicial'] ?? 0;
-        $ventasEfectivo = $data['ventas_efectivo'] ?? 0;
-        $ventasOtros = $data['ventas_otros'] ?? 0;
-        $totalGastos = $data['total_gastos'] ?? 0;
-        $totalDevoluciones = $data['total_devoluciones'] ?? 0;
-        $saldoContado = $data['saldo_contado'] ?? 0;
-
-        $inicioTurno = isset($data['fecha_apertura']) ? Carbon::parse($data['fecha_apertura']) : now()->subDay();
         $user = Auth::user();
 
-        // Intentar obtener detalles, si falla no bloqueamos el cierre
+        // Determinar inicio del turno (misma lógica que create)
+        $ultimoCierre = CierreCaja::where('user_id', $user->id)
+            ->orderBy('fecha_cierre', 'desc')
+            ->first();
+
+        $inicioTurno = $this->calcularInicioTurno($user, $ultimoCierre);
+
+        // Obtener cálculos del backend como FUENTE DE VERDAD
         try {
             $calculos = $this->obtenerDetallesCierre($user, $inicioTurno);
             $detallesJson = $calculos['detalles'];
             $comisionesGestorDetalles = $calculos['comisiones_gestor_detalles'] ?? [];
             $comisionesGestorTotal = $calculos['comisiones_gestor_total'] ?? 0;
+
+            // Usar cálculos del backend como fuente de verdad
+            $ventasEfectivo = $calculos['ventas_efectivo'];
+            $ventasOtros = $calculos['ventas_otros'];
+            $saldoEsperado = $calculos['saldo_esperado_global'];
         } catch (\Exception $e) {
+            // Fallback defensivo solo si falla el cálculo backend
             \Illuminate\Support\Facades\Log::error('Fallo obtenerDetallesCierre: ' . $e->getMessage());
-            $detallesJson = [];
-            $comisionesGestorDetalles = [];
+            $ventasEfectivo = $data['ventas_efectivo'] ?? 0;
+            $ventasOtros = $data['ventas_otros'] ?? 0;
             $comisionesGestorTotal = 0;
+            $comisionesGestorDetalles = [];
+            $detallesJson = [];
+            $saldoEsperado = 0;
         }
 
-        $saldoEsperado = round($saldoInicial + $ventasEfectivo - $totalGastos - $totalDevoluciones - $comisionesGestorTotal, 2);
+        $saldoInicial = $data['saldo_inicial'] ?? 0;
+        $totalGastos = $data['total_gastos'] ?? 0;
+        $totalDevoluciones = $data['total_devoluciones'] ?? 0;
+        $saldoContado = $data['saldo_contado'] ?? 0;
+
+        // Calcular diferencia usando el saldo esperado del backend
         $diferencia = round($saldoContado - $saldoEsperado, 2);
 
         DB::beginTransaction();
@@ -517,11 +529,14 @@ class CierreCajaController extends Controller
                 'productos' => $detallesProductos,
             ];
 
-            // --- AGREGAR A RESUMEN DE PRODUCTOS (UNA SOLA VEZ POR VENTA) ---
+            // --- AGREGAR A RESUMEN DE PRODUCTOS (AGRUPADO POR PRODUCTO + PRECIO) ---
+            // Esto permite mostrar precios variables: 5 x $35 + 3 x $40 = filas separadas
             if ($pago->venta && $pago->venta->detalles && !in_array($pago->venta_id, $ventasProcesadas)) {
                 $ventasProcesadas[] = $pago->venta_id;
                 foreach ($pago->venta->detalles as $det) {
                     $prodId = $det->producto_id;
+                    $precioVenta = (float) $det->precio_venta;
+                    
                     $producto = $det->producto;
                     $nombreProd = $producto ? $producto->nombre_producto : 'Producto Desconocido';
                     $marca = $producto ? $producto->marca_producto : '';
@@ -532,6 +547,7 @@ class CierreCajaController extends Controller
                     $categoria = $producto && $producto->categoria ? $producto->categoria->nombre_categoria : '';
 
                     if (!isset($resumenPorMoneda[$codigo]['productos_resumen'][$prodId])) {
+                        $precioBase = isset($det->precio_base) ? (float) $det->precio_base : $precioVenta;
                         $resumenPorMoneda[$codigo]['productos_resumen'][$prodId] = [
                             'id' => $prodId,
                             'nombre' => $nombreProd,
@@ -542,7 +558,8 @@ class CierreCajaController extends Controller
                             'imagen_url' => $imagen,
                             'categoria' => $categoria,
                             'cantidad' => 0,
-                            'precio' => (float) $det->precio_venta,
+                            'precio_base' => $precioBase,
+                            'precio_venta' => $precioVenta,
                             'total' => 0,
                         ];
                     }
@@ -706,7 +723,7 @@ class CierreCajaController extends Controller
             'detalles' => array_values($resumenPorMoneda),
             'ventas_efectivo' => round($ventasEfectivoTotalUSD, 2),
             'ventas_otros' => round($ventasOtrosTotalUSD, 2),
-            'saldo_esperado_global' => max(0, round($saldoEsperadoTotalUSD, 2)),
+            'saldo_esperado_global' => round($saldoEsperadoTotalUSD, 2),
             // NUEVO: Totales separados por destino
             'ventas_a_cuentas_total_usd' => round($ventasACuentasTotalUSD, 2),
             'ventas_a_clientes_total_usd' => round($ventasAClientesTotalUSD, 2),
@@ -1028,5 +1045,42 @@ class CierreCajaController extends Controller
         });
 
         return $resumenTransferencias;
+    }
+
+    /**
+     * Calcula el inicio del turno de forma robusta.
+     * Si existe último cierre, usa su fecha_cierre.
+     * Si no existe, busca la operación más antigua sin cerrar del usuario.
+     * Solo usa today() como último recurso.
+     */
+    private function calcularInicioTurno($user, ?CierreCaja $ultimoCierre): Carbon
+    {
+        // 1. Si existe cierre previo, usar su fecha_cierre
+        if ($ultimoCierre && $ultimoCierre->fecha_cierre) {
+            return $ultimoCierre->fecha_cierre;
+        }
+
+        // 2. Si no existe cierre previo, buscar la operación más antigua sin cerrar
+        // Buscar la venta completada más antigua del usuario
+        $primeraVenta = Venta::where('user_id', $user->id)
+            ->where('estado', 'completada')
+            ->orderBy('created_at', 'asc')
+            ->first();
+
+        if ($primeraVenta) {
+            return $primeraVenta->created_at;
+        }
+
+        // 3. Buscar el pago más antiguo
+        $primerPago = \App\Models\PagoVenta::whereHas('venta', function ($q) use ($user) {
+            $q->where('user_id', $user->id);
+        })->orderBy('created_at', 'asc')->first();
+
+        if ($primerPago) {
+            return $primerPago->created_at;
+        }
+
+        // 4. Último recurso: usar hoy
+        return Carbon::today();
     }
 }

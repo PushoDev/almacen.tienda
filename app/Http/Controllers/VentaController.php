@@ -823,11 +823,16 @@ class VentaController extends Controller
                 $producto = Producto::find($item['producto_id']);
                 $ganancia = ($item['precio_venta'] - $producto->precio_compra_producto) * $item['cantidad'];
                 $total_ganancia += $ganancia;
+
+                // Obtener precio base del vendedor para el cierre
+                $precioBase = $item['precio_base'] ?? $item['precio_venta'];
+
                 VentaDetalle::create([
                     'venta_id' => $venta->id,
                     'producto_id' => $item['producto_id'],
                     'cantidad' => $item['cantidad'],
                     'precio_venta' => $item['precio_venta'],
+                    'precio_base' => $precioBase,
                     'subtotal' => $item['subtotal'],
                     'costo_unitario' => $producto->precio_compra_producto,
                     'ganancia' => $ganancia,

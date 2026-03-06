@@ -24,6 +24,7 @@ import {
     ArrowDown,
     ArrowUp,
     Banknote,
+    Briefcase,
     Calculator,
     CheckCircle2,
     ChevronDown,
@@ -35,9 +36,6 @@ import {
     ShoppingCart,
     TrendingUp,
     Wallet,
-    Users,
-    Briefcase,
-    MessageSquare,
 } from 'lucide-react';
 import { useState } from 'react';
 import { toast, Toaster } from 'sonner';
@@ -113,19 +111,23 @@ interface DetalleMoneda {
     items_transferencias: ItemMovimiento[];
     items_transferencias_salientes: TransferenciaItem[];
     items_transferencias_entrantes: TransferenciaItem[];
-    productos_resumen: Record<string, {
-        id: number;
-        nombre: string;
-        marca: string;
-        modelo: string;
-        capacidad: string;
-        codigo: string;
-        imagen_url: string;
-        categoria: string;
-        cantidad: number;
-        precio: number;
-        total: number
-    }>;
+    productos_resumen: Record<
+        string,
+        {
+            id: number;
+            nombre: string;
+            marca: string;
+            modelo: string;
+            capacidad: string;
+            codigo: string;
+            imagen_url: string;
+            categoria: string;
+            cantidad: number;
+            precio_base: number;
+            precio_venta: number;
+            total: number;
+        }
+    >;
     operaciones_detalle: OperacionDetaile[];
 }
 
@@ -194,37 +196,6 @@ interface TransferenciasResumen {
     detalles_completos: TransferenciaCompleta[];
 }
 
-interface DetalleMoneda {
-    moneda: string;
-    tasa_cambio: number;
-    ventas_efectivo: number;
-    ventas_transferencia: number;
-    ingresos_extra: number;
-    gastos: number;
-    transferencias_salientes: number;
-    transferencias_entrantes: number;
-    saldo_calculado: number;
-    items_ventas: ItemVenta[];
-    items_gastos: ItemMovimiento[];
-    items_ingresos: ItemMovimiento[];
-    items_transferencias: ItemMovimiento[];
-    items_transferencias_salientes: TransferenciaItem[];
-    items_transferencias_entrantes: TransferenciaItem[];
-    productos_resumen: Record<string, {
-        id: number;
-        nombre: string;
-        marca: string;
-        modelo: string;
-        capacidad: string;
-        codigo: string;
-        imagen_url: string;
-        categoria: string;
-        cantidad: number;
-        precio: number;
-        total: number
-    }>;
-}
-
 interface Calculos {
     saldo_inicial: number;
     ventas_efectivo: number;
@@ -280,9 +251,9 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Nuevo Cierre', href: '#' },
 ];
 
-export default function Create({ 
-    calculos, 
-    fecha_apertura, 
+export default function Create({
+    calculos,
+    fecha_apertura,
     moneda_referencia = 'USD',
     comparativa_cuentas = [],
     comparativa_clientes = [],
@@ -321,12 +292,12 @@ export default function Create({
         imagen_url: p.imagen_url || '',
         categoria: p.categoria || '',
         cantidad: Number(p.cantidad) || 0,
-        precio_unitario: Number(p.precio) || 0,
+        precio_base: Number(p.precio_base) || 0,
+        precio_venta: Number(p.precio_venta) || 0,
         total: Number(p.total) || 0,
-        precio_equivalente: Number(p.precio) || 0,
-        total_equivalente: Number(p.total) || 0,
     }));
-    const totalVentasProductos = lineasProductos.reduce((s, r) => s + (r.total_equivalente ?? r.total ?? 0), 0);
+    const totalVentasProductos = lineasProductos.reduce((s, r) => s + r.total, 0);
+    const totalEsperadoProductos = lineasProductos.reduce((s, r) => s + r.cantidad * r.precio_base, 0);
 
     // Por dónde entraron: agrupado primero por MONEDA, luego por método/destino.
     // Incluye tanto el total en moneda original como el equivalente USD.
@@ -364,7 +335,7 @@ export default function Create({
     const totalGastos = (calculos.detalles ?? []).reduce((sum, d) => sum + (d.gastos ?? 0), 0);
     const totalIngresos = (calculos.detalles ?? []).reduce((sum, d) => sum + (d.ingresos_extra ?? 0), 0);
     const totalTransferencias = (calculos.detalles ?? []).reduce((sum, d) => sum + (d.transferencias_salientes ?? 0), 0);
-    
+
     // NUEVO: Calcular total de comisiones a gestores
     const totalComisionesGestor = calculos.comisiones_gestor_total ?? 0;
     const comisionesGestorDetalles = calculos.comisiones_gestor_detalles ?? [];
@@ -529,20 +500,18 @@ export default function Create({
                     <Card>
                         <CardHeader className="pb-2">
                             <CardTitle className="flex items-center gap-2 text-lg">
-                                <Wallet className="h-5 w-5 text-primary" />
+                                <Wallet className="text-primary h-5 w-5" />
                                 Distribución del Dinero
                             </CardTitle>
-                            <CardDescription>
-                                Separación entre dinero que entró a tus cuentas y dinero que fue a deuda de clientes
-                            </CardDescription>
+                            <CardDescription>Separación entre dinero que entró a tus cuentas y dinero que fue a deuda de clientes</CardDescription>
                         </CardHeader>
                         <CardContent className="p-4">
                             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                                 {/* Columna: Dinero en MIS CUENTAS */}
-                                <div className="space-y-3 rounded-lg border border-border bg-primary/5 p-4">
+                                <div className="border-border bg-primary/5 space-y-3 rounded-lg border p-4">
                                     <div className="flex items-center gap-2">
-                                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                                            <Banknote className="h-4 w-4 text-primary" />
+                                        <div className="bg-primary/10 flex h-8 w-8 items-center justify-center rounded-full">
+                                            <Banknote className="text-primary h-4 w-4" />
                                         </div>
                                         <h4 className="font-semibold">Montos Depositados a mis Cuentas</h4>
                                     </div>
@@ -559,10 +528,10 @@ export default function Create({
                                                 ${Number(calculos.ventas_a_cuentas_transferencia_usd || 0).toFixed(2)}
                                             </span>
                                         </div>
-                                        <div className="border-t border-border pt-2">
+                                        <div className="border-border border-t pt-2">
                                             <div className="flex items-center justify-between">
                                                 <span className="font-semibold">Total en Cuentas:</span>
-                                                <span className="text-xl font-bold text-primary">
+                                                <span className="text-primary text-xl font-bold">
                                                     ${Number(calculos.ventas_a_cuentas_total_usd || 0).toFixed(2)}
                                                 </span>
                                             </div>
@@ -571,10 +540,10 @@ export default function Create({
                                 </div>
 
                                 {/* Columna: Dinero a DEUDA de CLIENTES */}
-                                <div className="space-y-3 rounded-lg border border-border bg-muted/50 p-4">
+                                <div className="border-border bg-muted/50 space-y-3 rounded-lg border p-4">
                                     <div className="flex items-center gap-2">
-                                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
-                                            <CreditCard className="h-4 w-4 text-muted-foreground" />
+                                        <div className="bg-muted flex h-8 w-8 items-center justify-center rounded-full">
+                                            <CreditCard className="text-muted-foreground h-4 w-4" />
                                         </div>
                                         <h4 className="font-semibold">Depósitos a Clientes</h4>
                                     </div>
@@ -591,10 +560,10 @@ export default function Create({
                                                 ${Number(calculos.ventas_a_clientes_transferencia_usd || 0).toFixed(2)}
                                             </span>
                                         </div>
-                                        <div className="border-t border-border pt-2">
+                                        <div className="border-border border-t pt-2">
                                             <div className="flex items-center justify-between">
                                                 <span className="font-semibold">Total a Clientes:</span>
-                                                <span className="text-xl font-bold text-muted-foreground">
+                                                <span className="text-muted-foreground text-xl font-bold">
                                                     ${Number(calculos.ventas_a_clientes_total_usd || 0).toFixed(2)}
                                                 </span>
                                             </div>
@@ -613,9 +582,7 @@ export default function Create({
                             <Receipt className="h-5 w-5" />
                             Ventas
                         </CardTitle>
-                        <CardDescription>
-                            Productos vendidos en el turno. Importes en {moneda_referencia} (moneda de referencia).
-                        </CardDescription>
+                        <CardDescription>Productos vendidos en el turno. Importes en {moneda_referencia} (moneda de referencia).</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="overflow-x-auto rounded-lg border">
@@ -628,14 +595,15 @@ export default function Create({
                                         <th className="px-4 py-3 text-left font-semibold">Capacidad</th>
                                         <th className="px-4 py-3 text-left font-semibold">Categoría</th>
                                         <th className="px-4 py-3 text-center font-semibold">Cantidad</th>
-                                        <th className="px-4 py-3 text-right font-semibold">Precio</th>
-                                        <th className="px-4 py-3 text-right font-semibold">Total</th>
+                                        <th className="px-4 py-3 text-right font-semibold">Precio Unit</th>
+                                        <th className="px-4 py-3 text-right font-semibold">Total Esperado</th>
+                                        <th className="px-4 py-3 text-right font-semibold">Total Real</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-border">
+                                <tbody className="divide-border divide-y">
                                     {lineasProductos.length > 0 ? (
                                         lineasProductos.map((linea, idx) => (
-                                            <tr key={idx} className="transition-colors hover:bg-muted/50">
+                                            <tr key={idx} className="hover:bg-muted/50 transition-colors">
                                                 <td className="px-4 py-2">
                                                     <div className="flex items-center gap-3">
                                                         <img
@@ -645,34 +613,27 @@ export default function Create({
                                                         />
                                                         <div>
                                                             <div className="font-semibold">{linea.nombre}</div>
-                                                            <div className="text-xs text-muted-foreground">{linea.codigo}</div>
+                                                            <div className="text-muted-foreground text-xs">{linea.codigo}</div>
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="px-4 py-2 text-muted-foreground">{linea.marca}</td>
-                                                <td className="px-4 py-2 text-muted-foreground">{linea.modelo}</td>
-                                                <td className="px-4 py-2 text-muted-foreground">{linea.capacidad || 'N/A'}</td>
-                                                <td className="px-4 py-2 text-muted-foreground">{linea.categoria}</td>
+                                                <td className="text-muted-foreground px-4 py-2">{linea.marca}</td>
+                                                <td className="text-muted-foreground px-4 py-2">{linea.modelo}</td>
+                                                <td className="text-muted-foreground px-4 py-2">{linea.capacidad || 'N/A'}</td>
+                                                <td className="text-muted-foreground px-4 py-2">{linea.categoria}</td>
                                                 <td className="px-4 py-2 text-center">
-                                                    <span className="font-bold text-primary">{linea.cantidad}</span>
+                                                    <span className="text-primary font-bold">{linea.cantidad}</span>
                                                 </td>
+                                                <td className="px-4 py-2 text-right font-mono">${Number(linea.precio_base).toFixed(2)}</td>
                                                 <td className="px-4 py-2 text-right font-mono">
-                                                    {(linea.total_equivalente !== undefined
-                                                        ? Number(linea.precio_equivalente)
-                                                        : Number(linea.precio_unitario)
-                                                    ).toFixed(2)}
+                                                    ${Number(linea.cantidad * linea.precio_base).toFixed(2)}
                                                 </td>
-                                                <td className="px-4 py-2 text-right font-mono font-medium">
-                                                    {(linea.total_equivalente !== undefined
-                                                        ? Number(linea.total_equivalente)
-                                                        : Number(linea.total)
-                                                    ).toFixed(2)}
-                                                </td>
+                                                <td className="px-4 py-2 text-right font-mono font-medium">${Number(linea.total).toFixed(2)}</td>
                                             </tr>
                                         ))
                                     ) : (
                                         <tr>
-                                            <td colSpan={8} className="text-muted-foreground px-4 py-8 text-center italic">
+                                            <td colSpan={9} className="text-muted-foreground px-4 py-8 text-center italic">
                                                 No hay ventas en este turno
                                             </td>
                                         </tr>
@@ -683,12 +644,11 @@ export default function Create({
                                         <td colSpan={5} className="px-4 py-3 text-right font-bold">
                                             Total
                                         </td>
-                                        <td className="px-4 py-3 text-center font-bold">
-                                            {lineasProductos.reduce((sum, p) => sum + p.cantidad, 0)}
-                                        </td>
+                                        <td className="px-4 py-3 text-center font-bold">{lineasProductos.reduce((sum, p) => sum + p.cantidad, 0)}</td>
                                         <td className="px-4 py-3"></td>
-                                        <td className="px-4 py-3 text-right font-mono font-bold">
-                                            {Number(totalVentasProductos).toFixed(2)} {moneda_referencia}
+                                        <td className="px-4 py-3 text-right font-mono font-bold">${totalEsperadoProductos.toFixed(2)}</td>
+                                        <td className="px-4 py-3 text-right font-mono text-lg font-bold text-green-600">
+                                            ${totalVentasProductos.toFixed(2)}
                                         </td>
                                     </tr>
                                 </tfoot>
@@ -699,8 +659,6 @@ export default function Create({
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
                     {/* Columna Izquierda: Información del Sistema */}
                     <div className="space-y-6 lg:col-span-8">
-
-
                         {/* Por dónde entraron: una tabla por moneda con desglose de operaciones */}
                         <Card>
                             <CardHeader>
@@ -749,8 +707,8 @@ export default function Create({
                                                                             ? `${via} ${destino}`
                                                                             : via
                                                                         : destino
-                                                                            ? `Transferencia ${destino}`
-                                                                            : `Transferencia ${moneda}`;
+                                                                          ? `Transferencia ${destino}`
+                                                                          : `Transferencia ${moneda}`;
                                                                 }
                                                                 return etiquetaMetodo === etiqueta;
                                                             });
@@ -851,7 +809,7 @@ export default function Create({
                     <div className="space-y-6 lg:col-span-4">
                         {/* Movimientos Financieros */}
                         <div className="space-y-2">
-                            <h3 className="text-sm font-bold uppercase tracking-wide">Movimientos Financieros</h3>
+                            <h3 className="text-sm font-bold tracking-wide uppercase">Movimientos Financieros</h3>
                             <div className="grid grid-cols-4 gap-2">
                                 {/* Gastos */}
                                 <Card
@@ -912,7 +870,10 @@ export default function Create({
                         {/* Dialog de Detalle de Transacciones */}
                         <Dialog open={showTransaccionesDialog} onOpenChange={setShowTransaccionesDialog}>
                             <DialogTrigger asChild>
-                                <Button variant="outline" className="w-full bg-blue-500 text-white hover:bg-blue-600 hover:text-white cursor-pointer gap-2">
+                                <Button
+                                    variant="outline"
+                                    className="w-full cursor-pointer gap-2 bg-blue-500 text-white hover:bg-blue-600 hover:text-white"
+                                >
                                     <Eye className="h-4 w-4" /> Ver Detalle de los Movimientos
                                 </Button>
                             </DialogTrigger>
@@ -1056,7 +1017,9 @@ export default function Create({
                                                                         <div className="text-muted-foreground text-xs">{item.cuenta_tipo}</div>
                                                                     </TableCell>
                                                                     <TableCell className="max-w-xs text-sm">
-                                                                        {item.comentario || <span className="text-muted-foreground italic">Sin comentario</span>}
+                                                                        {item.comentario || (
+                                                                            <span className="text-muted-foreground italic">Sin comentario</span>
+                                                                        )}
                                                                     </TableCell>
                                                                     <TableCell className="text-right font-mono font-medium text-red-600">
                                                                         -${Number(item.monto).toFixed(2)} {item.moneda_codigo}
@@ -1154,9 +1117,7 @@ export default function Create({
                                         <TrendingUp className="h-5 w-5 text-blue-600" />
                                         Comparativa con Cierre Anterior
                                     </CardTitle>
-                                    <CardDescription>
-                                        Comparación de saldos y deudas respecto al cierre anterior
-                                    </CardDescription>
+                                    <CardDescription>Comparación de saldos y deudas respecto al cierre anterior</CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-6">
                                     {/* Pestañas Cuentas / Clientes */}
@@ -1184,7 +1145,7 @@ export default function Create({
                                                             <TableRow key={item.id}>
                                                                 <TableCell className="font-medium">{item.nombre}</TableCell>
                                                                 <TableCell>
-                                                                    <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium">
+                                                                    <span className="bg-muted rounded px-2 py-0.5 text-xs font-medium">
                                                                         {item.moneda}
                                                                     </span>
                                                                 </TableCell>
@@ -1200,9 +1161,7 @@ export default function Create({
                                                                             +${Number(item.diferencia).toFixed(2)} 📈
                                                                         </span>
                                                                     ) : item.diferencia < 0 ? (
-                                                                        <span className="text-red-600">
-                                                                            ${Number(item.diferencia).toFixed(2)} 📉
-                                                                        </span>
+                                                                        <span className="text-red-600">${Number(item.diferencia).toFixed(2)} 📉</span>
                                                                     ) : (
                                                                         <span className="text-muted-foreground">-</span>
                                                                     )}
@@ -1256,9 +1215,7 @@ export default function Create({
                                                     </Table>
                                                 </div>
                                             ) : (
-                                                <p className="text-muted-foreground py-8 text-center italic">
-                                                    No hay clientes con deuda registrada.
-                                                </p>
+                                                <p className="text-muted-foreground py-8 text-center italic">No hay clientes con deuda registrada.</p>
                                             )}
                                         </TabsContent>
                                     </Tabs>
@@ -1273,8 +1230,8 @@ export default function Create({
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 {/* Total de Venta */}
-                                <div className="rounded-lg border border-primary bg-primary/10 p-4">
-                                    <p className="text-muted-foreground text-xs font-bold uppercase mb-1">Total de Ventas del Turno</p>
+                                <div className="border-primary bg-primary/10 rounded-lg border p-4">
+                                    <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Total de Ventas del Turno</p>
                                     <p className="text-4xl font-black text-emerald-600">${Number(calculos.ventas_efectivo).toFixed(2)}</p>
                                     <p className="text-muted-foreground mt-2 text-xs">Incluyendo todas las monedas y métodos de pago</p>
                                 </div>
@@ -1282,7 +1239,7 @@ export default function Create({
                                 {/* Comisiones a Gestores - Si existen */}
                                 {totalComisionesGestor > 0 && (
                                     <div className="rounded-lg border border-purple-200 bg-purple-50 p-4">
-                                        <p className="text-muted-foreground text-xs font-bold uppercase mb-1">- Comisiones a Gestores</p>
+                                        <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">- Comisiones a Gestores</p>
                                         <p className="text-2xl font-black text-purple-700">-${Number(totalComisionesGestor).toFixed(2)}</p>
                                         <p className="text-muted-foreground mt-1 text-xs">
                                             {comisionesGestorDetalles.length} venta{comisionesGestorDetalles.length !== 1 ? 's' : ''} con gestor
