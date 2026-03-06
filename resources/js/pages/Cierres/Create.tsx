@@ -730,37 +730,86 @@ export default function Create({
                                                             <CollapsibleContent>
                                                                 <TableRow>
                                                                     <TableCell colSpan={4} className="bg-muted/30 p-0">
-                                                                        <div className="border-muted-foreground/20 ml-4 space-y-2 border-l-2 p-2">
+                                                                        <div className="border-muted-foreground/20 ml-4 space-y-2 border-l-2 p-3">
                                                                             {operacionesPorMetodo.length > 0 ? (
                                                                                 operacionesPorMetodo.map((operacion, idx) => (
                                                                                     <div
                                                                                         key={idx}
-                                                                                        className="bg-card space-y-1 rounded-md border p-2 text-sm shadow-sm"
+                                                                                        className="bg-card w-full space-y-2 rounded-md border p-3 text-sm shadow-sm"
                                                                                     >
-                                                                                        <div className="flex items-center justify-between font-medium">
-                                                                                            <span>
-                                                                                                Venta #{operacion.venta_id} - {operacion.cliente}
-                                                                                            </span>
-                                                                                            <span className="font-mono">
-                                                                                                ${Number(operacion.monto).toFixed(2)} -{' '}
-                                                                                                {operacion.hora}
-                                                                                            </span>
+                                                                                        {/* Header de la operación */}
+                                                                                        <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
+                                                                                            <div className="flex items-center gap-2">
+                                                                                                <span className="font-semibold">
+                                                                                                    Venta #{operacion.venta_id}
+                                                                                                </span>
+                                                                                                <span className="text-muted-foreground">-</span>
+                                                                                                <span>{operacion.cliente}</span>
+                                                                                                <span className="text-muted-foreground">-</span>
+                                                                                                <span className="text-muted-foreground">
+                                                                                                    {operacion.hora}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            <div className="flex items-center gap-4">
+                                                                                                <span className="text-muted-foreground text-sm">
+                                                                                                    {operacion.cuenta_nombre
+                                                                                                        ? `Cuenta: ${operacion.cuenta_nombre}`
+                                                                                                        : ''}
+                                                                                                    {operacion.destino_nombre
+                                                                                                        ? ` - ${operacion.destino_nombre}`
+                                                                                                        : ''}
+                                                                                                </span>
+                                                                                                <span className="font-mono font-bold text-green-600">
+                                                                                                    ${Number(operacion.monto).toFixed(2)}
+                                                                                                </span>
+                                                                                            </div>
                                                                                         </div>
+
+                                                                                        {/* Tabla de productos */}
                                                                                         {(operacion.productos?.length ?? 0) > 0 && (
-                                                                                            <div className="text-muted-foreground ml-4 space-y-1">
-                                                                                                {operacion.productos?.map((prod, pidx) => (
-                                                                                                    <div
-                                                                                                        key={pidx}
-                                                                                                        className="flex justify-between text-xs"
-                                                                                                    >
-                                                                                                        <span>
-                                                                                                            {prod.cantidad}x {prod.descripcion}
-                                                                                                        </span>
-                                                                                                        <span className="font-mono">
-                                                                                                            ${Number(prod.total).toFixed(2)}
-                                                                                                        </span>
-                                                                                                    </div>
-                                                                                                ))}
+                                                                                            <div className="mt-2 w-full overflow-x-auto">
+                                                                                                <table className="w-full text-xs">
+                                                                                                    <thead className="bg-muted/50">
+                                                                                                        <tr>
+                                                                                                            <th className="px-2 py-1 text-left font-semibold">
+                                                                                                                Producto
+                                                                                                            </th>
+                                                                                                            <th className="px-2 py-1 text-center font-semibold">
+                                                                                                                Cant
+                                                                                                            </th>
+                                                                                                            <th className="px-2 py-1 text-right font-semibold">
+                                                                                                                Precio
+                                                                                                            </th>
+                                                                                                            <th className="px-2 py-1 text-right font-semibold">
+                                                                                                                Total
+                                                                                                            </th>
+                                                                                                        </tr>
+                                                                                                    </thead>
+                                                                                                    <tbody>
+                                                                                                        {operacion.productos?.map((prod, pidx) => (
+                                                                                                            <tr key={pidx} className="border-t">
+                                                                                                                <td className="px-2 py-1">
+                                                                                                                    {prod.cantidad}x{' '}
+                                                                                                                    {prod.descripcion}
+                                                                                                                </td>
+                                                                                                                <td className="px-2 py-1 text-center">
+                                                                                                                    {prod.cantidad}
+                                                                                                                </td>
+                                                                                                                <td className="px-2 py-1 text-right font-mono">
+                                                                                                                    $
+                                                                                                                    {Number(
+                                                                                                                        prod.precio_unitario ||
+                                                                                                                            prod.total /
+                                                                                                                                prod.cantidad,
+                                                                                                                    ).toFixed(2)}
+                                                                                                                </td>
+                                                                                                                <td className="px-2 py-1 text-right font-mono font-medium">
+                                                                                                                    ${Number(prod.total).toFixed(2)}
+                                                                                                                </td>
+                                                                                                            </tr>
+                                                                                                        ))}
+                                                                                                    </tbody>
+                                                                                                </table>
                                                                                             </div>
                                                                                         )}
                                                                                     </div>
