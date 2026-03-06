@@ -296,9 +296,9 @@ export default function PuntoVentaOficial({
         try {
             console.log(`Cargando cuentas filtradas para moneda ID: ${monedaId}, método: ${metodoPago}`);
             const response = await axios.get(route('ventas.getCuentasFiltradas'), {
-                params: { 
+                params: {
                     moneda_id: monedaId,
-                    metodo_pago: metodoPago || undefined
+                    metodo_pago: metodoPago || undefined,
                 },
             });
             console.log('Cuentas filtradas cargadas:', response.data);
@@ -503,6 +503,38 @@ export default function PuntoVentaOficial({
 
     const totalPaid = useMemo(() => payments.reduce((sum, payment) => sum + payment.amountInUsd, 0), [payments]);
     const remainingInUsd = calcularTotal - totalPaid;
+
+    // ✅ NUEVO: Recalcular monto automáticamente cuando el usuario cambia la tasa de cambio manualmente
+    useEffect(() => {
+        // Solo ejecutar cuando el usuario edita manualmente la tasa (no cuando se selecciona moneda o destino)
+        const monedaSeleccionada = currencies.find((c) => c.id === currentPayment.moneda_id);
+        const tasaOriginal = monedaSeleccionada?.exchangeRate || 0;
+        const tasaActual = parseFloat(currentPayment.exchangeRate) || 0;
+
+        // Solo ejecutar si la tasa fue editada manualmente (diferente de la tasa original de la moneda)
+        const tasaFueEditada = Math.abs(tasaActual - tasaOriginal) > 0.0001;
+
+        if (
+            currentPayment.moneda_id &&
+            currentPayment.exchangeRate &&
+            tasaFueEditada &&
+            parseFloat(currentPayment.exchangeRate) > 0 &&
+            remainingInUsd > 0 &&
+            currentPayment.amount &&
+            parseFloat(currentPayment.amount) > 0
+        ) {
+            const nuevaTasa = parseFloat(currentPayment.exchangeRate);
+            const montoCalculado = remainingInUsd * nuevaTasa;
+
+            const montoActual = parseFloat(currentPayment.amount) || 0;
+            if (Math.abs(montoActual - montoCalculado) > 0.01) {
+                setCurrentPayment((prev) => ({
+                    ...prev,
+                    amount: montoCalculado.toFixed(2),
+                }));
+            }
+        }
+    }, [currentPayment.exchangeRate, remainingInUsd, currentPayment.moneda_id]);
 
     const convertToUsd = (amount: number, exchangeRate: number): number => {
         if (!exchangeRate || exchangeRate <= 0) {
@@ -1459,14 +1491,6 @@ export default function PuntoVentaOficial({
                                                                                             cliente_id: value.replace('cliente_', ''),
                                                                                             cuenta_id: '',
                                                                                         };
-                                                                                    }
-
-                                                                                    // Si ya hay una moneda seleccionada, recalcular el monto automático
-                                                                                    if (updatedPayment.moneda_id) {
-                                                                                        const automaticAmount = calculateAutomaticAmount(
-                                                                                            updatedPayment.moneda_id,
-                                                                                        );
-                                                                                        updatedPayment.amount = automaticAmount;
                                                                                     }
 
                                                                                     setCurrentPayment(updatedPayment);

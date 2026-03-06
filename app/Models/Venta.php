@@ -30,6 +30,7 @@ class Venta extends Model
         'gestor_monto',
         'gestor_cuenta_id',
         'gestor_comentario',
+        'tasa_aplicada_gestor',
     ];
 
     protected $casts = [
@@ -39,7 +40,8 @@ class Venta extends Model
         'ganancia_perdida_cambiaria' => 'decimal:2',
         'ganancia_real_total' => 'decimal:2',
         'tasa_aplicada_venta' => 'decimal:2',
-        'monto_diferencia_cambiaria' => 'decimal:2', // ← AQUÍ SE ACEPTAN NEGATIVOS
+        'monto_diferencia_cambiaria' => 'decimal:2',
+        'tasa_aplicada_gestor' => 'decimal:2',
     ];
 
     public function usuario()

@@ -599,6 +599,10 @@ class VentaController extends Controller
                 'comentario' => $venta->gestor_comentario,
                 'cuenta_nombre' => $venta->gestorCuenta?->nombre_cuenta,
                 'tasa_aplicada' => $venta->tasa_aplicada_venta ? (float) $venta->tasa_aplicada_venta : null,
+                'tasa_aplicada_gestor' => $venta->tasa_aplicada_gestor ? (float) $venta->tasa_aplicada_gestor : null,
+                'monto_usd' => $venta->gestor_monto && $venta->tasa_aplicada_gestor 
+                    ? round($venta->gestor_monto / $venta->tasa_aplicada_gestor, 2) 
+                    : null,
                 'moneda' => $venta->gestorCuenta?->moneda ? [
                     'codigo' => $venta->gestorCuenta->moneda->codigo_moneda,
                     'simbolo' => $venta->gestorCuenta->moneda->simbolo_moneda,
@@ -714,6 +718,7 @@ class VentaController extends Controller
             $validator = Validator::make($request->all(), [
                 'gestor_monto' => 'required|numeric|min:0.01',
                 'gestor_cuenta_id' => 'required|exists:cuentas,id',
+                'tasa_aplicada_gestor' => 'required|numeric|min:0.0001',
             ]);
 
             if ($validator->fails()) {
@@ -808,6 +813,7 @@ class VentaController extends Controller
                 'gestor_monto' => $validatedData['gestor_monto'] ?? 0,
                 'gestor_cuenta_id' => $validatedData['gestor_cuenta_id'] ?? null,
                 'gestor_comentario' => $validatedData['gestor_comentario'] ?? null,
+                'tasa_aplicada_gestor' => $validatedData['tasa_aplicada_gestor'] ?? null,
             ]);
 
             HistorialStock::where('user_id', $user->id)->where('tipo', 'venta_pendiente')->whereNull('venta_id')->update(['venta_id' => $venta->id]);
@@ -929,10 +935,33 @@ class VentaController extends Controller
             'gestor_cuenta_id' => 'nullable|exists:cuentas,id',
             'gestor_comentario' => 'nullable|string|max:500',
             'tasa_aplicada_venta' => 'nullable|numeric|min:0.0001',
+            'tasa_aplicada_gestor' => 'nullable|numeric|min:0.0001',
         ]);
 
         if ($request->filled('carnet_identidad')) {
             $validated['carnet_identidad'] = preg_replace('/\D/', '', $validated['carnet_identidad']);
+        }
+
+        // Validar datos del gestor si está activado
+        if ($request->boolean('es_venta_gestor')) {
+            if (empty($validated['gestor_cuenta_id'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Debe seleccionar una cuenta del gestor'
+                ], 422);
+            }
+            if (empty($validated['gestor_monto']) || $validated['gestor_monto'] <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'El monto del gestor debe ser mayor a 0'
+                ], 422);
+            }
+            if (empty($validated['tasa_aplicada_gestor'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Debe ingresar la tasa aplicada del gestor'
+                ], 422);
+            }
         }
 
         DB::transaction(function () use ($venta, $validated, $request) {
@@ -951,6 +980,7 @@ class VentaController extends Controller
                     'gestor_cuenta_id' => !empty($validated['gestor_cuenta_id']) ? (int) $validated['gestor_cuenta_id'] : null,
                     'gestor_comentario' => $validated['gestor_comentario'] ?? null,
                     'tasa_aplicada_venta' => !empty($validated['tasa_aplicada_venta']) ? (float) $validated['tasa_aplicada_venta'] : null,
+                    'tasa_aplicada_gestor' => !empty($validated['tasa_aplicada_gestor']) ? (float) $validated['tasa_aplicada_gestor'] : null,
                 ]);
             } else {
                 // Si no es venta con gestor, limpiar los datos
@@ -960,6 +990,7 @@ class VentaController extends Controller
                     'gestor_cuenta_id' => null,
                     'gestor_comentario' => null,
                     'tasa_aplicada_venta' => null,
+                    'tasa_aplicada_gestor' => null,
                 ]);
             }
         });
@@ -976,6 +1007,10 @@ class VentaController extends Controller
                 'comentario' => $venta->gestor_comentario,
                 'cuenta_nombre' => $venta->gestorCuenta?->nombre_cuenta,
                 'tasa_aplicada' => $venta->tasa_aplicada_venta ? (float) $venta->tasa_aplicada_venta : null,
+                'tasa_aplicada_gestor' => $venta->tasa_aplicada_gestor ? (float) $venta->tasa_aplicada_gestor : null,
+                'monto_usd' => $venta->gestor_monto && $venta->tasa_aplicada_gestor 
+                    ? round($venta->gestor_monto / $venta->tasa_aplicada_gestor, 2) 
+                    : null,
                 'moneda' => $venta->gestorCuenta?->moneda ? [
                     'codigo' => $venta->gestorCuenta->moneda->codigo_moneda,
                     'simbolo' => $venta->gestorCuenta->moneda->simbolo_moneda,
@@ -1174,6 +1209,10 @@ class VentaController extends Controller
                         'comentario' => $venta->gestor_comentario,
                         'cuenta_nombre' => $venta->gestorCuenta?->nombre_cuenta,
                         'tasa_aplicada' => $venta->tasa_aplicada_venta ? (float) $venta->tasa_aplicada_venta : null,
+                        'tasa_aplicada_gestor' => $venta->tasa_aplicada_gestor ? (float) $venta->tasa_aplicada_gestor : null,
+                        'monto_usd' => $venta->gestor_monto && $venta->tasa_aplicada_gestor 
+                            ? round($venta->gestor_monto / $venta->tasa_aplicada_gestor, 2) 
+                            : null,
                         'moneda' => $venta->gestorCuenta?->moneda ? [
                             'codigo' => $venta->gestorCuenta->moneda->codigo_moneda,
                             'simbolo' => $venta->gestorCuenta->moneda->simbolo_moneda,
@@ -1209,33 +1248,31 @@ class VentaController extends Controller
         }
 
         DB::transaction(function () use ($venta) {
-            // Si está completada, revertir stock y saldos
-            if ($venta->estado === 'completada') {
-                // Revertir stock
-                foreach ($venta->detalles as $detalle) {
-                    $almacenProducto = AlmacenProducto::where('almacen_id', $venta->almacen_id)
-                        ->where('producto_id', $detalle->producto_id)->first();
-                    
-                    if ($almacenProducto) {
-                        $almacenProducto->increment('cantidad', $detalle->cantidad);
-                    }
-
-                    HistorialStock::create([
-                        'producto_id' => $detalle->producto_id,
-                        'almacen_id' => $venta->almacen_id,
-                        'venta_id' => $venta->id,
-                        'cantidad_anterior' => $almacenProducto?->cantidad ?? 0,
-                        'cantidad_nueva' => ($almacenProducto?->cantidad ?? 0) + $detalle->cantidad,
-                        'diferencia' => $detalle->cantidad,
-                        'tipo' => 'venta_anulada',
-                        'observaciones' => 'Stock revertido por anulación de venta',
-                        'user_id' => Auth::id(),
-                    ]);
+            // ✅ SIEMPRE revertir stock (pendiente o completada)
+            foreach ($venta->detalles as $detalle) {
+                $almacenProducto = AlmacenProducto::where('almacen_id', $venta->almacen_id)
+                    ->where('producto_id', $detalle->producto_id)->first();
+                
+                if ($almacenProducto) {
+                    $almacenProducto->increment('cantidad', $detalle->cantidad);
                 }
 
-                // Revertir saldos de cuentas y deudas de clientes
+                HistorialStock::create([
+                    'producto_id' => $detalle->producto_id,
+                    'almacen_id' => $venta->almacen_id,
+                    'venta_id' => $venta->id,
+                    'cantidad_anterior' => $almacenProducto?->cantidad ?? 0,
+                    'cantidad_nueva' => ($almacenProducto?->cantidad ?? 0) + $detalle->cantidad,
+                    'diferencia' => $detalle->cantidad,
+                    'tipo' => 'venta_anulada',
+                    'observaciones' => 'Stock revertido por anulación de venta',
+                    'user_id' => Auth::id(),
+                ]);
+            }
+
+            // ✅ SIEMPRE revertir pagos (solo si estaba completada)
+            if ($venta->estado === 'completada') {
                 foreach ($venta->pagos as $pago) {
-                    // Si el pago fue a un cliente, revertir deuda
                     if ($pago->cliente_id) {
                         $cliente = $pago->cliente;
                         if ($cliente) {
@@ -1243,7 +1280,6 @@ class VentaController extends Controller
                         }
                     }
                     
-                    // Si el pago fue a una cuenta, revertir saldo
                     if ($pago->cuenta_id) {
                         $cuenta = $pago->cuenta;
                         if ($cuenta) {
@@ -1261,7 +1297,6 @@ class VentaController extends Controller
                 }
             }
 
-            // Cambiar estado a cancelada
             $venta->update(['estado' => 'cancelada']);
         });
 

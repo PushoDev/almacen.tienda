@@ -2,23 +2,31 @@
 
 Laravel 12 + React 19 + Inertia.js + Tailwind CSS v4 inventory management system.
 
+**Cursor Rules**: See `.cursor/rules/` for additional patterns.
+
 ## Commands
 
 ### PHP/Laravel
 
 ```bash
-composer run dev        # Laravel server + queue + Vite dev server
-composer run dev:ssr    # Laravel server + queue + Vite + SSR dev server
-composer test           # Pest tests with config clear
+# Development servers (runs all: Laravel, queue, Vite)
+composer run dev        # Standard dev
+composer run dev:ssr    # With SSR support
+
+# Testing
 php artisan test                       # Run all tests
 php artisan test --filter TestClassName # Single test class
-php artisan test --filter "test name"   # Single test method
-php artisan test tests/Feature/         # Feature tests only
-php artisan test tests/Unit/           # Unit tests only
+php artisan test --filter "test name"  # Single test method
+php artisan test tests/Feature/        # Feature tests only
+php artisan test tests/Unit/            # Unit tests only
+
+# Code quality
 php artisan pint        # Format code (PSR-12)
+php artisan config:clear && php artisan cache:clear
+
+# Database
 php artisan migrate
 php artisan migrate:fresh --seed
-php artisan config:clear && php artisan cache:clear
 ```
 
 ### Frontend
@@ -38,48 +46,50 @@ npm run types       # TypeScript type checking
 ### PHP (Backend)
 
 - **Standard**: PSR-12 via Laravel Pint
-- **PHP Version**: 8.2+ - use typed properties, readonly when applicable
-- **Testing**: Pest PHP (Spanish test names)
+- **PHP Version**: 8.2+ - use typed properties, `readonly` when applicable
+- **Testing**: Pest PHP (tests in Spanish)
 - **PHPDoc**: Required on classes/methods with `@param`, `@return`
 - **Validation**: Form Request classes for complex validation
 
-**Naming**: Classes `PascalCase`, methods/variables `camelCase`, constants `UPPER_SNAKE_CASE`, tables `snake_case`.
+**Naming**: Classes `PascalCase`, methods/variables `camelCase`, constants `UPPER_SNAKE_CASE`, tables/columns `snake_case`.
 
 ### TypeScript/React (Frontend)
 
-- **Framework**: React 19 + TypeScript + Inertia.js + Tailwind v4
+- **Framework**: React 19, TypeScript, Inertia.js, Tailwind v4
 - **Formatter**: Prettier (150 char width, single quotes, semicolons, 4-space tabs)
-- **Linter**: ESLint with auto-fix + prettier
-- **UI**: Radix UI + `cn()` utility for conditional classes
-- **Notifications**: Sonner (`import { toast } from 'sonner';`)
+- **Linter**: ESLint + prettier integration
+- **UI**: Radix UI / Shadcn with `cn()` utility
+- **Notifications**: Sonner (`import { toast } from 'sonner'`)
 
-**Naming**: Components `PascalCase`, hooks `useCamelCase`, types `PascalCase`, files `PascalCase`.
+**Naming**: Components `PascalCase`, hooks `useCamelCase`, types `PascalCase`, files `PascalCase.tsx`.
 
-**Imports**: Use `@/` path alias (e.g., `@/components/ui/button`).
+**Imports**: Use `@/` path alias (`@/components/ui/button`). Use `route()` from Ziggy for internal routes.
 
 ## Patterns
 
-### Form Handling
+### Inertia + React
 
-```typescript
-const { data, setData, post, processing, errors, reset } = useForm<LoginForm>({
-    email: '',
-    password: '',
-});
+```tsx
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
 
-const submit: FormEventHandler = (e) => {
-    e.preventDefault();
-    post(route('login'), { onFinish: () => reset('password') });
-};
+// Page props typing
+interface Props extends PageProps {
+    categorias: { id: number; nombre: string }[];
+}
+
+export default function Create({ categorias }: Props) {
+    const { data, setData, post, processing, errors } = useForm({ nombre: '' });
+    // ...
+}
 ```
 
-### Page Props
+### Form Handling
 
-```typescript
-interface DashboardPageProps extends PageProps {
-    productos: Producto[];
-    ventas: Venta[];
-}
+```tsx
+const submit: FormEventHandler = (e) => {
+    e.preventDefault();
+    post(route('productos.store'), { onFinish: () => reset('password') });
+};
 ```
 
 ### Controller Pattern
@@ -92,6 +102,26 @@ public function store(StoreProductoRequest $request): RedirectResponse
 }
 ```
 
+### UI Components (Shadcn)
+
+```tsx
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+
+<Button variant="default" size="sm" className={cn('base-class', condition && 'conditional')}>
+    Click me
+</Button>;
+```
+
+### Laravel Eloquent
+
+- Always use `with()`, `load()` to avoid N+1 queries
+- Use scopes for reusable queries
+- Type hints on relationships
+- `$fillable`, `$casts`, `$hidden` on models
+
 ## Structure
 
 ```
@@ -99,21 +129,22 @@ app/
 ├── Models/          # Eloquent models
 ├── Controllers/     # HTTP controllers
 ├── Requests/        # Form request validation
-├── Services/        # Business logic
+├── Services/       # Business logic
 resources/js/
 ├── pages/           # Inertia pages
-├── components/      # React components (ui/ = Shadcn)
-├── hooks/           # Custom hooks
-└── types/           # TypeScript types
+├── components/      # React components
+│   └── ui/         # Shadcn/Radix components
+├── hooks/          # Custom hooks
+└── types/          # TypeScript types
 tests/
-├── Feature/         # Feature tests
-└── Unit/            # Unit tests
+├── Feature/        # Feature tests
+└── Unit/          # Unit tests
 ```
 
-## Database
+## Database Conventions
 
 - Tables/columns: `snake_case`
-- Timestamps: `created_at`, `updated_at`, `deleted_at` for soft deletes
+- Timestamps: `created_at`, `updated_at`, `deleted_at` (soft deletes)
 - Pivot tables: alphabetical order (`producto_vendedors`)
 - Foreign keys: `{model}_id` (e.g., `categoria_id`)
 
@@ -122,8 +153,7 @@ tests/
 - Validate input with Form Requests
 - Use Gates/Policies for authorization
 - Never commit secrets (.env, credentials)
-- Eager load relationships (`with()`, `load()`) to avoid N+1
-- Use scopes for reusable queries
+- Eager load relationships to avoid N+1
 - Paginate large datasets (`paginate()`, `cursorPaginate()`)
 
 ## Testing
@@ -142,16 +172,14 @@ it('creates a product', function () {
 
 ## Error Handling
 
-- Backend: Laravel exceptions, proper HTTP codes (400,401,403,404,422,500), Form Request validation
-- Frontend: Inertia error handling, `InputError` components, toast notifications
+- **Backend**: Laravel exceptions, proper HTTP codes (400,401,403,404,422,500)
+- **Frontend**: Inertia error handling, `errors` from `useForm`, toast notifications
 - Use `try/catch` in services and bubble up exceptions with meaningful messages
 
-## Skills
+## Available Skills
 
-Use `/skill` command:
-
-| Skill                          | Purpose                                       |
-| ------------------------------ | --------------------------------------------- |
-| `/skill laravel-inertia-react` | Laravel + Inertia.js + React patterns         |
-| `/skill shadcn-ui`             | Radix UI components, React Hook Form + Zod    |
-| `/skill laravel-specialist`    | Eloquent optimizations, API Resources, Queues |
+| Skill                          | Purpose                                    |
+| ------------------------------ | ------------------------------------------ |
+| `/skill laravel-inertia-react` | Laravel + Inertia.js + React patterns      |
+| `/skill shadcn-ui`             | Radix UI components, React Hook Form + Zod |
+| `/skill laravel-specialist`    | Eloquent optimizations, API Resources      |
