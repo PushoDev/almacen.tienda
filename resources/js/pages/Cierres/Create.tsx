@@ -272,6 +272,18 @@ export default function Create({
 
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showTransaccionesDialog, setShowTransaccionesDialog] = useState(false);
+    const [selectedVentaDetails, setSelectedVentaDetails] = useState<{
+        show: boolean;
+        ventaId: number | null;
+    }>({ show: false, ventaId: null });
+
+    // Obtener todas las operaciones de una venta específica
+    const getOperacionesPorVenta = (ventaId: number) => {
+        const todasOperaciones = (calculos.detalles ?? []).flatMap((d) => d.operaciones_detalle ?? []);
+        return todasOperaciones.filter((op) => op.venta_id === ventaId);
+    };
+
+    const operacionSeleccionada = selectedVentaDetails.ventaId ? getOperacionesPorVenta(selectedVentaDetails.ventaId) : [];
 
     // Todas las ventas de todas las monedas juntas
     const todosItemsVentas = (calculos.detalles ?? []).flatMap((d) => d.items_ventas ?? []);
@@ -814,6 +826,8 @@ export default function Create({
                                                                                                                     <th className="px-2 py-1 text-right font-semibold">
                                                                                                                         Total
                                                                                                                     </th>
+
+                                                                                                                    <th className="w-10"></th>
                                                                                                                 </tr>
                                                                                                             </thead>
 
@@ -864,6 +878,25 @@ export default function Create({
                                                                                                                                 {Number(
                                                                                                                                     prod.total,
                                                                                                                                 ).toFixed(2)}
+                                                                                                                            </td>
+
+                                                                                                                            <td className="px-2 py-1 text-center">
+                                                                                                                                <Button
+                                                                                                                                    variant="ghost"
+                                                                                                                                    size="icon"
+                                                                                                                                    className="text-muted-foreground hover:text-primary h-6 w-6 cursor-pointer"
+                                                                                                                                    onClick={() =>
+                                                                                                                                        setSelectedVentaDetails(
+                                                                                                                                            {
+                                                                                                                                                show: true,
+                                                                                                                                                ventaId:
+                                                                                                                                                    operacion.venta_id,
+                                                                                                                                            },
+                                                                                                                                        )
+                                                                                                                                    }
+                                                                                                                                >
+                                                                                                                                    <Eye className="h-3 w-3" />
+                                                                                                                                </Button>
                                                                                                                             </td>
                                                                                                                         </tr>
                                                                                                                     ),
@@ -1367,6 +1400,102 @@ export default function Create({
                             <AlertDialogAction type="button" onClick={() => submit()} className="bg-primary cursor-pointer">
                                 Sí, Finalizar Cierre
                             </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+
+                {/* Modal de Detalles de la Venta Completa */}
+                <AlertDialog
+                    open={selectedVentaDetails.show}
+                    onOpenChange={(open) => setSelectedVentaDetails({ ...selectedVentaDetails, show: open })}
+                >
+                    <AlertDialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Detalles de la Venta #{selectedVentaDetails.ventaId}</AlertDialogTitle>
+                        </AlertDialogHeader>
+                        <div className="space-y-4">
+                            {/* Todas las operaciones de esta venta */}
+                            {operacionSeleccionada.length > 0 && (
+                                <>
+                                    <div className="bg-muted/50 rounded-md p-3">
+                                        <p className="text-muted-foreground text-xs font-semibold uppercase">
+                                            Pagos Realizados ({operacionSeleccionada.length})
+                                        </p>
+                                    </div>
+                                    {operacionSeleccionada.map((op, idx) => (
+                                        <div key={idx} className="rounded-md border p-3">
+                                            <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-medium">
+                                                        {op.tipo_pago === 'efectivo' ? 'Efectivo' : op.via_pago || 'Transferencia'}
+                                                    </span>
+                                                    {op.cuenta_nombre && <span className="text-muted-foreground text-sm">- {op.cuenta_nombre}</span>}
+                                                </div>
+                                                <span className="font-mono font-bold text-green-600">${Number(op.monto || 0).toFixed(2)}</span>
+                                            </div>
+                                            <div className="text-muted-foreground mt-2 text-xs">
+                                                <span>Cliente: {op.cliente}</span>
+                                                <span className="mx-2">|</span>
+                                                <span>Hora: {op.hora}</span>
+                                                {op.destino_nombre && (
+                                                    <>
+                                                        <span className="mx-2">|</span>
+                                                        <span>Destino: {op.destino_nombre}</span>
+                                                    </>
+                                                )}
+                                            </div>
+                                            {/* Productos de esta operación */}
+                                            {(op.productos?.length ?? 0) > 0 && (
+                                                <div className="mt-3">
+                                                    <table className="w-full text-xs">
+                                                        <thead className="bg-muted/30">
+                                                            <tr>
+                                                                <th className="px-2 py-1 text-left font-semibold">Producto</th>
+                                                                <th className="px-2 py-1 text-center font-semibold">Cant</th>
+                                                                <th className="px-2 py-1 text-right font-semibold">Precio</th>
+                                                                <th className="px-2 py-1 text-right font-semibold">Total</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {op.productos?.map((prod: any, pidx: number) => (
+                                                                <tr key={pidx} className="border-t">
+                                                                    <td className="px-2 py-1">
+                                                                        {prod.descripcion}
+                                                                        <div className="text-muted-foreground text-[10px]">
+                                                                            {prod.marca && `${prod.marca} `}
+                                                                            {prod.modelo && `${prod.modelo} `}
+                                                                            {prod.categoria && `(${prod.categoria})`}
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="px-2 py-1 text-center">{prod.cantidad}</td>
+                                                                    <td className="px-2 py-1 text-right font-mono">
+                                                                        ${Number(prod.precio_unitario || 0).toFixed(2)}
+                                                                    </td>
+                                                                    <td className="px-2 py-1 text-right font-mono font-medium">
+                                                                        ${Number(prod.total || 0).toFixed(2)}
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                    {/* Total de la venta */}
+                                    <div className="rounded-md bg-green-50 p-3 dark:bg-green-900/20">
+                                        <div className="flex justify-between">
+                                            <span className="font-semibold">Total Venta:</span>
+                                            <span className="font-mono text-lg font-bold text-green-600">
+                                                ${operacionSeleccionada.reduce((sum, op) => sum + (Number(op.monto) || 0), 0).toFixed(2)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel className="cursor-pointer">Cerrar</AlertDialogCancel>
                         </AlertDialogFooter>
                     </AlertDialogContent>
                 </AlertDialog>
