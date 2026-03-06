@@ -656,618 +656,588 @@ export default function Create({
                         </div>
                     </CardContent>
                 </Card>
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-                    {/* Columna Izquierda: Información del Sistema */}
-                    <div className="space-y-6 lg:col-span-8">
-                        {/* Por dónde entraron: una tabla por moneda con desglose de operaciones */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <Banknote className="h-5 w-5" />
-                                    Por dónde entraron
-                                </CardTitle>
-                                <CardDescription>
-                                    Cantidad de ventas y total por método, separado por moneda. Cada total es en su propia moneda.
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-6">
-                                {monedasConPagos.length > 0 ? (
-                                    monedasConPagos.map((moneda) => {
-                                        const metodos = pagosPorMonedaYMetodo[moneda];
-                                        const totalMoneda = Object.values(metodos).reduce((s, x) => s + (Number(x.total) || 0), 0);
-                                        const cantidadMoneda = Object.values(metodos).reduce((s, x) => s + (x.cantidad || 0), 0);
-                                        const totalEquivalenteMoneda = Object.values(metodos).reduce((s, x) => s + (x.totalEquivalente || 0), 0);
-                                        const detalleMoneda = calculos.detalles?.find((d) => d.moneda === moneda);
 
-                                        return (
-                                            <div key={moneda} className="space-y-2">
-                                                <h4 className="text-muted-foreground text-sm font-semibold">{moneda}</h4>
-                                                <Table>
-                                                    <TableHeader>
-                                                        <TableRow>
-                                                            <TableHead>Método / Destino</TableHead>
-                                                            <TableHead className="w-20 text-center">Ventas</TableHead>
-                                                            <TableHead className="w-32 text-right">Total</TableHead>
-                                                            <TableHead className="w-32 text-right">Equiv. USD</TableHead>
-                                                        </TableRow>
-                                                    </TableHeader>
-                                                    <TableBody>
-                                                        {Object.entries(metodos).map(([etiqueta, data]) => {
-                                                            const total = Number(data.total) || 0;
-                                                            const totalEquivalente = Number(data.totalEquivalente) || 0;
-                                                            const operacionesPorMetodo = (detalleMoneda?.operaciones_detalle || []).filter((op) => {
-                                                                const via = (op.via_pago || '').toString().trim().toUpperCase();
-                                                                const destino = (op.destino_nombre || '').toString().trim();
-                                                                let etiquetaMetodo: string;
-                                                                if (op.tipo_pago === 'efectivo') {
-                                                                    etiquetaMetodo = moneda;
-                                                                } else {
-                                                                    etiquetaMetodo = via
-                                                                        ? destino
-                                                                            ? `${via} ${destino}`
-                                                                            : via
-                                                                        : destino
-                                                                          ? `Transferencia ${destino}`
-                                                                          : `Transferencia ${moneda}`;
-                                                                }
-                                                                return etiquetaMetodo === etiqueta;
-                                                            });
+                {/* Por dónde entraron: una tabla por moneda con desglose de operaciones */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Banknote className="h-5 w-5" />
+                            Por dónde entraron
+                        </CardTitle>
+                        <CardDescription>
+                            Cantidad de ventas y total por método, separado por moneda. Cada total es en su propia moneda.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                        {monedasConPagos.length > 0 ? (
+                            monedasConPagos.map((moneda) => {
+                                const metodos = pagosPorMonedaYMetodo[moneda];
+                                const totalMoneda = Object.values(metodos).reduce((s, x) => s + (Number(x.total) || 0), 0);
+                                const cantidadMoneda = Object.values(metodos).reduce((s, x) => s + (x.cantidad || 0), 0);
+                                const totalEquivalenteMoneda = Object.values(metodos).reduce((s, x) => s + (x.totalEquivalente || 0), 0);
+                                const detalleMoneda = calculos.detalles?.find((d) => d.moneda === moneda);
 
-                                                            return (
-                                                                <CollapsibleRoot key={`${moneda}-${etiqueta}`}>
-                                                                    <CollapsibleTrigger asChild>
-                                                                        <TableRow className="hover:bg-muted/50 cursor-pointer">
-                                                                            <TableCell className="flex items-center gap-2 font-medium">
-                                                                                <ChevronDown className="collapsible-trigger-icon h-4 w-4 transition-transform" />
-                                                                                <ChevronRight className="collapsible-trigger-icon[!hidden] h-4 w-4 transition-transform" />
-                                                                                {etiqueta}
-                                                                            </TableCell>
-                                                                            <TableCell className="text-center font-mono">{data.cantidad}</TableCell>
-                                                                            <TableCell className="text-right font-mono">{total.toFixed(2)}</TableCell>
-                                                                            <TableCell className="text-right font-mono font-medium text-green-600">
-                                                                                ${totalEquivalente.toFixed(2)}
-                                                                            </TableCell>
-                                                                        </TableRow>
-                                                                    </CollapsibleTrigger>
-                                                                    <CollapsibleContent>
-                                                                        <TableRow>
-                                                                            <TableCell colSpan={4} className="bg-muted/30 p-0">
-                                                                                <div className="border-muted-foreground/20 ml-4 space-y-2 border-l-2 p-2">
-                                                                                    {operacionesPorMetodo.length > 0 ? (
-                                                                                        operacionesPorMetodo.map((operacion, idx) => (
-                                                                                            <div
-                                                                                                key={idx}
-                                                                                                className="bg-card space-y-1 rounded-md border p-2 text-sm shadow-sm"
-                                                                                            >
-                                                                                                <div className="flex items-center justify-between font-medium">
-                                                                                                    <span>
-                                                                                                        Venta #{operacion.venta_id} -{' '}
-                                                                                                        {operacion.cliente}
-                                                                                                    </span>
-                                                                                                    <span className="font-mono">
-                                                                                                        ${Number(operacion.monto).toFixed(2)} -{' '}
-                                                                                                        {operacion.hora}
-                                                                                                    </span>
-                                                                                                </div>
-                                                                                                {(operacion.productos?.length ?? 0) > 0 && (
-                                                                                                    <div className="text-muted-foreground ml-4 space-y-1">
-                                                                                                        {operacion.productos?.map((prod, pidx) => (
-                                                                                                            <div
-                                                                                                                key={pidx}
-                                                                                                                className="flex justify-between text-xs"
-                                                                                                            >
-                                                                                                                <span>
-                                                                                                                    {prod.cantidad}x{' '}
-                                                                                                                    {prod.descripcion}
-                                                                                                                </span>
-                                                                                                                <span className="font-mono">
-                                                                                                                    ${Number(prod.total).toFixed(2)}
-                                                                                                                </span>
-                                                                                                            </div>
-                                                                                                        ))}
+                                return (
+                                    <div key={moneda} className="space-y-2">
+                                        <h4 className="text-muted-foreground text-sm font-semibold">{moneda}</h4>
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Método / Destino</TableHead>
+                                                    <TableHead className="w-20 text-center">Ventas</TableHead>
+                                                    <TableHead className="w-32 text-right">Total</TableHead>
+                                                    <TableHead className="w-32 text-right">Equiv. USD</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {Object.entries(metodos).map(([etiqueta, data]) => {
+                                                    const total = Number(data.total) || 0;
+                                                    const totalEquivalente = Number(data.totalEquivalente) || 0;
+                                                    const operacionesPorMetodo = (detalleMoneda?.operaciones_detalle || []).filter((op) => {
+                                                        const via = (op.via_pago || '').toString().trim().toUpperCase();
+                                                        const destino = (op.destino_nombre || '').toString().trim();
+                                                        let etiquetaMetodo: string;
+                                                        if (op.tipo_pago === 'efectivo') {
+                                                            etiquetaMetodo = moneda;
+                                                        } else {
+                                                            etiquetaMetodo = via
+                                                                ? destino
+                                                                    ? `${via} ${destino}`
+                                                                    : via
+                                                                : destino
+                                                                  ? `Transferencia ${destino}`
+                                                                  : `Transferencia ${moneda}`;
+                                                        }
+                                                        return etiquetaMetodo === etiqueta;
+                                                    });
+
+                                                    return (
+                                                        <CollapsibleRoot key={`${moneda}-${etiqueta}`}>
+                                                            <CollapsibleTrigger asChild>
+                                                                <TableRow className="hover:bg-muted/50 cursor-pointer">
+                                                                    <TableCell className="flex items-center gap-2 font-medium">
+                                                                        <ChevronDown className="collapsible-trigger-icon h-4 w-4 transition-transform" />
+                                                                        <ChevronRight className="collapsible-trigger-icon[!hidden] h-4 w-4 transition-transform" />
+                                                                        {etiqueta}
+                                                                    </TableCell>
+                                                                    <TableCell className="text-center font-mono">{data.cantidad}</TableCell>
+                                                                    <TableCell className="text-right font-mono">{total.toFixed(2)}</TableCell>
+                                                                    <TableCell className="text-right font-mono font-medium text-green-600">
+                                                                        ${totalEquivalente.toFixed(2)}
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            </CollapsibleTrigger>
+                                                            <CollapsibleContent>
+                                                                <TableRow>
+                                                                    <TableCell colSpan={4} className="bg-muted/30 p-0">
+                                                                        <div className="border-muted-foreground/20 ml-4 space-y-2 border-l-2 p-2">
+                                                                            {operacionesPorMetodo.length > 0 ? (
+                                                                                operacionesPorMetodo.map((operacion, idx) => (
+                                                                                    <div
+                                                                                        key={idx}
+                                                                                        className="bg-card space-y-1 rounded-md border p-2 text-sm shadow-sm"
+                                                                                    >
+                                                                                        <div className="flex items-center justify-between font-medium">
+                                                                                            <span>
+                                                                                                Venta #{operacion.venta_id} - {operacion.cliente}
+                                                                                            </span>
+                                                                                            <span className="font-mono">
+                                                                                                ${Number(operacion.monto).toFixed(2)} -{' '}
+                                                                                                {operacion.hora}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                        {(operacion.productos?.length ?? 0) > 0 && (
+                                                                                            <div className="text-muted-foreground ml-4 space-y-1">
+                                                                                                {operacion.productos?.map((prod, pidx) => (
+                                                                                                    <div
+                                                                                                        key={pidx}
+                                                                                                        className="flex justify-between text-xs"
+                                                                                                    >
+                                                                                                        <span>
+                                                                                                            {prod.cantidad}x {prod.descripcion}
+                                                                                                        </span>
+                                                                                                        <span className="font-mono">
+                                                                                                            ${Number(prod.total).toFixed(2)}
+                                                                                                        </span>
                                                                                                     </div>
-                                                                                                )}
+                                                                                                ))}
                                                                                             </div>
-                                                                                        ))
-                                                                                    ) : (
-                                                                                        <p className="text-muted-foreground px-2 text-xs italic">
-                                                                                            Sin detalle de operaciones
-                                                                                        </p>
-                                                                                    )}
-                                                                                </div>
-                                                                            </TableCell>
-                                                                        </TableRow>
-                                                                    </CollapsibleContent>
-                                                                </CollapsibleRoot>
-                                                            );
-                                                        })}
-                                                    </TableBody>
-                                                    <TableFooter>
-                                                        <TableRow>
-                                                            <TableCell className="font-bold">Total {moneda}</TableCell>
-                                                            <TableCell className="text-center font-mono font-bold">{cantidadMoneda}</TableCell>
-                                                            <TableCell className="text-right font-mono font-bold">
-                                                                {Number(totalMoneda).toFixed(2)} {moneda}
-                                                            </TableCell>
-                                                            <TableCell className="text-right font-mono font-bold text-green-600">
-                                                                ${totalEquivalenteMoneda.toFixed(2)}
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    </TableFooter>
-                                                </Table>
-                                            </div>
-                                        );
-                                    })
-                                ) : (
-                                    <p className="text-muted-foreground text-center italic">No hay pagos registrados</p>
-                                )}
+                                                                                        )}
+                                                                                    </div>
+                                                                                ))
+                                                                            ) : (
+                                                                                <p className="text-muted-foreground px-2 text-xs italic">
+                                                                                    Sin detalle de operaciones
+                                                                                </p>
+                                                                            )}
+                                                                        </div>
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            </CollapsibleContent>
+                                                        </CollapsibleRoot>
+                                                    );
+                                                })}
+                                            </TableBody>
+                                            <TableFooter>
+                                                <TableRow>
+                                                    <TableCell className="font-bold">Total {moneda}</TableCell>
+                                                    <TableCell className="text-center font-mono font-bold">{cantidadMoneda}</TableCell>
+                                                    <TableCell className="text-right font-mono font-bold">
+                                                        {Number(totalMoneda).toFixed(2)} {moneda}
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-mono font-bold text-green-600">
+                                                        ${totalEquivalenteMoneda.toFixed(2)}
+                                                    </TableCell>
+                                                </TableRow>
+                                            </TableFooter>
+                                        </Table>
+                                    </div>
+                                );
+                            })
+                        ) : (
+                            <p className="text-muted-foreground text-center italic">No hay pagos registrados</p>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* Movimientos Financieros */}
+                <div className="space-y-2">
+                    <h3 className="text-sm font-bold tracking-wide uppercase">Movimientos Financieros</h3>
+                    <div className="grid grid-cols-4 gap-2">
+                        {/* Gastos */}
+                        <Card
+                            className="cursor-pointer border-red-200 bg-red-500/5 transition-colors hover:bg-red-500/10"
+                            onClick={() => setShowTransaccionesDialog(true)}
+                        >
+                            <CardContent className="p-3 text-center">
+                                <ArrowUp className="mx-auto mb-1 h-5 w-5 text-red-600" />
+                                <p className="text-muted-foreground text-[10px] uppercase">Gastos</p>
+                                <p className="text-lg font-bold text-red-700">${Number(totalGastos).toFixed(2)}</p>
+                                <p className="text-muted-foreground text-[9px]">{todosGastos.length} oper.</p>
                             </CardContent>
                         </Card>
-                    </div>
 
-                    {/* Columna Derecha: Finalizar Cierre */}
-                    <div className="space-y-6 lg:col-span-4">
-                        {/* Movimientos Financieros */}
-                        <div className="space-y-2">
-                            <h3 className="text-sm font-bold tracking-wide uppercase">Movimientos Financieros</h3>
-                            <div className="grid grid-cols-4 gap-2">
-                                {/* Gastos */}
-                                <Card
-                                    className="cursor-pointer border-red-200 bg-red-500/5 transition-colors hover:bg-red-500/10"
-                                    onClick={() => setShowTransaccionesDialog(true)}
-                                >
-                                    <CardContent className="p-3 text-center">
-                                        <ArrowUp className="mx-auto mb-1 h-5 w-5 text-red-600" />
-                                        <p className="text-muted-foreground text-[10px] uppercase">Gastos</p>
-                                        <p className="text-lg font-bold text-red-700">${Number(totalGastos).toFixed(2)}</p>
-                                        <p className="text-muted-foreground text-[9px]">{todosGastos.length} oper.</p>
-                                    </CardContent>
-                                </Card>
+                        {/* Ingresos */}
+                        <Card
+                            className="cursor-pointer border-green-200 bg-green-500/5 transition-colors hover:bg-green-500/10"
+                            onClick={() => setShowTransaccionesDialog(true)}
+                        >
+                            <CardContent className="p-3 text-center">
+                                <ArrowDown className="mx-auto mb-1 h-5 w-5 text-green-600" />
+                                <p className="text-muted-foreground text-[10px] uppercase">Ingresos</p>
+                                <p className="text-lg font-bold text-green-700">${Number(totalIngresos).toFixed(2)}</p>
+                                <p className="text-muted-foreground text-[9px]">{todosIngresos.length} oper.</p>
+                            </CardContent>
+                        </Card>
 
-                                {/* Ingresos */}
-                                <Card
-                                    className="cursor-pointer border-green-200 bg-green-500/5 transition-colors hover:bg-green-500/10"
-                                    onClick={() => setShowTransaccionesDialog(true)}
-                                >
-                                    <CardContent className="p-3 text-center">
-                                        <ArrowDown className="mx-auto mb-1 h-5 w-5 text-green-600" />
-                                        <p className="text-muted-foreground text-[10px] uppercase">Ingresos</p>
-                                        <p className="text-lg font-bold text-green-700">${Number(totalIngresos).toFixed(2)}</p>
-                                        <p className="text-muted-foreground text-[9px]">{todosIngresos.length} oper.</p>
-                                    </CardContent>
-                                </Card>
+                        {/* Transferencias */}
+                        <Card
+                            className="cursor-pointer border-blue-200 bg-blue-500/5 transition-colors hover:bg-blue-500/10"
+                            onClick={() => setShowTransaccionesDialog(true)}
+                        >
+                            <CardContent className="p-3 text-center">
+                                <TrendingUp className="mx-auto mb-1 h-5 w-5 text-blue-600" />
+                                <p className="text-muted-foreground text-[10px] uppercase">Transfer.</p>
+                                <p className="text-lg font-bold text-blue-700">${Number(totalTransferencias).toFixed(2)}</p>
+                                <p className="text-muted-foreground text-[9px]">{todasTransferencias.length} oper.</p>
+                            </CardContent>
+                        </Card>
 
-                                {/* Transferencias */}
-                                <Card
-                                    className="cursor-pointer border-blue-200 bg-blue-500/5 transition-colors hover:bg-blue-500/10"
-                                    onClick={() => setShowTransaccionesDialog(true)}
-                                >
-                                    <CardContent className="p-3 text-center">
-                                        <TrendingUp className="mx-auto mb-1 h-5 w-5 text-blue-600" />
-                                        <p className="text-muted-foreground text-[10px] uppercase">Transfer.</p>
-                                        <p className="text-lg font-bold text-blue-700">${Number(totalTransferencias).toFixed(2)}</p>
-                                        <p className="text-muted-foreground text-[9px]">{todasTransferencias.length} oper.</p>
-                                    </CardContent>
-                                </Card>
-
-                                {/* Gestores - NUEVO */}
-                                {totalComisionesGestor > 0 && (
-                                    <Card
-                                        className="cursor-pointer border-purple-200 bg-purple-500/5 transition-colors hover:bg-purple-500/10"
-                                        onClick={() => setShowTransaccionesDialog(true)}
-                                    >
-                                        <CardContent className="p-3 text-center">
-                                            <Briefcase className="mx-auto mb-1 h-5 w-5 text-purple-600" />
-                                            <p className="text-muted-foreground text-[10px] uppercase">Gestores</p>
-                                            <p className="text-lg font-bold text-purple-700">-${Number(totalComisionesGestor).toFixed(2)}</p>
-                                            <p className="text-muted-foreground text-[9px]">{comisionesGestorDetalles.length} oper.</p>
-                                        </CardContent>
-                                    </Card>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Dialog de Detalle de Transacciones */}
-                        <Dialog open={showTransaccionesDialog} onOpenChange={setShowTransaccionesDialog}>
-                            <DialogTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    className="w-full cursor-pointer gap-2 bg-blue-500 text-white hover:bg-blue-600 hover:text-white"
-                                >
-                                    <Eye className="h-4 w-4" /> Ver Detalle de los Movimientos
-                                </Button>
-                            </DialogTrigger>
-                            <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden p-0 sm:max-w-4xl">
-                                <DialogHeader className="border-b px-6 pt-6 pb-4">
-                                    <DialogTitle>Detalle de Transacciones del Turno</DialogTitle>
-                                    <DialogDescription>
-                                        Desglose completo de ingresos, gastos y transferencias realizadas durante tu turno.
-                                    </DialogDescription>
-                                </DialogHeader>
-
-                                <div className="flex-1 overflow-y-auto px-6 py-4">
-                                    <Tabs defaultValue="gastos" className="w-full">
-                                        <TabsList className="mb-4 grid w-full grid-cols-4">
-                                            <TabsTrigger value="ingresos">Ingresos ({todosIngresos.length})</TabsTrigger>
-                                            <TabsTrigger value="gastos">Gastos ({todosGastos.length})</TabsTrigger>
-                                            <TabsTrigger value="gestores">Gestores ({comisionesGestorDetalles.length})</TabsTrigger>
-                                            <TabsTrigger value="transferencias">Transferencias ({todasTransferencias.length})</TabsTrigger>
-                                        </TabsList>
-
-                                        {/* Tab Ingresos */}
-                                        <TabsContent value="ingresos" className="mt-0">
-                                            {todosIngresos.length > 0 ? (
-                                                <div className="rounded-md border">
-                                                    <Table>
-                                                        <TableHeader>
-                                                            <TableRow>
-                                                                <TableHead className="w-16">Hora</TableHead>
-                                                                <TableHead>Descripción</TableHead>
-                                                                <TableHead>Origen</TableHead>
-                                                                <TableHead>Destino</TableHead>
-                                                                <TableHead className="w-28 text-right">Monto</TableHead>
-                                                            </TableRow>
-                                                        </TableHeader>
-                                                        <TableBody>
-                                                            {todosIngresos.map((item: ItemMovimiento) => (
-                                                                <TableRow key={item.id}>
-                                                                    <TableCell className="font-mono text-xs">{item.hora}</TableCell>
-                                                                    <TableCell className="text-sm">{item.desc}</TableCell>
-                                                                    <TableCell className="text-muted-foreground text-xs">{item.origen}</TableCell>
-                                                                    <TableCell className="text-muted-foreground text-xs">{item.destino}</TableCell>
-                                                                    <TableCell className="text-right font-mono font-medium text-green-600">
-                                                                        +${Number(item.monto).toFixed(2)}
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            ))}
-                                                        </TableBody>
-                                                        <TableFooter>
-                                                            <TableRow>
-                                                                <TableCell colSpan={4} className="font-bold">
-                                                                    Total Ingresos
-                                                                </TableCell>
-                                                                <TableCell className="text-right font-bold text-green-600">
-                                                                    ${Number(totalIngresos).toFixed(2)}
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        </TableFooter>
-                                                    </Table>
-                                                </div>
-                                            ) : (
-                                                <p className="text-muted-foreground py-12 text-center italic">
-                                                    No hay ingresos registrados en este turno.
-                                                </p>
-                                            )}
-                                        </TabsContent>
-
-                                        {/* Tab Gastos */}
-                                        <TabsContent value="gastos" className="mt-0">
-                                            {todosGastos.length > 0 ? (
-                                                <div className="rounded-md border">
-                                                    <Table>
-                                                        <TableHeader>
-                                                            <TableRow>
-                                                                <TableHead className="w-16">Hora</TableHead>
-                                                                <TableHead>Descripción</TableHead>
-                                                                <TableHead>Origen</TableHead>
-                                                                <TableHead>Destino</TableHead>
-                                                                <TableHead className="w-28 text-right">Monto</TableHead>
-                                                            </TableRow>
-                                                        </TableHeader>
-                                                        <TableBody>
-                                                            {todosGastos.map((item: ItemMovimiento) => (
-                                                                <TableRow key={item.id}>
-                                                                    <TableCell className="font-mono text-xs">{item.hora}</TableCell>
-                                                                    <TableCell className="text-sm">{item.desc}</TableCell>
-                                                                    <TableCell className="text-muted-foreground text-xs">{item.origen}</TableCell>
-                                                                    <TableCell className="text-muted-foreground text-xs">{item.destino}</TableCell>
-                                                                    <TableCell className="text-right font-mono font-medium text-red-600">
-                                                                        -${Number(item.monto).toFixed(2)}
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            ))}
-                                                        </TableBody>
-                                                        <TableFooter>
-                                                            <TableRow>
-                                                                <TableCell colSpan={4} className="font-bold">
-                                                                    Total Gastos
-                                                                </TableCell>
-                                                                <TableCell className="text-right font-bold text-red-600">
-                                                                    ${Number(totalGastos).toFixed(2)}
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        </TableFooter>
-                                                    </Table>
-                                                </div>
-                                            ) : (
-                                                <p className="text-muted-foreground py-12 text-center italic">
-                                                    No hay gastos registrados en este turno.
-                                                </p>
-                                            )}
-                                        </TabsContent>
-
-                                        {/* Tab Gestores - NUEVO */}
-                                        <TabsContent value="gestores" className="mt-0">
-                                            {comisionesGestorDetalles.length > 0 ? (
-                                                <div className="rounded-md border">
-                                                    <Table>
-                                                        <TableHeader>
-                                                            <TableRow>
-                                                                <TableHead>Venta #</TableHead>
-                                                                <TableHead>Cuenta</TableHead>
-                                                                <TableHead>Comentario</TableHead>
-                                                                <TableHead className="w-28 text-right">Monto</TableHead>
-                                                            </TableRow>
-                                                        </TableHeader>
-                                                        <TableBody>
-                                                            {comisionesGestorDetalles.map((item: ComisionGestorItem) => (
-                                                                <TableRow key={item.venta_id}>
-                                                                    <TableCell className="font-mono text-xs">
-                                                                        <a
-                                                                            href={`/ventas/${item.venta_id}`}
-                                                                            target="_blank"
-                                                                            rel="noopener noreferrer"
-                                                                            className="text-blue-600 hover:underline"
-                                                                        >
-                                                                            #{item.venta_id}
-                                                                        </a>
-                                                                    </TableCell>
-                                                                    <TableCell className="text-sm">
-                                                                        <div className="font-medium">{item.cuenta_nombre}</div>
-                                                                        <div className="text-muted-foreground text-xs">{item.cuenta_tipo}</div>
-                                                                    </TableCell>
-                                                                    <TableCell className="max-w-xs text-sm">
-                                                                        {item.comentario || (
-                                                                            <span className="text-muted-foreground italic">Sin comentario</span>
-                                                                        )}
-                                                                    </TableCell>
-                                                                    <TableCell className="text-right font-mono font-medium text-red-600">
-                                                                        -${Number(item.monto).toFixed(2)} {item.moneda_codigo}
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            ))}
-                                                        </TableBody>
-                                                        <TableFooter>
-                                                            <TableRow>
-                                                                <TableCell colSpan={3} className="font-bold">
-                                                                    Total Comisiones
-                                                                </TableCell>
-                                                                <TableCell className="text-right font-bold text-red-600">
-                                                                    -${Number(totalComisionesGestor).toFixed(2)} USD
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        </TableFooter>
-                                                    </Table>
-                                                </div>
-                                            ) : (
-                                                <p className="text-muted-foreground py-12 text-center italic">
-                                                    No hay comisiones a gestores en este turno.
-                                                </p>
-                                            )}
-                                        </TabsContent>
-
-                                        {/* Tab Transferencias */}
-                                        <TabsContent value="transferencias" className="mt-0">
-                                            {todasTransferencias.length > 0 ? (
-                                                <div className="rounded-md border">
-                                                    <Table>
-                                                        <TableHeader>
-                                                            <TableRow>
-                                                                <TableHead className="w-16">Hora</TableHead>
-                                                                <TableHead>Descripción</TableHead>
-                                                                <TableHead>Origen</TableHead>
-                                                                <TableHead>Destino</TableHead>
-                                                                <TableHead className="w-32 text-right">Monto</TableHead>
-                                                            </TableRow>
-                                                        </TableHeader>
-                                                        <TableBody>
-                                                            {todasTransferencias.map((item: TransferenciaCompleta) => (
-                                                                <TableRow key={item.id}>
-                                                                    <TableCell className="font-mono text-xs">{item.hora}</TableCell>
-                                                                    <TableCell className="max-w-xs truncate text-sm">{item.desc}</TableCell>
-                                                                    <TableCell className="text-muted-foreground text-xs">
-                                                                        <div className="max-w-[120px] truncate" title={item.origen_nombre}>
-                                                                            {item.origen_nombre}
-                                                                        </div>
-                                                                    </TableCell>
-                                                                    <TableCell className="text-muted-foreground text-xs">
-                                                                        <div className="max-w-[120px] truncate" title={item.destino_nombre}>
-                                                                            {item.destino_nombre}
-                                                                        </div>
-                                                                    </TableCell>
-                                                                    <TableCell className="text-right font-mono text-xs">
-                                                                        <span
-                                                                            className={item.tipo === 'entrante' ? 'text-green-600' : 'text-blue-600'}
-                                                                        >
-                                                                            {item.tipo === 'entrante' ? '+' : '-'}$
-                                                                            {Number(item.monto_origen).toFixed(2)} {item.moneda_origen}
-                                                                        </span>
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            ))}
-                                                        </TableBody>
-                                                        <TableFooter>
-                                                            <TableRow>
-                                                                <TableCell colSpan={4} className="font-bold">
-                                                                    Total Transferencias
-                                                                </TableCell>
-                                                                <TableCell className="text-right font-bold text-blue-600">
-                                                                    ${Number(totalTransferencias).toFixed(2)}
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        </TableFooter>
-                                                    </Table>
-                                                </div>
-                                            ) : (
-                                                <p className="text-muted-foreground py-12 text-center italic">
-                                                    No hay transferencias registradas en este turno.
-                                                </p>
-                                            )}
-                                        </TabsContent>
-                                    </Tabs>
-                                </div>
-                            </DialogContent>
-                        </Dialog>
-
-                        {/* NUEVO: Comparativa con Cierre Anterior */}
-                        {tiene_cierre_anterior && comparativa_cuentas && comparativa_cuentas.length > 0 && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="flex items-center gap-2 text-base">
-                                        <TrendingUp className="h-5 w-5 text-blue-600" />
-                                        Comparativa con Cierre Anterior
-                                    </CardTitle>
-                                    <CardDescription>Comparación de saldos y deudas respecto al cierre anterior</CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-6">
-                                    {/* Pestañas Cuentas / Clientes */}
-                                    <Tabs defaultValue="cuentas" className="w-full">
-                                        <TabsList className="grid w-full grid-cols-2">
-                                            <TabsTrigger value="cuentas">Cuentas ({comparativa_cuentas.length})</TabsTrigger>
-                                            <TabsTrigger value="clientes">Clientes ({comparativa_clientes?.length ?? 0})</TabsTrigger>
-                                        </TabsList>
-
-                                        {/* Tab Cuentas */}
-                                        <TabsContent value="cuentas" className="mt-4">
-                                            <div className="rounded-md border">
-                                                <Table>
-                                                    <TableHeader>
-                                                        <TableRow>
-                                                            <TableHead>Cuenta</TableHead>
-                                                            <TableHead>Moneda</TableHead>
-                                                            <TableHead className="text-right">Anterior</TableHead>
-                                                            <TableHead className="text-right">Actual</TableHead>
-                                                            <TableHead className="text-right">Diferencia</TableHead>
-                                                        </TableRow>
-                                                    </TableHeader>
-                                                    <TableBody>
-                                                        {comparativa_cuentas.map((item: ComparativaItem) => (
-                                                            <TableRow key={item.id}>
-                                                                <TableCell className="font-medium">{item.nombre}</TableCell>
-                                                                <TableCell>
-                                                                    <span className="bg-muted rounded px-2 py-0.5 text-xs font-medium">
-                                                                        {item.moneda}
-                                                                    </span>
-                                                                </TableCell>
-                                                                <TableCell className="text-right font-mono">
-                                                                    ${Number(item.saldo_anterior).toFixed(2)}
-                                                                </TableCell>
-                                                                <TableCell className="text-right font-mono font-medium">
-                                                                    ${Number(item.saldo_actual).toFixed(2)}
-                                                                </TableCell>
-                                                                <TableCell className="text-right font-mono">
-                                                                    {item.diferencia > 0 ? (
-                                                                        <span className="text-green-600">
-                                                                            +${Number(item.diferencia).toFixed(2)} 📈
-                                                                        </span>
-                                                                    ) : item.diferencia < 0 ? (
-                                                                        <span className="text-red-600">${Number(item.diferencia).toFixed(2)} 📉</span>
-                                                                    ) : (
-                                                                        <span className="text-muted-foreground">-</span>
-                                                                    )}
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        ))}
-                                                    </TableBody>
-                                                </Table>
-                                            </div>
-                                        </TabsContent>
-
-                                        {/* Tab Clientes */}
-                                        <TabsContent value="clientes" className="mt-4">
-                                            {comparativa_clientes && comparativa_clientes.length > 0 ? (
-                                                <div className="rounded-md border">
-                                                    <Table>
-                                                        <TableHeader>
-                                                            <TableRow>
-                                                                <TableHead>Cliente</TableHead>
-                                                                <TableHead className="text-right">Deuda Anterior</TableHead>
-                                                                <TableHead className="text-right">Deuda Actual</TableHead>
-                                                                <TableHead className="text-right">Diferencia</TableHead>
-                                                            </TableRow>
-                                                        </TableHeader>
-                                                        <TableBody>
-                                                            {comparativa_clientes.map((item: ComparativaClienteItem) => (
-                                                                <TableRow key={item.id}>
-                                                                    <TableCell className="font-medium">{item.nombre}</TableCell>
-                                                                    <TableCell className="text-right font-mono">
-                                                                        ${Number(item.deuda_anterior).toFixed(2)}
-                                                                    </TableCell>
-                                                                    <TableCell className="text-right font-mono font-medium">
-                                                                        ${Number(item.deuda_actual).toFixed(2)}
-                                                                    </TableCell>
-                                                                    <TableCell className="text-right font-mono">
-                                                                        {item.diferencia < 0 ? (
-                                                                            <span className="text-green-600">
-                                                                                ${Number(item.diferencia).toFixed(2)} ✅
-                                                                            </span>
-                                                                        ) : item.diferencia > 0 ? (
-                                                                            <span className="text-red-600">
-                                                                                +${Number(item.diferencia).toFixed(2)} ⚠️
-                                                                            </span>
-                                                                        ) : (
-                                                                            <span className="text-muted-foreground">-</span>
-                                                                        )}
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            ))}
-                                                        </TableBody>
-                                                    </Table>
-                                                </div>
-                                            ) : (
-                                                <p className="text-muted-foreground py-8 text-center italic">No hay clientes con deuda registrada.</p>
-                                            )}
-                                        </TabsContent>
-                                    </Tabs>
+                        {/* Gestores - NUEVO */}
+                        {totalComisionesGestor > 0 && (
+                            <Card
+                                className="cursor-pointer border-purple-200 bg-purple-500/5 transition-colors hover:bg-purple-500/10"
+                                onClick={() => setShowTransaccionesDialog(true)}
+                            >
+                                <CardContent className="p-3 text-center">
+                                    <Briefcase className="mx-auto mb-1 h-5 w-5 text-purple-600" />
+                                    <p className="text-muted-foreground text-[10px] uppercase">Gestores</p>
+                                    <p className="text-lg font-bold text-purple-700">-${Number(totalComisionesGestor).toFixed(2)}</p>
+                                    <p className="text-muted-foreground text-[9px]">{comisionesGestorDetalles.length} oper.</p>
                                 </CardContent>
                             </Card>
                         )}
-
-                        {/* Acción Final */}
-                        <Card className="border-primary/20 bg-primary/5">
-                            <CardHeader>
-                                <CardTitle className="text-sm font-bold tracking-wider uppercase">Finalizar Cierre</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                {/* Total de Venta */}
-                                <div className="border-primary bg-primary/10 rounded-lg border p-4">
-                                    <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Total de Ventas del Turno</p>
-                                    <p className="text-4xl font-black text-emerald-600">${Number(calculos.ventas_efectivo).toFixed(2)}</p>
-                                    <p className="text-muted-foreground mt-2 text-xs">Incluyendo todas las monedas y métodos de pago</p>
-                                </div>
-
-                                {/* Comisiones a Gestores - Si existen */}
-                                {totalComisionesGestor > 0 && (
-                                    <div className="rounded-lg border border-purple-200 bg-purple-50 p-4">
-                                        <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">- Comisiones a Gestores</p>
-                                        <p className="text-2xl font-black text-purple-700">-${Number(totalComisionesGestor).toFixed(2)}</p>
-                                        <p className="text-muted-foreground mt-1 text-xs">
-                                            {comisionesGestorDetalles.length} venta{comisionesGestorDetalles.length !== 1 ? 's' : ''} con gestor
-                                        </p>
-                                    </div>
-                                )}
-
-                                <div className="space-y-1">
-                                    <Label className="text-muted-foreground text-xs font-bold uppercase">Observaciones del Turno</Label>
-                                    <Input
-                                        placeholder="Ej: Faltó dinero por cambio mal dado..."
-                                        value={data.observaciones}
-                                        onChange={(e) => setData('observaciones', e.target.value)}
-                                    />
-                                </div>
-
-                                <div className="flex flex-col gap-2 pt-2">
-                                    <Button type="button" className="h-12 w-full text-base font-bold" disabled={processing} onClick={() => submit()}>
-                                        <CheckCircle2 className="mr-2 h-5 w-5" /> FINALIZAR CIERRE
-                                    </Button>
-                                    <p className="text-muted-foreground px-4 text-center text-[10px] leading-tight italic">
-                                        Al finalizar se notificará a los administradores y se cerrará tu sesión de venta.
-                                    </p>
-                                </div>
-                            </CardContent>
-                        </Card>
                     </div>
                 </div>
+
+                {/* Dialog de Detalle de Transacciones */}
+                <Dialog open={showTransaccionesDialog} onOpenChange={setShowTransaccionesDialog}>
+                    <DialogTrigger asChild>
+                        <Button variant="outline" className="w-full cursor-pointer gap-2 bg-blue-500 text-white hover:bg-blue-600 hover:text-white">
+                            <Eye className="h-4 w-4" /> Ver Detalle de los Movimientos
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden p-0 sm:max-w-4xl">
+                        <DialogHeader className="border-b px-6 pt-6 pb-4">
+                            <DialogTitle>Detalle de Transacciones del Turno</DialogTitle>
+                            <DialogDescription>Desglose completo de ingresos, gastos y transferencias realizadas durante tu turno.</DialogDescription>
+                        </DialogHeader>
+
+                        <div className="flex-1 overflow-y-auto px-6 py-4">
+                            <Tabs defaultValue="gastos" className="w-full">
+                                <TabsList className="mb-4 grid w-full grid-cols-4">
+                                    <TabsTrigger value="ingresos">Ingresos ({todosIngresos.length})</TabsTrigger>
+                                    <TabsTrigger value="gastos">Gastos ({todosGastos.length})</TabsTrigger>
+                                    <TabsTrigger value="gestores">Gestores ({comisionesGestorDetalles.length})</TabsTrigger>
+                                    <TabsTrigger value="transferencias">Transferencias ({todasTransferencias.length})</TabsTrigger>
+                                </TabsList>
+
+                                {/* Tab Ingresos */}
+                                <TabsContent value="ingresos" className="mt-0">
+                                    {todosIngresos.length > 0 ? (
+                                        <div className="rounded-md border">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead className="w-16">Hora</TableHead>
+                                                        <TableHead>Descripción</TableHead>
+                                                        <TableHead>Origen</TableHead>
+                                                        <TableHead>Destino</TableHead>
+                                                        <TableHead className="w-28 text-right">Monto</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {todosIngresos.map((item: ItemMovimiento) => (
+                                                        <TableRow key={item.id}>
+                                                            <TableCell className="font-mono text-xs">{item.hora}</TableCell>
+                                                            <TableCell className="text-sm">{item.desc}</TableCell>
+                                                            <TableCell className="text-muted-foreground text-xs">{item.origen}</TableCell>
+                                                            <TableCell className="text-muted-foreground text-xs">{item.destino}</TableCell>
+                                                            <TableCell className="text-right font-mono font-medium text-green-600">
+                                                                +${Number(item.monto).toFixed(2)}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                                <TableFooter>
+                                                    <TableRow>
+                                                        <TableCell colSpan={4} className="font-bold">
+                                                            Total Ingresos
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-bold text-green-600">
+                                                            ${Number(totalIngresos).toFixed(2)}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                </TableFooter>
+                                            </Table>
+                                        </div>
+                                    ) : (
+                                        <p className="text-muted-foreground py-12 text-center italic">No hay ingresos registrados en este turno.</p>
+                                    )}
+                                </TabsContent>
+
+                                {/* Tab Gastos */}
+                                <TabsContent value="gastos" className="mt-0">
+                                    {todosGastos.length > 0 ? (
+                                        <div className="rounded-md border">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead className="w-16">Hora</TableHead>
+                                                        <TableHead>Descripción</TableHead>
+                                                        <TableHead>Origen</TableHead>
+                                                        <TableHead>Destino</TableHead>
+                                                        <TableHead className="w-28 text-right">Monto</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {todosGastos.map((item: ItemMovimiento) => (
+                                                        <TableRow key={item.id}>
+                                                            <TableCell className="font-mono text-xs">{item.hora}</TableCell>
+                                                            <TableCell className="text-sm">{item.desc}</TableCell>
+                                                            <TableCell className="text-muted-foreground text-xs">{item.origen}</TableCell>
+                                                            <TableCell className="text-muted-foreground text-xs">{item.destino}</TableCell>
+                                                            <TableCell className="text-right font-mono font-medium text-red-600">
+                                                                -${Number(item.monto).toFixed(2)}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                                <TableFooter>
+                                                    <TableRow>
+                                                        <TableCell colSpan={4} className="font-bold">
+                                                            Total Gastos
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-bold text-red-600">
+                                                            ${Number(totalGastos).toFixed(2)}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                </TableFooter>
+                                            </Table>
+                                        </div>
+                                    ) : (
+                                        <p className="text-muted-foreground py-12 text-center italic">No hay gastos registrados en este turno.</p>
+                                    )}
+                                </TabsContent>
+
+                                {/* Tab Gestores - NUEVO */}
+                                <TabsContent value="gestores" className="mt-0">
+                                    {comisionesGestorDetalles.length > 0 ? (
+                                        <div className="rounded-md border">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead>Venta #</TableHead>
+                                                        <TableHead>Cuenta</TableHead>
+                                                        <TableHead>Comentario</TableHead>
+                                                        <TableHead className="w-28 text-right">Monto</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {comisionesGestorDetalles.map((item: ComisionGestorItem) => (
+                                                        <TableRow key={item.venta_id}>
+                                                            <TableCell className="font-mono text-xs">
+                                                                <a
+                                                                    href={`/ventas/${item.venta_id}`}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="text-blue-600 hover:underline"
+                                                                >
+                                                                    #{item.venta_id}
+                                                                </a>
+                                                            </TableCell>
+                                                            <TableCell className="text-sm">
+                                                                <div className="font-medium">{item.cuenta_nombre}</div>
+                                                                <div className="text-muted-foreground text-xs">{item.cuenta_tipo}</div>
+                                                            </TableCell>
+                                                            <TableCell className="max-w-xs text-sm">
+                                                                {item.comentario || (
+                                                                    <span className="text-muted-foreground italic">Sin comentario</span>
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell className="text-right font-mono font-medium text-red-600">
+                                                                -${Number(item.monto).toFixed(2)} {item.moneda_codigo}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                                <TableFooter>
+                                                    <TableRow>
+                                                        <TableCell colSpan={3} className="font-bold">
+                                                            Total Comisiones
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-bold text-red-600">
+                                                            -${Number(totalComisionesGestor).toFixed(2)} USD
+                                                        </TableCell>
+                                                    </TableRow>
+                                                </TableFooter>
+                                            </Table>
+                                        </div>
+                                    ) : (
+                                        <p className="text-muted-foreground py-12 text-center italic">No hay comisiones a gestores en este turno.</p>
+                                    )}
+                                </TabsContent>
+
+                                {/* Tab Transferencias */}
+                                <TabsContent value="transferencias" className="mt-0">
+                                    {todasTransferencias.length > 0 ? (
+                                        <div className="rounded-md border">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead className="w-16">Hora</TableHead>
+                                                        <TableHead>Descripción</TableHead>
+                                                        <TableHead>Origen</TableHead>
+                                                        <TableHead>Destino</TableHead>
+                                                        <TableHead className="w-32 text-right">Monto</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {todasTransferencias.map((item: TransferenciaCompleta) => (
+                                                        <TableRow key={item.id}>
+                                                            <TableCell className="font-mono text-xs">{item.hora}</TableCell>
+                                                            <TableCell className="max-w-xs truncate text-sm">{item.desc}</TableCell>
+                                                            <TableCell className="text-muted-foreground text-xs">
+                                                                <div className="max-w-[120px] truncate" title={item.origen_nombre}>
+                                                                    {item.origen_nombre}
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell className="text-muted-foreground text-xs">
+                                                                <div className="max-w-[120px] truncate" title={item.destino_nombre}>
+                                                                    {item.destino_nombre}
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell className="text-right font-mono text-xs">
+                                                                <span className={item.tipo === 'entrante' ? 'text-green-600' : 'text-blue-600'}>
+                                                                    {item.tipo === 'entrante' ? '+' : '-'}${Number(item.monto_origen).toFixed(2)}{' '}
+                                                                    {item.moneda_origen}
+                                                                </span>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                                <TableFooter>
+                                                    <TableRow>
+                                                        <TableCell colSpan={4} className="font-bold">
+                                                            Total Transferencias
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-bold text-blue-600">
+                                                            ${Number(totalTransferencias).toFixed(2)}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                </TableFooter>
+                                            </Table>
+                                        </div>
+                                    ) : (
+                                        <p className="text-muted-foreground py-12 text-center italic">
+                                            No hay transferencias registradas en este turno.
+                                        </p>
+                                    )}
+                                </TabsContent>
+                            </Tabs>
+                        </div>
+                    </DialogContent>
+                </Dialog>
+
+                {/* NUEVO: Comparativa con Cierre Anterior */}
+                {tiene_cierre_anterior && comparativa_cuentas && comparativa_cuentas.length > 0 && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-base">
+                                <TrendingUp className="h-5 w-5 text-blue-600" />
+                                Comparativa con Cierre Anterior
+                            </CardTitle>
+                            <CardDescription>Comparación de saldos y deudas respecto al cierre anterior</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            {/* Pestañas Cuentas / Clientes */}
+                            <Tabs defaultValue="cuentas" className="w-full">
+                                <TabsList className="grid w-full grid-cols-2">
+                                    <TabsTrigger value="cuentas">Cuentas ({comparativa_cuentas.length})</TabsTrigger>
+                                    <TabsTrigger value="clientes">Clientes ({comparativa_clientes?.length ?? 0})</TabsTrigger>
+                                </TabsList>
+
+                                {/* Tab Cuentas */}
+                                <TabsContent value="cuentas" className="mt-4">
+                                    <div className="rounded-md border">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Cuenta</TableHead>
+                                                    <TableHead>Moneda</TableHead>
+                                                    <TableHead className="text-right">Anterior</TableHead>
+                                                    <TableHead className="text-right">Actual</TableHead>
+                                                    <TableHead className="text-right">Diferencia</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {comparativa_cuentas.map((item: ComparativaItem) => (
+                                                    <TableRow key={item.id}>
+                                                        <TableCell className="font-medium">{item.nombre}</TableCell>
+                                                        <TableCell>
+                                                            <span className="bg-muted rounded px-2 py-0.5 text-xs font-medium">{item.moneda}</span>
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-mono">
+                                                            ${Number(item.saldo_anterior).toFixed(2)}
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-mono font-medium">
+                                                            ${Number(item.saldo_actual).toFixed(2)}
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-mono">
+                                                            {item.diferencia > 0 ? (
+                                                                <span className="text-green-600">+${Number(item.diferencia).toFixed(2)} 📈</span>
+                                                            ) : item.diferencia < 0 ? (
+                                                                <span className="text-red-600">${Number(item.diferencia).toFixed(2)} 📉</span>
+                                                            ) : (
+                                                                <span className="text-muted-foreground">-</span>
+                                                            )}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                </TabsContent>
+
+                                {/* Tab Clientes */}
+                                <TabsContent value="clientes" className="mt-4">
+                                    {comparativa_clientes && comparativa_clientes.length > 0 ? (
+                                        <div className="rounded-md border">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead>Cliente</TableHead>
+                                                        <TableHead className="text-right">Deuda Anterior</TableHead>
+                                                        <TableHead className="text-right">Deuda Actual</TableHead>
+                                                        <TableHead className="text-right">Diferencia</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {comparativa_clientes.map((item: ComparativaClienteItem) => (
+                                                        <TableRow key={item.id}>
+                                                            <TableCell className="font-medium">{item.nombre}</TableCell>
+                                                            <TableCell className="text-right font-mono">
+                                                                ${Number(item.deuda_anterior).toFixed(2)}
+                                                            </TableCell>
+                                                            <TableCell className="text-right font-mono font-medium">
+                                                                ${Number(item.deuda_actual).toFixed(2)}
+                                                            </TableCell>
+                                                            <TableCell className="text-right font-mono">
+                                                                {item.diferencia < 0 ? (
+                                                                    <span className="text-green-600">${Number(item.diferencia).toFixed(2)} ✅</span>
+                                                                ) : item.diferencia > 0 ? (
+                                                                    <span className="text-red-600">+${Number(item.diferencia).toFixed(2)} ⚠️</span>
+                                                                ) : (
+                                                                    <span className="text-muted-foreground">-</span>
+                                                                )}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    ) : (
+                                        <p className="text-muted-foreground py-8 text-center italic">No hay clientes con deuda registrada.</p>
+                                    )}
+                                </TabsContent>
+                            </Tabs>
+                        </CardContent>
+                    </Card>
+                )}
+
+                {/* Acción Final */}
+                <Card className="border-primary/20 bg-primary/5">
+                    <CardHeader>
+                        <CardTitle className="text-sm font-bold tracking-wider uppercase">Finalizar Cierre</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {/* Total de Venta */}
+                        <div className="border-primary bg-primary/10 rounded-lg border p-4">
+                            <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Total de Ventas del Turno</p>
+                            <p className="text-4xl font-black text-emerald-600">${Number(calculos.ventas_efectivo).toFixed(2)}</p>
+                            <p className="text-muted-foreground mt-2 text-xs">Incluyendo todas las monedas y métodos de pago</p>
+                        </div>
+
+                        {/* Comisiones a Gestores - Si existen */}
+                        {totalComisionesGestor > 0 && (
+                            <div className="rounded-lg border border-purple-200 bg-purple-50 p-4">
+                                <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">- Comisiones a Gestores</p>
+                                <p className="text-2xl font-black text-purple-700">-${Number(totalComisionesGestor).toFixed(2)}</p>
+                                <p className="text-muted-foreground mt-1 text-xs">
+                                    {comisionesGestorDetalles.length} venta{comisionesGestorDetalles.length !== 1 ? 's' : ''} con gestor
+                                </p>
+                            </div>
+                        )}
+
+                        <div className="space-y-1">
+                            <Label className="text-muted-foreground text-xs font-bold uppercase">Observaciones del Turno</Label>
+                            <Input
+                                placeholder="Ej: Faltó dinero por cambio mal dado..."
+                                value={data.observaciones}
+                                onChange={(e) => setData('observaciones', e.target.value)}
+                            />
+                        </div>
+
+                        <div className="flex flex-col gap-2 pt-2">
+                            <Button type="button" className="h-12 w-full text-base font-bold" disabled={processing} onClick={() => submit()}>
+                                <CheckCircle2 className="mr-2 h-5 w-5" /> FINALIZAR CIERRE
+                            </Button>
+                            <p className="text-muted-foreground px-4 text-center text-[10px] leading-tight italic">
+                                Al finalizar se notificará a los administradores y se cerrará tu sesión de venta.
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
 
                 {/* Modal de Confirmación */}
                 <AlertDialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
