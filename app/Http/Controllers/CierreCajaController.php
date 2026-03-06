@@ -418,6 +418,9 @@ class CierreCajaController extends Controller
                     $capacidad = $det->producto && $det->producto->capacidad_producto
                         ? trim($det->producto->capacidad_producto)
                         : '';
+                    $categoria = $det->producto && $det->producto->categoria
+                        ? trim($det->producto->categoria->nombre_categoria)
+                        : '';
                     $partes = array_filter([$nombre, $marca, $modelo, $capacidad]);
                     $descripcionCompleta = implode(' ', $partes);
                     $precioVenta = (float) $det->precio_venta;
@@ -426,7 +429,11 @@ class CierreCajaController extends Controller
                     $subtotalEquiv = $tasaVenta > 0 ? $subtotal / $tasaVenta : $subtotal;
                     $detallesProductos[] = [
                         'cantidad' => (int) $det->cantidad,
-                        'descripcion' => $descripcionCompleta,
+                        'descripcion' => $nombre,
+                        'marca' => $marca,
+                        'modelo' => $modelo,
+                        'capacidad' => $capacidad,
+                        'categoria' => $categoria,
                         'precio_unitario' => $precioVenta,
                         'total' => $subtotal,
                         'precio_equivalente' => round($precioEquiv, 2),
