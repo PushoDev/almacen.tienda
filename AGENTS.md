@@ -7,6 +7,7 @@ Laravel 12 + React 19 + Inertia.js + Tailwind CSS v4 inventory management system
 ## Commands
 
 ### PHP/Laravel
+
 ```bash
 composer run dev        # Dev: Laravel + queue + Vite
 composer run dev:ssr    # Dev with SSR support
@@ -24,6 +25,7 @@ php artisan migrate:fresh --seed
 ```
 
 ### Frontend
+
 ```bash
 npm run dev         # Vite dev server
 npm run build       # Production build
@@ -37,6 +39,7 @@ npm run types       # TypeScript check
 ## Code Style
 
 ### PHP (Backend)
+
 - **Standard**: PSR-12 via Laravel Pint
 - **PHP**: 8.2+ - typed properties, `readonly` when applicable
 - **Testing**: Pest PHP (tests in Spanish)
@@ -44,6 +47,7 @@ npm run types       # TypeScript check
 - **Naming**: Classes `PascalCase`, methods/variables `camelCase`, tables/columns `snake_case`
 
 ### TypeScript/React (Frontend)
+
 - **Stack**: React 19, TypeScript, Inertia.js, Tailwind v4
 - **Formatter**: Prettier (150 char, single quotes, semicolons, 4-space tabs)
 - **UI**: Radix UI / Shadcn with `cn()` utility
@@ -54,6 +58,7 @@ npm run types       # TypeScript check
 ## Patterns
 
 ### Inertia + React
+
 ```tsx
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 
@@ -68,6 +73,7 @@ export default function Create({ categorias }: Props) {
 ```
 
 ### Persistent Layouts
+
 ```tsx
 // AppLayout.tsx
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -79,6 +85,7 @@ Page.layout = (page) => <AppLayout>{page}</AppLayout>;
 ```
 
 ### Form Handling
+
 ```tsx
 const submit: FormEventHandler = (e) => {
     e.preventDefault();
@@ -87,6 +94,7 @@ const submit: FormEventHandler = (e) => {
 ```
 
 ### Controller Pattern
+
 ```php
 public function store(StoreProductoRequest $request): RedirectResponse
 {
@@ -95,7 +103,13 @@ public function store(StoreProductoRequest $request): RedirectResponse
 }
 ```
 
+### Flash Messages & Redirects
+
+- Use `->with('success', 'message')` or `->with('error', 'message')` for flash data
+- Access in React via `usePage().props.flash`
+
 ### UI Components (Shadcn)
+
 ```tsx
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -106,21 +120,54 @@ import { cn } from '@/lib/utils';
 </Button>;
 ```
 
+### React Hook Form + Zod (Formularios complejos)
+
+```tsx
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
+
+const schema = z.object({
+    nombre: z.string().min(1, 'Requerido'),
+    precio: z.coerce.number().positive(),
+});
+
+type FormData = z.infer<typeof schema>;
+
+const {
+    register,
+    handleSubmit,
+    formState: { errors },
+} = useForm<FormData>({
+    resolver: zodResolver(schema),
+});
+```
+
 ### Laravel Eloquent
+
 - Use `with()`, `load()` to avoid N+1 queries
 - Use scopes for reusable queries
 - Type hints on relationships
 - `$fillable`, `$casts`, `$hidden` on models
 
+### Middleware
+
+- `HandleInertiaRequests` for shared props (auth, flash messages)
+- Share data via `$page.props` in `share()` method
+
 ## Structure
+
 ```
 app/
 ├── Models/       # Eloquent models
-├── Controllers/ # HTTP controllers
-├── Requests/     # Form request validation
+├── Http/
+│   ├── Controllers/ # HTTP controllers
+│   └── Requests/     # Form request validation
+├── Middleware/   # HandleInertiaRequests for shared props
 ├── Services/     # Business logic
+└── Providers/   # App service providers
 resources/js/
-├── pages/        # Inertia pages
+├── pages/        # Inertia pages (Pages/*.tsx)
 ├── components/   # React components (ui/ = Shadcn)
 ├── hooks/        # Custom hooks
 └── types/        # TypeScript types
@@ -130,12 +177,14 @@ tests/
 ```
 
 ## Database Conventions
+
 - Tables/columns: `snake_case`
 - Timestamps: `created_at`, `updated_at`, `deleted_at` (soft deletes)
 - Pivot tables: alphabetical (`producto_vendedors`)
 - Foreign keys: `{model}_id` (e.g., `categoria_id`)
 
 ## Security & Performance
+
 - Validate input with Form Requests
 - Use Gates/Policies for authorization
 - Never commit secrets (.env)
@@ -143,6 +192,7 @@ tests/
 - Paginate large datasets (`paginate()`, `cursorPaginate()`)
 
 ## Testing
+
 ```php
 it('creates a product', function () {
     loginAsAdmin();
@@ -156,13 +206,21 @@ it('creates a product', function () {
 ```
 
 ## Error Handling
+
 - **Backend**: Laravel exceptions, proper HTTP codes (400,401,403,404,422,500)
 - **Frontend**: Inertia error handling, `errors` from `useForm`, toast notifications
 - Use `try/catch` in services with meaningful messages
 
 ## Available Skills
-| Skill                    | Purpose                              |
-| ------------------------ | ------------------------------------ |
-| `/skill laravel-inertia-react` | Laravel + Inertia.js + React |
-| `/skill shadcn-ui`      | Radix UI, React Hook Form + Zod     |
-| `/skill laravel-specialist` | Eloquent, API Resources          |
+
+| Skill                          | Purpose                         |
+| ------------------------------ | ------------------------------- |
+| `/skill laravel-inertia-react` | Laravel + Inertia.js + React    |
+| `/skill shadcn-ui`             | Radix UI, React Hook Form + Zod |
+| `/skill laravel-specialist`    | Eloquent, API Resources         |
+
+## File Patterns
+
+- PHP: `app/**/*.php`, `routes/**/*.php`
+- React/TS: `resources/js/**/*.tsx`, `resources/js/**/*.ts`
+- Tests: `tests/Feature/*.php`, `tests/Unit/*.php`
