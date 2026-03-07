@@ -56,6 +56,7 @@ interface Props extends PageProps {
 interface ComparativaItem {
     id: number;
     nombre: string;
+    tipo: string;
     moneda: string;
     saldo_anterior: number;
     saldo_actual: number;
@@ -1240,41 +1241,51 @@ export default function Create({
                     </DialogContent>
                 </Dialog>
 
-                {/* NUEVO: Comparativa con Cierre Anterior */}
-                {tiene_cierre_anterior && comparativa_cuentas && comparativa_cuentas.length > 0 && (
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-base">
-                                <TrendingUp className="h-5 w-5 text-blue-600" />
-                                Comparativa con Cierre Anterior
-                            </CardTitle>
-                            <CardDescription>Comparación de saldos y deudas respecto al cierre anterior</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-6">
-                            {/* Pestañas Cuentas / Clientes */}
-                            <Tabs defaultValue="cuentas" className="w-full">
-                                <TabsList className="grid w-full grid-cols-2">
-                                    <TabsTrigger value="cuentas">Cuentas ({comparativa_cuentas.length})</TabsTrigger>
-                                    <TabsTrigger value="clientes">Clientes ({comparativa_clientes?.length ?? 0})</TabsTrigger>
-                                </TabsList>
+                {/* Comparativa con Cierre Anterior */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-base">
+                            <TrendingUp className="h-5 w-5 text-blue-600" />
+                            Comparativa con Cierre Anterior
+                        </CardTitle>
+                        <CardDescription>Comparación de saldos y deudas respecto al cierre anterior</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                        {/* Pestañas Cuentas / Clientes */}
+                        <Tabs defaultValue="cuentas" className="w-full">
+                            <TabsList className="grid w-full grid-cols-2">
+                                <TabsTrigger value="cuentas">Cuentas ({comparativa_cuentas?.length ?? 0})</TabsTrigger>
+                                <TabsTrigger value="clientes">Clientes ({comparativa_clientes?.length ?? 0})</TabsTrigger>
+                            </TabsList>
 
-                                {/* Tab Cuentas */}
-                                <TabsContent value="cuentas" className="mt-4">
-                                    <div className="rounded-md border">
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead>Cuenta</TableHead>
-                                                    <TableHead>Moneda</TableHead>
-                                                    <TableHead className="text-right">Anterior</TableHead>
-                                                    <TableHead className="text-right">Actual</TableHead>
-                                                    <TableHead className="text-right">Diferencia</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {comparativa_cuentas.map((item: ComparativaItem) => (
+                            {/* Tab Cuentas */}
+                            <TabsContent value="cuentas" className="mt-4">
+                                <div className="rounded-md border">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Cuenta</TableHead>
+                                                <TableHead>Tipo</TableHead>
+                                                <TableHead>Moneda</TableHead>
+                                                <TableHead className="text-right">Cierre Anterior</TableHead>
+                                                <TableHead className="text-right">Cierre Hoy</TableHead>
+                                                <TableHead className="text-right">Diferencia</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {comparativa_cuentas && comparativa_cuentas.length > 0 ? (
+                                                comparativa_cuentas.map((item: ComparativaItem) => (
                                                     <TableRow key={item.id}>
                                                         <TableCell className="font-medium">{item.nombre}</TableCell>
+                                                        <TableCell>
+                                                            <span className="bg-muted rounded px-2 py-0.5 text-xs font-medium">
+                                                                {item.tipo === 'efectivo'
+                                                                    ? 'Efectivo'
+                                                                    : item.tipo === 'tarjeta'
+                                                                      ? 'Tarjeta'
+                                                                      : item.tipo || '-'}
+                                                            </span>
+                                                        </TableCell>
                                                         <TableCell>
                                                             <span className="bg-muted rounded px-2 py-0.5 text-xs font-medium">{item.moneda}</span>
                                                         </TableCell>
@@ -1286,9 +1297,57 @@ export default function Create({
                                                         </TableCell>
                                                         <TableCell className="text-right font-mono">
                                                             {item.diferencia > 0 ? (
-                                                                <span className="text-green-600">+${Number(item.diferencia).toFixed(2)} 📈</span>
+                                                                <span className="text-green-600">+${Number(item.diferencia).toFixed(2)}</span>
                                                             ) : item.diferencia < 0 ? (
-                                                                <span className="text-red-600">${Number(item.diferencia).toFixed(2)} 📉</span>
+                                                                <span className="text-red-600">${Number(item.diferencia).toFixed(2)}</span>
+                                                            ) : (
+                                                                <span className="text-muted-foreground">-</span>
+                                                            )}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))
+                                            ) : (
+                                                <TableRow>
+                                                    <TableCell colSpan={6} className="text-muted-foreground py-8 text-center italic">
+                                                        {!tiene_cierre_anterior
+                                                            ? 'No hay cierre anterior para comparar'
+                                                            : 'No hay cuentas para mostrar'}
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            </TabsContent>
+
+                            {/* Tab Clientes */}
+                            <TabsContent value="clientes" className="mt-4">
+                                {comparativa_clientes && comparativa_clientes.length > 0 ? (
+                                    <div className="rounded-md border">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Cliente</TableHead>
+                                                    <TableHead className="text-right">Deuda Anterior</TableHead>
+                                                    <TableHead className="text-right">Deuda Actual</TableHead>
+                                                    <TableHead className="text-right">Diferencia</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {comparativa_clientes.map((item: ComparativaClienteItem) => (
+                                                    <TableRow key={item.id}>
+                                                        <TableCell className="font-medium">{item.nombre}</TableCell>
+                                                        <TableCell className="text-right font-mono">
+                                                            ${Number(item.deuda_anterior).toFixed(2)}
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-mono font-medium">
+                                                            ${Number(item.deuda_actual).toFixed(2)}
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-mono">
+                                                            {item.diferencia < 0 ? (
+                                                                <span className="text-green-600">${Number(item.diferencia).toFixed(2)} ✅</span>
+                                                            ) : item.diferencia > 0 ? (
+                                                                <span className="text-red-600">+${Number(item.diferencia).toFixed(2)} ⚠️</span>
                                                             ) : (
                                                                 <span className="text-muted-foreground">-</span>
                                                             )}
@@ -1298,53 +1357,13 @@ export default function Create({
                                             </TableBody>
                                         </Table>
                                     </div>
-                                </TabsContent>
-
-                                {/* Tab Clientes */}
-                                <TabsContent value="clientes" className="mt-4">
-                                    {comparativa_clientes && comparativa_clientes.length > 0 ? (
-                                        <div className="rounded-md border">
-                                            <Table>
-                                                <TableHeader>
-                                                    <TableRow>
-                                                        <TableHead>Cliente</TableHead>
-                                                        <TableHead className="text-right">Deuda Anterior</TableHead>
-                                                        <TableHead className="text-right">Deuda Actual</TableHead>
-                                                        <TableHead className="text-right">Diferencia</TableHead>
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
-                                                    {comparativa_clientes.map((item: ComparativaClienteItem) => (
-                                                        <TableRow key={item.id}>
-                                                            <TableCell className="font-medium">{item.nombre}</TableCell>
-                                                            <TableCell className="text-right font-mono">
-                                                                ${Number(item.deuda_anterior).toFixed(2)}
-                                                            </TableCell>
-                                                            <TableCell className="text-right font-mono font-medium">
-                                                                ${Number(item.deuda_actual).toFixed(2)}
-                                                            </TableCell>
-                                                            <TableCell className="text-right font-mono">
-                                                                {item.diferencia < 0 ? (
-                                                                    <span className="text-green-600">${Number(item.diferencia).toFixed(2)} ✅</span>
-                                                                ) : item.diferencia > 0 ? (
-                                                                    <span className="text-red-600">+${Number(item.diferencia).toFixed(2)} ⚠️</span>
-                                                                ) : (
-                                                                    <span className="text-muted-foreground">-</span>
-                                                                )}
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    ))}
-                                                </TableBody>
-                                            </Table>
-                                        </div>
-                                    ) : (
-                                        <p className="text-muted-foreground py-8 text-center italic">No hay clientes con deuda registrada.</p>
-                                    )}
-                                </TabsContent>
-                            </Tabs>
-                        </CardContent>
-                    </Card>
-                )}
+                                ) : (
+                                    <p className="text-muted-foreground py-8 text-center italic">No hay clientes con deuda registrada.</p>
+                                )}
+                            </TabsContent>
+                        </Tabs>
+                    </CardContent>
+                </Card>
 
                 {/* Acción Final */}
                 <Card className="border-primary/20 bg-primary/5">

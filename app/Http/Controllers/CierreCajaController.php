@@ -118,6 +118,7 @@ class CierreCajaController extends Controller
                 $comparativaCuentas[] = [
                     'id' => $cuenta->id,
                     'nombre' => $nombreCuenta,
+                    'tipo' => $cuenta->tipo,
                     'moneda' => $cuenta->moneda?->codigo_moneda ?? $cuenta->tipo_moneda,
                     'saldo_anterior' => round($saldoAnterior, 2),
                     'saldo_actual' => round($saldoActual, 2),
