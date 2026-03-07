@@ -1,19 +1,15 @@
 import HeadingSmall from '@/components/heading-small';
 import {
     AlertDialog,
-    AlertDialogAction,
     AlertDialogCancel,
     AlertDialogContent,
-    AlertDialogDescription,
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AppLayout from '@/layouts/app-layout';
@@ -25,9 +21,7 @@ import {
     ArrowUp,
     Banknote,
     Calculator,
-    CheckCircle2,
     ChevronDown,
-    ChevronRight,
     CreditCard,
     DollarSign,
     Eye,
@@ -126,6 +120,19 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 export default function Show({ cierre }: Props) {
     const [showTransaccionesDialog, setShowTransaccionesDialog] = useState(false);
+    const [selectedVentaDetails, setSelectedVentaDetails] = useState<{
+        show: boolean;
+        ventaId: number | null;
+    }>({ show: false, ventaId: null });
+
+    // Obtener todas las operaciones de una venta específica
+    const getOperacionesPorVenta = (ventaId: number) => {
+        const todasOperaciones = (calculos.detalles ?? []).flatMap((d: any) => d.operaciones_detalle ?? []);
+        return todasOperaciones.filter((op: any) => op.venta_id === ventaId);
+    };
+
+    const operacionSeleccionada = selectedVentaDetails.ventaId ? getOperacionesPorVenta(selectedVentaDetails.ventaId) : [];
+
     const moneda_referencia = 'USD';
 
     // Mapear cierre a estructura similar a calculos usada en Create.tsx
@@ -186,19 +193,45 @@ export default function Show({ cierre }: Props) {
 
     const todosGastos = (calculos.detalles ?? []).flatMap((d: any) => d.items_gastos ?? []);
     const todosIngresos = (calculos.detalles ?? []).flatMap((d: any) => d.items_ingresos ?? []);
-    const todasTransferencias = (calculos.detalles ?? []).flatMap((d: any) => [...(d.items_transferencias_salientes ?? []), ...(d.items_transferencias_entrantes ?? [])]);
+    const todasTransferencias = (calculos.detalles ?? []).flatMap((d: any) => [
+        ...(d.items_transferencias_salientes ?? []),
+        ...(d.items_transferencias_entrantes ?? []),
+    ]);
+
+    // Comisiones a gestores
+    const comisionesGestorDetalles = (calculos.detalles ?? []).flatMap((d: any) => d.comisiones_gestor_detalles ?? []);
+    const totalComisionesGestor =
+        calculos.comisiones_gestor_total ?? comisionesGestorDetalles.reduce((sum: number, item: any) => sum + (Number(item.monto_usd) || 0), 0);
+
+    // Agrupar comisiones de gestores por moneda
+    const comisionesPorMoneda = comisionesGestorDetalles.reduce(
+        (acc: Record<string, { total: number; count: number }>, item: any) => {
+            const moneda = item.moneda_codigo || 'USD';
+            if (!acc[moneda]) {
+                acc[moneda] = { total: 0, count: 0 };
+            }
+            acc[moneda].total += Number(item.monto) || 0;
+            acc[moneda].count += 1;
+            return acc;
+        },
+        {} as Record<string, { total: number; count: number }>,
+    );
 
     // transferencias resumen por moneda
-    const transferenciasResumen = (calculos.detalles ?? []).reduce((acc: Record<string, any>, d: any) => {
-        const moneda = d.moneda || 'USD';
-        if (!acc[moneda]) acc[moneda] = { tasa: d.tasa_cambio || 1, salientes: 0, entrantes: 0, neto: 0, items_salientes: [], items_entrantes: [] };
-        acc[moneda].salientes += Number(d.transferencias_salientes || 0);
-        acc[moneda].entrantes += Number(d.transferencias_entrantes || 0);
-        acc[moneda].neto = acc[moneda].entrantes - acc[moneda].salientes;
-        acc[moneda].items_salientes = (acc[moneda].items_salientes || []).concat(d.items_transferencias_salientes || []);
-        acc[moneda].items_entrantes = (acc[moneda].items_entrantes || []).concat(d.items_transferencias_entrantes || []);
-        return acc;
-    }, {} as Record<string, any>);
+    const transferenciasResumen = (calculos.detalles ?? []).reduce(
+        (acc: Record<string, any>, d: any) => {
+            const moneda = d.moneda || 'USD';
+            if (!acc[moneda])
+                acc[moneda] = { tasa: d.tasa_cambio || 1, salientes: 0, entrantes: 0, neto: 0, items_salientes: [], items_entrantes: [] };
+            acc[moneda].salientes += Number(d.transferencias_salientes || 0);
+            acc[moneda].entrantes += Number(d.transferencias_entrantes || 0);
+            acc[moneda].neto = acc[moneda].entrantes - acc[moneda].salientes;
+            acc[moneda].items_salientes = (acc[moneda].items_salientes || []).concat(d.items_transferencias_salientes || []);
+            acc[moneda].items_entrantes = (acc[moneda].items_entrantes || []).concat(d.items_transferencias_entrantes || []);
+            return acc;
+        },
+        {} as Record<string, any>,
+    );
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -207,8 +240,15 @@ export default function Show({ cierre }: Props) {
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-6 p-4 md:p-6">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-6">
-                    <HeadingSmall title={`Reporte de Cierre #${cierre.id}`} description={`Auditoría detallada de movimientos realizados por ${cierre.usuario?.name || 'usuario'}.`} />
-                    <Wallet size={70} color="#d6d3d1" className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 transform opacity-40" />
+                    <HeadingSmall
+                        title={`Reporte de Cierre #${cierre.id}`}
+                        description={`Auditoría detallada de movimientos realizados por ${cierre.usuario?.name || 'usuario'}.`}
+                    />
+                    <Wallet
+                        size={70}
+                        color="#d6d3d1"
+                        className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 transform opacity-40"
+                    />
                 </div>
 
                 {/* Widgets estadísticos (como Create.tsx) */}
@@ -356,8 +396,19 @@ export default function Show({ cierre }: Props) {
                         {/* Tabla Ventas (productos) */}
                         <Card>
                             <CardHeader>
-                                <CardTitle className="flex items-center gap-2"><Receipt className="h-5 w-5" /> Ventas del Día</CardTitle>
-                                <CardDescription>Productos vendidos el {new Date(cierre.fecha_apertura).toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}. Importes en {moneda_referencia}.</CardDescription>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Receipt className="h-5 w-5" /> Ventas del Día
+                                </CardTitle>
+                                <CardDescription>
+                                    Productos vendidos el{' '}
+                                    {new Date(cierre.fecha_apertura).toLocaleDateString('es-ES', {
+                                        weekday: 'long',
+                                        year: 'numeric',
+                                        month: 'long',
+                                        day: 'numeric',
+                                    })}
+                                    . Importes en {moneda_referencia}.
+                                </CardDescription>
                             </CardHeader>
                             <CardContent>
                                 <Table>
@@ -375,20 +426,36 @@ export default function Show({ cierre }: Props) {
                                                 <TableRow key={idx}>
                                                     <TableCell className="font-medium">{linea.cantidad}</TableCell>
                                                     <TableCell>{linea.descripcion}</TableCell>
-                                                    <TableCell className="text-right">{(linea.total_equivalente !== undefined ? Number(linea.precio_equivalente) : Number(linea.precio_unitario)).toFixed(2)}</TableCell>
-                                                    <TableCell className="text-right font-mono">{(linea.total_equivalente !== undefined ? Number(linea.total_equivalente) : Number(linea.total)).toFixed(2)}</TableCell>
+                                                    <TableCell className="text-right">
+                                                        {(linea.total_equivalente !== undefined
+                                                            ? Number(linea.precio_equivalente)
+                                                            : Number(linea.precio_unitario)
+                                                        ).toFixed(2)}
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-mono">
+                                                        {(linea.total_equivalente !== undefined
+                                                            ? Number(linea.total_equivalente)
+                                                            : Number(linea.total)
+                                                        ).toFixed(2)}
+                                                    </TableCell>
                                                 </TableRow>
                                             ))
                                         ) : (
                                             <TableRow>
-                                                <TableCell colSpan={4} className="text-muted-foreground text-center italic">No hay ventas en este turno</TableCell>
+                                                <TableCell colSpan={4} className="text-muted-foreground text-center italic">
+                                                    No hay ventas en este turno
+                                                </TableCell>
                                             </TableRow>
                                         )}
                                     </TableBody>
                                     <TableFooter>
                                         <TableRow>
-                                            <TableCell colSpan={3} className="text-right font-bold">Total</TableCell>
-                                            <TableCell className="text-right font-mono font-bold">{Number(totalVentasProductos).toFixed(2)} {moneda_referencia}</TableCell>
+                                            <TableCell colSpan={3} className="text-right font-bold">
+                                                Total
+                                            </TableCell>
+                                            <TableCell className="text-right font-mono font-bold">
+                                                {Number(totalVentasProductos).toFixed(2)} {moneda_referencia}
+                                            </TableCell>
                                         </TableRow>
                                     </TableFooter>
                                 </Table>
@@ -398,7 +465,9 @@ export default function Show({ cierre }: Props) {
                         {/* Por dónde entraron */}
                         <Card>
                             <CardHeader>
-                                <CardTitle className="flex items-center gap-2"><Banknote className="h-5 w-5" /> Por dónde entraron</CardTitle>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Banknote className="h-5 w-5" /> Por dónde entraron
+                                </CardTitle>
                                 <CardDescription>Cantidad de ventas y total por método, separado por moneda.</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-6">
@@ -414,7 +483,7 @@ export default function Show({ cierre }: Props) {
                                             <div key={moneda} className="space-y-2">
                                                 <h4 className="text-muted-foreground text-sm font-semibold">{moneda}</h4>
                                                 <Table>
-                                                    <TableHeader className='bg-sidebar-accent hover:bg-sidebar-accent'>
+                                                    <TableHeader className="bg-sidebar-accent hover:bg-sidebar-accent">
                                                         <TableRow>
                                                             <TableHead>Método / Destino</TableHead>
                                                             <TableHead className="w-20 text-center">Operaciones</TableHead>
@@ -426,59 +495,209 @@ export default function Show({ cierre }: Props) {
                                                         {Object.entries(metodos).map(([etiqueta, data]) => {
                                                             const total = Number(data.total) || 0;
                                                             const totalEquivalente = Number(data.totalEquivalente) || 0;
-                                                            const operacionesPorMetodo = (detalleMoneda?.operaciones_detalle || []).filter((op: any) => {
-                                                                const via = (op.via_pago || '').toString().trim().toUpperCase();
-                                                                const destino = (op.destino_nombre || '').toString().trim();
-                                                                let etiquetaMetodo: string;
-                                                                if (op.tipo_pago === 'efectivo') etiquetaMetodo = moneda;
-                                                                else etiquetaMetodo = via ? (destino ? `${via} ${destino}` : via) : destino ? `Transferencia ${destino}` : `Transferencia ${moneda}`;
-                                                                return etiquetaMetodo === etiqueta;
-                                                            });
+                                                            const operacionesPorMetodo = (detalleMoneda?.operaciones_detalle || []).filter(
+                                                                (op: any) => {
+                                                                    const via = (op.via_pago || '').toString().trim().toUpperCase();
+                                                                    const destino = (op.destino_nombre || '').toString().trim();
+                                                                    let etiquetaMetodo: string;
+                                                                    if (op.tipo_pago === 'efectivo') etiquetaMetodo = moneda;
+                                                                    else
+                                                                        etiquetaMetodo = via
+                                                                            ? destino
+                                                                                ? `${via} ${destino}`
+                                                                                : via
+                                                                            : destino
+                                                                              ? `Transferencia ${destino}`
+                                                                              : `Transferencia ${moneda}`;
+                                                                    return etiquetaMetodo === etiqueta;
+                                                                },
+                                                            );
 
                                                             return (
-                                                                <Collapsible.Root key={`${moneda}-${etiqueta}`}>
-                                                                    <Collapsible.Trigger asChild>
-                                                                        <TableRow className="hover:bg-muted/50 cursor-pointer">
-                                                                            <TableCell className="flex items-center gap-2 font-medium">
-                                                                                <ChevronDown className="collapsible-trigger-icon h-4 w-4 transition-transform" />
-                                                                                <ChevronRight className="collapsible-trigger-icon[!hidden] h-4 w-4 transition-transform" />
-                                                                                {etiqueta}
-                                                                            </TableCell>
-                                                                            <TableCell className="text-center font-mono">{data.cantidad}</TableCell>
-                                                                            <TableCell className="text-right font-mono">{total.toFixed(2)}</TableCell>
-                                                                            <TableCell className="text-right font-mono font-medium text-green-600">${totalEquivalente.toFixed(2)}</TableCell>
-                                                                        </TableRow>
-                                                                    </Collapsible.Trigger>
-                                                                    <Collapsible.Content>
-                                                                        <TableRow>
-                                                                            <TableCell colSpan={4} className="bg-muted/30 p-0">
-                                                                                <div className="border-muted-foreground/20 ml-4 space-y-2 border-l-2 p-2">
-                                                                                    {operacionesPorMetodo.length > 0 ? (
-                                                                                        operacionesPorMetodo.map((operacion: any, idx: number) => (
-                                                                                            <div key={idx} className="bg-card space-y-1 rounded-md border p-2 text-sm shadow-sm">
-                                                                                                <div className="flex items-center justify-between font-medium">
-                                                                                                    <span>Venta #{operacion.venta_id} - {operacion.cliente}</span>
-                                                                                                    <span className="font-mono">${Number(operacion.monto).toFixed(2)} - {operacion.hora}</span>
-                                                                                                </div>
-                                                                                                {(operacion.productos?.length ?? 0) > 0 && (
-                                                                                                    <div className="text-muted-foreground ml-4 space-y-1">
-                                                                                                        {operacion.productos?.map((prod: any, pidx: number) => (
-                                                                                                            <div key={pidx} className="flex justify-between text-xs">
-                                                                                                                <span>{prod.cantidad}x {prod.descripcion}</span>
-                                                                                                                <span className="font-mono">${Number(prod.total).toFixed(2)}</span>
+                                                                <Collapsible.Root key={`${moneda}-${etiqueta}`} asChild>
+                                                                    <>
+                                                                        <Collapsible.Trigger asChild>
+                                                                            <TableRow className="hover:bg-muted/50 cursor-pointer">
+                                                                                <TableCell className="flex items-center gap-2 font-medium">
+                                                                                    <ChevronDown className="collapsible-trigger-icon h-4 w-4 transition-transform" />
+                                                                                    {etiqueta}
+                                                                                </TableCell>
+                                                                                <TableCell className="text-center font-mono">
+                                                                                    {data.cantidad}
+                                                                                </TableCell>
+                                                                                <TableCell className="text-right font-mono">
+                                                                                    {total.toFixed(2)}
+                                                                                </TableCell>
+                                                                                <TableCell className="text-right font-mono font-medium text-green-600">
+                                                                                    ${totalEquivalente.toFixed(2)}
+                                                                                </TableCell>
+                                                                            </TableRow>
+                                                                        </Collapsible.Trigger>
+                                                                        <Collapsible.Content>
+                                                                            <TableRow>
+                                                                                <TableCell colSpan={4} className="p-0">
+                                                                                    <div className="bg-muted/30 w-full p-4">
+                                                                                        <div className="border-muted space-y-3 border-l-2 pl-4">
+                                                                                            {operacionesPorMetodo.length > 0 ? (
+                                                                                                operacionesPorMetodo.map(
+                                                                                                    (operacion: any, idx: number) => (
+                                                                                                        <div
+                                                                                                            key={idx}
+                                                                                                            className="bg-card w-full rounded-md border p-4 shadow-sm"
+                                                                                                        >
+                                                                                                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b pb-2 text-sm">
+                                                                                                                <div className="flex items-center gap-2">
+                                                                                                                    <span className="font-semibold">
+                                                                                                                        Venta #{operacion.venta_id}
+                                                                                                                    </span>
+                                                                                                                    <span className="text-muted-foreground">
+                                                                                                                        -
+                                                                                                                    </span>
+                                                                                                                    <span>{operacion.cliente}</span>
+                                                                                                                    <span className="text-muted-foreground">
+                                                                                                                        -
+                                                                                                                    </span>
+                                                                                                                    <span className="text-muted-foreground">
+                                                                                                                        {operacion.hora}
+                                                                                                                    </span>
+                                                                                                                </div>
+                                                                                                                <div className="flex items-center gap-4">
+                                                                                                                    <span className="text-muted-foreground text-sm">
+                                                                                                                        {operacion.cuenta_nombre &&
+                                                                                                                            `Cuenta: ${operacion.cuenta_nombre}`}
+                                                                                                                        {operacion.destino_nombre &&
+                                                                                                                            ` - ${operacion.destino_nombre}`}
+                                                                                                                    </span>
+                                                                                                                    <span className="font-mono font-bold text-green-600">
+                                                                                                                        $
+                                                                                                                        {Number(
+                                                                                                                            operacion.monto,
+                                                                                                                        ).toFixed(2)}
+                                                                                                                    </span>
+                                                                                                                    <Button
+                                                                                                                        variant="ghost"
+                                                                                                                        size="icon"
+                                                                                                                        className="text-muted-foreground hover:text-primary h-6 w-6 cursor-pointer"
+                                                                                                                        onClick={() =>
+                                                                                                                            setSelectedVentaDetails({
+                                                                                                                                show: true,
+                                                                                                                                ventaId:
+                                                                                                                                    operacion.venta_id,
+                                                                                                                            })
+                                                                                                                        }
+                                                                                                                    >
+                                                                                                                        <Eye className="h-3 w-3" />
+                                                                                                                    </Button>
+                                                                                                                </div>
                                                                                                             </div>
-                                                                                                        ))}
-                                                                                                    </div>
-                                                                                                )}
-                                                                                            </div>
-                                                                                        ))
-                                                                                    ) : (
-                                                                                        <p className="text-muted-foreground px-2 text-xs italic">Sin detalle de operaciones</p>
-                                                                                    )}
-                                                                                </div>
-                                                                            </TableCell>
-                                                                        </TableRow>
-                                                                    </Collapsible.Content>
+
+                                                                                                            {(operacion.productos?.length ?? 0) >
+                                                                                                                0 && (
+                                                                                                                <div className="mt-3 w-full overflow-x-auto">
+                                                                                                                    <table className="w-full text-xs">
+                                                                                                                        <thead className="bg-muted/50">
+                                                                                                                            <tr>
+                                                                                                                                <th className="px-2 py-1 text-left font-semibold">
+                                                                                                                                    Producto
+                                                                                                                                </th>
+                                                                                                                                <th className="px-2 py-1 text-left font-semibold">
+                                                                                                                                    Marca
+                                                                                                                                </th>
+                                                                                                                                <th className="px-2 py-1 text-left font-semibold">
+                                                                                                                                    Modelo
+                                                                                                                                </th>
+                                                                                                                                <th className="px-2 py-1 text-left font-semibold">
+                                                                                                                                    Categoría
+                                                                                                                                </th>
+                                                                                                                                <th className="px-2 py-1 text-left font-semibold">
+                                                                                                                                    Capacidad
+                                                                                                                                </th>
+                                                                                                                                <th className="px-2 py-1 text-center font-semibold">
+                                                                                                                                    Cant
+                                                                                                                                </th>
+                                                                                                                                <th className="px-2 py-1 text-right font-semibold">
+                                                                                                                                    Precio
+                                                                                                                                </th>
+                                                                                                                                <th className="px-2 py-1 text-right font-semibold">
+                                                                                                                                    Total
+                                                                                                                                </th>
+                                                                                                                            </tr>
+                                                                                                                        </thead>
+                                                                                                                        <tbody>
+                                                                                                                            {operacion.productos?.map(
+                                                                                                                                (
+                                                                                                                                    prod: any,
+                                                                                                                                    pidx: number,
+                                                                                                                                ) => (
+                                                                                                                                    <tr
+                                                                                                                                        key={pidx}
+                                                                                                                                        className="border-t"
+                                                                                                                                    >
+                                                                                                                                        <td className="px-2 py-1">
+                                                                                                                                            {
+                                                                                                                                                prod.descripcion
+                                                                                                                                            }
+                                                                                                                                        </td>
+                                                                                                                                        <td className="text-muted-foreground px-2 py-1">
+                                                                                                                                            {prod.marca ||
+                                                                                                                                                '-'}
+                                                                                                                                        </td>
+                                                                                                                                        <td className="text-muted-foreground px-2 py-1">
+                                                                                                                                            {prod.modelo ||
+                                                                                                                                                '-'}
+                                                                                                                                        </td>
+                                                                                                                                        <td className="text-muted-foreground px-2 py-1">
+                                                                                                                                            {prod.categoria ||
+                                                                                                                                                '-'}
+                                                                                                                                        </td>
+                                                                                                                                        <td className="text-muted-foreground px-2 py-1">
+                                                                                                                                            {prod.capacidad ||
+                                                                                                                                                '-'}
+                                                                                                                                        </td>
+                                                                                                                                        <td className="px-2 py-1 text-center">
+                                                                                                                                            {
+                                                                                                                                                prod.cantidad
+                                                                                                                                            }
+                                                                                                                                        </td>
+                                                                                                                                        <td className="px-2 py-1 text-right font-mono">
+                                                                                                                                            $
+                                                                                                                                            {Number(
+                                                                                                                                                prod.precio_unitario ||
+                                                                                                                                                    prod.total /
+                                                                                                                                                        prod.cantidad,
+                                                                                                                                            ).toFixed(
+                                                                                                                                                2,
+                                                                                                                                            )}
+                                                                                                                                        </td>
+                                                                                                                                        <td className="px-2 py-1 text-right font-mono font-medium">
+                                                                                                                                            $
+                                                                                                                                            {Number(
+                                                                                                                                                prod.total,
+                                                                                                                                            ).toFixed(
+                                                                                                                                                2,
+                                                                                                                                            )}
+                                                                                                                                        </td>
+                                                                                                                                    </tr>
+                                                                                                                                ),
+                                                                                                                            )}
+                                                                                                                        </tbody>
+                                                                                                                    </table>
+                                                                                                                </div>
+                                                                                                            )}
+                                                                                                        </div>
+                                                                                                    ),
+                                                                                                )
+                                                                                            ) : (
+                                                                                                <p className="text-muted-foreground text-xs italic">
+                                                                                                    Sin detalle de operaciones
+                                                                                                </p>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </TableCell>
+                                                                            </TableRow>
+                                                                        </Collapsible.Content>
+                                                                    </>
                                                                 </Collapsible.Root>
                                                             );
                                                         })}
@@ -487,8 +706,12 @@ export default function Show({ cierre }: Props) {
                                                         <TableRow>
                                                             <TableCell className="font-bold">Total {moneda}</TableCell>
                                                             <TableCell className="text-center font-mono font-bold">{cantidadMoneda}</TableCell>
-                                                            <TableCell className="text-right font-mono font-bold">{Number(totalMoneda).toFixed(2)} {moneda}</TableCell>
-                                                            <TableCell className="text-right font-mono font-bold text-green-600">${totalEquivalenteMoneda.toFixed(2)}</TableCell>
+                                                            <TableCell className="text-right font-mono font-bold">
+                                                                {Number(totalMoneda).toFixed(2)} {moneda}
+                                                            </TableCell>
+                                                            <TableCell className="text-right font-mono font-bold text-green-600">
+                                                                ${totalEquivalenteMoneda.toFixed(2)}
+                                                            </TableCell>
                                                         </TableRow>
                                                     </TableFooter>
                                                 </Table>
@@ -511,9 +734,9 @@ export default function Show({ cierre }: Props) {
                             <CardContent className="space-y-8">
                                 {/* Gastos */}
                                 <div className="space-y-3">
-                                    <div className="flex items-center gap-2 pb-3 border-b">
+                                    <div className="flex items-center gap-2 border-b pb-3">
                                         <ArrowUp className="h-5 w-5 text-red-600" />
-                                        <h3 className="font-semibold text-base">Gastos</h3>
+                                        <h3 className="text-base font-semibold">Gastos</h3>
                                         <span className="ml-auto inline-flex items-center rounded-full bg-red-100 px-3 py-1 text-sm font-medium text-red-700">
                                             {todosGastos.length} operación{todosGastos.length !== 1 ? 'es' : ''}
                                         </span>
@@ -552,7 +775,7 @@ export default function Show({ cierre }: Props) {
                                             </Table>
                                         </div>
                                     ) : (
-                                        <p className="text-muted-foreground py-6 text-center italic text-sm">
+                                        <p className="text-muted-foreground py-6 text-center text-sm italic">
                                             No hay gastos registrados en este turno.
                                         </p>
                                     )}
@@ -560,9 +783,9 @@ export default function Show({ cierre }: Props) {
 
                                 {/* Ingresos */}
                                 <div className="space-y-3">
-                                    <div className="flex items-center gap-2 pb-3 border-b">
+                                    <div className="flex items-center gap-2 border-b pb-3">
                                         <ArrowDown className="h-5 w-5 text-green-600" />
-                                        <h3 className="font-semibold text-base">Ingresos</h3>
+                                        <h3 className="text-base font-semibold">Ingresos</h3>
                                         <span className="ml-auto inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-700">
                                             {todosIngresos.length} operación{todosIngresos.length !== 1 ? 'es' : ''}
                                         </span>
@@ -601,7 +824,7 @@ export default function Show({ cierre }: Props) {
                                             </Table>
                                         </div>
                                     ) : (
-                                        <p className="text-muted-foreground py-6 text-center italic text-sm">
+                                        <p className="text-muted-foreground py-6 text-center text-sm italic">
                                             No hay ingresos registrados en este turno.
                                         </p>
                                     )}
@@ -609,9 +832,9 @@ export default function Show({ cierre }: Props) {
 
                                 {/* Transferencias */}
                                 <div className="space-y-3">
-                                    <div className="flex items-center gap-2 pb-3 border-b">
+                                    <div className="flex items-center gap-2 border-b pb-3">
                                         <TrendingUp className="h-5 w-5 text-blue-600" />
-                                        <h3 className="font-semibold text-base">Transferencias</h3>
+                                        <h3 className="text-base font-semibold">Transferencias</h3>
                                         <span className="ml-auto inline-flex items-center rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-700">
                                             {todasTransferencias.length} operación{todasTransferencias.length !== 1 ? 'es' : ''}
                                         </span>
@@ -632,11 +855,17 @@ export default function Show({ cierre }: Props) {
                                                     {todasTransferencias.map((item: TransferenciaItem, idx: number) => (
                                                         <TableRow key={idx}>
                                                             <TableCell className="font-mono text-xs">{item.hora}</TableCell>
-                                                            <TableCell className="text-sm max-w-xs truncate">{item.desc}</TableCell>
-                                                            <TableCell className="text-muted-foreground text-xs max-w-[100px] truncate" title={item.origen_nombre}>
+                                                            <TableCell className="max-w-xs truncate text-sm">{item.desc}</TableCell>
+                                                            <TableCell
+                                                                className="text-muted-foreground max-w-[100px] truncate text-xs"
+                                                                title={item.origen_nombre}
+                                                            >
                                                                 {item.origen_nombre}
                                                             </TableCell>
-                                                            <TableCell className="text-muted-foreground text-xs max-w-[100px] truncate" title={item.destino_nombre}>
+                                                            <TableCell
+                                                                className="text-muted-foreground max-w-[100px] truncate text-xs"
+                                                                title={item.destino_nombre}
+                                                            >
                                                                 {item.destino_nombre}
                                                             </TableCell>
                                                             <TableCell className="text-right font-mono text-xs text-blue-600">
@@ -658,7 +887,7 @@ export default function Show({ cierre }: Props) {
                                             </Table>
                                         </div>
                                     ) : (
-                                        <p className="text-muted-foreground py-6 text-center italic text-sm">
+                                        <p className="text-muted-foreground py-6 text-center text-sm italic">
                                             No hay transferencias registradas en este turno.
                                         </p>
                                     )}
@@ -749,8 +978,12 @@ export default function Show({ cierre }: Props) {
                                                                 <TableRow key={idx}>
                                                                     <TableCell className="font-mono text-xs">{item.hora}</TableCell>
                                                                     <TableCell className="text-sm">{item.desc}</TableCell>
-                                                                    <TableCell className="text-muted-foreground text-xs">{item.origen || ''}</TableCell>
-                                                                    <TableCell className="text-muted-foreground text-xs">{item.destino || ''}</TableCell>
+                                                                    <TableCell className="text-muted-foreground text-xs">
+                                                                        {item.origen || ''}
+                                                                    </TableCell>
+                                                                    <TableCell className="text-muted-foreground text-xs">
+                                                                        {item.destino || ''}
+                                                                    </TableCell>
                                                                     <TableCell className="text-right font-mono font-medium text-red-600">
                                                                         -${Number(item.monto).toFixed(2)}
                                                                     </TableCell>
@@ -835,6 +1068,106 @@ export default function Show({ cierre }: Props) {
                                 </div>
                             </DialogContent>
                         </Dialog>
+
+                        {/* Modal de Detalles de la Venta Completa */}
+                        <AlertDialog
+                            open={selectedVentaDetails.show}
+                            onOpenChange={(open) => setSelectedVentaDetails({ ...selectedVentaDetails, show: open })}
+                        >
+                            <AlertDialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Detalles de la Venta #{selectedVentaDetails.ventaId}</AlertDialogTitle>
+                                </AlertDialogHeader>
+                                <div className="space-y-4">
+                                    {operacionSeleccionada.length > 0 && (
+                                        <>
+                                            <div className="bg-muted/50 rounded-md p-3">
+                                                <p className="text-muted-foreground text-xs font-semibold uppercase">
+                                                    Pagos Realizados ({operacionSeleccionada.length})
+                                                </p>
+                                            </div>
+                                            {operacionSeleccionada.map((op: any, idx: number) => (
+                                                <div key={idx} className="rounded-md border p-3">
+                                                    <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-medium">
+                                                                {op.tipo_pago === 'efectivo' ? 'Efectivo' : op.via_pago || 'Transferencia'}
+                                                            </span>
+                                                            {op.cuenta_nombre && (
+                                                                <span className="text-muted-foreground text-sm">- {op.cuenta_nombre}</span>
+                                                            )}
+                                                        </div>
+                                                        <span className="font-mono font-bold text-green-600">
+                                                            ${Number(op.monto || 0).toFixed(2)}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-muted-foreground mt-2 text-xs">
+                                                        <span>Cliente: {op.cliente}</span>
+                                                        <span className="mx-2">|</span>
+                                                        <span>Hora: {op.hora}</span>
+                                                        {op.destino_nombre && (
+                                                            <>
+                                                                <span className="mx-2">|</span>
+                                                                <span>Destino: {op.destino_nombre}</span>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                    {(op.productos?.length ?? 0) > 0 && (
+                                                        <div className="mt-3">
+                                                            <table className="w-full text-xs">
+                                                                <thead className="bg-muted/30">
+                                                                    <tr>
+                                                                        <th className="px-2 py-1 text-left font-semibold">Producto</th>
+                                                                        <th className="px-2 py-1 text-center font-semibold">Cant</th>
+                                                                        <th className="px-2 py-1 text-right font-semibold">Precio</th>
+                                                                        <th className="px-2 py-1 text-right font-semibold">Total</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {op.productos?.map((prod: any, pidx: number) => (
+                                                                        <tr key={pidx} className="border-t">
+                                                                            <td className="px-2 py-1">
+                                                                                {prod.descripcion}
+                                                                                <div className="text-muted-foreground text-[10px]">
+                                                                                    {prod.marca && `${prod.marca} `}
+                                                                                    {prod.modelo && `${prod.modelo} `}
+                                                                                    {prod.categoria && `(${prod.categoria})`}
+                                                                                </div>
+                                                                            </td>
+                                                                            <td className="px-2 py-1 text-center">{prod.cantidad}</td>
+                                                                            <td className="px-2 py-1 text-right font-mono">
+                                                                                ${Number(prod.precio_unitario || 0).toFixed(2)}
+                                                                            </td>
+                                                                            <td className="px-2 py-1 text-right font-mono font-medium">
+                                                                                ${Number(prod.total || 0).toFixed(2)}
+                                                                            </td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                            <div className="rounded-md bg-green-50 p-3 dark:bg-green-900/20">
+                                                <div className="flex justify-between">
+                                                    <span className="font-semibold">Total Venta:</span>
+                                                    <span className="font-mono text-lg font-bold text-green-600">
+                                                        $
+                                                        {operacionSeleccionada
+                                                            .reduce((sum: number, op: any) => sum + (Number(op.monto) || 0), 0)
+                                                            .toFixed(2)}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel className="cursor-pointer">Cerrar</AlertDialogCancel>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
                     </div>
                 </div>
             </div>
