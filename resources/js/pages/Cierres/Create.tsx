@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -1024,13 +1024,8 @@ export default function Create({
                     </div>
                 </div>
 
-                {/* Dialog de Detalle de Transacciones */}
+                {/* Dialog de Detalle de Transacciones - se abre al hacer click en los cards */}
                 <Dialog open={showTransaccionesDialog} onOpenChange={setShowTransaccionesDialog}>
-                    <DialogTrigger asChild>
-                        <Button variant="outline" className="w-full cursor-pointer gap-2 bg-blue-500 text-white hover:bg-blue-600 hover:text-white">
-                            <Eye className="h-4 w-4" /> Ver Detalle de los Movimientos
-                        </Button>
-                    </DialogTrigger>
                     <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden p-0 sm:max-w-4xl">
                         <DialogHeader className="border-b px-6 pt-6 pb-4">
                             <DialogTitle>Detalle de Transacciones del Turno</DialogTitle>
@@ -1164,8 +1159,10 @@ export default function Create({
                                                                 <div className="font-medium">{item.cuenta_nombre}</div>
                                                                 <div className="text-muted-foreground text-xs">{item.cuenta_tipo}</div>
                                                             </TableCell>
-                                                            <TableCell className="max-w-xs text-sm">
-                                                                {item.comentario || (
+                                                            <TableCell className="max-w-xs text-sm" title={item.comentario || undefined}>
+                                                                {item.comentario ? (
+                                                                    <span className="block max-w-[150px] truncate">{item.comentario}</span>
+                                                                ) : (
                                                                     <span className="text-muted-foreground italic">Sin comentario</span>
                                                                 )}
                                                             </TableCell>
