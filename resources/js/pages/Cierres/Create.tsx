@@ -351,6 +351,20 @@ export default function Create({
     const totalComisionesGestor = calculos.comisiones_gestor_total ?? 0;
     const comisionesGestorDetalles = calculos.comisiones_gestor_detalles ?? [];
 
+    // Agrupar comisiones de gestores por moneda
+    const comisionesPorMoneda = comisionesGestorDetalles.reduce(
+        (acc, item) => {
+            const moneda = item.moneda_codigo || 'USD';
+            if (!acc[moneda]) {
+                acc[moneda] = { total: 0, count: 0 };
+            }
+            acc[moneda].total += Number(item.monto) || 0;
+            acc[moneda].count += 1;
+            return acc;
+        },
+        {} as Record<string, { total: number; count: number }>,
+    );
+
     // Obtener todos los items de transacciones
     const todosGastos = (calculos.detalles ?? []).flatMap((d) => d.items_gastos ?? []);
     const todosIngresos = (calculos.detalles ?? []).flatMap((d) => d.items_ingresos ?? []);
@@ -988,7 +1002,7 @@ export default function Create({
                         </Card>
 
                         {/* Gestores - NUEVO */}
-                        {totalComisionesGestor > 0 && (
+                        {comisionesGestorDetalles.length > 0 && (
                             <Card
                                 className="cursor-pointer border-purple-200 bg-purple-500/5 transition-colors hover:bg-purple-500/10"
                                 onClick={() => setShowTransaccionesDialog(true)}
@@ -996,7 +1010,13 @@ export default function Create({
                                 <CardContent className="p-3 text-center">
                                     <Briefcase className="mx-auto mb-1 h-5 w-5 text-purple-600" />
                                     <p className="text-muted-foreground text-[10px] uppercase">Gestores</p>
-                                    <p className="text-lg font-bold text-purple-700">-${Number(totalComisionesGestor).toFixed(2)}</p>
+                                    <div className="space-y-0.5">
+                                        {Object.entries(comisionesPorMoneda).map(([moneda, data]) => (
+                                            <p key={moneda} className="text-lg font-bold text-purple-700">
+                                                -${Number(data.total).toFixed(2)} {moneda}
+                                            </p>
+                                        ))}
+                                    </div>
                                     <p className="text-muted-foreground text-[9px]">{comisionesGestorDetalles.length} oper.</p>
                                 </CardContent>
                             </Card>
@@ -1155,16 +1175,6 @@ export default function Create({
                                                         </TableRow>
                                                     ))}
                                                 </TableBody>
-                                                <TableFooter>
-                                                    <TableRow>
-                                                        <TableCell colSpan={3} className="font-bold">
-                                                            Total Comisiones
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-bold text-red-600">
-                                                            -${Number(totalComisionesGestor).toFixed(2)} USD
-                                                        </TableCell>
-                                                    </TableRow>
-                                                </TableFooter>
                                             </Table>
                                         </div>
                                     ) : (
@@ -1353,10 +1363,16 @@ export default function Create({
                         </div>
 
                         {/* Comisiones a Gestores - Si existen */}
-                        {totalComisionesGestor > 0 && (
-                            <div className="rounded-lg border border-purple-200 bg-purple-50 p-4">
+                        {comisionesGestorDetalles.length > 0 && (
+                            <div className="rounded-lg border border-purple-200 bg-purple-50 p-4 dark:bg-purple-900/20">
                                 <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">- Comisiones a Gestores</p>
-                                <p className="text-2xl font-black text-purple-700">-${Number(totalComisionesGestor).toFixed(2)}</p>
+                                <div className="space-y-1">
+                                    {Object.entries(comisionesPorMoneda).map(([moneda, data]) => (
+                                        <p key={moneda} className="text-2xl font-black text-purple-700">
+                                            -${Number(data.total).toFixed(2)} {moneda}
+                                        </p>
+                                    ))}
+                                </div>
                                 <p className="text-muted-foreground mt-1 text-xs">
                                     {comisionesGestorDetalles.length} venta{comisionesGestorDetalles.length !== 1 ? 's' : ''} con gestor
                                 </p>

@@ -647,9 +647,16 @@ class CierreCajaController extends Controller
 
         foreach ($ventasConGestor as $venta) {
             $montoComision = (float) $venta->gestor_monto;
-            $monedaCodigo = $venta->monedaCobro?->codigo_moneda ?? 'USD';
-            $tasaCambio = $venta->monedaCobro?->tasa_cambio ?? 1;
-            $montoEnUSD = $montoComision / $tasaCambio;
+            
+            // Obtener la moneda de la cuenta del gestor - primero por relación, luego por campo directo
+            $gestorCuenta = $venta->gestorCuenta;
+            $monedaCodigo = 
+                ($gestorCuenta?->moneda?->codigo_moneda) ??
+                ($gestorCuenta?->tipo_moneda) ?? 
+                'USD';
+            
+            $tasaCambio = $gestorCuenta?->moneda?->tasa_cambio ?? 1;
+            $montoEnUSD = $tasaCambio > 0 ? $montoComision / $tasaCambio : $montoComision;
             
             // Agregar al total
             $comisionesGestorTotalUSD += $montoEnUSD;
