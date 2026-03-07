@@ -87,6 +87,7 @@ interface OperacionDetaile {
     pago_id: number;
     cliente: string;
     monto: number;
+    tasa_cambio_aplicada?: number;
     hora: string;
     tipo_pago: string;
     via_pago?: string | null;
@@ -136,6 +137,7 @@ interface ItemVenta {
     venta_id: string;
     monto: number;
     monto_equivalente?: number;
+    tasa_cambio_aplicada?: number;
     tipo_pago: string;
     confirmada: boolean;
     referencia?: string;
@@ -790,6 +792,18 @@ export default function Create({
                                                                                                         <span className="text-muted-foreground">
                                                                                                             {operacion.hora}
                                                                                                         </span>
+
+                                                                                                        {operacion.tasa_cambio_aplicada && (
+                                                                                                            <>
+                                                                                                                <span className="text-muted-foreground">
+                                                                                                                    -
+                                                                                                                </span>
+                                                                                                                <span className="font-mono text-xs text-blue-600">
+                                                                                                                    Tasa:{' '}
+                                                                                                                    {operacion.tasa_cambio_aplicada}
+                                                                                                                </span>
+                                                                                                            </>
+                                                                                                        )}
                                                                                                     </div>
 
                                                                                                     <div className="flex items-center gap-4">
