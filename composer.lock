@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "bbae590a6e29f339066f7d6a1a884c18",
+    "content-hash": "feec38b2a5d2dd708485c55c019e72cb",
     "packages": [
         {
             "name": "barryvdh/laravel-dompdf",
@@ -8057,6 +8057,131 @@
                 "source": "https://github.com/Jean85/pretty-package-versions/tree/2.1.1"
             },
             "time": "2025-03-19T14:43:43+00:00"
+        },
+        {
+            "name": "joshcirre/instruckt-laravel",
+            "version": "v0.4.17",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/joshcirre/instruckt-laravel.git",
+                "reference": "277c847f30169e23826269994d8a533521995dc4"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/joshcirre/instruckt-laravel/zipball/277c847f30169e23826269994d8a533521995dc4",
+                "reference": "277c847f30169e23826269994d8a533521995dc4",
+                "shasum": ""
+            },
+            "require": {
+                "laravel/framework": "^11.0|^12.0",
+                "laravel/mcp": "^0.1 || ^0.2 || ^0.3 || ^0.4 || ^0.5 || ^0.6",
+                "php": "^8.2"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "Instruckt\\Laravel\\InstrucktServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Instruckt\\Laravel\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "description": "Visual feedback for AI coding agents — Laravel MCP package",
+            "keywords": [
+                "Agent",
+                "ai",
+                "feedback",
+                "instruckt",
+                "laravel",
+                "livewire",
+                "mcp"
+            ],
+            "support": {
+                "issues": "https://github.com/joshcirre/instruckt-laravel/issues",
+                "source": "https://github.com/joshcirre/instruckt-laravel/tree/v0.4.17"
+            },
+            "time": "2026-03-07T09:01:23+00:00"
+        },
+        {
+            "name": "laravel/mcp",
+            "version": "v0.6.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/laravel/mcp.git",
+                "reference": "28860a10ca0cc5433e25d897ba7af844e6c7b6a2"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/laravel/mcp/zipball/28860a10ca0cc5433e25d897ba7af844e6c7b6a2",
+                "reference": "28860a10ca0cc5433e25d897ba7af844e6c7b6a2",
+                "shasum": ""
+            },
+            "require": {
+                "ext-json": "*",
+                "ext-mbstring": "*",
+                "illuminate/console": "^11.45.3|^12.41.1|^13.0",
+                "illuminate/container": "^11.45.3|^12.41.1|^13.0",
+                "illuminate/contracts": "^11.45.3|^12.41.1|^13.0",
+                "illuminate/http": "^11.45.3|^12.41.1|^13.0",
+                "illuminate/json-schema": "^12.41.1|^13.0",
+                "illuminate/routing": "^11.45.3|^12.41.1|^13.0",
+                "illuminate/support": "^11.45.3|^12.41.1|^13.0",
+                "illuminate/validation": "^11.45.3|^12.41.1|^13.0",
+                "php": "^8.2"
+            },
+            "require-dev": {
+                "laravel/pint": "^1.20",
+                "orchestra/testbench": "^9.15|^10.8|^11.0",
+                "pestphp/pest": "^3.8.5|^4.3.2",
+                "phpstan/phpstan": "^2.1.27",
+                "rector/rector": "^2.2.4"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "aliases": {
+                        "Mcp": "Laravel\\Mcp\\Server\\Facades\\Mcp"
+                    },
+                    "providers": [
+                        "Laravel\\Mcp\\Server\\McpServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Laravel\\Mcp\\": "src/",
+                    "Laravel\\Mcp\\Server\\": "src/Server/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Taylor Otwell",
+                    "email": "taylor@laravel.com"
+                }
+            ],
+            "description": "Rapidly build MCP servers for your Laravel applications.",
+            "homepage": "https://github.com/laravel/mcp",
+            "keywords": [
+                "laravel",
+                "mcp"
+            ],
+            "support": {
+                "issues": "https://github.com/laravel/mcp/issues",
+                "source": "https://github.com/laravel/mcp"
+            },
+            "time": "2026-02-24T08:43:06+00:00"
         },
         {
             "name": "laravel/pail",
