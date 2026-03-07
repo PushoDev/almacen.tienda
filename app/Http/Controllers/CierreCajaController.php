@@ -561,6 +561,25 @@ class CierreCajaController extends Controller
                 foreach ($pago->venta->detalles as $det) {
                     $prodId = $det->producto_id;
                     $precioVenta = (float) $det->precio_venta;
+                    $precioBase = isset($det->precio_base) ? (float) $det->precio_base : null;
+
+                    // Si no hay precio_base, buscar en producto_vendedors (precio configurado por el vendedor)
+                    if ($precioBase === null || $precioBase === 0) {
+                        $precioBase = DB::table('producto_vendedors')
+                            ->where('producto_id', $prodId)
+                            ->where('user_id', $pago->venta->user_id)
+                            ->value('precio_venta');
+
+                        // Si no existe para ese usuario, buscar el del admin (user_id = 1)
+                        if (! $precioBase) {
+                            $precioBase = DB::table('producto_vendedors')
+                                ->where('producto_id', $prodId)
+                                ->where('user_id', 1)
+                                ->value('precio_venta');
+                        }
+
+                        $precioBase = $precioBase ? (float) $precioBase : $precioVenta;
+                    }
 
                     $producto = $det->producto;
                     $nombreProd = $producto ? $producto->nombre_producto : 'Producto Desconocido';
@@ -572,7 +591,6 @@ class CierreCajaController extends Controller
                     $categoria = $producto && $producto->categoria ? $producto->categoria->nombre_categoria : '';
 
                     if (! isset($resumenPorMoneda[$codigo]['productos_resumen'][$prodId])) {
-                        $precioBase = isset($det->precio_base) ? (float) $det->precio_base : $precioVenta;
                         $resumenPorMoneda[$codigo]['productos_resumen'][$prodId] = [
                             'id' => $prodId,
                             'nombre' => $nombreProd,

@@ -85,6 +85,7 @@ interface ItemCarrito {
     producto: Producto;
     cantidad: number;
     precio_venta: number;
+    precio_base: number; // Precio original antes de editar
     subtotal: number;
 }
 interface Moneda {
@@ -430,6 +431,7 @@ export default function PuntoVentaOficial({
                 producto: producto,
                 cantidad: 1,
                 precio_venta: precioVenta,
+                precio_base: precioVenta, // Guardar el precio original
                 subtotal: precioVenta,
             };
             setCarrito([...carrito, nuevoItem]);
@@ -682,7 +684,7 @@ export default function PuntoVentaOficial({
                 producto_id: item.producto.id,
                 cantidad: item.cantidad,
                 precio_venta: item.precio_venta,
-                precio_base: item.precio_venta,
+                precio_base: item.precio_base, // Usar el precio original guardado
                 subtotal: item.subtotal,
             })),
             total: calcularTotal,
