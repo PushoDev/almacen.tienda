@@ -1,0 +1,12 @@
+{
+    "mcpServers": {
+        "instruckt": {
+            "command": "php",
+            "args": [
+                "D:\\APP_CREATED\\PHP\\almacen.tienda\\artisan",
+                "mcp:start",
+                "instruckt"
+            ]
+        }
+    }
+}

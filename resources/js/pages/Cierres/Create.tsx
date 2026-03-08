@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem, PageProps } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
@@ -87,6 +88,7 @@ interface OperacionDetaile {
     pago_id: number;
     cliente: string;
     monto: number;
+    tasa_cambio_aplicada?: number;
     hora: string;
     tipo_pago: string;
     via_pago?: string | null;
@@ -136,6 +138,7 @@ interface ItemVenta {
     venta_id: string;
     monto: number;
     monto_equivalente?: number;
+    tasa_cambio_aplicada?: number;
     tipo_pago: string;
     confirmada: boolean;
     referencia?: string;
@@ -255,6 +258,7 @@ export default function Create({
     calculos,
     fecha_apertura,
     moneda_referencia = 'USD',
+    almacenes = [],
     comparativa_cuentas = [],
     comparativa_clientes = [],
     tiene_cierre_anterior = false,
@@ -270,6 +274,11 @@ export default function Create({
         fecha_apertura: fecha_apertura,
         confirmacion_transferencias: [] as string[],
     });
+
+    const getAlmacenNombre = (almacenId: number) => {
+        const almacen = almacenes.find((a: { id: number; nombre: string }) => a.id === almacenId);
+        return almacen?.nombre || `Almacén #${almacenId}`;
+    };
 
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showTransaccionesDialog, setShowTransaccionesDialog] = useState(false);
@@ -296,6 +305,7 @@ export default function Create({
     const lineasProductosRaw = (calculos.detalles ?? []).flatMap((d) => Object.values(d.productos_resumen ?? {}));
     const lineasProductos = lineasProductosRaw.map((p) => ({
         id: p.id,
+        almacen_id: p.almacen_id,
         nombre: p.nombre || '',
         marca: p.marca || '',
         modelo: p.modelo || '',
@@ -638,7 +648,16 @@ export default function Create({
                                                             className="h-10 w-10 rounded-md object-cover"
                                                         />
                                                         <div>
-                                                            <div className="font-semibold">{linea.nombre}</div>
+                                                            <TooltipProvider>
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                        <div className="cursor-help font-semibold">{linea.nombre}</div>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent>
+                                                                        <p className="text-xs">Almacén: {getAlmacenNombre(linea.almacen_id)}</p>
+                                                                    </TooltipContent>
+                                                                </Tooltip>
+                                                            </TooltipProvider>
                                                             <div className="text-muted-foreground text-xs">{linea.codigo}</div>
                                                         </div>
                                                     </div>
@@ -731,8 +750,8 @@ export default function Create({
                                                                     ? `${via} ${destino}`
                                                                     : via
                                                                 : destino
-                                                                  ? `Transferencia ${destino}`
-                                                                  : `Transferencia ${moneda}`;
+                                                                    ? `Transferencia ${destino}`
+                                                                    : `Transferencia ${moneda}`;
                                                         }
                                                         return etiquetaMetodo === etiqueta;
                                                     });
@@ -790,6 +809,18 @@ export default function Create({
                                                                                                         <span className="text-muted-foreground">
                                                                                                             {operacion.hora}
                                                                                                         </span>
+
+                                                                                                        {operacion.tasa_cambio_aplicada && (
+                                                                                                            <>
+                                                                                                                <span className="text-muted-foreground">
+                                                                                                                    -
+                                                                                                                </span>
+                                                                                                                <span className="font-mono text-xs text-blue-600">
+                                                                                                                    Tasa:{' '}
+                                                                                                                    {operacion.tasa_cambio_aplicada}
+                                                                                                                </span>
+                                                                                                            </>
+                                                                                                        )}
                                                                                                     </div>
 
                                                                                                     <div className="flex items-center gap-4">
@@ -883,8 +914,8 @@ export default function Create({
                                                                                                                                 $
                                                                                                                                 {Number(
                                                                                                                                     prod.precio_unitario ||
-                                                                                                                                        prod.total /
-                                                                                                                                            prod.cantidad,
+                                                                                                                                    prod.total /
+                                                                                                                                    prod.cantidad,
                                                                                                                                 ).toFixed(2)}
                                                                                                                             </td>
 
@@ -1282,8 +1313,8 @@ export default function Create({
                                                                 {item.tipo === 'efectivo'
                                                                     ? 'Efectivo'
                                                                     : item.tipo === 'tarjeta'
-                                                                      ? 'Tarjeta'
-                                                                      : item.tipo || '-'}
+                                                                        ? 'Tarjeta'
+                                                                        : item.tipo || '-'}
                                                             </span>
                                                         </TableCell>
                                                         <TableCell>

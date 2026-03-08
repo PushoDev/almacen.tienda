@@ -17,9 +17,13 @@ createInertiaApp({
         root.render(<App {...props} />);
     },
     progress: {
-        color: '#e11d48',
+        color: '#EC4F23ED',
     },
 });
 
 // This will set light / dark mode on load...
 initializeTheme();
+
+// Instruckt — visual feedback toolbar
+import { Instruckt } from 'instruckt';
+new Instruckt({ endpoint: '/instruckt', adapters: ['react'] });
