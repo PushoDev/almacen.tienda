@@ -79,6 +79,8 @@ interface Producto {
     imagen_url: string;
     codigo_barras: string;
     barcode_image_url: string | null;
+    precio_base: number | null; // Precio del vendedor o admin
+    es_precio_vendedor: boolean;
 }
 interface ItemCarrito {
     id: string;
@@ -426,12 +428,13 @@ export default function PuntoVentaOficial({
             );
         } else {
             const precioVenta = producto.precio_venta;
+            const precioBase = producto.precio_base ?? precioVenta;
             const nuevoItem: ItemCarrito = {
                 id: idItem,
                 producto: producto,
                 cantidad: 1,
                 precio_venta: precioVenta,
-                precio_base: precioVenta, // Guardar el precio original
+                precio_base: precioBase,
                 subtotal: precioVenta,
             };
             setCarrito([...carrito, nuevoItem]);

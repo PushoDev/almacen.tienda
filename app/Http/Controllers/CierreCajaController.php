@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Inertia\Inertia;
+use App\Models\Almacen;
 
 class CierreCajaController extends Controller
 {
@@ -71,6 +72,11 @@ class CierreCajaController extends Controller
 
         // Moneda de referencia (principal) para que total productos = total cobrado
         $monedaRef = Moneda::where('principal', true)->first();
+
+        // Obtener warehouses para tooltip en tabla de productos
+        $almacenes = Almacen::select('id', 'nombre_almacen')->get()->map(function ($a) {
+            return ['id' => $a->id, 'nombre' => $a->nombre_almacen];
+        });
 
         // ============================================
         // NUEVO: COMPARATIVA CON CIERRE ANTERIOR
@@ -169,6 +175,7 @@ class CierreCajaController extends Controller
         return Inertia::render('Cierres/Create', [
             'fecha_apertura' => $inicioTurno instanceof Carbon ? $inicioTurno->toDateTimeString() : $inicioTurno,
             'moneda_referencia' => $monedaRef ? $monedaRef->codigo_moneda : 'USD',
+            'almacenes' => $almacenes,
             'calculos' => [
                 'inicio_turno' => $inicioTurno instanceof Carbon ? $inicioTurno->toDateTimeString() : $inicioTurno,
                 'saldo_inicial' => 0,
@@ -233,7 +240,7 @@ class CierreCajaController extends Controller
             $saldoEsperado = $calculos['saldo_esperado_global'];
         } catch (\Exception $e) {
             // Fallback defensivo solo si falla el cálculo backend
-            \Illuminate\Support\Facades\Log::error('Fallo obtenerDetallesCierre: '.$e->getMessage());
+            \Illuminate\Support\Facades\Log::error('Fallo obtenerDetallesCierre: ' . $e->getMessage());
             $ventasEfectivo = $data['ventas_efectivo'] ?? 0;
             $ventasOtros = $data['ventas_otros'] ?? 0;
             $comisionesGestorTotal = 0;
@@ -275,7 +282,7 @@ class CierreCajaController extends Controller
             ]);
 
             DB::commit();
-            \Illuminate\Support\Facades\Log::emergency('!!! CIERRE GUARDADO EXITOSAMENTE ID: '.$cierre->id.' !!!');
+            \Illuminate\Support\Facades\Log::emergency('!!! CIERRE GUARDADO EXITOSAMENTE ID: ' . $cierre->id . ' !!!');
 
             // Notificar a usuarios relevantes
             try {
@@ -285,15 +292,15 @@ class CierreCajaController extends Controller
 
                 Notification::send($usuariosParaNotificar, new CierreCajaNotification($cierre));
             } catch (\Exception $e) {
-                \Log::error('Error enviando notificación de cierre de caja: '.$e->getMessage());
+                \Log::error('Error enviando notificación de cierre de caja: ' . $e->getMessage());
             }
 
             return redirect()->route('ventas.cierres')->with('success', 'Cierre realizado con éxito.');
         } catch (\Exception $e) {
             DB::rollBack();
-            \Illuminate\Support\Facades\Log::emergency('!!! ERROR CRÍTICO AL GUARDAR CIERRE !!!: '.$e->getMessage());
+            \Illuminate\Support\Facades\Log::emergency('!!! ERROR CRÍTICO AL GUARDAR CIERRE !!!: ' . $e->getMessage());
 
-            return back()->with('error', 'Error crítico: '.$e->getMessage());
+            return back()->with('error', 'Error crítico: ' . $e->getMessage());
         }
     }
 
@@ -479,7 +486,7 @@ class CierreCajaController extends Controller
                 ? $pago->cuenta->nombre_cuenta
                 : ($pago->cliente ? $pago->cliente->nombre_cliente : null);
             $itemVenta = [
-                'id' => 'p_'.$pago->id,
+                'id' => 'p_' . $pago->id,
                 'venta_id' => $pago->venta_id,
                 'monto' => (float) $pago->monto,
                 'monto_equivalente' => (float) ($pago->monto_equivalente ?? $pago->monto),
@@ -561,25 +568,25 @@ class CierreCajaController extends Controller
                 foreach ($pago->venta->detalles as $det) {
                     $prodId = $det->producto_id;
                     $precioVenta = (float) $det->precio_venta;
-                    $precioBase = isset($det->precio_base) ? (float) $det->precio_base : null;
 
-                    // Si no hay precio_base, buscar en producto_vendedors (precio configurado por el vendedor)
-                    if ($precioBase === null || $precioBase === 0) {
+                    // SIEMPRE obtener precio base desde producto_vendedors (precio configurado por admin/vendedor)
+                    $precioBase = DB::table('producto_vendedors')
+                        ->where('producto_id', $prodId)
+                        ->where('almacen_id', $pago->venta->almacen_id)
+                        ->where('user_id', $pago->venta->user_id)
+                        ->value('precio_venta');
+
+                    // Si no existe para ese usuario, buscar el del admin (user_id = 1)
+                    if (! $precioBase) {
                         $precioBase = DB::table('producto_vendedors')
                             ->where('producto_id', $prodId)
-                            ->where('user_id', $pago->venta->user_id)
+                            ->where('almacen_id', $pago->venta->almacen_id)
+                            ->where('user_id', 1)
                             ->value('precio_venta');
-
-                        // Si no existe para ese usuario, buscar el del admin (user_id = 1)
-                        if (! $precioBase) {
-                            $precioBase = DB::table('producto_vendedors')
-                                ->where('producto_id', $prodId)
-                                ->where('user_id', 1)
-                                ->value('precio_venta');
-                        }
-
-                        $precioBase = $precioBase ? (float) $precioBase : $precioVenta;
                     }
+
+                    // Si no existe ningún precio, usar el precio de venta
+                    $precioBase = $precioBase ? (float) $precioBase : $precioVenta;
 
                     $producto = $det->producto;
                     $nombreProd = $producto ? $producto->nombre_producto : 'Producto Desconocido';
@@ -589,10 +596,15 @@ class CierreCajaController extends Controller
                     $codigo = $producto ? $producto->codigo_producto : '';
                     $imagen = $producto ? $producto->imagen_url : '';
                     $categoria = $producto && $producto->categoria ? $producto->categoria->nombre_categoria : '';
+                    $almacenId = $pago->venta->almacen_id;
 
-                    if (! isset($resumenPorMoneda[$codigo]['productos_resumen'][$prodId])) {
-                        $resumenPorMoneda[$codigo]['productos_resumen'][$prodId] = [
+                    // Agrupar por producto + almacen para manejar precios base diferentes por almacen
+                    $key = $prodId . '_' . $almacenId;
+
+                    if (! isset($resumenPorMoneda[$codigo]['productos_resumen'][$key])) {
+                        $resumenPorMoneda[$codigo]['productos_resumen'][$key] = [
                             'id' => $prodId,
+                            'almacen_id' => $almacenId,
                             'nombre' => $nombreProd,
                             'marca' => $marca,
                             'modelo' => $modelo,
@@ -607,8 +619,8 @@ class CierreCajaController extends Controller
                         ];
                     }
 
-                    $resumenPorMoneda[$codigo]['productos_resumen'][$prodId]['cantidad'] += $det->cantidad;
-                    $resumenPorMoneda[$codigo]['productos_resumen'][$prodId]['total'] += (float) $det->subtotal;
+                    $resumenPorMoneda[$codigo]['productos_resumen'][$key]['cantidad'] += $det->cantidad;
+                    $resumenPorMoneda[$codigo]['productos_resumen'][$key]['total'] += (float) $det->subtotal;
                 }
             }
         }
@@ -623,7 +635,7 @@ class CierreCajaController extends Controller
             // TIPO 1: GASTO
             if ($mov->tipo_movimiento_id == 1) {
                 $item = [
-                    'id' => 'm_'.$mov->id,
+                    'id' => 'm_' . $mov->id,
                     'desc' => $mov->descripcion,
                     'monto' => $mov->monto,
                     'hora' => $mov->created_at->format('H:i'),
@@ -639,7 +651,7 @@ class CierreCajaController extends Controller
             // TIPO 2: INGRESO
             elseif ($mov->tipo_movimiento_id == 2) {
                 $item = [
-                    'id' => 'm_'.$mov->id,
+                    'id' => 'm_' . $mov->id,
                     'desc' => $mov->descripcion,
                     'monto' => $mov->monto,
                     'hora' => $mov->created_at->format('H:i'),
@@ -656,7 +668,7 @@ class CierreCajaController extends Controller
             elseif ($mov->tipo_movimiento_id == 3) {
                 // Determinar si el usuario es el emisor o el receptor de la transferencia
                 $esReceptor = ! empty($mov->cuenta_destino_id) &&
-                              in_array($mov->cuenta_destino_id, $cuentaIds);
+                    in_array($mov->cuenta_destino_id, $cuentaIds);
 
                 // Procesar transferencia con detalles bidireccionales
                 $detallesTransferencia = $this->procesarTransferenciaBidireccional($mov, $resumenPorMoneda, $user, $cuentaIds, $esReceptor);
@@ -727,7 +739,7 @@ class CierreCajaController extends Controller
             $monedaData['comisiones_gestor'] = $monedaData['comisiones_gestor'] ?? 0;
             $monedaData['comisiones_gestor_detalles'] = array_filter(
                 $comisionesGestorDetalles,
-                fn ($d) => $d['moneda_codigo'] === $monedaCodigo
+                fn($d) => $d['moneda_codigo'] === $monedaCodigo
             );
         }
         unset($monedaData); // Romper referencia
@@ -794,7 +806,7 @@ class CierreCajaController extends Controller
 
         Log::info('CIERRE: Resultado', [
             'detalles_count' => count($result['detalles']),
-            'items_ventas_total' => array_sum(array_map(fn ($d) => count($d['items_ventas'] ?? []), $result['detalles'])),
+            'items_ventas_total' => array_sum(array_map(fn($d) => count($d['items_ventas'] ?? []), $result['detalles'])),
             'ventas_efectivo' => $result['ventas_efectivo'],
             'ventas_otros' => $result['ventas_otros'],
         ]);
@@ -903,7 +915,7 @@ class CierreCajaController extends Controller
 
         // Crear item de salida con detalles completos
         $itemSalida = [
-            'id' => 't_'.$movimiento->id,
+            'id' => 't_' . $movimiento->id,
             'desc' => $movimiento->descripcion,
             'monto_origen' => $movimiento->monto,
             'moneda_origen' => $codigoOrigen,
@@ -925,7 +937,7 @@ class CierreCajaController extends Controller
 
         if ($destinoInfo['moneda'] !== $codigoOrigen && isset($resumenPorMoneda[$destinoInfo['moneda']])) {
             $itemEntrada = [
-                'id' => 't_entrada_'.$movimiento->id,
+                'id' => 't_entrada_' . $movimiento->id,
                 'desc' => $movimiento->descripcion,
                 'monto_origen' => $movimiento->monto,
                 'moneda_origen' => $codigoOrigen,
@@ -942,7 +954,7 @@ class CierreCajaController extends Controller
         } else {
             // Mismo código de moneda, crear item de entrada con el mismo monto
             $itemEntrada = [
-                'id' => 't_entrada_'.$movimiento->id,
+                'id' => 't_entrada_' . $movimiento->id,
                 'desc' => $movimiento->descripcion,
                 'monto_origen' => $movimiento->monto,
                 'moneda_origen' => $codigoOrigen,

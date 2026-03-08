@@ -122,15 +122,17 @@ class VentaController extends Controller
             return response()->json(['error' => 'Acceso denegado al almacén'], 403);
         }
 
+        $userId = $user->id;
+
         $productos = Producto::whereHas('almacenes', function ($q) use ($id) {
             $q->where('almacens.id', $id);
         })
             ->with([
                 'categoria',
-                'vendedores' => function ($q) {
-                    // Buscar precio del admin (user_id = 1)
-                    $q->where('user_id', 1)
-                        ->select('users.id', 'producto_vendedors.precio_venta', 'producto_vendedors.venta_ganancia');
+                'vendedores' => function ($q) use ($userId) {
+                    // Buscar precio del vendedor actual Y del admin (user_id = 1)
+                    $q->whereIn('user_id', [$userId, 1])
+                        ->select('users.id', 'producto_vendedors.precio_venta', 'producto_vendedors.venta_ganancia', 'producto_vendedors.user_id');
                 },
                 'almacenes' => function ($q) use ($id) {
                     $q->where('almacens.id', $id)
@@ -138,8 +140,15 @@ class VentaController extends Controller
                 }
             ])
             ->get()
-            ->map(function ($producto) {
-                $vendedor = $producto->vendedores->first();
+            ->map(function ($producto) use ($userId) {
+                // Prioridad: precio del vendedor actual > precio del admin
+                $vendedorActual = $producto->vendedores->firstWhere('pivot.user_id', $userId);
+                $precioAdmin = $producto->vendedores->firstWhere('pivot.user_id', 1);
+                
+                // Usar precio del vendedor actual si existe, si no el del admin
+                $vendedor = $vendedorActual ?? $precioAdmin;
+                $esPrecioVendedor = $vendedorActual !== null;
+                
                 $almacen = $producto->almacenes->first();
 
                 return [
@@ -156,6 +165,8 @@ class VentaController extends Controller
                     'imagen_url' => $producto->imagen_url,
                     'codigo_barras' => $producto->codigo_producto,
                     'barcode_image_url' => $producto->barcode_image_url,
+                    'precio_base' => $vendedor?->pivot->precio_venta ?? null, // Precio base del vendedor o admin
+                    'es_precio_vendedor' => $esPrecioVendedor, // Indica si es precio personalizado del vendedor
                 ];
             });
 
