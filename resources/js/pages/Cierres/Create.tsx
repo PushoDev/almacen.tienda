@@ -750,8 +750,8 @@ export default function Create({
                                                                     ? `${via} ${destino}`
                                                                     : via
                                                                 : destino
-                                                                    ? `Transferencia ${destino}`
-                                                                    : `Transferencia ${moneda}`;
+                                                                  ? `Transferencia ${destino}`
+                                                                  : `Transferencia ${moneda}`;
                                                         }
                                                         return etiquetaMetodo === etiqueta;
                                                     });
@@ -873,6 +873,10 @@ export default function Create({
                                                                                                                         Total
                                                                                                                     </th>
 
+                                                                                                                    <th className="px-2 py-1 text-right font-semibold text-green-600">
+                                                                                                                        Entró
+                                                                                                                    </th>
+
                                                                                                                     <th className="w-10"></th>
                                                                                                                 </tr>
                                                                                                             </thead>
@@ -914,8 +918,8 @@ export default function Create({
                                                                                                                                 $
                                                                                                                                 {Number(
                                                                                                                                     prod.precio_unitario ||
-                                                                                                                                    prod.total /
-                                                                                                                                    prod.cantidad,
+                                                                                                                                        prod.total /
+                                                                                                                                            prod.cantidad,
                                                                                                                                 ).toFixed(2)}
                                                                                                                             </td>
 
@@ -923,6 +927,13 @@ export default function Create({
                                                                                                                                 $
                                                                                                                                 {Number(
                                                                                                                                     prod.total,
+                                                                                                                                ).toFixed(2)}
+                                                                                                                            </td>
+
+                                                                                                                            <td className="px-2 py-1 text-right font-mono font-medium text-green-600">
+                                                                                                                                $
+                                                                                                                                {Number(
+                                                                                                                                    operacion.monto,
                                                                                                                                 ).toFixed(2)}
                                                                                                                             </td>
 
@@ -1313,8 +1324,8 @@ export default function Create({
                                                                 {item.tipo === 'efectivo'
                                                                     ? 'Efectivo'
                                                                     : item.tipo === 'tarjeta'
-                                                                        ? 'Tarjeta'
-                                                                        : item.tipo || '-'}
+                                                                      ? 'Tarjeta'
+                                                                      : item.tipo || '-'}
                                                             </span>
                                                         </TableCell>
                                                         <TableCell>
@@ -1405,8 +1416,8 @@ export default function Create({
                         {/* Total de Venta */}
                         <div className="border-primary bg-primary/10 rounded-lg border p-4">
                             <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Total de Ventas del Turno</p>
-                            <p className="text-4xl font-black text-emerald-600">${Number(calculos.ventas_efectivo).toFixed(2)}</p>
-                            <p className="text-muted-foreground mt-2 text-xs">Incluyendo todas las monedas y métodos de pago</p>
+                            <p className="text-4xl font-black text-emerald-600">${Number(totalVentasProductos).toFixed(2)}</p>
+                            <p className="text-muted-foreground mt-2 text-xs">Total real de productos vendidos</p>
                         </div>
 
                         {/* Comisiones a Gestores - Si existen */}
