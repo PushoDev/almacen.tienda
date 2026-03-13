@@ -1263,6 +1263,9 @@ class VentaController extends Controller
             return response()->json(['success' => false, 'message' => 'La venta ya está anulada'], 400);
         }
 
+        // Cargar relaciones necesarias para poder revertirlas
+        $venta->load(['detalles', 'pagos.cliente', 'pagos.cuenta', 'gestorCuenta']);
+
         DB::transaction(function () use ($venta) {
             // ✅ SIEMPRE revertir stock (pendiente o completada)
             foreach ($venta->detalles as $detalle) {
@@ -1286,30 +1289,31 @@ class VentaController extends Controller
                 ]);
             }
 
-            // ✅ SIEMPRE revertir pagos (solo si estaba completada)
-            if ($venta->estado === 'completada') {
-                foreach ($venta->pagos as $pago) {
-                    if ($pago->cliente_id) {
-                        $cliente = $pago->cliente;
-                        if ($cliente) {
-                            $cliente->decrement('deuda_pago_cliente', $pago->monto);
-                        }
-                    }
-                    
-                    if ($pago->cuenta_id) {
-                        $cuenta = $pago->cuenta;
-                        if ($cuenta) {
-                            $cuenta->decrement('saldo_cuenta', $pago->monto);
-                        }
+            // ✅ SIEMPRE revertir pagos y gestor (pendiente o completada)
+            // Si estaba completada: revertimos lo que se avanzó
+            // Si estaba pendiente: no había nada avanzado, pero por seguridad ejecutamos
+            foreach ($venta->pagos as $pago) {
+                if ($pago->cliente_id) {
+                    $cliente = $pago->cliente;
+                    if ($cliente) {
+                        $cliente->decrement('deuda_pago_cliente', $pago->monto);
                     }
                 }
-
-                // Revertir descuento del gestor si existía
-                if ($venta->es_venta_gestor && $venta->gestor_cuenta_id && $venta->gestor_monto > 0) {
-                    $cuentaGestor = $venta->gestorCuenta;
-                    if ($cuentaGestor) {
-                        $cuentaGestor->increment('saldo_cuenta', $venta->gestor_monto);
+                
+                if ($pago->cuenta_id) {
+                    $cuenta = $pago->cuenta;
+                    if ($cuenta) {
+                        $cuenta->decrement('saldo_cuenta', $pago->monto);
                     }
+                }
+            }
+
+            // ✅ SIEMPRE revertir descuento del gestor si existía
+            // Se aplica aunque la venta haya sido anulada desde pendiente
+            if ($venta->es_venta_gestor && $venta->gestor_cuenta_id && $venta->gestor_monto > 0) {
+                $cuentaGestor = $venta->gestorCuenta;
+                if ($cuentaGestor) {
+                    $cuentaGestor->increment('saldo_cuenta', $venta->gestor_monto);
                 }
             }
 
