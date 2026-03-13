@@ -348,10 +348,11 @@ class CierreCajaController extends Controller
      */
     private function obtenerDetallesCierre($user, $inicioTurno)
     {
-        // 1. Obtener Pagos de Ventas (Ingresos por Venta)
+        // 1. Obtener Pagos de Ventas (Ingresos por Venta) - solo ventas completadas
         $pagos = \App\Models\PagoVenta::whereHas('venta', function ($q) use ($user, $inicioTurno) {
             $q->where('user_id', $user->id)
-                ->where('created_at', '>=', $inicioTurno);
+                ->where('created_at', '>=', $inicioTurno)
+                ->where('estado', 'completada');
         })->with(['moneda', 'cuenta', 'cliente', 'venta.detalles.producto.categoria'])->get();
 
         // 2. Obtener IDs de cuentas del usuario para buscar transferencias entrantes
@@ -690,9 +691,10 @@ class CierreCajaController extends Controller
         $comisionesGestorTotalUSD = 0;
         $comisionesGestorDetalles = [];
 
-        // Buscar ventas con gestor en el turno actual
+        // Buscar ventas con gestor en el turno actual - solo ventas completadas
         $ventasConGestor = Venta::where('user_id', $user->id)
             ->where('created_at', '>=', $inicioTurno)
+            ->where('estado', 'completada')
             ->where('es_venta_gestor', true)
             ->whereNotNull('gestor_cuenta_id')
             ->where('gestor_monto', '>', 0)
