@@ -24,6 +24,4 @@ createInertiaApp({
 // This will set light / dark mode on load...
 initializeTheme();
 
-// Instruckt — visual feedback toolbar
-import { Instruckt } from 'instruckt';
-new Instruckt({ endpoint: '/instruckt', adapters: ['react'] });
+

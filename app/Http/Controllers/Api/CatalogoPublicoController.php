@@ -39,6 +39,33 @@ class CatalogoPublicoController extends Controller
     }
 
     /**
+     * Construye una URL de WhatsApp para un teléfono dado.
+     *
+     * @param  string|null  $phone
+     * @param  string|null  $message
+     * @return string|null
+     */
+    private function buildWhatsAppUrl(?string $phone, ?string $message = null): ?string
+    {
+        if (! $phone) {
+            return null;
+        }
+
+        // Normalizar a solo dígitos (WhatsApp requiere formato internacional sin signos)
+        $clean = preg_replace('/[^0-9]/', '', $phone);
+        if (empty($clean)) {
+            return null;
+        }
+
+        $url = "https://wa.me/{$clean}";
+        if ($message) {
+            $url .= '?text=' . urlencode($message);
+        }
+
+        return $url;
+    }
+
+    /**
      * Lista los almacenes públicos (puntos de venta) disponibles para el catálogo.
      *
      * Ruta: GET /api/tienda/almacenes
@@ -59,16 +86,24 @@ class CatalogoPublicoController extends Controller
                     'ciudad_almacen',
                     'provincia_almacen',
                     'notas_almacen',
+                    'telefono_almacen',
                 ])
                 ->orderBy('nombre_almacen')
                 ->get()
                 ->map(function (Almacen $almacen) {
+                    $whatsapp = $this->buildWhatsAppUrl(
+                        $almacen->telefono_almacen,
+                        "Hola, quiero información sobre los productos disponibles."
+                    );
+
                     return [
                         'id' => $almacen->id,
                         'nombre' => $almacen->nombre_almacen,
                         'ciudad' => $almacen->ciudad_almacen,
                         // En este modelo no hay dirección explícita, usamos notas como fallback
                         'direccion' => $almacen->notas_almacen,
+                        'telefono' => $almacen->telefono_almacen,
+                        'whatsapp_url' => $whatsapp,
                         'slug' => Str::slug($almacen->nombre_almacen),
                     ];
                 });
@@ -99,6 +134,7 @@ class CatalogoPublicoController extends Controller
                     'ciudad_almacen',
                     'provincia_almacen',
                     'notas_almacen',
+                    'telefono_almacen',
                 ])
                 ->first();
         }, ['catalogo', "almacen:{$id}"]);
@@ -106,12 +142,19 @@ class CatalogoPublicoController extends Controller
             return response()->json(['message' => 'Almacén no encontrado'], 404);
         }
 
+        $whatsapp = $this->buildWhatsAppUrl(
+            $almacen->telefono_almacen,
+            "Hola, quiero ver los productos disponibles en {$almacen->nombre_almacen}."
+        );
+
         return response()->json([
             'id' => $almacen->id,
             'nombre' => $almacen->nombre_almacen,
             'ciudad' => $almacen->ciudad_almacen,
             'provincia' => $almacen->provincia_almacen,
             'direccion' => $almacen->notas_almacen,
+            'telefono' => $almacen->telefono_almacen,
+            'whatsapp_url' => $whatsapp,
             'slug' => Str::slug($almacen->nombre_almacen),
         ]);
     }
@@ -147,10 +190,30 @@ class CatalogoPublicoController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        $almacen = Almacen::query()
+            ->where('id', $almacenId)
+            ->where('tipo_almacen', 'punto_venta')
+            ->select(['id', 'nombre_almacen', 'telefono_almacen'])
+            ->first();
+
+        if (! $almacen) {
+            return response()->json(['message' => 'Almacén no encontrado'], 404);
+        }
+
         $perPage = (int) ($request->input('per_page', 20));
         $cacheKey = 'catalogo:productos:' . $almacenId . ':' . md5($request->fullUrl());
 
-        $productosPaginados = $this->cacheRemember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($request, $almacenId, $perPage) {
+        $almacenMeta = [
+            'id' => $almacen->id,
+            'nombre' => $almacen->nombre_almacen,
+            'telefono' => $almacen->telefono_almacen,
+            'whatsapp_url' => $this->buildWhatsAppUrl(
+                $almacen->telefono_almacen,
+                "Hola, quiero comprar productos del almacén {$almacen->nombre_almacen}."
+            ),
+        ];
+
+        $productosPaginados = $this->cacheRemember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($request, $almacenId, $perPage, $almacenMeta) {
             $query = Producto::query()
                 ->select([
                     'productos.id',
@@ -209,22 +272,28 @@ class CatalogoPublicoController extends Controller
                             ->orWhere('productos.modelo_producto', 'LIKE', "%{$term}%")
                             ->orWhere('productos.codigo_producto', 'LIKE', "%{$term}%");
                     });
-                }
-            }
+                }use ($almacenMeta) {
+                    return [
+                        'id' => $producto->id,
+                        'nombre' => $producto->nombre_producto,
+                        'slug' => Str::slug($producto->nombre_producto),
+                        'precio_venta' => (float) $producto->precio_venta,
+                        'stock' => (int) $producto->stock,
+                        'imagen_principal' => $this->resolveImagenPrincipal($producto->imagen_producto),
+                        'categoria' => [
+                            'id' => $producto->categoria_id,
+                            'nombre' => $producto->categoria_nombre,
+                        ],
+                        'descripcion_corta' => Str::limit($producto->descripcion_producto ?? '', 180),
+                        'whatsapp_url' => $this->buildWhatsAppUrl(
+                            $almacenMeta['telefono'],
+                            "Hola, quiero comprar el producto {$producto->nombre_producto}"
+                        ),
+                    ];
+                })
+                ->additional(['almacen' => $almacenMeta]);
+        }, ['catalogo', "productos:almacen:{$almacenId}"]);
 
-            // Ordenamiento adicional
-            $orderBy = $request->input('order_by', 'nombre');
-            $orderDir = strtolower($request->input('order_dir', 'asc')) === 'desc' ? 'desc' : 'asc';
-
-            $orderByMap = [
-                'nombre' => 'productos.nombre_producto',
-                'precio' => 'precio_venta',
-                'stock' => 'almacen_producto.cantidad',
-            ];
-
-            if (! isset($orderByMap[$orderBy])) {
-                $orderBy = 'nombre';
-            }
 
             $query->orderBy($orderByMap[$orderBy], $orderDir);
 
