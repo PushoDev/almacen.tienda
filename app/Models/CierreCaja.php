@@ -32,6 +32,8 @@ class CierreCaja extends Model
         'detalles',
         'arqueo_detalles',
         'confirmacion_transferencias',
+        'snapshot_cuentas',
+        'snapshot_clientes',
     ];
 
     protected $casts = [
@@ -51,6 +53,8 @@ class CierreCaja extends Model
         'arqueo_detalles' => 'array',
         'confirmacion_transferencias' => 'array',
         'comisiones_gestor_detalles' => 'array',
+        'snapshot_cuentas' => 'array',
+        'snapshot_clientes' => 'array',
     ];
 
     public function usuario()

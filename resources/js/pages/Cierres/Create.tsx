@@ -1302,6 +1302,11 @@ export default function Create({
 
                             {/* Tab Cuentas */}
                             <TabsContent value="cuentas" className="mt-4">
+                                {!tiene_cierre_anterior && comparativa_cuentas.length > 0 && (
+                                    <p className="text-muted-foreground mb-2 text-xs italic">
+                                        Primer cierre: estos son los saldos iniciales actuales.
+                                    </p>
+                                )}
                                 <div className="rounded-md border">
                                     <Table>
                                         <TableHeader>
