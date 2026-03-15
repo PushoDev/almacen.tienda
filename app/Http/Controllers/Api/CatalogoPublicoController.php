@@ -15,6 +15,29 @@ class CatalogoPublicoController extends Controller
 {
     private const CACHE_TTL_SECONDS = 60;
 
+    private function supportsCacheTags(): bool
+    {
+        return method_exists(Cache::getStore(), 'tags');
+    }
+
+    private function cacheRemember(string $key, int $ttl, callable $callback, array $tags = [])
+    {
+        if ($this->supportsCacheTags() && !empty($tags)) {
+            return Cache::tags($tags)->remember($key, $ttl, $callback);
+        }
+        return Cache::remember($key, $ttl, $callback);
+    }
+
+    private function cacheForget(string $key, array $tags = []): void
+    {
+        if ($this->supportsCacheTags() && !empty($tags)) {
+            Cache::tags($tags)->forget($key);
+            return;
+        }
+
+        Cache::forget($key);
+    }
+
     /**
      * Lista los almacenes públicos (puntos de venta) disponibles para el catálogo.
      *
@@ -26,7 +49,7 @@ class CatalogoPublicoController extends Controller
     {
         $cacheKey = 'catalogo:almacenes';
 
-        $almacenes = Cache::remember($cacheKey, self::CACHE_TTL_SECONDS, function () {
+        $almacenes = $this->cacheRemember($cacheKey, self::CACHE_TTL_SECONDS, function () {
             return Almacen::query()
                 // Solo puntos de venta (visibles para catálogo público)
                 ->where('tipo_almacen', 'punto_venta')
@@ -49,9 +72,48 @@ class CatalogoPublicoController extends Controller
                         'slug' => Str::slug($almacen->nombre_almacen),
                     ];
                 });
-        });
+        }, ['catalogo', 'almacenes']);
 
         return response()->json($almacenes);
+    }
+
+    /**
+     * Devuelve los datos de un almacén para el catálogo.
+     *
+     * Ruta: GET /api/tienda/almacenes/{id}
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function showAlmacen(int $id)
+    {
+        $cacheKey = "catalogo:almacen:{$id}";
+
+        $almacen = $this->cacheRemember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($id) {
+            return Almacen::query()
+                ->where('id', $id)
+                ->where('tipo_almacen', 'punto_venta')
+                ->select([
+                    'id',
+                    'nombre_almacen',
+                    'ciudad_almacen',
+                    'provincia_almacen',
+                    'notas_almacen',
+                ])
+                ->first();
+        }, ['catalogo', "almacen:{$id}"]);
+        if (! $almacen) {
+            return response()->json(['message' => 'Almacén no encontrado'], 404);
+        }
+
+        return response()->json([
+            'id' => $almacen->id,
+            'nombre' => $almacen->nombre_almacen,
+            'ciudad' => $almacen->ciudad_almacen,
+            'provincia' => $almacen->provincia_almacen,
+            'direccion' => $almacen->notas_almacen,
+            'slug' => Str::slug($almacen->nombre_almacen),
+        ]);
     }
 
     /**
@@ -88,7 +150,7 @@ class CatalogoPublicoController extends Controller
         $perPage = (int) ($request->input('per_page', 20));
         $cacheKey = 'catalogo:productos:' . $almacenId . ':' . md5($request->fullUrl());
 
-        $productosPaginados = Cache::remember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($request, $almacenId, $perPage) {
+        $productosPaginados = $this->cacheRemember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($request, $almacenId, $perPage) {
             $query = Producto::query()
                 ->select([
                     'productos.id',
@@ -150,8 +212,23 @@ class CatalogoPublicoController extends Controller
                 }
             }
 
-            return $query->orderBy('productos.nombre_producto')
-                ->paginate($perPage)
+            // Ordenamiento adicional
+            $orderBy = $request->input('order_by', 'nombre');
+            $orderDir = strtolower($request->input('order_dir', 'asc')) === 'desc' ? 'desc' : 'asc';
+
+            $orderByMap = [
+                'nombre' => 'productos.nombre_producto',
+                'precio' => 'precio_venta',
+                'stock' => 'almacen_producto.cantidad',
+            ];
+
+            if (! isset($orderByMap[$orderBy])) {
+                $orderBy = 'nombre';
+            }
+
+            $query->orderBy($orderByMap[$orderBy], $orderDir);
+
+            return $query->paginate($perPage)
                 ->through(function ($producto) {
                     return [
                         'id' => $producto->id,
@@ -167,8 +244,7 @@ class CatalogoPublicoController extends Controller
                         'descripcion_corta' => Str::limit($producto->descripcion_producto ?? '', 180),
                     ];
                 });
-        });
-
+        }, ['catalogo', "productos:almacen:{$almacenId}"]);
         return response()->json($productosPaginados);
     }
 
@@ -184,7 +260,7 @@ class CatalogoPublicoController extends Controller
     {
         $cacheKey = "catalogo:producto:{$id}";
 
-        $producto = Cache::remember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($id) {
+        $producto = $this->cacheRemember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($id) {
             return Producto::query()
                 ->select([
                     'productos.id',
@@ -216,8 +292,7 @@ class CatalogoPublicoController extends Controller
                     'producto_vendedors.precio_venta'
                 )
                 ->first();
-        });
-
+        }, ['catalogo', "producto:{$id}"]);
         if (! $producto) {
             return response()->json(['message' => 'Producto no encontrado'], 404);
         }
@@ -235,6 +310,311 @@ class CatalogoPublicoController extends Controller
             ],
             'descripcion_corta' => Str::limit($producto->descripcion_producto ?? '', 180),
             'codigo' => $producto->codigo_producto,
+        ]);
+    }
+
+    /**
+     * Lista categorías activas para el catálogo.
+     *
+     * Ruta: GET /api/tienda/categorias
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function indexCategorias()
+    {
+        $cacheKey = 'catalogo:categorias';
+
+        $categorias = $this->cacheRemember($cacheKey, self::CACHE_TTL_SECONDS, function () {
+            return \App\Models\Categoria::query()
+                ->where('activar_categoria', true)
+                ->select(['id', 'nombre_categoria'])
+                ->orderBy('nombre_categoria')
+                ->get()
+                ->map(fn($cat) => [
+                    'id' => $cat->id,
+                    'nombre' => $cat->nombre_categoria,
+                ]);
+        }, ['catalogo', 'categorias']);
+
+        return response()->json($categorias);
+    }
+
+    /**
+     * Búsqueda global de productos (sin filtrar por almacén)
+     *
+     * Ruta: GET /api/tienda/productos
+     *
+     * Query params: q, categoria_id, marca, precio_min, precio_max, etiquetas, per_page, order_by, order_dir
+     */
+    public function searchProductos(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'q' => 'nullable|string|max:255',
+            'categoria_id' => 'nullable|exists:categorias,id',
+            'marca' => 'nullable|string|max:100',
+            'precio_min' => 'nullable|numeric|min:0',
+            'precio_max' => 'nullable|numeric|min:0',
+            'etiquetas' => 'nullable|string|max:255',
+            'per_page' => 'nullable|integer|min:1|max:100',
+            'order_by' => 'nullable|string|in:nombre,precio,stock',
+            'order_dir' => 'nullable|string|in:asc,desc',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $perPage = (int) ($request->input('per_page', 20));
+        $cacheKey = 'catalogo:productos:search:' . md5($request->fullUrl());
+
+        $productosPaginados = $this->cacheRemember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($request, $perPage) {
+            $query = Producto::query()
+                ->select([
+                    'productos.id',
+                    'productos.nombre_producto',
+                    'productos.descripcion_producto',
+                    'productos.imagen_producto',
+                    'productos.codigo_producto',
+                    DB::raw('COALESCE(producto_vendedors.precio_venta, 0) as precio_venta'),
+                    'categorias.id as categoria_id',
+                    'categorias.nombre_categoria as categoria_nombre',
+                    DB::raw('COALESCE(SUM(almacen_producto.cantidad), 0) as stock_total'),
+                ])
+                ->leftJoin('almacen_producto', 'productos.id', '=', 'almacen_producto.producto_id')
+                ->leftJoin('producto_vendedors', function ($join) {
+                    $join->on('productos.id', '=', 'producto_vendedors.producto_id')
+                        ->where('producto_vendedors.user_id', 1);
+                })
+                ->join('categorias', 'productos.categoria_id', '=', 'categorias.id')
+                ->where('productos.activo', true)
+                ->groupBy(
+                    'productos.id',
+                    'productos.nombre_producto',
+                    'productos.descripcion_producto',
+                    'productos.imagen_producto',
+                    'productos.codigo_producto',
+                    'categorias.id',
+                    'categorias.nombre_categoria',
+                    'producto_vendedors.precio_venta'
+                );
+
+            if ($q = $request->input('q')) {
+                $query->where(function ($sub) use ($q) {
+                    $sub->where('productos.nombre_producto', 'LIKE', "%{$q}%")
+                        ->orWhere('productos.codigo_producto', 'LIKE', "%{$q}%");
+                });
+            }
+
+            if ($categoriaId = $request->input('categoria_id')) {
+                $query->where('productos.categoria_id', $categoriaId);
+            }
+
+            if ($marca = $request->input('marca')) {
+                $query->where('productos.marca_producto', 'LIKE', "%{$marca}%");
+            }
+
+            if (($precioMin = $request->input('precio_min')) !== null) {
+                $query->whereRaw('COALESCE(producto_vendedors.precio_venta, 0) >= ?', [$precioMin]);
+            }
+
+            if (($precioMax = $request->input('precio_max')) !== null) {
+                $query->whereRaw('COALESCE(producto_vendedors.precio_venta, 0) <= ?', [$precioMax]);
+            }
+
+            if ($etiquetas = $request->input('etiquetas')) {
+                $terms = array_filter(array_map('trim', explode(',', $etiquetas)));
+                foreach ($terms as $term) {
+                    $query->where(function ($sub) use ($term) {
+                        $sub->where('productos.nombre_producto', 'LIKE', "%{$term}%")
+                            ->orWhere('productos.descripcion_producto', 'LIKE', "%{$term}%")
+                            ->orWhere('productos.marca_producto', 'LIKE', "%{$term}%")
+                            ->orWhere('productos.modelo_producto', 'LIKE', "%{$term}%")
+                            ->orWhere('productos.codigo_producto', 'LIKE', "%{$term}%");
+                    });
+                }
+            }
+
+            $orderBy = $request->input('order_by', 'nombre');
+            $orderDir = strtolower($request->input('order_dir', 'asc')) === 'desc' ? 'desc' : 'asc';
+
+            $orderByMap = [
+                'nombre' => 'productos.nombre_producto',
+                'precio' => 'precio_venta',
+                'stock' => 'stock_total',
+            ];
+
+            if (! isset($orderByMap[$orderBy])) {
+                $orderBy = 'nombre';
+            }
+
+            $query->orderBy($orderByMap[$orderBy], $orderDir);
+
+            return $query->paginate($perPage)
+                ->through(function ($producto) {
+                    return [
+                        'id' => $producto->id,
+                        'nombre' => $producto->nombre_producto,
+                        'slug' => Str::slug($producto->nombre_producto),
+                        'precio_venta' => (float) $producto->precio_venta,
+                        'stock' => (int) $producto->stock_total,
+                        'imagen_principal' => $this->resolveImagenPrincipal($producto->imagen_producto),
+                        'categoria' => [
+                            'id' => $producto->categoria_id,
+                            'nombre' => $producto->categoria_nombre,
+                        ],
+                        'descripcion_corta' => Str::limit($producto->descripcion_producto ?? '', 180),
+                    ];
+                });
+        }, ['catalogo', 'productos', 'productos:search']);
+
+        return response()->json($productosPaginados);
+    }
+
+    /**
+     * Devuelve stock por producto desglosado por almacén.
+     *
+     * Ruta: GET /api/tienda/productos/{id}/stock
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function stockPorProducto(int $id)
+    {
+        $cacheKey = "catalogo:producto:{$id}:stock";
+
+        $stocks = $this->cacheRemember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($id) {
+            return DB::table('almacen_producto')
+                ->join('almacens', 'almacen_producto.almacen_id', '=', 'almacens.id')
+                ->where('almacen_producto.producto_id', $id)
+                ->where('almacen_producto.cantidad', '>', 0)
+                ->select(
+                    'almacens.id as almacen_id',
+                    'almacens.nombre_almacen as almacen_nombre',
+                    'almacen_producto.cantidad as stock'
+                )
+                ->orderBy('almacens.nombre_almacen')
+                ->get();
+        }, ['catalogo', "producto:{$id}"]);
+
+        return response()->json($stocks);
+    }
+
+    /**
+     * Devuelve un OpenAPI básico para el catálogo.
+     *
+     * Ruta: GET /api/tienda/docs/openapi.json
+     */
+    public function openApiSpec()
+    {
+        $spec = [
+            'openapi' => '3.0.3',
+            'info' => [
+                'title' => 'Catálogo Público - API',
+                'version' => '1.0.0',
+                'description' => 'Documentación de la API pública para el catálogo de productos y almacenes.',
+            ],
+            'servers' => [
+                ['url' => url('/')],
+            ],
+            'paths' => [
+                '/api/tienda/almacenes' => [
+                    'get' => [
+                        'summary' => 'Lista todos los almacenes públicos',
+                        'responses' => [
+                            '200' => [
+                                'description' => 'Lista de almacenes',
+                            ],
+                        ],
+                    ],
+                ],
+                '/api/tienda/almacenes/{id}' => [
+                    'get' => [
+                        'summary' => 'Obtiene datos de un almacén',
+                        'parameters' => [[
+                            'name' => 'id',
+                            'in' => 'path',
+                            'required' => true,
+                            'schema' => ['type' => 'integer'],
+                        ]],
+                        'responses' => ['200' => ['description' => 'Datos del almacén']],
+                    ],
+                ],
+                '/api/tienda/almacenes/{id}/productos' => [
+                    'get' => [
+                        'summary' => 'Lista productos de un almacén',
+                        'parameters' => [
+                            ['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'integer']],
+                            ['name' => 'q', 'in' => 'query', 'schema' => ['type' => 'string']],
+                            ['name' => 'categoria_id', 'in' => 'query', 'schema' => ['type' => 'integer']],
+                            ['name' => 'marca', 'in' => 'query', 'schema' => ['type' => 'string']],
+                            ['name' => 'precio_min', 'in' => 'query', 'schema' => ['type' => 'number']],
+                            ['name' => 'precio_max', 'in' => 'query', 'schema' => ['type' => 'number']],
+                            ['name' => 'order_by', 'in' => 'query', 'schema' => ['type' => 'string', 'enum' => ['nombre','precio','stock']]],
+                            ['name' => 'order_dir', 'in' => 'query', 'schema' => ['type' => 'string', 'enum' => ['asc','desc']]],
+                        ],
+                        'responses' => ['200' => ['description' => 'Lista paginada de productos']],
+                    ],
+                ],
+                '/api/tienda/productos' => [
+                    'get' => [
+                        'summary' => 'Búsqueda global de productos',
+                        'parameters' => [
+                            ['name' => 'q', 'in' => 'query', 'schema' => ['type' => 'string']],
+                            ['name' => 'categoria_id', 'in' => 'query', 'schema' => ['type' => 'integer']],
+                            ['name' => 'marca', 'in' => 'query', 'schema' => ['type' => 'string']],
+                            ['name' => 'precio_min', 'in' => 'query', 'schema' => ['type' => 'number']],
+                            ['name' => 'precio_max', 'in' => 'query', 'schema' => ['type' => 'number']],
+                            ['name' => 'order_by', 'in' => 'query', 'schema' => ['type' => 'string', 'enum' => ['nombre','precio','stock']]],
+                            ['name' => 'order_dir', 'in' => 'query', 'schema' => ['type' => 'string', 'enum' => ['asc','desc']]],
+                        ],
+                        'responses' => ['200' => ['description' => 'Resultados paginados de búsqueda de productos']],
+                    ],
+                ],
+                '/api/tienda/productos/{id}' => [
+                    'get' => [
+                        'summary' => 'Obtiene un producto por ID',
+                        'parameters' => [[
+                            'name' => 'id',
+                            'in' => 'path',
+                            'required' => true,
+                            'schema' => ['type' => 'integer'],
+                        ]],
+                        'responses' => ['200' => ['description' => 'Detalle del producto']],
+                    ],
+                ],
+                '/api/tienda/productos/{id}/stock' => [
+                    'get' => [
+                        'summary' => 'Stock por almacén para un producto',
+                        'parameters' => [[
+                            'name' => 'id',
+                            'in' => 'path',
+                            'required' => true,
+                            'schema' => ['type' => 'integer'],
+                        ]],
+                        'responses' => ['200' => ['description' => 'Stock por almacén']],
+                    ],
+                ],
+                '/api/tienda/categorias' => [
+                    'get' => [
+                        'summary' => 'Lista categorías activas',
+                        'responses' => ['200' => ['description' => 'Listado de categorías']],
+                    ],
+                ],
+            ],
+        ];
+
+        return response()->json($spec);
+    }
+
+    /**
+     * Página simple con Swagger UI apuntando al OpenAPI spec.
+     *
+     * Ruta: GET /api/tienda/docs
+     */
+    public function swaggerUi()
+    {
+        return response()->view('api-docs', [
+            'openapiUrl' => url('/api/tienda/docs/openapi.json'),
         ]);
     }
 

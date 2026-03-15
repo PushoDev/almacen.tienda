@@ -83,6 +83,37 @@ class Producto extends Model
                 }
             }
         });
+
+        // Limpiar cache relacionado con el catálogo público cuando cambia un producto
+        static::saved(function ($producto) {
+            try {
+                $cache = \Illuminate\Support\Facades\Cache::getStore();
+
+                if (method_exists($cache, 'tags')) {
+                    \Illuminate\Support\Facades\Cache::tags(['catalogo', 'productos'])->flush();
+                    \Illuminate\Support\Facades\Cache::tags(['catalogo', "producto:{$producto->id}"])->forget("catalogo:producto:{$producto->id}");
+                } else {
+                    \Illuminate\Support\Facades\Cache::forget("catalogo:producto:{$producto->id}");
+                }
+            } catch (\Exception $e) {
+                logger()->warning('No se pudo limpiar cache de producto: ' . $e->getMessage());
+            }
+        });
+
+        static::deleted(function ($producto) {
+            try {
+                $cache = \Illuminate\Support\Facades\Cache::getStore();
+
+                if (method_exists($cache, 'tags')) {
+                    \Illuminate\Support\Facades\Cache::tags(['catalogo', 'productos'])->flush();
+                    \Illuminate\Support\Facades\Cache::tags(['catalogo', "producto:{$producto->id}"])->forget("catalogo:producto:{$producto->id}");
+                } else {
+                    \Illuminate\Support\Facades\Cache::forget("catalogo:producto:{$producto->id}");
+                }
+            } catch (\Exception $e) {
+                logger()->warning('No se pudo limpiar cache de producto: ' . $e->getMessage());
+            }
+        });
     }
 
     /**

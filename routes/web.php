@@ -20,10 +20,16 @@ use App\Http\Controllers\AdminController;
 // Route::get('/carrito', [EcommerceController::class, 'index'])->name('Carrito');
 
 // API público de catálogo de tienda (sin autenticación)
-Route::prefix('api/tienda')->group(function () {
+Route::prefix('api/tienda')->middleware('throttle:60,1')->group(function () {
     Route::get('almacenes', [\App\Http\Controllers\Api\CatalogoPublicoController::class, 'indexAlmacenes']);
+    Route::get('almacenes/{id}', [\App\Http\Controllers\Api\CatalogoPublicoController::class, 'showAlmacen']);
     Route::get('almacenes/{id}/productos', [\App\Http\Controllers\Api\CatalogoPublicoController::class, 'productosPorAlmacen']);
+    Route::get('productos', [\App\Http\Controllers\Api\CatalogoPublicoController::class, 'searchProductos']);
     Route::get('productos/{id}', [\App\Http\Controllers\Api\CatalogoPublicoController::class, 'showProducto']);
+    Route::get('productos/{id}/stock', [\App\Http\Controllers\Api\CatalogoPublicoController::class, 'stockPorProducto']);
+    Route::get('categorias', [\App\Http\Controllers\Api\CatalogoPublicoController::class, 'indexCategorias']);
+    Route::get('docs/openapi.json', [\App\Http\Controllers\Api\CatalogoPublicoController::class, 'openApiSpec']);
+    Route::get('docs', [\App\Http\Controllers\Api\CatalogoPublicoController::class, 'swaggerUi']);
 });
 
 // API Routes para Ecommerce (sin autenticación)
