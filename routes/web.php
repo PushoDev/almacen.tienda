@@ -19,6 +19,13 @@ use App\Http\Controllers\AdminController;
 // Carrito (mismo ecommerce)
 // Route::get('/carrito', [EcommerceController::class, 'index'])->name('Carrito');
 
+// API público de catálogo de tienda (sin autenticación)
+Route::prefix('api/tienda')->group(function () {
+    Route::get('almacenes', [\App\Http\Controllers\Api\CatalogoPublicoController::class, 'indexAlmacenes']);
+    Route::get('almacenes/{id}/productos', [\App\Http\Controllers\Api\CatalogoPublicoController::class, 'productosPorAlmacen']);
+    Route::get('productos/{id}', [\App\Http\Controllers\Api\CatalogoPublicoController::class, 'showProducto']);
+});
+
 // API Routes para Ecommerce (sin autenticación)
 // Route::prefix('api/ecommerce')->group(function () {
 //     Route::get('/puntos-venta', [EcommerceController::class, 'getPuntosVenta'])->name('api.ecommerce.puntos-venta');
