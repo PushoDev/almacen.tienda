@@ -84,91 +84,117 @@ class CierreCajaController extends Controller
         $comparativaCuentas = [];
         $comparativaClientes = [];
 
-        if ($ultimoCierre) {
-            // Obtener saldos actuales de TODAS las cuentas accesibles por el usuario
-            $cuentasQuery = \App\Models\Cuenta::with('moneda');
-            if (! in_array($user->role, ['admin', 'moderador'])) {
-                $cuentasQuery->whereHas('users', function ($q) use ($user) {
-                    $q->where('user_id', $user->id);
-                });
-            }
-            $cuentasActuales = $cuentasQuery->get();
+        // Obtener saldos actuales de TODAS las cuentas accesibles por el usuario
+        $cuentasQuery = \App\Models\Cuenta::with('moneda');
+        if (! in_array($user->role, ['admin', 'moderador'])) {
+            $cuentasQuery->whereHas('users', function ($q) use ($user) {
+                $q->where('user_id', $user->id);
+            });
+        }
+        $cuentasActuales = $cuentasQuery->get();
 
-            // Obtener saldos del cierre anterior (de los detalles)
-            $cuentasCierreAnterior = [];
-            if ($ultimoCierre->detalles && is_array($ultimoCierre->detalles)) {
-                foreach ($ultimoCierre->detalles as $detalle) {
-                    if (isset($detalle['items_ventas_cuentas'])) {
-                        foreach ($detalle['items_ventas_cuentas'] as $item) {
-                            if (isset($item['cuenta_nombre'])) {
-                                $cuentaNombre = $item['cuenta_nombre'];
-                                if (! isset($cuentasCierreAnterior[$cuentaNombre])) {
-                                    $cuentasCierreAnterior[$cuentaNombre] = 0;
-                                }
-                                // Sumar montos de ventas a cuentas
-                                $cuentasCierreAnterior[$cuentaNombre] += $item['monto_equivalente'] ?? $item['monto'] ?? 0;
+        // Obtener deudas actuales de TODOS los clientes
+        $clientesActuales = \App\Models\Cliente::all();
+
+        // Obtener saldos/deudas del cierre anterior (snapshot o fallback a detalles)
+        $cuentasCierreAnteriorPorId = [];
+        $cuentasCierreAnteriorPorNombre = [];
+        $clientesCierreAnteriorPorId = [];
+        $clientesCierreAnteriorPorNombre = [];
+
+        if ($ultimoCierre && is_array($ultimoCierre->snapshot_cuentas)) {
+            foreach ($ultimoCierre->snapshot_cuentas as $item) {
+                if (isset($item['id'])) {
+                    $cuentasCierreAnteriorPorId[(int) $item['id']] = $item['saldo'] ?? 0;
+                }
+            }
+        }
+
+        if ($ultimoCierre && is_array($ultimoCierre->snapshot_clientes)) {
+            foreach ($ultimoCierre->snapshot_clientes as $item) {
+                if (isset($item['id'])) {
+                    $clientesCierreAnteriorPorId[(int) $item['id']] = $item['deuda'] ?? 0;
+                }
+            }
+        }
+
+        // Fallback: si no hay snapshot, usar detalles antiguos (por nombre)
+        if ($ultimoCierre && empty($cuentasCierreAnteriorPorId) && $ultimoCierre->detalles && is_array($ultimoCierre->detalles)) {
+            foreach ($ultimoCierre->detalles as $detalle) {
+                if (isset($detalle['items_ventas_cuentas'])) {
+                    foreach ($detalle['items_ventas_cuentas'] as $item) {
+                        if (isset($item['cuenta_nombre'])) {
+                            $cuentaNombre = $item['cuenta_nombre'];
+                            if (! isset($cuentasCierreAnteriorPorNombre[$cuentaNombre])) {
+                                $cuentasCierreAnteriorPorNombre[$cuentaNombre] = 0;
                             }
+                            $cuentasCierreAnteriorPorNombre[$cuentaNombre] += $item['monto_equivalente'] ?? $item['monto'] ?? 0;
                         }
                     }
                 }
             }
+        }
 
-            // Comparar cuentas
-            foreach ($cuentasActuales as $cuenta) {
-                $nombreCuenta = $cuenta->nombre_cuenta;
-                $saldoActual = $cuenta->saldo_cuenta;
-                $saldoAnterior = $cuentasCierreAnterior[$nombreCuenta] ?? 0;
-                $diferencia = $saldoActual - $saldoAnterior;
-
-                $comparativaCuentas[] = [
-                    'id' => $cuenta->id,
-                    'nombre' => $nombreCuenta,
-                    'tipo' => $cuenta->tipo,
-                    'moneda' => $cuenta->moneda?->codigo_moneda ?? $cuenta->tipo_moneda,
-                    'saldo_anterior' => round($saldoAnterior, 2),
-                    'saldo_actual' => round($saldoActual, 2),
-                    'diferencia' => round($diferencia, 2),
-                    'estado' => $diferencia > 0 ? 'subio' : ($diferencia < 0 ? 'bajo' : 'igual'),
-                ];
-            }
-
-            // Obtener deudas actuales de TODOS los clientes
-            $clientesActuales = \App\Models\Cliente::all();
-
-            // Obtener deudas del cierre anterior
-            $clientesCierreAnterior = [];
-            if ($ultimoCierre->detalles && is_array($ultimoCierre->detalles)) {
-                foreach ($ultimoCierre->detalles as $detalle) {
-                    if (isset($detalle['items_ventas_clientes'])) {
-                        foreach ($detalle['items_ventas_clientes'] as $item) {
-                            if (isset($item['cliente_nombre'])) {
-                                $clienteNombre = $item['cliente_nombre'];
-                                if (! isset($clientesCierreAnterior[$clienteNombre])) {
-                                    $clientesCierreAnterior[$clienteNombre] = 0;
-                                }
-                                $clientesCierreAnterior[$clienteNombre] += $item['monto_equivalente'] ?? $item['monto'] ?? 0;
+        if ($ultimoCierre && empty($clientesCierreAnteriorPorId) && $ultimoCierre->detalles && is_array($ultimoCierre->detalles)) {
+            foreach ($ultimoCierre->detalles as $detalle) {
+                if (isset($detalle['items_ventas_clientes'])) {
+                    foreach ($detalle['items_ventas_clientes'] as $item) {
+                        if (isset($item['cliente_nombre'])) {
+                            $clienteNombre = $item['cliente_nombre'];
+                            if (! isset($clientesCierreAnteriorPorNombre[$clienteNombre])) {
+                                $clientesCierreAnteriorPorNombre[$clienteNombre] = 0;
                             }
+                            $clientesCierreAnteriorPorNombre[$clienteNombre] += $item['monto_equivalente'] ?? $item['monto'] ?? 0;
                         }
                     }
                 }
             }
+        }
 
-            // Comparar clientes (deuda)
-            foreach ($clientesActuales as $cliente) {
-                $nombreCliente = $cliente->nombre_cliente;
-                $deudaActual = $cliente->deuda_pago_cliente;
-                $deudaAnterior = $clientesCierreAnterior[$nombreCliente] ?? 0;
-                $diferencia = $deudaActual - $deudaAnterior;
-
-                $comparativaClientes[] = [
-                    'id' => $cliente->id,
-                    'nombre' => $nombreCliente,
-                    'deuda_anterior' => round($deudaAnterior, 2),
-                    'deuda_actual' => round($deudaActual, 2),
-                    'diferencia' => round($diferencia, 2),
-                    'estado' => $diferencia < 0 ? 'mejoro' : ($diferencia > 0 ? 'empeoro' : 'igual'),
-                ];
+        // Comparar cuentas (si no hay cierre anterior, mostrar saldo actual como anterior)
+        foreach ($cuentasActuales as $cuenta) {
+            $saldoActual = (float) $cuenta->saldo_cuenta;
+            if ($ultimoCierre) {
+                $saldoAnterior = $cuentasCierreAnteriorPorId[$cuenta->id]
+                    ?? $cuentasCierreAnteriorPorNombre[$cuenta->nombre_cuenta]
+                    ?? 0;
+            } else {
+                $saldoAnterior = $saldoActual;
             }
+            $diferencia = $saldoActual - $saldoAnterior;
+
+            $comparativaCuentas[] = [
+                'id' => $cuenta->id,
+                'nombre' => $cuenta->nombre_cuenta,
+                'tipo' => $cuenta->tipo,
+                'moneda' => $cuenta->moneda?->codigo_moneda ?? $cuenta->tipo_moneda,
+                'saldo_anterior' => round($saldoAnterior, 2),
+                'saldo_actual' => round($saldoActual, 2),
+                'diferencia' => round($diferencia, 2),
+                'estado' => $diferencia > 0 ? 'subio' : ($diferencia < 0 ? 'bajo' : 'igual'),
+            ];
+        }
+
+        // Comparar clientes (deuda)
+        foreach ($clientesActuales as $cliente) {
+            $deudaActual = (float) $cliente->deuda_pago_cliente;
+            if ($ultimoCierre) {
+                $deudaAnterior = $clientesCierreAnteriorPorId[$cliente->id]
+                    ?? $clientesCierreAnteriorPorNombre[$cliente->nombre_cliente]
+                    ?? 0;
+            } else {
+                $deudaAnterior = $deudaActual;
+            }
+            $diferencia = $deudaActual - $deudaAnterior;
+
+            $comparativaClientes[] = [
+                'id' => $cliente->id,
+                'nombre' => $cliente->nombre_cliente,
+                'deuda_anterior' => round($deudaAnterior, 2),
+                'deuda_actual' => round($deudaActual, 2),
+                'diferencia' => round($diferencia, 2),
+                'estado' => $diferencia < 0 ? 'mejoro' : ($diferencia > 0 ? 'empeoro' : 'igual'),
+            ];
         }
 
         // Preparar respuesta para Inertia con detalles mejorados de transferencias y claridad en pagos
@@ -257,6 +283,32 @@ class CierreCajaController extends Controller
         // Calcular diferencia usando el saldo esperado del backend
         $diferencia = round($saldoContado - $saldoEsperado, 2);
 
+        // Snapshot real de cuentas accesibles
+        $cuentasSnapshotQuery = \App\Models\Cuenta::with('moneda');
+        if (! in_array($user->role, ['admin', 'moderador'])) {
+            $cuentasSnapshotQuery->whereHas('users', function ($q) use ($user) {
+                $q->where('user_id', $user->id);
+            });
+        }
+        $cuentasSnapshot = $cuentasSnapshotQuery->get()->map(function ($cuenta) {
+            return [
+                'id' => $cuenta->id,
+                'nombre' => $cuenta->nombre_cuenta,
+                'tipo' => $cuenta->tipo,
+                'moneda' => $cuenta->moneda?->codigo_moneda ?? $cuenta->tipo_moneda,
+                'saldo' => round((float) $cuenta->saldo_cuenta, 2),
+            ];
+        })->values()->all();
+
+        // Snapshot real de clientes
+        $clientesSnapshot = \App\Models\Cliente::all()->map(function ($cliente) {
+            return [
+                'id' => $cliente->id,
+                'nombre' => $cliente->nombre_cliente,
+                'deuda' => round((float) $cliente->deuda_pago_cliente, 2),
+            ];
+        })->values()->all();
+
         DB::beginTransaction();
         try {
             $cierre = CierreCaja::create([
@@ -279,6 +331,8 @@ class CierreCajaController extends Controller
                 'detalles' => $detallesJson,
                 'arqueo_detalles' => $data['arqueo_detalles'] ?? [],
                 'confirmacion_transferencias' => $data['confirmacion_transferencias'] ?? [],
+                'snapshot_cuentas' => $cuentasSnapshot,
+                'snapshot_clientes' => $clientesSnapshot,
             ]);
 
             DB::commit();
