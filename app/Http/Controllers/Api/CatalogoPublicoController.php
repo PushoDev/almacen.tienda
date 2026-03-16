@@ -272,7 +272,26 @@ class CatalogoPublicoController extends Controller
                             ->orWhere('productos.modelo_producto', 'LIKE', "%{$term}%")
                             ->orWhere('productos.codigo_producto', 'LIKE', "%{$term}%");
                     });
-                }use ($almacenMeta) {
+                }
+            }
+
+            $orderBy = $request->input('order_by', 'nombre');
+            $orderDir = strtolower($request->input('order_dir', 'asc')) === 'desc' ? 'desc' : 'asc';
+
+            $orderByMap = [
+                'nombre' => 'productos.nombre_producto',
+                'precio' => 'precio_venta',
+                'stock' => 'stock',
+            ];
+
+            if (! isset($orderByMap[$orderBy])) {
+                $orderBy = 'nombre';
+            }
+
+            $query->orderBy($orderByMap[$orderBy], $orderDir);
+
+            return $query->paginate($perPage)
+                ->through(function ($producto) use ($almacenMeta) {
                     return [
                         'id' => $producto->id,
                         'nombre' => $producto->nombre_producto,
@@ -294,26 +313,6 @@ class CatalogoPublicoController extends Controller
                 ->additional(['almacen' => $almacenMeta]);
         }, ['catalogo', "productos:almacen:{$almacenId}"]);
 
-
-            $query->orderBy($orderByMap[$orderBy], $orderDir);
-
-            return $query->paginate($perPage)
-                ->through(function ($producto) {
-                    return [
-                        'id' => $producto->id,
-                        'nombre' => $producto->nombre_producto,
-                        'slug' => Str::slug($producto->nombre_producto),
-                        'precio_venta' => (float) $producto->precio_venta,
-                        'stock' => (int) $producto->stock,
-                        'imagen_principal' => $this->resolveImagenPrincipal($producto->imagen_producto),
-                        'categoria' => [
-                            'id' => $producto->categoria_id,
-                            'nombre' => $producto->categoria_nombre,
-                        ],
-                        'descripcion_corta' => Str::limit($producto->descripcion_producto ?? '', 180),
-                    ];
-                });
-        }, ['catalogo', "productos:almacen:{$almacenId}"]);
         return response()->json($productosPaginados);
     }
 
@@ -618,8 +617,8 @@ class CatalogoPublicoController extends Controller
                             ['name' => 'marca', 'in' => 'query', 'schema' => ['type' => 'string']],
                             ['name' => 'precio_min', 'in' => 'query', 'schema' => ['type' => 'number']],
                             ['name' => 'precio_max', 'in' => 'query', 'schema' => ['type' => 'number']],
-                            ['name' => 'order_by', 'in' => 'query', 'schema' => ['type' => 'string', 'enum' => ['nombre','precio','stock']]],
-                            ['name' => 'order_dir', 'in' => 'query', 'schema' => ['type' => 'string', 'enum' => ['asc','desc']]],
+                            ['name' => 'order_by', 'in' => 'query', 'schema' => ['type' => 'string', 'enum' => ['nombre', 'precio', 'stock']]],
+                            ['name' => 'order_dir', 'in' => 'query', 'schema' => ['type' => 'string', 'enum' => ['asc', 'desc']]],
                         ],
                         'responses' => ['200' => ['description' => 'Lista paginada de productos']],
                     ],
@@ -633,8 +632,8 @@ class CatalogoPublicoController extends Controller
                             ['name' => 'marca', 'in' => 'query', 'schema' => ['type' => 'string']],
                             ['name' => 'precio_min', 'in' => 'query', 'schema' => ['type' => 'number']],
                             ['name' => 'precio_max', 'in' => 'query', 'schema' => ['type' => 'number']],
-                            ['name' => 'order_by', 'in' => 'query', 'schema' => ['type' => 'string', 'enum' => ['nombre','precio','stock']]],
-                            ['name' => 'order_dir', 'in' => 'query', 'schema' => ['type' => 'string', 'enum' => ['asc','desc']]],
+                            ['name' => 'order_by', 'in' => 'query', 'schema' => ['type' => 'string', 'enum' => ['nombre', 'precio', 'stock']]],
+                            ['name' => 'order_dir', 'in' => 'query', 'schema' => ['type' => 'string', 'enum' => ['asc', 'desc']]],
                         ],
                         'responses' => ['200' => ['description' => 'Resultados paginados de búsqueda de productos']],
                     ],
