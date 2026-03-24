@@ -26,7 +26,6 @@ import {
     ArrowUp,
     Banknote,
     Briefcase,
-    Calculator,
     CheckCircle2,
     ChevronDown,
     CreditCard,
@@ -476,60 +475,6 @@ export default function Create({
                         </CardContent>
                     </Card>
                 </div>
-
-                {/* Widget de Resumen Global */}
-                <Card className="border-slate-200 bg-gradient-to-r from-slate-500/5 to-slate-100/50">
-                    <CardContent className="p-4">
-                        <div className="flex flex-wrap items-center justify-between gap-4">
-                            <div className="flex items-center gap-3">
-                                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100">
-                                    <Calculator className="h-6 w-6 text-slate-600" />
-                                </div>
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <p className="text-muted-foreground text-sm">Saldo Esperado en Caja</p>
-                                        <div className="group relative">
-                                            <svg
-                                                className="text-muted-foreground/60 h-4 w-4 shrink-0 cursor-help"
-                                                xmlns="http://www.w3.org/2000/svg"
-                                                width="24"
-                                                height="24"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                strokeWidth="2"
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                            >
-                                                <circle cx="12" cy="12" r="10" />
-                                                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                                                <path d="M12 17h.01" />
-                                            </svg>
-                                            <div className="invisible absolute bottom-full left-1/2 z-50 mb-2 w-64 translate-x-[-50%] rounded-md bg-slate-800 p-3 text-xs text-white opacity-0 transition-all group-hover:visible group-hover:opacity-100">
-                                                Es el total de dinero que debería haber en caja según las ventas y movimientos registrados. Incluye
-                                                ventas en efectivo + ingresos extras - gastos - transferencias.
-                                                <div className="absolute top-full left-1/2 h-2 w-2 translate-x-[-50%] bg-slate-800"></div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <p className="text-3xl font-bold text-slate-700">${Number(calculos.saldo_esperado_global || 0).toFixed(2)}</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-6 text-sm">
-                                <div className="flex items-center gap-2">
-                                    <TrendingUp className="h-4 w-4 text-emerald-600" />
-                                    <span className="text-muted-foreground">Total Productos:</span>
-                                    <span className="font-semibold">{lineasProductos.length}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <CreditCard className="h-4 w-4 text-blue-600" />
-                                    <span className="text-muted-foreground">Métodos Pago:</span>
-                                    <span className="font-semibold">{monedasConPagos.length}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
 
                 {/* NUEVO: Widget de Resumen por Destino (Cuentas vs Clientes) */}
                 {(calculos.ventas_a_cuentas_total_usd !== undefined || calculos.ventas_a_clientes_total_usd !== undefined) && (
@@ -1044,26 +989,28 @@ export default function Create({
                             </CardContent>
                         </Card>
 
-                        {/* Gestores - NUEVO */}
-                        {comisionesGestorDetalles.length > 0 && (
-                            <Card
-                                className="cursor-pointer border-purple-200 bg-purple-500/5 transition-colors hover:bg-purple-500/10"
-                                onClick={() => setShowTransaccionesDialog(true)}
-                            >
-                                <CardContent className="p-3 text-center">
-                                    <Briefcase className="mx-auto mb-1 h-5 w-5 text-purple-600" />
-                                    <p className="text-muted-foreground text-[10px] uppercase">Gestores</p>
-                                    <div className="space-y-0.5">
-                                        {Object.entries(comisionesPorMoneda).map(([moneda, data]) => (
+                        {/* Gestores */}
+                        <Card
+                            className="cursor-pointer border-purple-200 bg-purple-500/5 transition-colors hover:bg-purple-500/10"
+                            onClick={() => setShowTransaccionesDialog(true)}
+                        >
+                            <CardContent className="p-3 text-center">
+                                <Briefcase className="mx-auto mb-1 h-5 w-5 text-purple-600" />
+                                <p className="text-muted-foreground text-[10px] uppercase">Gestores</p>
+                                <div className="space-y-0.5">
+                                    {comisionesGestorDetalles.length > 0 ? (
+                                        Object.entries(comisionesPorMoneda).map(([moneda, data]) => (
                                             <p key={moneda} className="text-lg font-bold text-purple-700">
                                                 -${Number(data.total).toFixed(2)} {moneda}
                                             </p>
-                                        ))}
-                                    </div>
-                                    <p className="text-muted-foreground text-[9px]">{comisionesGestorDetalles.length} oper.</p>
-                                </CardContent>
-                            </Card>
-                        )}
+                                        ))
+                                    ) : (
+                                        <p className="text-lg font-bold text-purple-700">$0.00</p>
+                                    )}
+                                </div>
+                                <p className="text-muted-foreground text-[9px]">{comisionesGestorDetalles.length} oper.</p>
+                            </CardContent>
+                        </Card>
                     </div>
                 </div>
 
