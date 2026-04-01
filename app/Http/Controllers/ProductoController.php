@@ -49,6 +49,14 @@ class ProductoController extends Controller
             $query->where('categoria_id', $request->categoria_id);
         }
 
+        // Filtro por almacén
+        if ($request->has('almacen_id') && $request->almacen_id != '') {
+            $almacenId = $request->almacen_id;
+            $query->whereHas('almacenes', function ($q) use ($almacenId) {
+                $q->where('almacen_id', $almacenId);
+            });
+        }
+
         // Ordenamiento
         $sortField = $request->get('sort_field', 'nombre_producto');
         $sortDirection = $request->get('sort_direction', 'asc');
@@ -106,7 +114,7 @@ class ProductoController extends Controller
             'productos' => $paginatedProducts,
             'almacenes' => Almacen::select('id', 'nombre_almacen')->get(),
             'categorias' => Categoria::select('id', 'nombre_categoria')->get(),
-            'filters' => $request->only(['search', 'categoria_id', 'stock_bajo']),
+            'filters' => $request->only(['search', 'categoria_id', 'almacen_id', 'stock_bajo']),
             'sort' => ['field' => $sortField, 'direction' => $sortDirection],
             'canViewStockStats' => $canViewStockStats,
         ]);

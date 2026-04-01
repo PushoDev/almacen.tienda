@@ -317,6 +317,7 @@ export default function ProductosPage({
     // Estados para gestión de stock
     const [searchTerm, setSearchTerm] = useState(filters.search || '');
     const [selectedCategoria, setSelectedCategoria] = useState(filters.categoria_id || '');
+    const [selectedAlmacen, setSelectedAlmacen] = useState(filters.almacen_id || '');
     const [soloStockBajo, setSoloStockBajo] = useState(filters.stock_bajo || false);
 
     // Estados para importación/exportación
@@ -471,6 +472,7 @@ export default function ProductosPage({
         const params: Record<string, string | boolean> = {};
         if (searchTerm) params.search = searchTerm;
         if (selectedCategoria) params.categoria_id = selectedCategoria;
+        if (selectedAlmacen) params.almacen_id = selectedAlmacen;
         if (soloStockBajo) params.stock_bajo = true;
         // Solo agregar parámetros de ordenamiento si son diferentes a los valores por defecto
         if (sort.field && sort.field !== 'nombre_producto') params.sort_field = sort.field;
@@ -480,7 +482,7 @@ export default function ProductosPage({
             preserveState: true,
             replace: true,
         });
-    }, [searchTerm, selectedCategoria, soloStockBajo, sort.field, sort.direction]);
+    }, [searchTerm, selectedCategoria, selectedAlmacen, soloStockBajo, sort.field, sort.direction]);
 
     // Cambiar ordenamiento
     const handleSort = (field: string) => {
@@ -624,6 +626,22 @@ export default function ProductosPage({
                             ))}
                         </select>
 
+                        {/* Filtro por almacén */}
+                        <select
+                            value={selectedAlmacen}
+                            onChange={(e) => setSelectedAlmacen(e.target.value)}
+                            className="focus:ring-sidebar-accent border-primary rounded-md border px-3 py-2 focus:ring-2 focus:outline-none"
+                        >
+                            <option className="bg-background" value="">
+                                Todos los almacenes
+                            </option>
+                            {almacenes.map((almacen) => (
+                                <option key={almacen.id} className="bg-background" value={almacen.id}>
+                                    {almacen.nombre_almacen}
+                                </option>
+                            ))}
+                        </select>
+
                         {/* Selector de almacén para exportación */}
                         <select
                             value={almacenExportId}
@@ -710,7 +728,7 @@ export default function ProductosPage({
                                             </Badge>
                                         </TableCell>
                                         <TableCell>{producto.modelo_producto || 'N/A'}</TableCell>
-                                        <TableCell>{producto.capacidad_producto || 'N/A'}</TableCell>
+                                        <TableCell>{producto.capacidad_producto || '-'}</TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-2">
                                                 <QrCode size={14} className="shrink-0 text-gray-500" />
@@ -863,7 +881,7 @@ export default function ProductosPage({
                                     disabled={!link.url || link.active}
                                     className="cursor-pointer"
                                 >
-                                    {link.label.replace('&laquo;', '«').replace('&raquo;', '»')}
+                                    {renderPaginationLabel(link.label)}
                                 </Button>
                             ))}
                         </div>
@@ -879,3 +897,10 @@ export default function ProductosPage({
         </AppLayout>
     );
 }
+    const renderPaginationLabel = (label: string) => {
+        if (!label) return '';
+        const normalized = label.toLowerCase();
+        if (normalized.includes('pagination.previous') || normalized.includes('previous')) return '«';
+        if (normalized.includes('pagination.next') || normalized.includes('next')) return '»';
+        return label.replace('&laquo;', '«').replace('&raquo;', '»');
+    };
