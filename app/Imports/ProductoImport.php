@@ -77,7 +77,8 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
             $marca = isset($row['marca']) && !empty($row['marca']) ? $row['marca'] : null;
             $modelo = isset($row['modelo']) && !empty($row['modelo']) ? $row['modelo'] : null;
             $capacidad = isset($row['capacidad']) && !empty($row['capacidad']) ? $row['capacidad'] : null;
-            $precio = floatval($row['precio_compra'] ?? 0);
+            $precioRaw = $row['precio_compra'] ?? null;
+            $precio = (is_null($precioRaw) || $precioRaw === '') ? 0 : floatval($precioRaw);
             $cantidad = intval($row['cantidad'] ?? 0);
 
             // Buscar producto existente
@@ -169,12 +170,26 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
         return [
             'nombre_producto' => 'required|string|max:255',
             'categoria' => 'required|string|max:255',
-            'precio_compra' => 'required|numeric|min:0',
+            'precio_compra' => 'nullable|numeric|min:0',
             'cantidad' => 'required|integer',
             'marca' => 'sometimes|nullable|string|max:255',
             'modelo' => 'sometimes|nullable|string|max:255',
             'capacidad' => 'sometimes|nullable|string|max:255',
         ];
+    }
+
+    /**
+     * Normaliza datos antes de validar (acepta valores numéricos en campos texto)
+     */
+    public function prepareForValidation($data, $index)
+    {
+        foreach (['marca', 'modelo', 'capacidad'] as $field) {
+            if (array_key_exists($field, $data) && $data[$field] !== null && $data[$field] !== '') {
+                $data[$field] = trim((string) $data[$field]);
+            }
+        }
+
+        return $data;
     }
 
     /**

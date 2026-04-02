@@ -179,6 +179,7 @@ export interface ProductosPaginados {
 export interface ProductosFilters {
     search?: string;
     categoria_id?: string;
+    almacen_id?: string;
     stock_bajo?: boolean;
 }
 
