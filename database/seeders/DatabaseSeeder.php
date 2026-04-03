@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\User;
 use App\Models\Almacen;
 use App\Models\Cliente;
+use App\Models\Cuenta;
 use App\Models\Moneda; // AGREGAR ESTA LÍNEA
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -114,6 +115,42 @@ class DatabaseSeeder extends Seeder
             );
         }
         // ========== FIN MONEDA POR DEFECTO ==========
+
+        // ========== CUENTAS MONETARIAS POR DEFECTO ==========
+        $codigosMoneda = Moneda::whereIn('codigo_moneda', ['USD', 'CUP', 'MLC', 'EUR'])
+            ->get()
+            ->keyBy('codigo_moneda');
+
+        $basesCuentas = [
+            'QUIVICAN',
+            'LA SALUD',
+            'BEJUCAL ALMACEN',
+            'MANZANILLO 1',
+            'MANZANILLO 2',
+            'COTORRO',
+            'GUANABACOA',
+            'SAN ANTONIO',
+        ];
+
+        foreach ($basesCuentas as $base) {
+            foreach ($codigosMoneda as $codigo => $moneda) {
+                $nombreCuenta = "{$base} {$codigo}";
+                Cuenta::firstOrCreate(
+                    ['nombre_cuenta' => $nombreCuenta],
+                    [
+                        'saldo_cuenta' => 0,
+                        'tipo_moneda' => $codigo,
+                        'deuda' => 0,
+                        'tipo_cuenta' => 'permanentes',
+                        'moneda_id' => $moneda->id,
+                        'notas_cuenta' => null,
+                        'tipo' => 'caja',
+                        'estado' => 'activa',
+                    ]
+                );
+            }
+        }
+        // ========== FIN CUENTAS MONETARIAS POR DEFECTO ==========
 
         // Crear el almacén predeterminado
         Almacen::firstOrCreate(
