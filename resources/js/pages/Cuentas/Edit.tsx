@@ -7,8 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head, useForm } from '@inertiajs/react';
-import { Banknote, Landmark } from 'lucide-react';
+import { Head, useForm, usePage } from '@inertiajs/react';
+import { Banknote, Eye, EyeOff, Landmark } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -56,6 +57,9 @@ interface EditarCuentasPageProps {
 }
 
 export default function EditarCuentasPage({ cuenta, monedas }: EditarCuentasPageProps) {
+    const { props } = usePage() as any;
+    const isAdmin = props?.auth?.user?.role === 'admin';
+
     // Manejo del formulario con useForm - ACTUALIZADO con nuevos campos
     const { data, setData, put, errors, processing } = useForm({
         nombre_cuenta: cuenta.nombre_cuenta,
@@ -65,11 +69,21 @@ export default function EditarCuentasPage({ cuenta, monedas }: EditarCuentasPage
         tipo_cuenta: cuenta.tipo_cuenta as 'permanentes' | 'temporales' | 'deudas',
         estado: cuenta.estado as 'activa' | 'inactiva',
         notas_cuenta: cuenta.notas_cuenta || '',
+        security_password: '',
     });
+
+    const [showSecurityPassword, setShowSecurityPassword] = useState(false);
+    const saldoCambio = useMemo(() => Number(data.saldo_cuenta) !== Number(cuenta.saldo_cuenta ?? 0), [data.saldo_cuenta, cuenta.saldo_cuenta]);
 
     // Función para enviar el formulario
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (isAdmin && saldoCambio && !data.security_password) {
+            toast.error('Debe ingresar la contraseña de seguridad para cambiar el saldo.');
+            return;
+        }
+
         put(route('cuentas.update', { cuenta: cuenta.id }), {
             onSuccess: () => {
                 toast.success('Cuenta actualizada correctamente');
@@ -148,11 +162,43 @@ export default function EditarCuentasPage({ cuenta, monedas }: EditarCuentasPage
                                             onChange={(e) => setData('saldo_cuenta', parseFloat(e.target.value) || 0)}
                                             placeholder="0.00"
                                             className="w-full"
-                                            disabled
+                                            disabled={!isAdmin}
                                         />
                                         <InputError message={errors.saldo_cuenta} />
-                                        <p className="text-muted-foreground text-xs">El saldo no se puede modificar directamente</p>
+                                        <p className="text-muted-foreground text-xs">
+                                            {isAdmin
+                                                ? 'Solo admin puede editar el saldo.'
+                                                : 'El saldo no se puede modificar directamente.'}
+                                        </p>
                                     </div>
+
+                                    {/* Contraseña de Seguridad (solo admin) */}
+                                    {isAdmin && (
+                                        <div className="space-y-2">
+                                            <Label htmlFor="security_password">Contraseña de Seguridad *</Label>
+                                            <div className="relative">
+                                                <Input
+                                                    id="security_password"
+                                                    type={showSecurityPassword ? 'text' : 'password'}
+                                                    value={data.security_password}
+                                                    onChange={(e) => setData('security_password', e.target.value)}
+                                                    placeholder="Ingrese la contraseña"
+                                                    className="w-full pr-10"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowSecurityPassword((prev) => !prev)}
+                                                    className="text-muted-foreground hover:text-foreground absolute top-1/2 right-2 -translate-y-1/2"
+                                                >
+                                                    {showSecurityPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                </button>
+                                            </div>
+                                            <InputError message={errors.security_password} />
+                                            <p className="text-muted-foreground text-xs">
+                                                Requerida para cambiar el saldo de la cuenta.
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Columna 2 */}

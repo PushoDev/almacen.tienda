@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\User;
 use App\Models\Almacen;
 use App\Models\Cliente;
+use App\Models\Cuenta;
 use App\Models\Moneda; // AGREGAR ESTA LÍNEA
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -86,6 +87,24 @@ class DatabaseSeeder extends Seeder
                 'commission' => 0,
                 'estado' => true,
                 'principal' => false,
+            ],
+            [
+                'codigo_moneda' => 'MLC',
+                'nombre_moneda' => 'Moneda Libremente Convertible',
+                'simbolo_moneda' => 'MLC',
+                'tasa_cambio' => 1.85,
+                'commission' => 0,
+                'estado' => true,
+                'principal' => false,
+            ],
+            [
+                'codigo_moneda' => 'EUR',
+                'nombre_moneda' => 'Moneda Euro, Europea',
+                'simbolo_moneda' => 'EUR',
+                'tasa_cambio' => 1.0,
+                'commission' => 0,
+                'estado' => true,
+                'principal' => false,
             ]
         ];
 
@@ -96,6 +115,42 @@ class DatabaseSeeder extends Seeder
             );
         }
         // ========== FIN MONEDA POR DEFECTO ==========
+
+        // ========== CUENTAS MONETARIAS POR DEFECTO ==========
+        $codigosMoneda = Moneda::whereIn('codigo_moneda', ['USD', 'CUP', 'MLC', 'EUR'])
+            ->get()
+            ->keyBy('codigo_moneda');
+
+        $basesCuentas = [
+            'QUIVICAN',
+            'LA SALUD',
+            'BEJUCAL ALMACEN',
+            'MANZANILLO 1',
+            'MANZANILLO 2',
+            'COTORRO',
+            'GUANABACOA',
+            'SAN ANTONIO',
+        ];
+
+        foreach ($basesCuentas as $base) {
+            foreach ($codigosMoneda as $codigo => $moneda) {
+                $nombreCuenta = "{$base} {$codigo}";
+                Cuenta::firstOrCreate(
+                    ['nombre_cuenta' => $nombreCuenta],
+                    [
+                        'saldo_cuenta' => 0,
+                        'tipo_moneda' => $codigo,
+                        'deuda' => 0,
+                        'tipo_cuenta' => 'permanentes',
+                        'moneda_id' => $moneda->id,
+                        'notas_cuenta' => null,
+                        'tipo' => 'caja',
+                        'estado' => 'activa',
+                    ]
+                );
+            }
+        }
+        // ========== FIN CUENTAS MONETARIAS POR DEFECTO ==========
 
         // Crear el almacén predeterminado
         Almacen::firstOrCreate(
@@ -381,7 +436,21 @@ class DatabaseSeeder extends Seeder
                 'updated_at' => now(),
             ],
             [
-                'nombre_categoria' => 'CELULARES',
+                'nombre_categoria' => 'LAVANDERÍA',
+                'descripcion_categoria' => 'Lavadoras, Secadoras',
+                'activar_categoria' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'nombre_categoria' => 'CLIMATIZACIÓN',
+                'descripcion_categoria' => 'Aire acondicionado, ventiladores, etc',
+                'activar_categoria' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'nombre_categoria' => 'TECNOLOGÍA',
                 'descripcion_categoria' => 'Celulares, Tablets, Memorias SD/USB, Laptop, etc',
                 'activar_categoria' => true,
                 'created_at' => now(),
@@ -395,22 +464,43 @@ class DatabaseSeeder extends Seeder
                 'updated_at' => now(),
             ],
             [
-                'nombre_categoria' => 'CICLOMOTORES',
-                'descripcion_categoria' => 'Bicicletas, Motorinas, etc',
+                'nombre_categoria' => 'TRANSPORTE',
+                'descripcion_categoria' => 'Bicicletas, Motorinas, Equipos para transporte',
                 'activar_categoria' => true,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
             [
-                'nombre_categoria' => 'MISCELANEAS',
-                'descripcion_categoria' => 'Split, Plantas, Motores, Turbinas, etc',
+                'nombre_categoria' => 'FERRETERÍA',
+                'descripcion_categoria' => 'Herramientas, materiales de construcción, etc',
+                'activar_categoria' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'nombre_categoria' => 'RESPALDO DE ENERGÍA',
+                'descripcion_categoria' => 'Paneles Solares, Baterías, Cargadores Solares, etc',
                 'activar_categoria' => true,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
             [
                 'nombre_categoria' => 'ACCESORIOS',
-                'descripcion_categoria' => 'Mochilas, Adornos para el hogar',
+                'descripcion_categoria' => 'Mochilas, Carteras, Bolsos, etc',
+                'activar_categoria' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'nombre_categoria' => 'ÚTILES DEL HOGAR',
+                'descripcion_categoria' => 'Adornos para el hogar',
+                'activar_categoria' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'nombre_categoria' => 'USO PERSONAL',
+                'descripcion_categoria' => 'Aseos, Relojes, Gafas, Perfumes, etc',
                 'activar_categoria' => true,
                 'created_at' => now(),
                 'updated_at' => now(),
@@ -457,42 +547,52 @@ class DatabaseSeeder extends Seeder
         // Clientes Asociados al Sistema por default
         $clientes = [
             [
-                'nombre_cliente' => 'CLIENTE ASOCIADO MANZANILLO',
-                'tipo_cliente' => 'asociado',
+                'nombre_cliente' => 'ALBERTO CLIENTE',
+                'tipo_cliente' => 'fisico',
                 'deuda_pago_cliente' => 0,
-                'telefono_cliente' => '+53 55572430',
-                'direccion_cliente' => 'Dirección Manzanillo',
-                'ciudad_cliente' => 'Manzanillo',
+                'telefono_cliente' => '+1 5 8000001',
+                'direccion_cliente' => null,
+                'ciudad_cliente' => null,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
             [
-                'nombre_cliente' => 'CLIENTE ASOCIADO QUIVICAN',
-                'tipo_cliente' => 'asociado',
+                'nombre_cliente' => 'DESTINY CLIENTE',
+                'tipo_cliente' => 'fisico',
                 'deuda_pago_cliente' => 0,
-                'telefono_cliente' => '+53 52696901',
-                'direccion_cliente' => 'Dirección Quivicán',
-                'ciudad_cliente' => 'Quivicán',
+                'telefono_cliente' => '+53 5 8000002',
+                'direccion_cliente' => null,
+                'ciudad_cliente' => null,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
             [
-                'nombre_cliente' => 'CLIENTE ASOCIADO FLORIDA',
-                'tipo_cliente' => 'asociado',
+                'nombre_cliente' => 'JOSEITO CLIENTE',
+                'tipo_cliente' => 'fisico',
                 'deuda_pago_cliente' => 0,
-                'telefono_cliente' => '+53 56142247',
-                'direccion_cliente' => 'Dirección Florida',
-                'ciudad_cliente' => 'Florida',
+                'telefono_cliente' => '+53 5 8000003',
+                'direccion_cliente' => null,
+                'ciudad_cliente' => null,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
             [
-                'nombre_cliente' => 'CLIENTE ASOCIADO LA SALUD',
-                'tipo_cliente' => 'asociado',
+                'nombre_cliente' => 'FORTE CLIENTE',
+                'tipo_cliente' => 'fisico',
                 'deuda_pago_cliente' => 0,
-                'telefono_cliente' => '+53 50331881',
-                'direccion_cliente' => 'Dirección Havana',
-                'ciudad_cliente' => 'Ciudad Habana',
+                'telefono_cliente' => '+53 5 8000004',
+                'direccion_cliente' => null,
+                'ciudad_cliente' => null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'nombre_cliente' => 'JUAN CLIENTE',
+                'tipo_cliente' => 'fisico',
+                'deuda_pago_cliente' => 0,
+                'telefono_cliente' => '+53 5 8000005',
+                'direccion_cliente' => null,
+                'ciudad_cliente' => null,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],

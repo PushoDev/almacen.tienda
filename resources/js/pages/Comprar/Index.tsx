@@ -154,6 +154,11 @@ export default function ComprarPage() {
     const [isSearchingClientes, setIsSearchingClientes] = useState(false);
     const [clienteSelectOpen, setClienteSelectOpen] = useState(false);
 
+    // Estados para búsqueda de cuentas
+    const [cuentaSearchTerm, setCuentaSearchTerm] = useState('');
+    const [filteredCuentas, setFilteredCuentas] = useState<CuentaNegocioProps[]>([]);
+    const [cuentaSelectOpen, setCuentaSelectOpen] = useState(false);
+
     // Estados para búsqueda de almacenes
     const [almacenSearchTerm, setAlmacenSearchTerm] = useState('');
     const [filteredAlmacens, setFilteredAlmacens] = useState<AlmacenProps[]>([]);
@@ -233,6 +238,18 @@ export default function ComprarPage() {
         }
     }, [almacenSearchTerm, almacens]);
 
+    // 🔍 EFECTO PARA BÚSQUEDA EN TIEMPO REAL DE CUENTAS
+    useEffect(() => {
+        if (cuentaSearchTerm) {
+            const filtered = cuentas.filter((cuenta) =>
+                cuenta.nombre_cuenta.toLowerCase().includes(cuentaSearchTerm.toLowerCase()),
+            );
+            setFilteredCuentas(filtered);
+        } else {
+            setFilteredCuentas(cuentas);
+        }
+    }, [cuentaSearchTerm, cuentas]);
+
     // ⚡ EFECTO PARA MANTENER EL ÚLTIMO ALMACÉN SELECCIONADO
     useEffect(() => {
         if (lastSelectedAlmacenId && !tempFormData.almacen_id) {
@@ -269,6 +286,7 @@ export default function ComprarPage() {
                 setProveedors(proveedoresRes.data);
                 setCategorias(categoriasRes.data);
                 setCuentas(cuentasRes.data);
+                setFilteredCuentas(cuentasRes.data);
                 setClientes(clientesRes.data);
                 setFilteredClientes(clientesRes.data);
                 setFilteredAlmacens(almacenesRes.data);
@@ -1914,6 +1932,30 @@ export default function ComprarPage() {
                                                                 Total a cubrir:{' '}
                                                                 <span className="text-3xl font-bold">${parseFloat(calcularTotal()).toFixed(2)}</span>
                                                             </AlertDialogDescription>
+                                                            <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-emerald-100">
+                                                                <span>
+                                                                    Pagado:{' '}
+                                                                    <span className="font-semibold text-white">
+                                                                        $
+                                                                        {(
+                                                                            data.pagos.reduce((a, p) => a + p.monto, 0) +
+                                                                            data.pagos_clientes.reduce((a, p) => a + (p.monto || 0), 0)
+                                                                        ).toFixed(2)}
+                                                                    </span>
+                                                                </span>
+                                                                <span className="opacity-70">•</span>
+                                                                <span>
+                                                                    Restante:{' '}
+                                                                    <span className="font-semibold text-white">
+                                                                        $
+                                                                        {(
+                                                                            parseFloat(calcularTotal()) -
+                                                                            (data.pagos.reduce((a, p) => a + p.monto, 0) +
+                                                                                data.pagos_clientes.reduce((a, p) => a + (p.monto || 0), 0))
+                                                                        ).toFixed(2)}
+                                                                    </span>
+                                                                </span>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </AlertDialogHeader>
@@ -1939,7 +1981,9 @@ export default function ComprarPage() {
                                                                                 >
                                                                                     <span className="flex items-center gap-2">
                                                                                         <Users className="h-4 w-4" />
-                                                                                        {clienteSearchTerm || 'Buscar cliente...'}
+                                                                                        {data.pagos_clientes.length > 0
+                                                                                            ? `${data.pagos_clientes.length} cliente${data.pagos_clientes.length > 1 ? 's' : ''} seleccionado${data.pagos_clientes.length > 1 ? 's' : ''}`
+                                                                                            : 'Buscar cliente...'}
                                                                                     </span>
                                                                                     <ChevronsUpDown className="h-4 w-4 opacity-50" />
                                                                                 </Button>
@@ -2108,38 +2152,82 @@ export default function ComprarPage() {
                                                                 <FieldDescription>Selecciona las cuentas a débitar</FieldDescription>
 
                                                                 <FieldGroup className="space-y-6 pt-4">
-                                                                    <Field>
-                                                                        <Select
-                                                                            value={data.pagos.map((p) => p.cuenta_id.toString())}
-                                                                            onValueChange={(value) => {
-                                                                                const ids = Array.isArray(value)
-                                                                                    ? value.map(Number)
-                                                                                    : [Number(value)];
-                                                                                const nuevos = ids.map((id) => ({
-                                                                                    cuenta_id: id,
-                                                                                    monto: data.pagos.find((p) => p.cuenta_id === id)?.monto || 0,
-                                                                                }));
-                                                                                setData('pagos', nuevos);
-                                                                            }}
-                                                                            multiple
-                                                                        >
-                                                                            <SelectTrigger className="h-12 cursor-pointer">
-                                                                                <SelectValue placeholder="Seleccionar cuentas..." />
-                                                                            </SelectTrigger>
-                                                                            <SelectContent>
-                                                                                {cuentas.map((cuenta) => (
-                                                                                    <SelectItem key={cuenta.id} value={cuenta.id.toString()}>
-                                                                                        <div className="flex w-full justify-between">
-                                                                                            <span>{cuenta.nombre_cuenta}</span>
-                                                                                            <span className="text-muted-foreground">
-                                                                                                ${cuenta.saldo_cuenta}
-                                                                                            </span>
+                                                                <Field>
+                                                                    <Popover open={cuentaSelectOpen} onOpenChange={setCuentaSelectOpen}>
+                                                                        <PopoverTrigger asChild>
+                                                                            <Button
+                                                                                variant="outline"
+                                                                                className="h-12 w-full cursor-pointer justify-between"
+                                                                            >
+                                                                                <span className="flex items-center gap-2">
+                                                                                    <Wallet className="h-4 w-4" />
+                                                                                    {data.pagos.length > 0
+                                                                                        ? `${data.pagos.length} cuenta${data.pagos.length > 1 ? 's' : ''} seleccionada${data.pagos.length > 1 ? 's' : ''}`
+                                                                                        : 'Buscar cuentas...'}
+                                                                                </span>
+                                                                                <ChevronsUpDown className="h-4 w-4 opacity-50" />
+                                                                            </Button>
+                                                                        </PopoverTrigger>
+                                                                        <PopoverContent className="w-full p-0" align="start">
+                                                                            <div className="space-y-3 p-3">
+                                                                                <Input
+                                                                                    placeholder="Buscar cuenta..."
+                                                                                    value={cuentaSearchTerm}
+                                                                                    onChange={(e) => setCuentaSearchTerm(e.target.value)}
+                                                                                    autoFocus
+                                                                                />
+                                                                                <ScrollArea className="h-64 rounded-md border">
+                                                                                    {filteredCuentas.length > 0 ? (
+                                                                                        filteredCuentas.map((cuenta) => {
+                                                                                            const seleccionado = data.pagos.some(
+                                                                                                (p) => p.cuenta_id === cuenta.id,
+                                                                                            );
+                                                                                            return (
+                                                                                                <div
+                                                                                                    key={cuenta.id}
+                                                                                                    className={cn(
+                                                                                                        'flex cursor-pointer items-center justify-between rounded-lg px-4 py-3 transition-colors',
+                                                                                                        seleccionado
+                                                                                                            ? 'bg-primary/10'
+                                                                                                            : 'hover:bg-accent',
+                                                                                                    )}
+                                                                                                    onClick={() => {
+                                                                                                        if (!seleccionado) {
+                                                                                                            setData('pagos', [
+                                                                                                                ...data.pagos,
+                                                                                                                { cuenta_id: cuenta.id, monto: 0 },
+                                                                                                            ]);
+                                                                                                        }
+                                                                                                        setCuentaSelectOpen(false);
+                                                                                                        setCuentaSearchTerm('');
+                                                                                                    }}
+                                                                                                >
+                                                                                                    <div className="flex items-center gap-3">
+                                                                                                        <div className="bg-primary/10 text-primary flex h-10 w-10 items-center justify-center rounded-full font-bold">
+                                                                                                            {cuenta.nombre_cuenta[0]}
+                                                                                                        </div>
+                                                                                                        <div>
+                                                                                                            <p className="font-medium">
+                                                                                                                {cuenta.nombre_cuenta}
+                                                                                                            </p>
+                                                                                                            <p className="text-muted-foreground text-sm">
+                                                                                                                Saldo: ${cuenta.saldo_cuenta}
+                                                                                                            </p>
+                                                                                                        </div>
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            );
+                                                                                        })
+                                                                                    ) : (
+                                                                                        <div className="text-muted-foreground py-8 text-center">
+                                                                                            No hay cuentas
                                                                                         </div>
-                                                                                    </SelectItem>
-                                                                                ))}
-                                                                            </SelectContent>
-                                                                        </Select>
-                                                                    </Field>
+                                                                                    )}
+                                                                                </ScrollArea>
+                                                                            </div>
+                                                                        </PopoverContent>
+                                                                    </Popover>
+                                                                </Field>
 
                                                                     {data.pagos.length > 0 && (
                                                                         <div className="space-y-4">

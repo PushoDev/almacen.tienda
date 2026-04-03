@@ -181,6 +181,22 @@ class CuentaController extends Controller
      */
     public function update(Request $request, Cuenta $cuenta)
     {
+        $saldoActual = (float) $cuenta->saldo_cuenta;
+        $saldoNuevo = $request->has('saldo_cuenta') ? (float) $request->saldo_cuenta : $saldoActual;
+        $saldoCambio = $request->has('saldo_cuenta') && $saldoNuevo !== $saldoActual;
+
+        if ($saldoCambio && auth()->user()->role !== 'admin') {
+            return back()->withErrors([
+                'saldo_cuenta' => 'Solo el administrador puede modificar el saldo de la cuenta.',
+            ]);
+        }
+
+        if ($saldoCambio && $request->input('security_password') !== 'glorietashop') {
+            return back()->withErrors([
+                'security_password' => 'Contraseña de seguridad incorrecta.',
+            ]);
+        }
+
         // Validamos los datos del formulario
         $validated = $request->validate([
             'nombre_cuenta' => [
@@ -202,7 +218,7 @@ class CuentaController extends Controller
         $cuenta->update([
             'nombre_cuenta' => $validated['nombre_cuenta'],
             'tipo' => $validated['tipo'],
-            'saldo_cuenta' => $validated['saldo_cuenta'] ?? $cuenta->saldo_cuenta,
+            'saldo_cuenta' => $saldoCambio ? $validated['saldo_cuenta'] : $cuenta->saldo_cuenta,
             'moneda_id' => $validated['moneda_id'], // Usamos moneda_id en lugar de tipo_moneda
             'deuda' => $validated['deuda'] ?? $cuenta->deuda,
             'tipo_cuenta' => $validated['tipo_cuenta'],
