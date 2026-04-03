@@ -11,6 +11,7 @@ import {
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -18,8 +19,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { Edit3, Eye, FileText, HousePlus, IdCard, Mail, MapPin, Phone, Sheet, Trash2, User, Warehouse } from 'lucide-react';
-import { useState } from 'react';
+import { Edit3, Eye, FileText, HousePlus, IdCard, Mail, MapPin, Phone, Search, Sheet, Trash2, User, Warehouse } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -46,17 +47,43 @@ export default function AlmacenesPage({ almacenes }: { almacenes: AlmacenProps[]
         });
     };
 
+    // Filtros y búsqueda
+    const [filtroTipo, setFiltroTipo] = useState<string>('');
+    const [busqueda, setBusqueda] = useState<string>('');
+
     // Paginación
     const [paginaActual, setPaginaActual] = useState(1);
     const elementosPorPagina = 10;
     const indiceUltimoElemento = paginaActual * elementosPorPagina;
     const indicePrimerElemento = indiceUltimoElemento - elementosPorPagina;
 
+    // Filtrar almacenes
+    const almacenesFiltrados = useMemo(() => {
+        return almacenes.filter((almacen) => {
+            const coincideTipo = !filtroTipo || almacen.tipo_almacen === filtroTipo;
+            const texto = busqueda.trim().toLowerCase();
+            const coincideBusqueda =
+                !texto ||
+                almacen.nombre_almacen?.toLowerCase().includes(texto) ||
+                almacen.telefono_almacen?.toLowerCase().includes(texto) ||
+                almacen.correo_almacen?.toLowerCase().includes(texto) ||
+                almacen.ciudad_almacen?.toLowerCase().includes(texto) ||
+                almacen.provincia_almacen?.toLowerCase().includes(texto) ||
+                almacen.notas_almacen?.toLowerCase().includes(texto) ||
+                almacen.nombre_responsable?.toLowerCase().includes(texto) ||
+                almacen.apellido_responsable?.toLowerCase().includes(texto) ||
+                almacen.carnet_responsable?.toLowerCase().includes(texto) ||
+                almacen.telefono_responsable?.toLowerCase().includes(texto);
+
+            return coincideTipo && coincideBusqueda;
+        });
+    }, [almacenes, filtroTipo, busqueda]);
+
     // Obtener los almacenes a mostrar en la página actual
-    const almacenesAmostrar = almacenes.slice(indicePrimerElemento, indiceUltimoElemento);
+    const almacenesAmostrar = almacenesFiltrados.slice(indicePrimerElemento, indiceUltimoElemento);
 
     // Calcular el número total de páginas
-    const totalPaginas = Math.ceil(almacenes.length / elementosPorPagina);
+    const totalPaginas = Math.ceil(almacenesFiltrados.length / elementosPorPagina);
 
     // Función para obtener el texto y estilos del badge según el tipo de almacén
     const getBadge = (tipo: string) => {
@@ -207,38 +234,80 @@ export default function AlmacenesPage({ almacenes }: { almacenes: AlmacenProps[]
 
                 <Separator className="col-span-4" />
 
-                {/* Acciones */}
-                <div className="flex justify-end gap-2">
-                    {/* Botón Crear nuevo */}
-                    <Link href={route('almacenes.create')}>
-                        <Button variant="default" className="flex cursor-pointer items-center gap-2">
-                            <HousePlus size={16} />
-                            Crear Nuevo
-                        </Button>
-                    </Link>
+                {/* Filtros y Acciones */}
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    {/* Búsqueda y Filtros */}
+                    <div className="flex flex-1 flex-col gap-4 sm:flex-row">
+                        <div className="relative flex-1">
+                            <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform" />
+                            <Input
+                                placeholder="Buscar por nombre, teléfono, correo o ubicación..."
+                                value={busqueda}
+                                onChange={(e) => {
+                                    setBusqueda(e.target.value);
+                                    setPaginaActual(1);
+                                }}
+                                className="pl-10"
+                            />
+                        </div>
 
-                    {/* Botón Editar */}
-                    <Link href="#">
-                        <Button variant="outline" className="hover:bg-chart-5 flex cursor-pointer items-center gap-2">
-                            <FileText size={16} />
-                            Exportar PDF
-                        </Button>
-                    </Link>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <select
+                                    value={filtroTipo}
+                                    onChange={(e) => {
+                                        setFiltroTipo(e.target.value);
+                                        setPaginaActual(1);
+                                    }}
+                                    className="border-input bg-background ring-offset-background focus:ring-ring h-10 w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:ring-offset-2 focus:outline-none sm:w-52"
+                                >
+                                    <option value="">Todos los tipos</option>
+                                    <option value="almacen">Almacén</option>
+                                    <option value="punto_venta">Punto de Venta</option>
+                                    <option value="transportacion">Transportación</option>
+                                </select>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>Filtrar por tipo de almacén</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </div>
 
-                    {/* Botón Regresar */}
-                    <Link href="#">
-                        <Button variant="secondary" className="hover:bg-chart-2 flex cursor-pointer items-center gap-2">
-                            <Sheet size={16} />
-                            Exportar Excel
-                        </Button>
-                    </Link>
+                    {/* Botones de Acción */}
+                    <div className="flex gap-2">
+                        <Link href={route('almacenes.create')}>
+                            <Button variant="default" className="flex cursor-pointer items-center gap-2">
+                                <HousePlus size={16} />
+                                Crear Nuevo
+                            </Button>
+                        </Link>
+
+                        <Link href="#">
+                            <Button variant="outline" className="hover:bg-chart-5 flex cursor-pointer items-center gap-2">
+                                <FileText size={16} />
+                                Exportar PDF
+                            </Button>
+                        </Link>
+
+                        <Link href="#">
+                            <Button variant="secondary" className="hover:bg-chart-2 flex cursor-pointer items-center gap-2">
+                                <Sheet size={16} />
+                                Exportar Excel
+                            </Button>
+                        </Link>
+                    </div>
                 </div>
 
                 {/* Tabla de Almacenes */}
                 <TooltipProvider>
                     <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
                         <Table>
-                            <TableCaption>Lista de Almacenes</TableCaption>
+                            <TableCaption>
+                                {almacenesFiltrados.length} almacén{almacenesFiltrados.length !== 1 ? 'es' : ''} encontrado
+                                {almacenesFiltrados.length !== 1 ? 's' : ''}
+                                {busqueda && ` para "${busqueda}"`}
+                                {filtroTipo && ` (tipo: ${getBadge(filtroTipo).text.toLowerCase()})`}
+                            </TableCaption>
                             <TableHeader>
                                 <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
                                     <TableHead className="w-[100px]">Nombre</TableHead>
@@ -374,7 +443,7 @@ export default function AlmacenesPage({ almacenes }: { almacenes: AlmacenProps[]
                                     <TableCell colSpan={4} className="bg-gray-700">
                                         Total de Almacenes
                                     </TableCell>
-                                    <TableCell className="bg-gray-500 text-center">{almacenes.length}</TableCell>
+                                    <TableCell className="bg-gray-500 text-center">{almacenesFiltrados.length}</TableCell>
                                 </TableRow>
                             </TableFooter>
                         </Table>

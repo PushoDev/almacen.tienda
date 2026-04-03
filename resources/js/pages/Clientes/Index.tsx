@@ -282,7 +282,7 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                                     setFiltroTipo(e.target.value);
                                                     setPaginaActual(1);
                                                 }}
-                                                className="border-input bg-background ring-offset-background focus:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:ring-offset-2 focus:outline-none"
+                                                className="border-input bg-background ring-offset-background focus:ring-ring h-10 w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:ring-offset-2 focus:outline-none sm:w-52"
                                             >
                                                 <option value="">Todos los tipos</option>
                                                 <option value="asociado">Asociados</option>
