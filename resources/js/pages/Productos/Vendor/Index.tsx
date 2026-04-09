@@ -48,6 +48,7 @@ interface AlmacenData {
 interface PageProps {
     almacenes: AlmacenData[];
     meta: { total_almacenes: number; role_usuario: string };
+    canViewSensitiveData?: boolean;
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -56,7 +57,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Precios por Almacén', href: '#' },
 ];
 
-export default function VendedorPage({ almacenes: initialAlmacenes, meta }: PageProps) {
+export default function VendedorPage({ almacenes: initialAlmacenes, meta, canViewSensitiveData = false }: PageProps) {
     const [almacenes, setAlmacenes] = useState<AlmacenData[]>(initialAlmacenes);
     const [selectedAlmacenId, setSelectedAlmacenId] = useState<number | null>(initialAlmacenes.length > 0 ? initialAlmacenes[0].almacen_id : null);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -165,10 +166,10 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                         productos: almacen.productos.map((p) =>
                             p.id === selectedProduct.id && p.almacen_id === selectedProduct.almacen_id
                                 ? {
-                                    ...p,
-                                    precio_venta: parsedPrice,
-                                    ganancia: parsedPrice - p.precio_compra,
-                                }
+                                      ...p,
+                                      precio_venta: parsedPrice,
+                                      ganancia: parsedPrice - p.precio_compra,
+                                  }
                                 : p,
                         ),
                     };
@@ -320,8 +321,8 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                             <div className="flex flex-col items-start">
                                                 <span className="font-medium">{almacen.nombre}</span>
                                                 <span className="text-muted-foreground text-xs">
-                                                    {almacen.totalProductos} productos • {almacen.totalStock} unidades •{' '}
-                                                    {formatCurrency(almacen.valorTotal)}
+                                                    {almacen.totalProductos} productos • {almacen.totalStock} unidades
+                                                    {canViewSensitiveData && ` • ${formatCurrency(almacen.valorTotal)}`}
                                                 </span>
                                             </div>
                                         </SelectItem>
@@ -378,10 +379,10 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                         <TableHead>Modelo</TableHead>
                                         <TableHead>Capacidad</TableHead>
                                         <TableHead>Categoría</TableHead>
-                                        <TableHead>Precio Compra</TableHead>
+                                        {canViewSensitiveData && <TableHead>Precio Compra</TableHead>}
                                         <TableHead>Stock</TableHead>
                                         <TableHead>Precio Venta</TableHead>
-                                        <TableHead>Ganancia</TableHead>
+                                        {canViewSensitiveData && <TableHead>Ganancia</TableHead>}
                                         <TableHead className="text-center">Acciones</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -421,10 +422,14 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                                                     <span className="text-muted-foreground">Categoría:</span>
                                                                     <span className="font-medium">{producto.categoria}</span>
 
-                                                                    <span className="text-muted-foreground">P. Compra:</span>
-                                                                    <span className="text-sidebar font-medium">
-                                                                        {formatCurrency(producto.precio_compra)}
-                                                                    </span>
+                                                                    {canViewSensitiveData && (
+                                                                        <>
+                                                                            <span className="text-muted-foreground">P. Compra:</span>
+                                                                            <span className="text-sidebar font-medium">
+                                                                                {formatCurrency(producto.precio_compra)}
+                                                                            </span>
+                                                                        </>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         </TooltipContent>
@@ -435,25 +440,27 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                             <TableCell>{producto.modelo_producto || '-'}</TableCell>
                                             <TableCell>{producto.capacidad_producto || '-'}</TableCell>
                                             <TableCell>{producto.categoria || 'Sin categoría'}</TableCell>
-                                            <TableCell>{formatCurrency(producto.precio_compra)}</TableCell>
+                                            {canViewSensitiveData && <TableCell>{formatCurrency(producto.precio_compra)}</TableCell>}
                                             <TableCell>
                                                 <Badge variant="outline">{producto.stock_almacen}</Badge>
                                             </TableCell>
                                             <TableCell className={cn(producto.precio_venta === null ? 'text-amber-400 italic' : 'text-amber-800')}>
                                                 {formatCurrency(producto.precio_venta)}
                                             </TableCell>
-                                            <TableCell
-                                                className={cn(
-                                                    'font-medium',
-                                                    producto.ganancia === null
-                                                        ? 'text-gray-400 italic'
-                                                        : producto.ganancia >= 0
-                                                            ? 'text-green-600'
-                                                            : 'text-red-600',
-                                                )}
-                                            >
-                                                {formatCurrency(producto.ganancia)}
-                                            </TableCell>
+                                            {canViewSensitiveData && (
+                                                <TableCell
+                                                    className={cn(
+                                                        'font-medium',
+                                                        producto.ganancia === null
+                                                            ? 'text-gray-400 italic'
+                                                            : producto.ganancia >= 0
+                                                              ? 'text-green-600'
+                                                              : 'text-red-600',
+                                                    )}
+                                                >
+                                                    {formatCurrency(producto.ganancia)}
+                                                </TableCell>
+                                            )}
                                             {/* 🆕 COLUMNA DE ACCIONES ACTUALIZADA */}
                                             <TableCell className="text-center">
                                                 <div className="flex items-center justify-center gap-1">
@@ -559,21 +566,25 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                         </Badge>
                                     </div>
                                     <div className="border-border/50 flex gap-4 border-t pt-2">
-                                        <div>
-                                            <p className="text-muted-foreground text-xs">Costo Base</p>
-                                            <p className="font-medium text-amber-700">{formatCurrency(selectedProduct.precio_compra)}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-muted-foreground text-xs">Ganancia Actual</p>
-                                            <p
-                                                className={cn(
-                                                    'font-medium',
-                                                    (selectedProduct.ganancia || 0) >= 0 ? 'text-success' : 'text-destructive',
-                                                )}
-                                            >
-                                                {formatCurrency(selectedProduct.ganancia)}
-                                            </p>
-                                        </div>
+                                        {canViewSensitiveData && (
+                                            <>
+                                                <div>
+                                                    <p className="text-muted-foreground text-xs">Costo Base</p>
+                                                    <p className="font-medium text-amber-700">{formatCurrency(selectedProduct.precio_compra)}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-muted-foreground text-xs">Ganancia Actual</p>
+                                                    <p
+                                                        className={cn(
+                                                            'font-medium',
+                                                            (selectedProduct.ganancia || 0) >= 0 ? 'text-success' : 'text-destructive',
+                                                        )}
+                                                    >
+                                                        {formatCurrency(selectedProduct.ganancia)}
+                                                    </p>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
 
@@ -627,10 +638,12 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                             />
                                         </div>
                                         <div className="flex items-center justify-between px-1">
-                                            <p className="text-muted-foreground text-[10px]">
-                                                Mínimo sugerido: {formatCurrency(selectedProduct.precio_compra * 1.01)}
-                                            </p>
-                                            {newPrice && !isNaN(parseFloat(newPrice)) && (
+                                            {canViewSensitiveData && (
+                                                <p className="text-muted-foreground text-[10px]">
+                                                    Mínimo sugerido: {formatCurrency(selectedProduct.precio_compra * 1.01)}
+                                                </p>
+                                            )}
+                                            {canViewSensitiveData && newPrice && !isNaN(parseFloat(newPrice)) && (
                                                 <p
                                                     className={cn(
                                                         'text-xs font-medium',
@@ -742,7 +755,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta }: Page
                                             <p className="text-lg font-bold text-purple-900 dark:text-purple-100">
                                                 {formatCurrency(
                                                     preciosVendedores.precios.reduce((sum: number, p: any) => sum + p.precio_venta, 0) /
-                                                    preciosVendedores.precios.length,
+                                                        preciosVendedores.precios.length,
                                                 )}
                                             </p>
                                         </div>
