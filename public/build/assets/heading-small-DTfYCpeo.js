@@ -1,1 +1,0 @@
-import{j as e}from"./app-A05AfG3_.js";function a({title:s,description:t}){return e.jsxs("header",{children:[e.jsx("h3",{className:"text-sidebar-accent mb-0.5 font-medium",children:s}),t&&e.jsx("p",{className:"text-muted-foreground text-sm",children:t})]})}export{a as H};
