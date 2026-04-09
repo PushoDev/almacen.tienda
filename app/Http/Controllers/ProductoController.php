@@ -109,6 +109,7 @@ class ProductoController extends Controller
         });
 
         $canViewStockStats = in_array($user->role, ['admin', 'moderador']);
+        $canViewSensitiveData = in_array($user->role, ['admin', 'moderador']);
 
         return Inertia::render('Productos/Index', [
             'productos' => $paginatedProducts,
@@ -117,6 +118,7 @@ class ProductoController extends Controller
             'filters' => $request->only(['search', 'categoria_id', 'almacen_id', 'stock_bajo']),
             'sort' => ['field' => $sortField, 'direction' => $sortDirection],
             'canViewStockStats' => $canViewStockStats,
+            'canViewSensitiveData' => $canViewSensitiveData,
         ]);
     }
 

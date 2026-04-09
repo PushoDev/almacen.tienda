@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { type NavItem } from '@/types';
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import { Bolt } from 'lucide-react';
 import { type PropsWithChildren } from 'react';
 
@@ -12,31 +12,35 @@ const sidebarNavItems: NavItem[] = [
         title: 'Perfil',
         href: '/settings/profile',
         icon: null,
+        roles: ['admin', 'moderador', 'vendedor'],
     },
     {
         title: 'Contraseña',
         href: '/settings/password',
         icon: null,
+        roles: ['admin', 'moderador', 'vendedor'],
     },
     {
         title: 'Apariencia',
         href: '/settings/appearance',
         icon: null,
+        roles: ['admin', 'moderador', 'vendedor'],
     },
     {
         title: 'Copia de Seguridad',
         href: '#',
         icon: null,
+        roles: ['admin'],
     },
 ];
 
 export default function SettingsLayout({ children }: PropsWithChildren) {
-    // When server-side rendering, we only render the layout on the client...
-    if (typeof window === 'undefined') {
-        return null;
-    }
+    const { props } = usePage();
+    const userRole = props.auth?.user?.role as 'admin' | 'moderador' | 'vendedor' | undefined;
 
     const currentPath = window.location.pathname;
+
+    const visibleItems = sidebarNavItems.filter((item) => !item.roles || (userRole && item.roles.includes(userRole)));
 
     return (
         <div className="px-4 py-6">
@@ -50,7 +54,7 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
             <div className="flex flex-col space-y-8 lg:flex-row lg:space-y-0 lg:space-x-12">
                 <aside className="w-full max-w-xl lg:w-48">
                     <nav className="flex flex-col space-y-1 space-x-0">
-                        {sidebarNavItems.map((item, index) => (
+                        {visibleItems.map((item, index) => (
                             <Button
                                 key={`${item.href}-${index}`}
                                 size="sm"
