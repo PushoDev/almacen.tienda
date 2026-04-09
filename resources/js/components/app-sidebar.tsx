@@ -120,21 +120,9 @@ const allNavItems: NavItem[] = [
         icon: Contact,
         roles: ['admin'],
     },
-    {
-        title: 'Seguimientos',
-        href: '#',
-        icon: Cctv,
-        roles: ['admin'],
-    },
 ];
 
 const footerNavItems: NavItem[] = [
-    // {
-    //     title: 'Chat.POS',
-    //     href: '#',
-    //     icon: MessageSquare,
-    //     roles: ['admin', 'moderador', 'vendedor'],
-    // },
     {
         title: 'Documentación',
         href: 'https://documentacion-glorietapos.vercel.app/',
