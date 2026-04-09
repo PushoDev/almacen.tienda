@@ -189,10 +189,11 @@ function ImportModal({ isOpen, onClose, onImport, almacenes }: ImportModalProps)
                     <div className="space-y-2">
                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">📄 Archivo Excel</label>
                         <div
-                            className={`cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-all ${isDragging
-                                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                                : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700/30'
-                                } ${isImporting ? 'pointer-events-none opacity-50' : ''}`}
+                            className={`cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-all ${
+                                isDragging
+                                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                                    : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700/30'
+                            } ${isImporting ? 'pointer-events-none opacity-50' : ''}`}
                             onDragOver={handleDragOver}
                             onDragLeave={handleDragLeave}
                             onDrop={handleDrop}
@@ -296,6 +297,7 @@ interface ProductosPageProps {
     filters?: ProductosFilters;
     sort?: ProductosSort;
     canViewStockStats?: boolean;
+    canViewSensitiveData?: boolean;
 }
 
 const defaultPaginator = {
@@ -313,6 +315,7 @@ export default function ProductosPage({
     filters = {},
     sort = { field: 'nombre_producto', direction: 'asc' },
     canViewStockStats = false,
+    canViewSensitiveData = false,
 }: ProductosPageProps) {
     // Estados para gestión de stock
     const [searchTerm, setSearchTerm] = useState(filters.search || '');
@@ -548,16 +551,18 @@ export default function ProductosPage({
                     </div>
 
                     {/* Widget: Valor Total del Inventario */}
-                    <div className="rounded-lg border border-green-500/20 bg-green-50/50 p-6 shadow-sm dark:bg-green-900/20">
-                        <div className="flex items-center justify-between">
-                            <p className="text-sm font-medium text-green-600 dark:text-green-400">Valor Total del Inventario</p>
-                            <DollarSign className="h-5 w-5 text-green-500" />
+                    {canViewSensitiveData && (
+                        <div className="rounded-lg border border-green-500/20 bg-green-50/50 p-6 shadow-sm dark:bg-green-900/20">
+                            <div className="flex items-center justify-between">
+                                <p className="text-sm font-medium text-green-600 dark:text-green-400">Valor Total del Inventario</p>
+                                <DollarSign className="h-5 w-5 text-green-500" />
+                            </div>
+                            <p className="mt-2 text-3xl font-bold text-green-900 dark:text-green-200">
+                                ${valorTotalInventario.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </p>
+                            <p className="mt-1 text-xs text-green-500 dark:text-green-400">Costo total de todos los productos</p>
                         </div>
-                        <p className="mt-2 text-3xl font-bold text-green-900 dark:text-green-200">
-                            ${valorTotalInventario.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </p>
-                        <p className="mt-1 text-xs text-green-500 dark:text-green-400">Costo total de todos los productos</p>
-                    </div>
+                    )}
 
                     {/* Widget: Productos con Stock Bajo */}
                     <div className="rounded-lg border border-amber-500/20 bg-amber-50/50 p-6 shadow-sm dark:bg-amber-900/20">
@@ -694,13 +699,15 @@ export default function ProductosPage({
                                 <TableHead>Capacidad</TableHead>
                                 <TableHead>Código</TableHead>
                                 <TableHead>Categoría</TableHead>
-                                <TableHead className="cursor-pointer" onClick={() => handleSort('precio_compra_producto')}>
-                                    Precio {sort.field === 'precio_compra_producto' && (sort.direction === 'asc' ? '↑' : '↓')}
-                                </TableHead>
+                                {canViewSensitiveData && (
+                                    <TableHead className="cursor-pointer" onClick={() => handleSort('precio_compra_producto')}>
+                                        Precio {sort.field === 'precio_compra_producto' && (sort.direction === 'asc' ? '↑' : '↓')}
+                                    </TableHead>
+                                )}
                                 <TableHead className="cursor-pointer" onClick={() => handleSort('cantidad_total')}>
                                     Cantidad {sort.field === 'cantidad_total' && (sort.direction === 'asc' ? '↑' : '↓')}
                                 </TableHead>
-                                <TableHead>Importe</TableHead>
+                                {canViewSensitiveData && <TableHead>Importe</TableHead>}
                                 <TableHead>Imagen</TableHead>
                                 <TableHead className="text-right">Acciones</TableHead>
                             </TableRow>
@@ -741,12 +748,14 @@ export default function ProductosPage({
                                                 <span>{producto.categoria}</span>
                                             </div>
                                         </TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center gap-2">
-                                                <Wallet size={14} className="shrink-0 text-emerald-500" />
-                                                <span>${producto.precio_compra_producto.toFixed(2)}</span>
-                                            </div>
-                                        </TableCell>
+                                        {canViewSensitiveData && (
+                                            <TableCell>
+                                                <div className="flex items-center gap-2">
+                                                    <Wallet size={14} className="shrink-0 text-emerald-500" />
+                                                    <span>${producto.precio_compra_producto.toFixed(2)}</span>
+                                                </div>
+                                            </TableCell>
+                                        )}
                                         <TableCell>
                                             <div className="flex items-center gap-2">
                                                 <Hash size={14} className="shrink-0 text-blue-500" />
@@ -767,12 +776,14 @@ export default function ProductosPage({
                                                 )}
                                             </div>
                                         </TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center gap-2">
-                                                <DollarSign size={14} className="shrink-0 text-emerald-500" />
-                                                <span>${(producto.precio_compra_producto * producto.cantidad_total).toFixed(2)}</span>
-                                            </div>
-                                        </TableCell>
+                                        {canViewSensitiveData && (
+                                            <TableCell>
+                                                <div className="flex items-center gap-2">
+                                                    <DollarSign size={14} className="shrink-0 text-emerald-500" />
+                                                    <span>${(producto.precio_compra_producto * producto.cantidad_total).toFixed(2)}</span>
+                                                </div>
+                                            </TableCell>
+                                        )}
                                         <TableCell>
                                             {producto.imagen_url ? (
                                                 <img
@@ -857,9 +868,14 @@ export default function ProductosPage({
                                 <TableCell className="bg-sidebar-accent text-center font-bold">
                                     {productosData.reduce((sum, p) => sum + p.cantidad_total, 0)}
                                 </TableCell>
-                                <TableCell colSpan={4} className="bg-sidebar-accent text-right font-bold">
-                                    Valor Total: ${productosData.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0).toFixed(2)}
-                                </TableCell>
+                                {canViewSensitiveData ? (
+                                    <TableCell colSpan={4} className="bg-sidebar-accent text-right font-bold">
+                                        Valor Total: $
+                                        {productosData.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0).toFixed(2)}
+                                    </TableCell>
+                                ) : (
+                                    <TableCell colSpan={4} className="bg-sidebar-accent"></TableCell>
+                                )}
                             </TableRow>
                         </TableFooter>
                     </Table>
@@ -897,10 +913,10 @@ export default function ProductosPage({
         </AppLayout>
     );
 }
-    const renderPaginationLabel = (label: string) => {
-        if (!label) return '';
-        const normalized = label.toLowerCase();
-        if (normalized.includes('pagination.previous') || normalized.includes('previous')) return '«';
-        if (normalized.includes('pagination.next') || normalized.includes('next')) return '»';
-        return label.replace('&laquo;', '«').replace('&raquo;', '»');
-    };
+const renderPaginationLabel = (label: string) => {
+    if (!label) return '';
+    const normalized = label.toLowerCase();
+    if (normalized.includes('pagination.previous') || normalized.includes('previous')) return '«';
+    if (normalized.includes('pagination.next') || normalized.includes('next')) return '»';
+    return label.replace('&laquo;', '«').replace('&raquo;', '»');
+};
