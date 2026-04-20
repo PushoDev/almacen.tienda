@@ -685,10 +685,6 @@ export default function ProductosPage({
                 {/* Tabla de Productos */}
                 <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
                     <Table>
-                        <TableCaption>
-                            Lista de Productos {soloStockBajo && '(Solo productos con stock bajo)'} - Mostrando {productos.from} a {productos.to} de{' '}
-                            {productos.total} productos
-                        </TableCaption>
                         <TableHeader>
                             <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
                                 <TableHead className="w-[200px] cursor-pointer" onClick={() => handleSort('nombre_producto')}>

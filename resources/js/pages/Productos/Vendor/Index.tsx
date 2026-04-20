@@ -223,9 +223,11 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
     // Filtrar y paginar productos del almacén seleccionado
     const filteredProducts = productsInAlmacen.filter(
         (producto) =>
-            producto.nombre_producto.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            producto.marca_producto.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            producto.categoria.toLowerCase().includes(searchTerm.toLowerCase()),
+            (producto.nombre_producto || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (producto.marca_producto || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (producto.categoria || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (producto.modelo_producto || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (producto.capacidad_producto || '').toLowerCase().includes(searchTerm.toLowerCase()),
     );
 
     const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
