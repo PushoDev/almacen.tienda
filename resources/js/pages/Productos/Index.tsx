@@ -14,24 +14,22 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
-import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { ProductosFilters, ProductosPaginados, ProductosSort, type BreadcrumbItem } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import {
     AlertTriangle,
     CloudUpload,
-    CopyX,
     DollarSign,
     Download,
     Edit3,
     Eye,
     FileText,
     Filter,
-    Hash,
     Package,
     Package2,
-    QrCode,
     RefreshCw,
     Search,
     Trash2,
@@ -682,153 +680,169 @@ export default function ProductosPage({
                     </div>
                 </div>
 
-                {/* Tabla de Productos */}
-                <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
+                {/* Tabla de Productos - Responsive sin scroll horizontal */}
+                <div className="border-sidebar-border/70 dark:border-sidebar-border relative w-full overflow-auto rounded-xl border">
                     <Table>
                         <TableHeader>
                             <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
-                                <TableHead className="w-[200px] cursor-pointer" onClick={() => handleSort('nombre_producto')}>
+                                <TableHead className="w-[180px] cursor-pointer whitespace-nowrap" onClick={() => handleSort('nombre_producto')}>
                                     Nombre {sort.field === 'nombre_producto' && (sort.direction === 'asc' ? '↑' : '↓')}
                                 </TableHead>
-                                <TableHead>Marca</TableHead>
-                                <TableHead>Modelo</TableHead>
-                                <TableHead>Capacidad</TableHead>
-                                <TableHead>Código</TableHead>
-                                <TableHead>Categoría</TableHead>
+                                <TableHead className="whitespace-nowrap">Marca</TableHead>
+                                <TableHead className="whitespace-nowrap">Modelo</TableHead>
+                                <TableHead className="whitespace-nowrap">Capacidad</TableHead>
+                                <TableHead className="whitespace-nowrap">Código</TableHead>
+                                <TableHead className="whitespace-nowrap">Categoría</TableHead>
                                 {canViewSensitiveData && (
-                                    <TableHead className="cursor-pointer" onClick={() => handleSort('precio_compra_producto')}>
+                                    <TableHead className="cursor-pointer whitespace-nowrap" onClick={() => handleSort('precio_compra_producto')}>
                                         Precio {sort.field === 'precio_compra_producto' && (sort.direction === 'asc' ? '↑' : '↓')}
                                     </TableHead>
                                 )}
-                                <TableHead className="cursor-pointer" onClick={() => handleSort('cantidad_total')}>
-                                    Cantidad {sort.field === 'cantidad_total' && (sort.direction === 'asc' ? '↑' : '↓')}
+                                <TableHead className="cursor-pointer whitespace-nowrap" onClick={() => handleSort('cantidad_total')}>
+                                    Cant {sort.field === 'cantidad_total' && (sort.direction === 'asc' ? '↑' : '↓')}
                                 </TableHead>
-                                {canViewSensitiveData && <TableHead>Importe</TableHead>}
-                                <TableHead>Imagen</TableHead>
-                                <TableHead className="text-right">Acciones</TableHead>
+                                {canViewSensitiveData && <TableHead className="whitespace-nowrap">Importe</TableHead>}
+                                <TableHead className="whitespace-nowrap">Img</TableHead>
+                                <TableHead className="text-right whitespace-nowrap">Acciones</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {productosData.map((producto) => {
                                 const isStockBajo = producto.stock_bajo;
+                                const productoCompleto = `${producto.nombre_producto}\nMarca: ${producto.marca_producto || 'Sin marca'}\nModelo: ${producto.modelo_producto || 'N/A'}\nCapacidad: ${producto.capacidad_producto || '-'}\nCategoría: ${producto.categoria}\nCódigo: ${producto.codigo_producto}`;
 
                                 return (
                                     <TableRow
                                         key={producto.id}
                                         className={isStockBajo ? 'animate-pulse border-l-4 border-red-500 bg-red-100 dark:bg-red-950/50' : ''}
                                     >
-                                        <TableCell>
-                                            <div className="flex items-center gap-2">
-                                                <Package size={14} className="text-primary shrink-0" />
-                                                <div>
-                                                    <span className="text-primary font-medium">{producto.nombre_producto}</span>
-                                                </div>
-                                            </div>
+                                        <TableCell className="max-w-[180px]">
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <div className="flex cursor-help items-center gap-2">
+                                                        <Package size={14} className="text-primary shrink-0" />
+                                                        <span className="text-primary truncate font-medium">
+                                                            {producto.nombre_producto.length > 25
+                                                                ? producto.nombre_producto.substring(0, 25) + '...'
+                                                                : producto.nombre_producto}
+                                                        </span>
+                                                    </div>
+                                                </TooltipTrigger>
+                                                <TooltipContent className="max-w-xs text-left whitespace-pre-line">
+                                                    <p className="font-semibold">{producto.nombre_producto}</p>
+                                                    <p className="text-muted-foreground mt-1 text-xs">
+                                                        {producto.marca_producto || 'Sin marca'} - {producto.modelo_producto || 'N/A'}
+                                                    </p>
+                                                    <p className="text-muted-foreground text-xs">
+                                                        {producto.capacidad_producto || '-'} | {producto.categoria}
+                                                    </p>
+                                                    <p className="text-muted-foreground mt-1 font-mono text-xs">{producto.codigo_producto}</p>
+                                                </TooltipContent>
+                                            </Tooltip>
                                         </TableCell>
                                         <TableCell>
-                                            <Badge variant="outline" className="font-mono uppercase">
-                                                {producto.marca_producto || 'Sin marca'}
+                                            <Badge variant="secondary" className="h-5 px-1.5 py-0 text-[10px] font-normal">
+                                                {producto.marca_producto?.substring(0, 10) || 'Sin marca'}
                                             </Badge>
                                         </TableCell>
-                                        <TableCell>{producto.modelo_producto || 'N/A'}</TableCell>
-                                        <TableCell>{producto.capacidad_producto || '-'}</TableCell>
+                                        <TableCell className="text-xs">{producto.modelo_producto?.substring(0, 12) || 'N/A'}</TableCell>
+                                        <TableCell className="text-xs">{producto.capacidad_producto?.substring(0, 8) || '-'}</TableCell>
                                         <TableCell>
-                                            <div className="flex items-center gap-2">
-                                                <QrCode size={14} className="shrink-0 text-gray-500" />
-                                                <span className="font-mono text-sm">{producto.codigo_producto}</span>
-                                            </div>
+                                            <span className="font-mono text-[10px]">{producto.codigo_producto?.substring(0, 10)}</span>
                                         </TableCell>
                                         <TableCell>
-                                            <div className="flex items-center gap-2">
-                                                <CopyX size={14} className="shrink-0 text-indigo-500" />
-                                                <span>{producto.categoria}</span>
-                                            </div>
+                                            <Badge variant="outline" className="h-5 px-1.5 py-0 text-[10px]">
+                                                {producto.categoria?.substring(0, 12) || '-'}
+                                            </Badge>
                                         </TableCell>
                                         {canViewSensitiveData && (
-                                            <TableCell>
-                                                <div className="flex items-center gap-2">
-                                                    <Wallet size={14} className="shrink-0 text-emerald-500" />
-                                                    <span>${producto.precio_compra_producto.toFixed(2)}</span>
-                                                </div>
+                                            <TableCell className="whitespace-nowrap">
+                                                <span className="text-xs">${producto.precio_compra_producto.toFixed(2)}</span>
                                             </TableCell>
                                         )}
                                         <TableCell>
-                                            <div className="flex items-center gap-2">
-                                                <Hash size={14} className="shrink-0 text-blue-500" />
-                                                <span className={isStockBajo ? 'font-bold text-red-600' : ''}>{producto.cantidad_total}</span>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <div className="flex cursor-help items-center gap-1">
+                                                        <span className={`text-xs font-medium ${isStockBajo ? 'font-bold text-red-600' : ''}`}>
+                                                            {producto.cantidad_total}
+                                                        </span>
+                                                        {isStockBajo && <AlertTriangle size={12} className="animate-pulse text-red-600" />}
+                                                    </div>
+                                                </TooltipTrigger>
                                                 {isStockBajo && (
-                                                    <>
-                                                        <div className="group relative">
-                                                            <AlertTriangle size={16} className="animate-pulse cursor-help text-red-600" />
-                                                            <div className="invisible absolute bottom-full left-1/2 z-50 mb-2 w-48 -translate-x-1/2 rounded-md bg-gray-900 px-3 py-2 text-xs text-white shadow-lg group-hover:visible">
-                                                                <div className="text-center">⚠️ Producto con bajo stock</div>
-                                                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
-                                                            </div>
-                                                        </div>
-                                                        <Badge variant="destructive" className="ml-1 animate-pulse">
-                                                            Bajo
-                                                        </Badge>
-                                                    </>
+                                                    <TooltipContent className="bg-red-500">
+                                                        <p className="font-semibold text-white">⚠️ Stock bajo (menos de 3 unidades)</p>
+                                                    </TooltipContent>
                                                 )}
-                                            </div>
+                                            </Tooltip>
                                         </TableCell>
                                         {canViewSensitiveData && (
-                                            <TableCell>
-                                                <div className="flex items-center gap-2">
-                                                    <DollarSign size={14} className="shrink-0 text-emerald-500" />
-                                                    <span>${(producto.precio_compra_producto * producto.cantidad_total).toFixed(2)}</span>
-                                                </div>
+                                            <TableCell className="whitespace-nowrap">
+                                                <span className="text-xs">
+                                                    ${(producto.precio_compra_producto * producto.cantidad_total).toFixed(2)}
+                                                </span>
                                             </TableCell>
                                         )}
                                         <TableCell>
                                             {producto.imagen_url ? (
-                                                <img
-                                                    src={producto.imagen_url}
-                                                    alt={producto.nombre_producto}
-                                                    className="h-10 w-10 rounded-full object-cover"
-                                                />
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <img
+                                                            src={producto.imagen_url}
+                                                            alt={producto.nombre_producto}
+                                                            className="h-8 w-8 cursor-help rounded-full object-cover"
+                                                        />
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <img
+                                                            src={producto.imagen_url}
+                                                            alt={producto.nombre_producto}
+                                                            className="h-20 w-20 rounded object-cover"
+                                                        />
+                                                    </TooltipContent>
+                                                </Tooltip>
                                             ) : (
-                                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-200">
-                                                    <Package size={16} className="text-gray-500" />
+                                                <div className="bg-muted flex h-8 w-8 items-center justify-center rounded-full">
+                                                    <Package size={12} className="text-muted-foreground" />
                                                 </div>
                                             )}
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-1">
-                                                {/* Botón Detalles */}
                                                 <Link href={route('productos.show', { producto: producto.id })}>
-                                                    <Button variant="outline" size="sm" className="hover:bg-chart-3 cursor-pointer">
-                                                        <Eye size={14} />
+                                                    <Button variant="outline" size="icon" className="hover:bg-chart-3 h-7 w-7 cursor-pointer">
+                                                        <Eye size={12} />
                                                     </Button>
                                                 </Link>
 
-                                                {/* Botón Editar */}
                                                 <Link href={route('productos.edit', { producto: producto.id })}>
-                                                    <Button variant="outline" size="sm" className="cursor-pointer hover:bg-blue-600 hover:text-white">
-                                                        <Edit3 size={14} />
+                                                    <Button
+                                                        variant="outline"
+                                                        size="icon"
+                                                        className="h-7 w-7 cursor-pointer hover:bg-blue-600 hover:text-white"
+                                                    >
+                                                        <Edit3 size={12} />
                                                     </Button>
                                                 </Link>
 
-                                                {/* Botón Regenerar Código de Barras */}
                                                 <Button
                                                     variant="outline"
-                                                    size="sm"
-                                                    className="cursor-pointer hover:bg-purple-600 hover:text-white"
+                                                    size="icon"
+                                                    className="h-7 w-7 cursor-pointer hover:bg-purple-600 hover:text-white"
                                                     onClick={() => regenerarBarcode(producto.id)}
-                                                    title="Regenerar código de barras"
                                                 >
-                                                    <RefreshCw size={14} />
+                                                    <RefreshCw size={12} />
                                                 </Button>
 
-                                                {/* Diálogo de Confirmación para Eliminar */}
                                                 <AlertDialog>
                                                     <AlertDialogTrigger asChild>
                                                         <Button
                                                             variant="ghost"
-                                                            size="sm"
-                                                            className="hover:bg-destructive dark:hover:bg-destructive cursor-pointer hover:text-white"
+                                                            size="icon"
+                                                            className="hover:bg-destructive dark:hover:bg-destructive h-7 w-7 cursor-pointer hover:text-white"
                                                         >
-                                                            <Trash2 size={14} />
+                                                            <Trash2 size={12} />
                                                         </Button>
                                                     </AlertDialogTrigger>
                                                     <AlertDialogContent>
@@ -858,20 +872,19 @@ export default function ProductosPage({
                         </TableBody>
                         <TableFooter>
                             <TableRow>
-                                <TableCell colSpan={6} className="bg-sidebar-accent">
-                                    Total de Productos {soloStockBajo && 'con Stock Bajo'}
+                                <TableCell colSpan={canViewSensitiveData ? 7 : 6} className="bg-sidebar-accent font-semibold">
+                                    Total {soloStockBajo && 'con Stock Bajo'}
                                 </TableCell>
                                 <TableCell className="bg-sidebar-accent text-center font-bold">
                                     {productosData.reduce((sum, p) => sum + p.cantidad_total, 0)}
                                 </TableCell>
-                                {canViewSensitiveData ? (
-                                    <TableCell colSpan={4} className="bg-sidebar-accent text-right font-bold">
-                                        Valor Total: $
-                                        {productosData.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0).toFixed(2)}
+                                {canViewSensitiveData && (
+                                    <TableCell className="bg-sidebar-accent text-right font-bold">
+                                        ${productosData.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0).toFixed(2)}
                                     </TableCell>
-                                ) : (
-                                    <TableCell colSpan={4} className="bg-sidebar-accent"></TableCell>
                                 )}
+                                <TableCell className="bg-sidebar-accent"></TableCell>
+                                <TableCell className="bg-sidebar-accent text-right">{productosData.length} prod.</TableCell>
                             </TableRow>
                         </TableFooter>
                     </Table>
