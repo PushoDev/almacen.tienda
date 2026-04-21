@@ -187,11 +187,10 @@ function ImportModal({ isOpen, onClose, onImport, almacenes }: ImportModalProps)
                     <div className="space-y-2">
                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">📄 Archivo Excel</label>
                         <div
-                            className={`cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-all ${
-                                isDragging
-                                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                                    : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700/30'
-                            } ${isImporting ? 'pointer-events-none opacity-50' : ''}`}
+                            className={`cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-all ${isDragging
+                                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                                : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700/30'
+                                } ${isImporting ? 'pointer-events-none opacity-50' : ''}`}
                             onDragOver={handleDragOver}
                             onDragLeave={handleDragLeave}
                             onDrop={handleDrop}
@@ -587,97 +586,107 @@ export default function ProductosPage({
                     )}
                 </div>
 
-                {/* Controles de Filtro */}
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex items-center gap-2">
-                        <Button
-                            variant={soloStockBajo ? 'default' : 'outline'}
-                            onClick={() => setSoloStockBajo(!soloStockBajo)}
-                            className="flex items-center gap-2"
-                        >
-                            <Filter size={16} />
-                            {soloStockBajo ? 'Mostrar Todos' : 'Solo Stock Bajo'}
-                        </Button>
-                    </div>
+                {/* Buscador - Fila 1 */}
+                <div className="relative">
+                    <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform" />
+                    <input
+                        type="text"
+                        placeholder="Buscar productos por nombre, código, marca o modelo..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="border-input bg-background focus:border-primary focus:ring-primary w-full rounded-lg border px-4 py-2.5 pl-10 text-sm focus:ring-1 focus:outline-none"
+                    />
+                </div>
 
-                    <div className="flex flex-wrap gap-2">
-                        {/* Buscador */}
-                        <div className="relative">
-                            <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform text-gray-500" />
-                            <input
-                                type="text"
-                                placeholder="Buscar productos..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="focus:ring-sidebar-accent border-primary rounded-md border px-3 py-2 pl-10 focus:ring-2 focus:outline-none"
-                            />
-                        </div>
-
-                        {/* Filtro por categoría */}
-                        <select
-                            value={selectedCategoria}
-                            onChange={(e) => setSelectedCategoria(e.target.value)}
-                            className="focus:ring-sidebar-accent border-primary rounded-md border px-3 py-2 focus:ring-2 focus:outline-none"
-                        >
-                            <option className="bg-background" value="">
-                                Todas las categorías
+                {/* Filtros y Acciones - Fila 2 */}
+                <div className="flex flex-wrap items-center gap-3">
+                    {/* Filtro por categoría */}
+                    <select
+                        value={selectedCategoria}
+                        onChange={(e) => setSelectedCategoria(e.target.value)}
+                        className="border-input bg-background focus:border-primary focus:ring-primary rounded-md border px-3 py-2 text-sm focus:ring-1 focus:outline-none"
+                    >
+                        <option className="bg-background" value="">
+                            Todas las categorías
+                        </option>
+                        {categorias.map((categoria) => (
+                            <option key={categoria.id} className="bg-background" value={categoria.id}>
+                                {categoria.nombre_categoria}
                             </option>
-                            {categorias.map((categoria) => (
-                                <option key={categoria.id} className="bg-background" value={categoria.id}>
-                                    {categoria.nombre_categoria}
-                                </option>
-                            ))}
-                        </select>
+                        ))}
+                    </select>
 
-                        {/* Filtro por almacén */}
-                        <select
-                            value={selectedAlmacen}
-                            onChange={(e) => setSelectedAlmacen(e.target.value)}
-                            className="focus:ring-sidebar-accent border-primary rounded-md border px-3 py-2 focus:ring-2 focus:outline-none"
-                        >
-                            <option className="bg-background" value="">
-                                Todos los almacenes
+                    {/* Filtro por almacén */}
+                    <select
+                        value={selectedAlmacen}
+                        onChange={(e) => setSelectedAlmacen(e.target.value)}
+                        className="border-input bg-background focus:border-primary focus:ring-primary rounded-md border px-3 py-2 text-sm focus:ring-1 focus:outline-none"
+                    >
+                        <option className="bg-background" value="">
+                            Todos los almacenes
+                        </option>
+                        {almacenes.map((almacen) => (
+                            <option key={almacen.id} className="bg-background" value={almacen.id}>
+                                {almacen.nombre_almacen}
                             </option>
-                            {almacenes.map((almacen) => (
-                                <option key={almacen.id} className="bg-background" value={almacen.id}>
-                                    {almacen.nombre_almacen}
-                                </option>
-                            ))}
-                        </select>
+                        ))}
+                    </select>
 
-                        {/* Selector de almacén para exportación */}
-                        <select
-                            value={almacenExportId}
-                            onChange={(e) => setAlmacenExportId(Number(e.target.value))}
-                            className="focus:ring-sidebar-accent border-primary rounded-md border px-3 py-2 focus:ring-2 focus:outline-none"
-                        >
-                            {almacenes.map((almacen) => (
-                                <option key={almacen.id} value={almacen.id} className="bg-background">
-                                    {almacen.nombre_almacen}
-                                </option>
-                            ))}
-                        </select>
+                    {/* Botón stock bajo */}
+                    <Button
+                        variant={soloStockBajo ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setSoloStockBajo(!soloStockBajo)}
+                        className="gap-1.5"
+                    >
+                        <Filter size={14} />
+                        {soloStockBajo ? 'Todos' : 'Stock Bajo'}
+                    </Button>
 
-                        {/* Botones de exportación/importación */}
-                        <Button variant="outline" className="hover:bg-chart-3 flex cursor-pointer items-center gap-2" onClick={downloadTemplate}>
-                            <FileText size={16} />
-                            Plantilla
-                        </Button>
+                    <Separator orientation="vertical" className="h-6" />
 
-                        <Button
-                            variant="secondary"
-                            className="hover:bg-chart-1 flex cursor-pointer items-center gap-2"
-                            onClick={() => setShowImportModal(true)}
-                        >
-                            <Download size={16} />
-                            Importar
-                        </Button>
+                    {/* Selector de almacén para exportación */}
+                    <select
+                        value={almacenExportId}
+                        onChange={(e) => setAlmacenExportId(Number(e.target.value))}
+                        className="border-input bg-background focus:border-primary focus:ring-primary rounded-md border px-3 py-2 text-sm focus:ring-1 focus:outline-none"
+                    >
+                        {almacenes.map((almacen) => (
+                            <option key={almacen.id} value={almacen.id} className="bg-background">
+                                {almacen.nombre_almacen}
+                            </option>
+                        ))}
+                    </select>
 
-                        <Button variant="secondary" className="hover:bg-chart-2 flex cursor-pointer items-center gap-2" onClick={handleExport}>
-                            <Upload size={16} />
-                            Exportar
-                        </Button>
-                    </div>
+                    {/* Botones de exportación/importación - Solo icono con Tooltip */}
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button size="icon" className="h-8 w-8 bg-primary hover:bg-sidebar hover:text-white cursor-pointer" onClick={handleExport}>
+                                <Upload size={16} />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Exportar productos</TooltipContent>
+                    </Tooltip>
+
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="outline" size="icon" className="h-8 w-8 cursor-pointer bg-emerald-500 hover:bg-emerald-800" onClick={downloadTemplate}>
+                                <FileText size={16} />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Descargar plantilla</TooltipContent>
+                    </Tooltip>
+
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="outline" size="icon" className="h-8 w-8 bg-blue-500 hover:bg-blue-800 cursor-pointer" onClick={() => setShowImportModal(true)}>
+                                <Download size={16} />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Importar productos</TooltipContent>
+                    </Tooltip>
+
+
                 </div>
 
                 {/* Tabla de Productos - Responsive sin scroll horizontal */}
