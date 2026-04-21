@@ -187,10 +187,11 @@ function ImportModal({ isOpen, onClose, onImport, almacenes }: ImportModalProps)
                     <div className="space-y-2">
                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">📄 Archivo Excel</label>
                         <div
-                            className={`cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-all ${isDragging
-                                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                                : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700/30'
-                                } ${isImporting ? 'pointer-events-none opacity-50' : ''}`}
+                            className={`cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-all ${
+                                isDragging
+                                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                                    : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700/30'
+                            } ${isImporting ? 'pointer-events-none opacity-50' : ''}`}
                             onDragOver={handleDragOver}
                             onDragLeave={handleDragLeave}
                             onDrop={handleDrop}
@@ -329,6 +330,9 @@ export default function ProductosPage({
     const productosConStockBajo = productosData.filter((p) => p.stock_bajo);
     const valorTotalInventario = productosData.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0);
     const valorStockBajo = productosConStockBajo.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0);
+
+    // Verificar si hay filtros activos
+    const hayFiltrosActivos = searchTerm || selectedCategoria || selectedAlmacen || soloStockBajo;
 
     // Eliminar Producto
     const deleteProducto = (id: number) => {
@@ -536,54 +540,60 @@ export default function ProductosPage({
                 <Separator className="col-span-4" />
 
                 {/* Contenedor de Widgets de Estadísticas */}
-                <div className={`grid gap-6 ${canViewStockStats ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'}`}>
-                    {/* Widget: Productos Totales */}
-                    <div className="rounded-lg border border-blue-500/20 bg-blue-50/50 p-6 shadow-sm dark:bg-blue-900/20">
-                        <div className="flex items-center justify-between">
-                            <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Productos Totales</p>
-                            <Package className="h-5 w-5 text-blue-500" />
-                        </div>
-                        <p className="mt-2 text-3xl font-bold text-blue-900 dark:text-blue-200">{productos.total}</p>
-                        <p className="mt-1 text-xs text-blue-500 dark:text-blue-400">Unidades únicas registradas</p>
-                    </div>
-
-                    {/* Widget: Valor Total del Inventario */}
-                    {canViewSensitiveData && (
-                        <div className="rounded-lg border border-green-500/20 bg-green-50/50 p-6 shadow-sm dark:bg-green-900/20">
-                            <div className="flex items-center justify-between">
-                                <p className="text-sm font-medium text-green-600 dark:text-green-400">Valor Total del Inventario</p>
-                                <DollarSign className="h-5 w-5 text-green-500" />
-                            </div>
-                            <p className="mt-2 text-3xl font-bold text-green-900 dark:text-green-200">
-                                ${valorTotalInventario.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </p>
-                            <p className="mt-1 text-xs text-green-500 dark:text-green-400">Costo total de todos los productos</p>
+                <div className="space-y-3">
+                    {hayFiltrosActivos && (
+                        <div className="flex items-center gap-2 rounded-md bg-amber-50 px-3 py-1.5 text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-400">
+                            <Filter size={12} />
+                            <span>
+                                Mostrando valores de {productosData.length} productos filtrados de {productos.total} totales
+                            </span>
                         </div>
                     )}
-
-                    {/* Widget: Productos con Stock Bajo */}
-                    <div className="rounded-lg border border-amber-500/20 bg-amber-50/50 p-6 shadow-sm dark:bg-amber-900/20">
-                        <div className="flex items-center justify-between">
-                            <p className="text-sm font-medium text-amber-600 dark:text-amber-400">Productos con Stock Bajo</p>
-                            <AlertTriangle className="h-5 w-5 text-amber-500" />
-                        </div>
-                        <p className="mt-2 text-3xl font-bold text-amber-900 dark:text-amber-200">{productosConStockBajo.length}</p>
-                        <p className="mt-1 text-xs text-amber-500 dark:text-amber-400">Productos con menos de 3 unidades</p>
-                    </div>
-
-                    {/* Widget: Valor Stock Bajo (Condicional) */}
-                    {canViewStockStats && (
-                        <div className="rounded-lg border border-red-500/20 bg-red-50/50 p-6 shadow-sm dark:bg-red-900/20">
+                    <div className={`grid gap-4 ${canViewStockStats ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'}`}>
+                        {/* Widget: Productos Totales */}
+                        <div className="bg-card rounded-lg border p-4 shadow-sm">
                             <div className="flex items-center justify-between">
-                                <p className="text-sm font-medium text-red-600 dark:text-red-400">Valor Stock Bajo</p>
-                                <Wallet className="h-5 w-5 text-red-500" />
+                                <p className="text-muted-foreground text-sm font-medium">Productos Totales</p>
+                                <Package className="h-4 w-4 text-blue-500" />
                             </div>
-                            <p className="mt-2 text-3xl font-bold text-red-900 dark:text-red-200">
-                                ${valorStockBajo.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </p>
-                            <p className="mt-1 text-xs text-red-500 dark:text-red-400">Costo de productos con stock bajo</p>
+                            <p className="mt-1 text-2xl font-bold">{productos.total}</p>
                         </div>
-                    )}
+
+                        {/* Widget: Valor Total del Inventario */}
+                        {canViewSensitiveData && (
+                            <div className="bg-card rounded-lg border p-4 shadow-sm">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-muted-foreground text-sm font-medium">Valor Total</p>
+                                    <DollarSign className="h-4 w-4 text-green-500" />
+                                </div>
+                                <p className="mt-1 text-2xl font-bold text-green-600 dark:text-green-400">
+                                    ${valorTotalInventario.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Widget: Productos con Stock Bajo */}
+                        <div className="bg-card rounded-lg border p-4 shadow-sm">
+                            <div className="flex items-center justify-between">
+                                <p className="text-muted-foreground text-sm font-medium">Stock Bajo</p>
+                                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                            </div>
+                            <p className="mt-1 text-2xl font-bold text-amber-600 dark:text-amber-400">{productosConStockBajo.length}</p>
+                        </div>
+
+                        {/* Widget: Valor Stock Bajo (Condicional) */}
+                        {canViewStockStats && (
+                            <div className="bg-card rounded-lg border p-4 shadow-sm">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-muted-foreground text-sm font-medium">Valor Stock Bajo</p>
+                                    <Wallet className="h-4 w-4 text-red-500" />
+                                </div>
+                                <p className="mt-1 text-2xl font-bold text-red-600 dark:text-red-400">
+                                    ${valorStockBajo.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* Buscador - Fila 1 */}
@@ -661,7 +671,11 @@ export default function ProductosPage({
                     {/* Botones de exportación/importación - Solo icono con Tooltip */}
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button size="icon" className="h-8 w-8 bg-primary hover:bg-sidebar hover:text-white cursor-pointer" onClick={handleExport}>
+                            <Button
+                                size="icon"
+                                className="bg-primary hover:bg-sidebar h-8 w-8 cursor-pointer hover:text-white"
+                                onClick={handleExport}
+                            >
                                 <Upload size={16} />
                             </Button>
                         </TooltipTrigger>
@@ -670,7 +684,12 @@ export default function ProductosPage({
 
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="outline" size="icon" className="h-8 w-8 cursor-pointer bg-emerald-500 hover:bg-emerald-800" onClick={downloadTemplate}>
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8 cursor-pointer bg-emerald-500 hover:bg-emerald-800"
+                                onClick={downloadTemplate}
+                            >
                                 <FileText size={16} />
                             </Button>
                         </TooltipTrigger>
@@ -679,14 +698,17 @@ export default function ProductosPage({
 
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="outline" size="icon" className="h-8 w-8 bg-blue-500 hover:bg-blue-800 cursor-pointer" onClick={() => setShowImportModal(true)}>
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8 cursor-pointer bg-blue-500 hover:bg-blue-800"
+                                onClick={() => setShowImportModal(true)}
+                            >
                                 <Download size={16} />
                             </Button>
                         </TooltipTrigger>
                         <TooltipContent>Importar productos</TooltipContent>
                     </Tooltip>
-
-
                 </div>
 
                 {/* Tabla de Productos - Responsive sin scroll horizontal */}
