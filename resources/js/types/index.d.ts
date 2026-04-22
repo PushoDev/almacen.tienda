@@ -92,13 +92,20 @@ export interface AlmacenProps {
 export interface ProveedorProps {
     id: number;
     nombre_proveedor: string;
-    telefono_proveedor: string;
+    telefono_proveedor?: string;
     correo_proveedor?: string | null;
-    localidad_proveedor: string;
+    localidad_proveedor?: string;
     notas_proveedor?: string | null;
-    saldo_proveedor: number; // Nuevo campo
-    created_at: string;
-    updated_at: string;
+    saldo_proveedor?: number;
+    created_at?: string;
+    updated_at?: string;
+}
+
+// Interface para Proveedor/Cliente combinado (para el select de compra)
+export interface ProveedorClienteProps {
+    id: number;
+    nombre: string;
+    tipo: 'proveedor' | 'cliente';
 }
 
 // Interface para Cuentas

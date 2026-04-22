@@ -30,11 +30,32 @@ class CompraController extends Controller
     }
 
     /**
-     * Devuelve una lista de proveedores.
+     * Devuelve una lista de proveedores y clientes tipo fisico combinados.
      *
      * @return \Illuminate\Http\JsonResponse
      */
     public function getProveedor()
+    {
+        $proveedores = Proveedor::select('id', 'nombre_proveedor as nombre')
+            ->addSelect(DB::raw("'proveedor' as tipo"));
+
+        $clientes = Cliente::where('tipo_cliente', 'fisico')
+            ->select('id', 'nombre_cliente as nombre')
+            ->addSelect(DB::raw("'cliente' as tipo"));
+
+        $result = $proveedores->unionAll($clientes)
+            ->orderBy('nombre')
+            ->get();
+
+        return response()->json($result);
+    }
+
+    /**
+     * Devuelve una lista solo de proveedores.
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getSoloProveedores()
     {
         $proveedores = Proveedor::select('id', 'nombre_proveedor')->get();
         return response()->json($proveedores);
@@ -157,6 +178,7 @@ class CompraController extends Controller
         $validated = $request->validate([
             'compra' => 'required|in:deuda_proveedor,pago_cash',
             'proveedor' => 'required|string|max:255',
+            'tipo_proveedor' => 'required|in:proveedor,cliente',
             'fecha' => 'required|date',
             'productos' => 'required|array|min:1',
             'productos.*.almacen_id' => 'required|exists:almacens,id',
@@ -178,12 +200,24 @@ class CompraController extends Controller
         DB::beginTransaction();
 
         try {
-            // Lógica de proveedor y cálculo total
-            $proveedor = Proveedor::firstOrCreate(['nombre_proveedor' => $validated['proveedor']]);
+            // Lógica de proveedor/cliente y cálculo total
+            $tipoProveedor = $validated['tipo_proveedor'];
+            $nombreProveedor = $validated['proveedor'];
+
+            if ($tipoProveedor === 'proveedor') {
+                $proveedor = Proveedor::firstOrCreate(['nombre_proveedor' => $nombreProveedor]);
+            } else {
+                $cliente = Cliente::firstOrCreate([
+                    'nombre_cliente' => $nombreProveedor,
+                    'tipo_cliente' => 'fisico',
+                ]);
+            }
+
             $total = collect($validated['productos'])->sum(fn($p) => $p['cantidad'] * $p['precio']);
 
             $compraData = [
-                'proveedor_id' => $proveedor->id,
+                'proveedor_id' => $tipoProveedor === 'proveedor' ? $proveedor->id : null,
+                'cliente_id' => $tipoProveedor === 'cliente' ? $cliente->id : null,
                 'fecha_compra' => $validated['fecha'],
                 'total_compra' => $total,
                 'tipo_compra' => $validated['compra'],
@@ -191,7 +225,11 @@ class CompraController extends Controller
 
             // 2. Lógica de Pagos y Deuda
             if ($validated['compra'] === 'deuda_proveedor') {
-                $proveedor->decrement('saldo_proveedor', $total);
+                if ($tipoProveedor === 'proveedor') {
+                    $proveedor->decrement('saldo_proveedor', $total);
+                } else {
+                    $cliente->increment('deuda_pago_cliente', $total);
+                }
                 $compraData['cuenta_id'] = null;
             } else if ($validated['compra'] === 'pago_cash') {
                 $pagos = $validated['pagos'] ?? [];
@@ -492,32 +530,101 @@ class CompraController extends Controller
     }
 
     /**
-     * Store a newly created proveedor for use during compra process.
+     * Crea o busca un proveedor/cliente para uso durante el proceso de compra.
      *
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\JsonResponse
      */
     public function storeProveedor(Request $request)
     {
+        // Determinar el tipo
+        $tipo = $request->tipo ?? 'proveedor';
+
+        // Si ya existe como proveedor
+        if ($tipo === 'proveedor') {
+            $existente = Proveedor::where('nombre_proveedor', $request->nombre_proveedor)->first();
+            if ($existente) {
+                return response()->json([
+                    'message' => 'Ya existe como proveedor.',
+                    'data' => $existente,
+                    'tipo' => 'proveedor',
+                    'existe' => true
+                ], 200);
+            }
+        }
+
+        // Si ya existe como cliente
+        $existenteCliente = Cliente::where('nombre_cliente', $request->nombre_cliente ?? $request->nombre_proveedor)->first();
+        if ($existenteCliente) {
+            return response()->json([
+                'message' => 'Ya existe como cliente.',
+                'data' => $existenteCliente,
+                'tipo' => 'cliente',
+                'existe' => true
+            ], 200);
+        }
+
         // Validación de datos
-        $validator = Validator::make($request->all(), [
-            'nombre_proveedor' => 'required|string|unique:proveedors,nombre_proveedor',
+        $validator = Validator::make([
+            'nombre_proveedor' => $request->nombre_proveedor,
+            'nombre_cliente' => $request->nombre_cliente ?? $request->nombre_proveedor,
+        ], [
+            'nombre_proveedor' => 'required|string',
+            'nombre_cliente' => 'required|string',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // Crear el proveedor
-        $proveedor = Proveedor::create([
-            'nombre_proveedor' => $request->nombre_proveedor,
-            'saldo_proveedor' => 0,
-        ]);
+        if ($tipo === 'proveedor') {
+            $proveedor = Proveedor::create([
+                'nombre_proveedor' => $request->nombre_proveedor,
+                'saldo_proveedor' => 0,
+            ]);
 
-        return response()->json([
-            'message' => 'Proveedor creado exitosamente.',
-            'proveedor' => $proveedor
-        ], 201);
+            return response()->json([
+                'message' => 'Proveedor creado exitosamente.',
+                'data' => $proveedor,
+                'tipo' => 'proveedor',
+                'existe' => false
+            ], 201);
+        } else {
+            // Para clientes, el teléfono es obligatorio
+            $telefono = $request->telefono_cliente ?? null;
+            if (empty($telefono)) {
+                return response()->json([
+                    'errors' => ['telefono_cliente' => 'El teléfono es requerido para clientes.']
+                ], 422);
+            }
+
+            // Verificar si ya existe con ese teléfono
+            $clienteExistentePorTelefono = Cliente::where('telefono_cliente', $telefono)->first();
+            if ($clienteExistentePorTelefono) {
+                return response()->json([
+                    'message' => 'Ya existe un cliente con ese teléfono.',
+                    'data' => $clienteExistentePorTelefono,
+                    'tipo' => 'cliente',
+                    'existe' => true
+                ], 200);
+            }
+
+            $cliente = Cliente::create([
+                'nombre_cliente' => $request->nombre_cliente ?? $request->nombre_proveedor,
+                'tipo_cliente' => 'fisico',
+                'deuda_pago_cliente' => 0,
+                'telefono_cliente' => $telefono,
+                'direccion_cliente' => $request->direccion_cliente ?? null,
+                'ciudad_cliente' => $request->ciudad_cliente ?? null,
+            ]);
+
+            return response()->json([
+                'message' => 'Cliente creado exitosamente.',
+                'data' => $cliente,
+                'tipo' => 'cliente',
+                'existe' => false
+            ], 201);
+        }
     }
 
     /**

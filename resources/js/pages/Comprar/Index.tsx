@@ -26,7 +26,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
-import { AlmacenProps, CategoriasProps, ClienteProps, CuentaNegocioProps, ProveedorProps, type BreadcrumbItem } from '@/types';
+import { AlmacenProps, CategoriasProps, ClienteProps, CuentaNegocioProps, ProveedorClienteProps, type BreadcrumbItem } from '@/types';
 import { Head, useForm, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { format } from 'date-fns';
@@ -56,9 +56,9 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
+import { ScrollProgress } from '@/components/ui/scroll';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
-import { ScrollProgress } from '@/components/ui/scroll';
 
 // =================================================================
 // 🚨 ATRIBUTOS DE PRODUCTO ACTUALIZADOS EN TYPESCRIPT
@@ -140,7 +140,7 @@ export default function ComprarPage() {
     const { props } = usePage();
     const { errors } = props;
     const [almacens, setAlmacens] = useState<AlmacenProps[]>([]);
-    const [proveedors, setProveedors] = useState<ProveedorProps[]>([]);
+    const [proveedors, setProveedors] = useState<ProveedorClienteProps[]>([]);
     const [categorias, setCategorias] = useState<CategoriasProps[]>([]);
     const [cuentas, setCuentas] = useState<CuentaNegocioProps[]>([]);
     const [date, setDate] = useState<Date | undefined>(new Date());
@@ -191,6 +191,7 @@ export default function ComprarPage() {
     const { data, setData, post, processing } = useForm({
         compra: '',
         proveedor: '',
+        tipo_proveedor: 'proveedor' as 'proveedor' | 'cliente',
         fecha: date ? date.toISOString().split('T')[0] : '',
         pagos: [] as { cuenta_id: number; monto: number }[],
         pagos_clientes: [] as { cliente_id: number; monto: number }[],
@@ -241,9 +242,7 @@ export default function ComprarPage() {
     // 🔍 EFECTO PARA BÚSQUEDA EN TIEMPO REAL DE CUENTAS
     useEffect(() => {
         if (cuentaSearchTerm) {
-            const filtered = cuentas.filter((cuenta) =>
-                cuenta.nombre_cuenta.toLowerCase().includes(cuentaSearchTerm.toLowerCase()),
-            );
+            const filtered = cuentas.filter((cuenta) => cuenta.nombre_cuenta.toLowerCase().includes(cuentaSearchTerm.toLowerCase()));
             setFilteredCuentas(filtered);
         } else {
             setFilteredCuentas(cuentas);
@@ -410,17 +409,17 @@ export default function ComprarPage() {
             prev.map((prod) =>
                 prod.id === editingProductId
                     ? ({
-                        id: editingProductId,
-                        almacen_id: parseInt(tempFormData.almacen_id),
-                        producto: tempFormData.producto,
-                        marca: tempFormData.marca,
-                        modelo: tempFormData.modelo,
-                        capacidad: tempFormData.capacidad,
-                        categoria: tempFormData.categoria,
-                        codigo: tempFormData.codigo,
-                        cantidad: tempFormData.cantidad,
-                        precio: tempFormData.precio,
-                    } as ProductoComprarProps)
+                          id: editingProductId,
+                          almacen_id: parseInt(tempFormData.almacen_id),
+                          producto: tempFormData.producto,
+                          marca: tempFormData.marca,
+                          modelo: tempFormData.modelo,
+                          capacidad: tempFormData.capacidad,
+                          categoria: tempFormData.categoria,
+                          codigo: tempFormData.codigo,
+                          cantidad: tempFormData.cantidad,
+                          precio: tempFormData.precio,
+                      } as ProductoComprarProps)
                     : prod,
             ),
         );
@@ -435,7 +434,15 @@ export default function ComprarPage() {
         return productos.reduce((total, p) => total + p.cantidad * p.precio, 0).toFixed(2);
     };
 
-    const filteredProvedors = proveedors.filter((proveedor) => proveedor.nombre_proveedor.toLowerCase().includes(searchProveedor.toLowerCase()));
+    const filteredProvedors =
+        searchProveedor.trim() === ''
+            ? proveedors
+            : proveedors.filter((proveedor) => proveedor.nombre?.toLowerCase().includes(searchProveedor.toLowerCase()));
+
+    const filteredProvedorsExacto =
+        searchProveedor.trim() === '' ? [] : proveedors.filter((proveedor) => proveedor.nombre?.toLowerCase() === searchProveedor.toLowerCase());
+
+    const isProveedorDuplicado = filteredProvedorsExacto.length > 1;
     const filteredCategorias = categorias.filter((cat) => cat.nombre_categoria.toLowerCase().includes(searchCategoria.toLowerCase()));
 
     const realizarCompra = () => {
@@ -494,8 +501,8 @@ export default function ComprarPage() {
                     name === 'nombre_almacen' || name === 'provincia_almacen' || name === 'ciudad_almacen' || name === 'notas_almacen'
                         ? value.toUpperCase()
                         : name === 'correo_almacen'
-                            ? value.toLowerCase()
-                            : value,
+                          ? value.toLowerCase()
+                          : value,
             }));
         };
 
@@ -885,31 +892,49 @@ export default function ComprarPage() {
     // 🆕 COMPONENTE DE CREACIÓN DE PROVEEDOR (VERSIÓN SIMPLE)
     const CrearProveedorDialogContent = () => {
         const [nombreProveedor, setNombreProveedor] = useState('');
+        const [telefonoProveedor, setTelefonoProveedor] = useState('+123456789');
+        const [direccionProveedor, setDireccionProveedor] = useState('RESIDENCIA DEL CLIENTE');
+        const [ciudadProveedor, setCiudadProveedor] = useState('CIUDAD DE RESIDENCIA');
         const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
 
         const crearProveedorLocal = async () => {
             const nombreMayusculas = nombreProveedor.trim().toUpperCase();
 
             if (!nombreMayusculas) {
-                toast.error('El nombre del proveedor es requerido');
+                toast.error('El nombre es requerido');
+                return;
+            }
+
+            if (data.tipo_proveedor === 'cliente' && !telefonoProveedor.trim()) {
+                toast.error('El teléfono es requerido para clientes');
                 return;
             }
 
             try {
-                const response = await axios.post(route('compras.proveedor.store'), {
+                const payload: Record<string, string> = {
                     nombre_proveedor: nombreMayusculas,
-                });
+                    tipo: data.tipo_proveedor,
+                };
 
-                const { proveedor, message } = response.data;
+                if (data.tipo_proveedor === 'cliente') {
+                    payload.telefono_cliente = telefonoProveedor.trim();
+                    payload.direccion_cliente = direccionProveedor.trim().toUpperCase();
+                    payload.ciudad_cliente = ciudadProveedor.trim().toUpperCase();
+                }
+
+                const response = await axios.post(route('compras.proveedor.store'), payload);
+
+                const { data: nuevoData, message, tipo } = response.data;
 
                 toast.success(message, {
-                    description: 'Proveedor creado exitosamente.',
+                    description: `Nuevo ${tipo} creado exitosamente.`,
                 });
 
-                // Actualizar el estado global de proveedores
-                setProveedors((prev) => [...prev, proveedor]);
-                // Seleccionar automáticamente el nuevo proveedor
-                setData('proveedor', proveedor.nombre_proveedor);
+                // Actualizar el estado global de proveedores/clientes
+                setProveedors((prev) => [...prev, { id: nuevoData.id, nombre: nuevoData.nombre_proveedor || nuevoData.nombre_cliente, tipo }]);
+                // Seleccionar automáticamente el nuevo
+                setData('proveedor', nuevoData.nombre_proveedor || nuevoData.nombre_cliente);
+                setData('tipo_proveedor', tipo as 'proveedor' | 'cliente');
 
                 resetDialog();
             } catch (error: any) {
@@ -929,6 +954,9 @@ export default function ComprarPage() {
 
         const resetDialog = () => {
             setNombreProveedor('');
+            setTelefonoProveedor('+123456789');
+            setDireccionProveedor('RESIDENCIA DEL CLIENTE');
+            setCiudadProveedor('CIUDAD DE RESIDENCIA');
             setLocalErrors({});
             setIsCrearProveedorDialogOpen(false);
         };
@@ -938,26 +966,89 @@ export default function ComprarPage() {
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2 text-xl">
                         <Truck className="h-5 w-5 text-blue-600" />
-                        Crear Nuevo Proveedor
+                        Crear Nuevo Proveedor/Cliente
                     </DialogTitle>
-                    <DialogDescription>Añade un nuevo proveedor al sistema de forma rápida.</DialogDescription>
+                    <DialogDescription>Añade un nuevo proveedor o cliente al sistema de forma rápida.</DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                     <div className="space-y-2">
+                        <Label>Tipo de Registro</Label>
+                        <div className="flex gap-4">
+                            <label className="flex cursor-pointer items-center gap-2">
+                                <input
+                                    type="radio"
+                                    name="tipo_proveedor"
+                                    value="proveedor"
+                                    checked={data.tipo_proveedor === 'proveedor'}
+                                    onChange={() => setData('tipo_proveedor', 'proveedor')}
+                                />
+                                <Truck className="h-4 w-4" />
+                                Proveedor
+                            </label>
+                            <label className="flex cursor-pointer items-center gap-2">
+                                <input
+                                    type="radio"
+                                    name="tipo_proveedor"
+                                    value="cliente"
+                                    checked={data.tipo_proveedor === 'cliente'}
+                                    onChange={() => setData('tipo_proveedor', 'cliente')}
+                                />
+                                <Users className="h-4 w-4" />
+                                Cliente
+                            </label>
+                        </div>
+                    </div>
+                    <div className="space-y-2">
                         <Label htmlFor="dialog-nombre-proveedor">
-                            Nombre del Proveedor <span className="text-red-500">*</span>
+                            Nombre {data.tipo_proveedor === 'proveedor' ? 'del Proveedor' : 'del Cliente'} <span className="text-red-500">*</span>
                         </Label>
                         <Input
                             id="dialog-nombre-proveedor"
                             name="nombre_proveedor"
                             value={nombreProveedor}
                             onChange={(e) => setNombreProveedor(e.target.value.toUpperCase())}
-                            placeholder="Ej: PROVEEDOR DE ELECTRÓNICA S.A."
+                            placeholder={data.tipo_proveedor === 'proveedor' ? 'Ej: PROVEEDOR DE ELECTRÓNICA S.A.' : 'Ej: JUAN PÉREZ'}
                             className={localErrors.nombre_proveedor ? 'border-red-500' : ''}
                             autoFocus
                         />
                         {localErrors.nombre_proveedor && <p className="text-sm text-red-500">{localErrors.nombre_proveedor}</p>}
                     </div>
+                    {data.tipo_proveedor === 'cliente' && (
+                        <div className="space-y-4 border-t pt-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="dialog-telefono-proveedor">
+                                    Teléfono <span className="text-red-500">*</span>
+                                </Label>
+                                <Input
+                                    id="dialog-telefono-proveedor"
+                                    name="telefono_cliente"
+                                    value={telefonoProveedor}
+                                    onChange={(e) => setTelefonoProveedor(e.target.value)}
+                                    placeholder="Ej: +123456789"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="dialog-direccion-proveedor">Dirección</Label>
+                                <Input
+                                    id="dialog-direccion-proveedor"
+                                    name="direccion_cliente"
+                                    value={direccionProveedor}
+                                    onChange={(e) => setDireccionProveedor(e.target.value.toUpperCase())}
+                                    placeholder="RESIDENCIA DEL CLIENTE"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="dialog-ciudad-proveedor">Ciudad</Label>
+                                <Input
+                                    id="dialog-ciudad-proveedor"
+                                    name="ciudad_cliente"
+                                    value={ciudadProveedor}
+                                    onChange={(e) => setCiudadProveedor(e.target.value.toUpperCase())}
+                                    placeholder="CIUDAD DE RESIDENCIA"
+                                />
+                            </div>
+                        </div>
+                    )}
                 </div>
                 <DialogFooter className="gap-2">
                     <Button type="button" variant="outline" onClick={resetDialog}>
@@ -965,7 +1056,7 @@ export default function ComprarPage() {
                     </Button>
                     <Button type="button" onClick={crearProveedorLocal} className="bg-blue-600 hover:bg-blue-700">
                         <PlusCircle className="mr-2 h-4 w-4" />
-                        Crear Proveedor
+                        Crear {data.tipo_proveedor === 'proveedor' ? 'Proveedor' : 'Cliente'}
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -1258,10 +1349,10 @@ export default function ComprarPage() {
                                     {errors.fecha && <InputError message={errors.fecha} />}
                                 </div>
 
-                                {/* Proveedor */}
+                                {/* Proveedor / Cliente */}
                                 <div className="space-y-2">
                                     <Label htmlFor="proveedor" className="text-sm font-medium">
-                                        Proveedor
+                                        Proveedor / Cliente
                                     </Label>
                                     <Select
                                         name="proveedor"
@@ -1272,27 +1363,49 @@ export default function ComprarPage() {
                                         }}
                                     >
                                         <SelectTrigger className="h-11 w-full">
-                                            <SelectValue placeholder="Seleccione Proveedor" />
+                                            <SelectValue placeholder="Seleccione Proveedor o Cliente" />
                                         </SelectTrigger>
                                         <SelectContent>
                                             <div className="p-2">
                                                 <Input
                                                     type="text"
-                                                    placeholder="Buscar proveedor..."
+                                                    placeholder="Buscar proveedor o cliente..."
                                                     value={searchProveedor}
                                                     onChange={(e) => setSearchProveedor(e.target.value)}
                                                     className="text-sm"
+                                                    autoFocus
                                                 />
                                             </div>
                                             <div className="max-h-60 overflow-y-auto">
                                                 {filteredProvedors.length > 0 ? (
                                                     filteredProvedors.map((proveedor) => (
-                                                        <SelectItem key={proveedor.id} value={proveedor.nombre_proveedor}>
-                                                            {proveedor.nombre_proveedor}
+                                                        <SelectItem key={proveedor.id} value={proveedor.nombre}>
+                                                            <div className="flex w-full items-center justify-between gap-2">
+                                                                <span className="flex items-center gap-2">
+                                                                    {proveedor.tipo === 'proveedor' ? (
+                                                                        <Truck className="h-4 w-4 text-blue-600" />
+                                                                    ) : (
+                                                                        <Users className="h-4 w-4 text-green-600" />
+                                                                    )}
+                                                                    <span>{proveedor.nombre}</span>
+                                                                </span>
+                                                                <Badge
+                                                                    variant={proveedor.tipo === 'proveedor' ? 'default' : 'secondary'}
+                                                                    className={
+                                                                        proveedor.tipo === 'proveedor'
+                                                                            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                                                                            : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                                                                    }
+                                                                >
+                                                                    {proveedor.tipo === 'proveedor' ? 'Proveedor' : 'Cliente'}
+                                                                </Badge>
+                                                            </div>
                                                         </SelectItem>
                                                     ))
                                                 ) : (
-                                                    <div className="text-muted-foreground px-2 py-4 text-center text-sm">No hay proveedores</div>
+                                                    <div className="text-muted-foreground px-2 py-4 text-center text-sm">
+                                                        {searchProveedor ? 'No se encontró' : 'No hay opciones'}
+                                                    </div>
                                                 )}
                                             </div>
                                             <Separator className="my-2" />
@@ -1557,17 +1670,7 @@ export default function ComprarPage() {
                                                     </Button>
                                                 </AlertDialogTrigger>
 
-                                                <AlertDialogContent
-                                                    className="
-        !max-w-none
-        flex
-        h-[90vh]
-        w-[95vw]
-        max-w-[1024px]
-        flex-col
-        p-0
-    "
-                                                >
+                                                <AlertDialogContent className="flex h-[90vh] w-[95vw] !max-w-none max-w-[1024px] flex-col p-0">
                                                     <AlertDialogHeader className="shrink-0 border-b px-6 py-4">
                                                         <AlertDialogTitle className="flex items-center gap-3 text-xl font-semibold text-gray-800 sm:text-2xl dark:text-white">
                                                             <Edit2 className="h-6 w-6" />
@@ -1747,7 +1850,6 @@ export default function ComprarPage() {
                                                         </Button>
                                                     </AlertDialogFooter>
                                                 </AlertDialogContent>
-
                                             </AlertDialog>
 
                                             <Button
@@ -2152,82 +2254,85 @@ export default function ComprarPage() {
                                                                 <FieldDescription>Selecciona las cuentas a débitar</FieldDescription>
 
                                                                 <FieldGroup className="space-y-6 pt-4">
-                                                                <Field>
-                                                                    <Popover open={cuentaSelectOpen} onOpenChange={setCuentaSelectOpen}>
-                                                                        <PopoverTrigger asChild>
-                                                                            <Button
-                                                                                variant="outline"
-                                                                                className="h-12 w-full cursor-pointer justify-between"
-                                                                            >
-                                                                                <span className="flex items-center gap-2">
-                                                                                    <Wallet className="h-4 w-4" />
-                                                                                    {data.pagos.length > 0
-                                                                                        ? `${data.pagos.length} cuenta${data.pagos.length > 1 ? 's' : ''} seleccionada${data.pagos.length > 1 ? 's' : ''}`
-                                                                                        : 'Buscar cuentas...'}
-                                                                                </span>
-                                                                                <ChevronsUpDown className="h-4 w-4 opacity-50" />
-                                                                            </Button>
-                                                                        </PopoverTrigger>
-                                                                        <PopoverContent className="w-full p-0" align="start">
-                                                                            <div className="space-y-3 p-3">
-                                                                                <Input
-                                                                                    placeholder="Buscar cuenta..."
-                                                                                    value={cuentaSearchTerm}
-                                                                                    onChange={(e) => setCuentaSearchTerm(e.target.value)}
-                                                                                    autoFocus
-                                                                                />
-                                                                                <ScrollArea className="h-64 rounded-md border">
-                                                                                    {filteredCuentas.length > 0 ? (
-                                                                                        filteredCuentas.map((cuenta) => {
-                                                                                            const seleccionado = data.pagos.some(
-                                                                                                (p) => p.cuenta_id === cuenta.id,
-                                                                                            );
-                                                                                            return (
-                                                                                                <div
-                                                                                                    key={cuenta.id}
-                                                                                                    className={cn(
-                                                                                                        'flex cursor-pointer items-center justify-between rounded-lg px-4 py-3 transition-colors',
-                                                                                                        seleccionado
-                                                                                                            ? 'bg-primary/10'
-                                                                                                            : 'hover:bg-accent',
-                                                                                                    )}
-                                                                                                    onClick={() => {
-                                                                                                        if (!seleccionado) {
-                                                                                                            setData('pagos', [
-                                                                                                                ...data.pagos,
-                                                                                                                { cuenta_id: cuenta.id, monto: 0 },
-                                                                                                            ]);
-                                                                                                        }
-                                                                                                        setCuentaSelectOpen(false);
-                                                                                                        setCuentaSearchTerm('');
-                                                                                                    }}
-                                                                                                >
-                                                                                                    <div className="flex items-center gap-3">
-                                                                                                        <div className="bg-primary/10 text-primary flex h-10 w-10 items-center justify-center rounded-full font-bold">
-                                                                                                            {cuenta.nombre_cuenta[0]}
-                                                                                                        </div>
-                                                                                                        <div>
-                                                                                                            <p className="font-medium">
-                                                                                                                {cuenta.nombre_cuenta}
-                                                                                                            </p>
-                                                                                                            <p className="text-muted-foreground text-sm">
-                                                                                                                Saldo: ${cuenta.saldo_cuenta}
-                                                                                                            </p>
+                                                                    <Field>
+                                                                        <Popover open={cuentaSelectOpen} onOpenChange={setCuentaSelectOpen}>
+                                                                            <PopoverTrigger asChild>
+                                                                                <Button
+                                                                                    variant="outline"
+                                                                                    className="h-12 w-full cursor-pointer justify-between"
+                                                                                >
+                                                                                    <span className="flex items-center gap-2">
+                                                                                        <Wallet className="h-4 w-4" />
+                                                                                        {data.pagos.length > 0
+                                                                                            ? `${data.pagos.length} cuenta${data.pagos.length > 1 ? 's' : ''} seleccionada${data.pagos.length > 1 ? 's' : ''}`
+                                                                                            : 'Buscar cuentas...'}
+                                                                                    </span>
+                                                                                    <ChevronsUpDown className="h-4 w-4 opacity-50" />
+                                                                                </Button>
+                                                                            </PopoverTrigger>
+                                                                            <PopoverContent className="w-full p-0" align="start">
+                                                                                <div className="space-y-3 p-3">
+                                                                                    <Input
+                                                                                        placeholder="Buscar cuenta..."
+                                                                                        value={cuentaSearchTerm}
+                                                                                        onChange={(e) => setCuentaSearchTerm(e.target.value)}
+                                                                                        autoFocus
+                                                                                    />
+                                                                                    <ScrollArea className="h-64 rounded-md border">
+                                                                                        {filteredCuentas.length > 0 ? (
+                                                                                            filteredCuentas.map((cuenta) => {
+                                                                                                const seleccionado = data.pagos.some(
+                                                                                                    (p) => p.cuenta_id === cuenta.id,
+                                                                                                );
+                                                                                                return (
+                                                                                                    <div
+                                                                                                        key={cuenta.id}
+                                                                                                        className={cn(
+                                                                                                            'flex cursor-pointer items-center justify-between rounded-lg px-4 py-3 transition-colors',
+                                                                                                            seleccionado
+                                                                                                                ? 'bg-primary/10'
+                                                                                                                : 'hover:bg-accent',
+                                                                                                        )}
+                                                                                                        onClick={() => {
+                                                                                                            if (!seleccionado) {
+                                                                                                                setData('pagos', [
+                                                                                                                    ...data.pagos,
+                                                                                                                    {
+                                                                                                                        cuenta_id: cuenta.id,
+                                                                                                                        monto: 0,
+                                                                                                                    },
+                                                                                                                ]);
+                                                                                                            }
+                                                                                                            setCuentaSelectOpen(false);
+                                                                                                            setCuentaSearchTerm('');
+                                                                                                        }}
+                                                                                                    >
+                                                                                                        <div className="flex items-center gap-3">
+                                                                                                            <div className="bg-primary/10 text-primary flex h-10 w-10 items-center justify-center rounded-full font-bold">
+                                                                                                                {cuenta.nombre_cuenta[0]}
+                                                                                                            </div>
+                                                                                                            <div>
+                                                                                                                <p className="font-medium">
+                                                                                                                    {cuenta.nombre_cuenta}
+                                                                                                                </p>
+                                                                                                                <p className="text-muted-foreground text-sm">
+                                                                                                                    Saldo: ${cuenta.saldo_cuenta}
+                                                                                                                </p>
+                                                                                                            </div>
                                                                                                         </div>
                                                                                                     </div>
-                                                                                                </div>
-                                                                                            );
-                                                                                        })
-                                                                                    ) : (
-                                                                                        <div className="text-muted-foreground py-8 text-center">
-                                                                                            No hay cuentas
-                                                                                        </div>
-                                                                                    )}
-                                                                                </ScrollArea>
-                                                                            </div>
-                                                                        </PopoverContent>
-                                                                    </Popover>
-                                                                </Field>
+                                                                                                );
+                                                                                            })
+                                                                                        ) : (
+                                                                                            <div className="text-muted-foreground py-8 text-center">
+                                                                                                No hay cuentas
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </ScrollArea>
+                                                                                </div>
+                                                                            </PopoverContent>
+                                                                        </Popover>
+                                                                    </Field>
 
                                                                     {data.pagos.length > 0 && (
                                                                         <div className="space-y-4">
