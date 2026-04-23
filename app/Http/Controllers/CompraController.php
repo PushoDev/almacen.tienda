@@ -37,28 +37,18 @@ class CompraController extends Controller
     public function getProveedor()
     {
         $proveedores = Proveedor::select('id', 'nombre_proveedor as nombre')
-            ->addSelect(DB::raw("'proveedor' as tipo"));
+            ->addSelect(DB::raw("'proveedor' as tipo"))
+            ->orderBy('nombre');
 
         $clientes = Cliente::where('tipo_cliente', 'fisico')
             ->select('id', 'nombre_cliente as nombre')
-            ->addSelect(DB::raw("'cliente' as tipo"));
+            ->addSelect(DB::raw("'cliente' as tipo"))
+            ->orderBy('nombre');
 
-        $result = $proveedores->unionAll($clientes)
-            ->orderBy('nombre')
-            ->get();
-
-        return response()->json($result);
-    }
-
-    /**
-     * Devuelve una lista solo de proveedores.
-     *
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function getSoloProveedores()
-    {
-        $proveedores = Proveedor::select('id', 'nombre_proveedor')->get();
-        return response()->json($proveedores);
+        return response()->json([
+            'proveedores' => $proveedores->get(),
+            'clientes' => $clientes->get(),
+        ]);
     }
 
     /**
@@ -228,7 +218,7 @@ class CompraController extends Controller
                 if ($tipoProveedor === 'proveedor') {
                     $proveedor->decrement('saldo_proveedor', $total);
                 } else {
-                    $cliente->increment('deuda_pago_cliente', $total);
+                    $cliente->decrement('deuda_pago_cliente', $total);
                 }
                 $compraData['cuenta_id'] = null;
             } else if ($validated['compra'] === 'pago_cash') {
@@ -272,13 +262,13 @@ class CompraController extends Controller
 
             // ✅ REGISTRAR TODOS LOS MÉTODOS DE PAGO EN COMPRA_PAGO
             if ($validated['compra'] === 'deuda_proveedor') {
-                // Registrar pago como deuda con proveedor
+                // Registrar pago como deuda
                 CompraPago::create([
                     'compra_id' => $compra->id,
                     'cuenta_id' => null,
-                    'cliente_id' => null,
+                    'cliente_id' => $tipoProveedor === 'cliente' ? $cliente->id : null,
                     'monto' => $total,
-                    'tipo_pago' => 'deuda_proveedor',
+                    'tipo_pago' => $tipoProveedor === 'proveedor' ? 'deuda_proveedor' : 'deuda_cliente',
                 ]);
             } else if ($validated['compra'] === 'pago_cash') {
                 // Registrar pagos con cuentas
@@ -375,7 +365,7 @@ class CompraController extends Controller
             $compra->load(['pagos.cuenta', 'pagos.cliente']);
 
             return Inertia::render('Comprar/Show', [
-                'compra' => $compra->load('proveedor'),
+                'compra' => $compra->load(['proveedor', 'cliente']),
                 'productos' => $productosConAlmacen,
                 'success' => 'Compra registrada y productos actualizados correctamente'
             ]);
@@ -530,101 +520,32 @@ class CompraController extends Controller
     }
 
     /**
-     * Crea o busca un proveedor/cliente para uso durante el proceso de compra.
+     * Store a newly created proveedor for use during compra process.
      *
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\JsonResponse
      */
     public function storeProveedor(Request $request)
     {
-        // Determinar el tipo
-        $tipo = $request->tipo ?? 'proveedor';
-
-        // Si ya existe como proveedor
-        if ($tipo === 'proveedor') {
-            $existente = Proveedor::where('nombre_proveedor', $request->nombre_proveedor)->first();
-            if ($existente) {
-                return response()->json([
-                    'message' => 'Ya existe como proveedor.',
-                    'data' => $existente,
-                    'tipo' => 'proveedor',
-                    'existe' => true
-                ], 200);
-            }
-        }
-
-        // Si ya existe como cliente
-        $existenteCliente = Cliente::where('nombre_cliente', $request->nombre_cliente ?? $request->nombre_proveedor)->first();
-        if ($existenteCliente) {
-            return response()->json([
-                'message' => 'Ya existe como cliente.',
-                'data' => $existenteCliente,
-                'tipo' => 'cliente',
-                'existe' => true
-            ], 200);
-        }
-
         // Validación de datos
-        $validator = Validator::make([
-            'nombre_proveedor' => $request->nombre_proveedor,
-            'nombre_cliente' => $request->nombre_cliente ?? $request->nombre_proveedor,
-        ], [
-            'nombre_proveedor' => 'required|string',
-            'nombre_cliente' => 'required|string',
+        $validator = Validator::make($request->all(), [
+            'nombre_proveedor' => 'required|string|unique:proveedors,nombre_proveedor',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        if ($tipo === 'proveedor') {
-            $proveedor = Proveedor::create([
-                'nombre_proveedor' => $request->nombre_proveedor,
-                'saldo_proveedor' => 0,
-            ]);
+        // Crear el proveedor
+        $proveedor = Proveedor::create([
+            'nombre_proveedor' => $request->nombre_proveedor,
+            'saldo_proveedor' => 0,
+        ]);
 
-            return response()->json([
-                'message' => 'Proveedor creado exitosamente.',
-                'data' => $proveedor,
-                'tipo' => 'proveedor',
-                'existe' => false
-            ], 201);
-        } else {
-            // Para clientes, el teléfono es obligatorio
-            $telefono = $request->telefono_cliente ?? null;
-            if (empty($telefono)) {
-                return response()->json([
-                    'errors' => ['telefono_cliente' => 'El teléfono es requerido para clientes.']
-                ], 422);
-            }
-
-            // Verificar si ya existe con ese teléfono
-            $clienteExistentePorTelefono = Cliente::where('telefono_cliente', $telefono)->first();
-            if ($clienteExistentePorTelefono) {
-                return response()->json([
-                    'message' => 'Ya existe un cliente con ese teléfono.',
-                    'data' => $clienteExistentePorTelefono,
-                    'tipo' => 'cliente',
-                    'existe' => true
-                ], 200);
-            }
-
-            $cliente = Cliente::create([
-                'nombre_cliente' => $request->nombre_cliente ?? $request->nombre_proveedor,
-                'tipo_cliente' => 'fisico',
-                'deuda_pago_cliente' => 0,
-                'telefono_cliente' => $telefono,
-                'direccion_cliente' => $request->direccion_cliente ?? null,
-                'ciudad_cliente' => $request->ciudad_cliente ?? null,
-            ]);
-
-            return response()->json([
-                'message' => 'Cliente creado exitosamente.',
-                'data' => $cliente,
-                'tipo' => 'cliente',
-                'existe' => false
-            ], 201);
-        }
+        return response()->json([
+            'message' => 'Proveedor creado exitosamente.',
+            'proveedor' => $proveedor
+        ], 201);
     }
 
     /**
