@@ -52,6 +52,17 @@ class CompraController extends Controller
     }
 
     /**
+     * Devuelve una lista solo de proveedores.
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getSoloProveedores()
+    {
+        $proveedores = Proveedor::select('id', 'nombre_proveedor')->get();
+        return response()->json($proveedores);
+    }
+
+    /**
      * Devuelve una lista de categorías.
      *
      * @return \Illuminate\Http\JsonResponse
@@ -171,7 +182,7 @@ class CompraController extends Controller
             'tipo_proveedor' => 'required|in:proveedor,cliente',
             'fecha' => 'required|date',
             'productos' => 'required|array|min:1',
-            'productos.*.almacen_id' => 'required|exists:almacens,id',
+            'productos.*.almacen_id' => 'required|integer|exists:almacens,id',
             'productos.*.producto' => 'required|string|max:255',
             'productos.*.marca' => 'nullable|string|max:255',
             'productos.*.modelo' => 'nullable|string|max:255',
@@ -218,7 +229,7 @@ class CompraController extends Controller
                 if ($tipoProveedor === 'proveedor') {
                     $proveedor->decrement('saldo_proveedor', $total);
                 } else {
-                    $cliente->decrement('deuda_pago_cliente', $total);
+                    $cliente->increment('deuda_pago_cliente', $total);
                 }
                 $compraData['cuenta_id'] = null;
             } else if ($validated['compra'] === 'pago_cash') {
@@ -262,13 +273,13 @@ class CompraController extends Controller
 
             // ✅ REGISTRAR TODOS LOS MÉTODOS DE PAGO EN COMPRA_PAGO
             if ($validated['compra'] === 'deuda_proveedor') {
-                // Registrar pago como deuda
+                // Registrar pago como deuda con proveedor
                 CompraPago::create([
                     'compra_id' => $compra->id,
                     'cuenta_id' => null,
-                    'cliente_id' => $tipoProveedor === 'cliente' ? $cliente->id : null,
+                    'cliente_id' => null,
                     'monto' => $total,
-                    'tipo_pago' => $tipoProveedor === 'proveedor' ? 'deuda_proveedor' : 'deuda_cliente',
+                    'tipo_pago' => 'deuda_proveedor',
                 ]);
             } else if ($validated['compra'] === 'pago_cash') {
                 // Registrar pagos con cuentas
@@ -325,16 +336,19 @@ class CompraController extends Controller
                 ]);
                 $producto->save();
 
+                // Castear almacen_id a integer
+                $almacenId = (int) $item['almacen_id'];
+
                 // Asociar producto a la compra
                 $compra->productos()->attach($producto->id, [
                     'cantidad' => $item['cantidad'],
                     'precio' => $item['precio'],
-                    'almacen_id' => $item['almacen_id'],
+                    'almacen_id' => $almacenId,
                 ]);
 
                 // Actualizar inventario en el almacén específico
                 $almacenProducto = AlmacenProducto::firstOrNew([
-                    'almacen_id' => $item['almacen_id'],
+                    'almacen_id' => $almacenId,
                     'producto_id' => $producto->id
                 ]);
 
@@ -355,7 +369,7 @@ class CompraController extends Controller
                         'cantidad' => $item['cantidad'],
                         'precio' => $item['precio'],
                     ],
-                    'almacen' => Almacen::find($item['almacen_id']),
+                    'almacen' => Almacen::find($almacenId),
                 ];
             }
 
@@ -365,7 +379,7 @@ class CompraController extends Controller
             $compra->load(['pagos.cuenta', 'pagos.cliente']);
 
             return Inertia::render('Comprar/Show', [
-                'compra' => $compra->load(['proveedor', 'cliente']),
+                'compra' => $compra->load('proveedor'),
                 'productos' => $productosConAlmacen,
                 'success' => 'Compra registrada y productos actualizados correctamente'
             ]);
@@ -520,32 +534,101 @@ class CompraController extends Controller
     }
 
     /**
-     * Store a newly created proveedor for use during compra process.
+     * Crea o busca un proveedor/cliente para uso durante el proceso de compra.
      *
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\JsonResponse
      */
     public function storeProveedor(Request $request)
     {
+        // Determinar el tipo
+        $tipo = $request->tipo ?? 'proveedor';
+
+        // Si ya existe como proveedor
+        if ($tipo === 'proveedor') {
+            $existente = Proveedor::where('nombre_proveedor', $request->nombre_proveedor)->first();
+            if ($existente) {
+                return response()->json([
+                    'message' => 'Ya existe como proveedor.',
+                    'data' => $existente,
+                    'tipo' => 'proveedor',
+                    'existe' => true
+                ], 200);
+            }
+        }
+
+        // Si ya existe como cliente
+        $existenteCliente = Cliente::where('nombre_cliente', $request->nombre_cliente ?? $request->nombre_proveedor)->first();
+        if ($existenteCliente) {
+            return response()->json([
+                'message' => 'Ya existe como cliente.',
+                'data' => $existenteCliente,
+                'tipo' => 'cliente',
+                'existe' => true
+            ], 200);
+        }
+
         // Validación de datos
-        $validator = Validator::make($request->all(), [
-            'nombre_proveedor' => 'required|string|unique:proveedors,nombre_proveedor',
+        $validator = Validator::make([
+            'nombre_proveedor' => $request->nombre_proveedor,
+            'nombre_cliente' => $request->nombre_cliente ?? $request->nombre_proveedor,
+        ], [
+            'nombre_proveedor' => 'required|string',
+            'nombre_cliente' => 'required|string',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // Crear el proveedor
-        $proveedor = Proveedor::create([
-            'nombre_proveedor' => $request->nombre_proveedor,
-            'saldo_proveedor' => 0,
-        ]);
+        if ($tipo === 'proveedor') {
+            $proveedor = Proveedor::create([
+                'nombre_proveedor' => $request->nombre_proveedor,
+                'saldo_proveedor' => 0,
+            ]);
 
-        return response()->json([
-            'message' => 'Proveedor creado exitosamente.',
-            'proveedor' => $proveedor
-        ], 201);
+            return response()->json([
+                'message' => 'Proveedor creado exitosamente.',
+                'data' => $proveedor,
+                'tipo' => 'proveedor',
+                'existe' => false
+            ], 201);
+        } else {
+            // Para clientes, el teléfono es obligatorio
+            $telefono = $request->telefono_cliente ?? null;
+            if (empty($telefono)) {
+                return response()->json([
+                    'errors' => ['telefono_cliente' => 'El teléfono es requerido para clientes.']
+                ], 422);
+            }
+
+            // Verificar si ya existe con ese teléfono
+            $clienteExistentePorTelefono = Cliente::where('telefono_cliente', $telefono)->first();
+            if ($clienteExistentePorTelefono) {
+                return response()->json([
+                    'message' => 'Ya existe un cliente con ese teléfono.',
+                    'data' => $clienteExistentePorTelefono,
+                    'tipo' => 'cliente',
+                    'existe' => true
+                ], 200);
+            }
+
+            $cliente = Cliente::create([
+                'nombre_cliente' => $request->nombre_cliente ?? $request->nombre_proveedor,
+                'tipo_cliente' => 'fisico',
+                'deuda_pago_cliente' => 0,
+                'telefono_cliente' => $telefono,
+                'direccion_cliente' => $request->direccion_cliente ?? null,
+                'ciudad_cliente' => $request->ciudad_cliente ?? null,
+            ]);
+
+            return response()->json([
+                'message' => 'Cliente creado exitosamente.',
+                'data' => $cliente,
+                'tipo' => 'cliente',
+                'existe' => false
+            ], 201);
+        }
     }
 
     /**

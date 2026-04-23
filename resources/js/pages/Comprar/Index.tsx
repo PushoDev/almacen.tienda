@@ -1369,10 +1369,6 @@ export default function ComprarPage() {
                                         value={data.proveedor}
                                         onValueChange={(value) => {
                                             setData('proveedor', value);
-                                            // Determinar el tipo basado en la selección
-                                            const esProveedor = proveedoresList.some((p) => p.nombre === value);
-                                            const esCliente = clientesList.some((c) => c.nombre === value);
-                                            setData('tipo_proveedor', esProveedor ? 'proveedor' : 'cliente');
                                             setSearchProveedor('');
                                         }}
                                     >
@@ -1391,52 +1387,32 @@ export default function ComprarPage() {
                                                 />
                                             </div>
                                             <div className="max-h-60 overflow-y-auto">
-                                                {/* PRIMERO: PROVEEDORES */}
-                                                {proveedoresList.filter((p) => p.nombre?.toLowerCase().includes(searchProveedor.toLowerCase()))
-                                                    .length > 0 && (
-                                                    <>
-                                                        <div className="px-2 py-1 text-xs font-semibold text-blue-600">PROVEEDORES</div>
-                                                        {proveedoresList
-                                                            .filter((p) => p.nombre?.toLowerCase().includes(searchProveedor.toLowerCase()))
-                                                            .map((proveedor) => (
-                                                                <SelectItem key={proveedor.id} value={proveedor.nombre}>
-                                                                    <div className="flex w-full items-center justify-between gap-2">
-                                                                        <span className="flex items-center gap-2">
-                                                                            <Truck className="h-4 w-4 text-blue-600" />
-                                                                            <span>{proveedor.nombre}</span>
-                                                                        </span>
-                                                                        <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
-                                                                            Proveedor
-                                                                        </Badge>
-                                                                    </div>
-                                                                </SelectItem>
-                                                            ))}
-                                                    </>
-                                                )}
-                                                {/* LUEGO: CLIENTES */}
-                                                {clientesList.filter((c) => c.nombre?.toLowerCase().includes(searchProveedor.toLowerCase())).length >
-                                                    0 && (
-                                                    <>
-                                                        <Separator className="my-2" />
-                                                        <div className="px-2 py-1 text-xs font-semibold text-green-600">CLIENTES</div>
-                                                        {clientesList
-                                                            .filter((c) => c.nombre?.toLowerCase().includes(searchProveedor.toLowerCase()))
-                                                            .map((cliente) => (
-                                                                <SelectItem key={cliente.id} value={cliente.nombre}>
-                                                                    <div className="flex w-full items-center justify-between gap-2">
-                                                                        <span className="flex items-center gap-2">
-                                                                            <Users className="h-4 w-4 text-green-600" />
-                                                                            <span>{cliente.nombre}</span>
-                                                                        </span>
-                                                                        <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
-                                                                            Cliente
-                                                                        </Badge>
-                                                                    </div>
-                                                                </SelectItem>
-                                                            ))}
-                                                    </>
-                                                )}
-                                                {filteredProvedors.length === 0 && (
+                                                {filteredProvedors.length > 0 ? (
+                                                    filteredProvedors.map((proveedor) => (
+                                                        <SelectItem key={proveedor.id} value={proveedor.nombre}>
+                                                            <div className="flex w-full items-center justify-between gap-2">
+                                                                <span className="flex items-center gap-2">
+                                                                    {proveedor.tipo === 'proveedor' ? (
+                                                                        <Truck className="h-4 w-4 text-blue-600" />
+                                                                    ) : (
+                                                                        <Users className="h-4 w-4 text-green-600" />
+                                                                    )}
+                                                                    <span>{proveedor.nombre}</span>
+                                                                </span>
+                                                                <Badge
+                                                                    variant={proveedor.tipo === 'proveedor' ? 'default' : 'secondary'}
+                                                                    className={
+                                                                        proveedor.tipo === 'proveedor'
+                                                                            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                                                                            : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                                                                    }
+                                                                >
+                                                                    {proveedor.tipo === 'proveedor' ? 'Proveedor' : 'Cliente'}
+                                                                </Badge>
+                                                            </div>
+                                                        </SelectItem>
+                                                    ))
+                                                ) : (
                                                     <div className="text-muted-foreground px-2 py-4 text-center text-sm">
                                                         {searchProveedor ? 'No se encontró' : 'No hay opciones'}
                                                     </div>
