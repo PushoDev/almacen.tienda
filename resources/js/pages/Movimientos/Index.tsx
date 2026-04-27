@@ -18,8 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, BreadcrumbItem, Movimiento, ProductoPorAlmacenDetalleRef } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { AlertCircle, Caravan, CarFront, CheckCircle2, Clock, Eye, ListCheck, Package, Send, TrendingUp, Warehouse, XCircle } from 'lucide-react';
-import { useState } from 'react';
+import { AlertCircle, Caravan, CheckCircle2, Clock, Eye, ListCheck, Package, Send, TrendingUp, XCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -73,6 +73,7 @@ interface ProductoConStock extends ProductoPorAlmacenDetalleRef {
     modelo?: string;
     capacidad?: string;
     codigo?: string;
+    categoria?: string;
     imagen_url?: string;
 }
 
@@ -121,6 +122,17 @@ export default function MovimientosPage({
     const [selectedMovimiento, setSelectedMovimiento] = useState<MovimientoWithDetails | null>(null);
     const [productosRecibidos, setProductosRecibidos] = useState<{ [key: string]: number }>({});
 
+    const [cantidades, setCantidades] = useState<Record<number, number>>({});
+    const [observacionesProd, setObservacionesProd] = useState<Record<number, string>>({});
+    const [paginaProductos, setPaginaProductos] = useState(1);
+    const PRODUCTOS_POR_PAGINA = 15;
+
+    useEffect(() => {
+        setCantidades({});
+        setObservacionesProd({});
+        setPaginaProductos(1);
+    }, [productosEmisor]);
+
     const [showDialogs, setShowDialogs] = useState({
         seguimiento: false,
         recibir: false,
@@ -144,6 +156,9 @@ export default function MovimientosPage({
     const almacenesOrigen = isVendedor && userAlmacenesIds.length > 0 ? almacenes.filter((a) => userAlmacenesIds.includes(a.id)) : almacenes;
 
     const almacenesDestino = almacenOrigenId ? almacenes.filter((a) => a.id !== parseInt(almacenOrigenId)) : almacenes;
+
+    const totalPaginasProductos = Math.ceil(productosEmisor.length / PRODUCTOS_POR_PAGINA);
+    const productosPaginados = productosEmisor.slice((paginaProductos - 1) * PRODUCTOS_POR_PAGINA, paginaProductos * PRODUCTOS_POR_PAGINA);
 
     const handleAlmacenOrigenChange = (value: string) => {
         console.log('[Movimientos] Cambiando almacén origen a:', value);
@@ -176,16 +191,15 @@ export default function MovimientosPage({
 
         const productosTrasladados = productosEmisor
             .map((producto) => {
-                const input = document.getElementById(`cantidad-${producto.id}`) as HTMLInputElement;
-                const cantidad = parseInt(input?.value || '0');
-                const observacionesInput = document.getElementById(`observaciones-${producto.id}`) as HTMLInputElement;
+                const cantidad = cantidades[producto.id] || 0;
+                const observaciones = observacionesProd[producto.id] || '';
 
                 return cantidad > 0
                     ? {
-                        id: producto.id,
-                        cantidad,
-                        observaciones: observacionesInput?.value || '',
-                    }
+                          id: producto.id,
+                          cantidad,
+                          observaciones,
+                      }
                     : null;
             })
             .filter((item) => item !== null);
@@ -214,6 +228,8 @@ export default function MovimientosPage({
                     setProductosEmisor([]);
                     setAlmacenOrigenId('');
                     setAlmacenDestinoId('');
+                    setCantidades({});
+                    setObservacionesProd({});
                     router.reload({ only: ['movimientos'] });
                 },
                 onError: (errors: ErrorResponse) => {
@@ -376,10 +392,7 @@ export default function MovimientosPage({
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
-                    <HeadingSmall
-                        title="Movimientos Logísticos"
-                        description="Gestión y Solicitud de Movimientos de Mercancía entre Almacenes"
-                    />
+                    <HeadingSmall title="Movimientos Logísticos" description="Gestión y Solicitud de Movimientos de Mercancía entre Almacenes" />
                     <Caravan
                         size={70}
                         color="#d6d3d1"
@@ -443,7 +456,6 @@ export default function MovimientosPage({
                                         <thead className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                                             <tr>
                                                 <th className="px-4 py-3 text-left font-semibold">Producto</th>
-                                                <th className="px-4 py-3 text-left font-semibold">Marca</th>
                                                 <th className="px-4 py-3 text-left font-semibold">Modelo</th>
                                                 <th className="px-4 py-3 text-left font-semibold">Capacidad</th>
                                                 <th className="px-4 py-3 text-left font-semibold">Categoría</th>
@@ -454,7 +466,7 @@ export default function MovimientosPage({
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                                            {productosEmisor.map((producto) => (
+                                            {productosPaginados.map((producto) => (
                                                 <tr key={producto.id} className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50">
                                                     <td className="px-4 py-2">
                                                         <div className="flex items-center gap-3">
@@ -470,11 +482,10 @@ export default function MovimientosPage({
                                                                 >
                                                                     {producto.nombre}
                                                                 </div>
-                                                                <div className="text-xs text-gray-500">{producto.codigo}</div>
+                                                                <div className="text-xs text-gray-500">{producto.marca || 'N/A'}</div>
                                                             </div>
                                                         </div>
                                                     </td>
-                                                    <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{producto.marca}</td>
                                                     <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{producto.modelo}</td>
                                                     <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{producto.capacidad || 'N/A'}</td>
                                                     <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{producto.categoria}</td>
@@ -491,19 +502,31 @@ export default function MovimientosPage({
                                                     <td className="px-4 py-2">
                                                         <Input
                                                             type="number"
-                                                            id={`cantidad-${producto.id}`}
                                                             className="w-full"
                                                             min="0"
                                                             max={producto.stock_disponible}
                                                             placeholder="0"
+                                                            value={cantidades[producto.id] || ''}
+                                                            onChange={(e) =>
+                                                                setCantidades((prev) => ({
+                                                                    ...prev,
+                                                                    [producto.id]: parseInt(e.target.value) || 0,
+                                                                }))
+                                                            }
                                                         />
                                                     </td>
                                                     <td className="px-4 py-2">
                                                         <Input
                                                             type="text"
-                                                            id={`observaciones-${producto.id}`}
                                                             className="w-full"
                                                             placeholder="Opcional..."
+                                                            value={observacionesProd[producto.id] || ''}
+                                                            onChange={(e) =>
+                                                                setObservacionesProd((prev) => ({
+                                                                    ...prev,
+                                                                    [producto.id]: e.target.value,
+                                                                }))
+                                                            }
                                                         />
                                                     </td>
                                                 </tr>
@@ -511,6 +534,45 @@ export default function MovimientosPage({
                                         </tbody>
                                     </table>
                                 </div>
+
+                                {/* Paginación Productos */}
+                                {totalPaginasProductos > 1 && (
+                                    <div className="flex items-center justify-between">
+                                        <div className="text-sm text-gray-600">
+                                            Mostrando {(paginaProductos - 1) * PRODUCTOS_POR_PAGINA + 1} a{' '}
+                                            {Math.min(paginaProductos * PRODUCTOS_POR_PAGINA, productosEmisor.length)} de {productosEmisor.length}{' '}
+                                            productos
+                                        </div>
+                                        <div className="flex space-x-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                disabled={paginaProductos === 1}
+                                                onClick={() => setPaginaProductos((p) => Math.max(1, p - 1))}
+                                            >
+                                                «
+                                            </Button>
+                                            {Array.from({ length: totalPaginasProductos }, (_, i) => i + 1).map((p) => (
+                                                <Button
+                                                    key={p}
+                                                    variant={p === paginaProductos ? 'default' : 'outline'}
+                                                    size="sm"
+                                                    onClick={() => setPaginaProductos(p)}
+                                                >
+                                                    {p}
+                                                </Button>
+                                            ))}
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                disabled={paginaProductos === totalPaginasProductos}
+                                                onClick={() => setPaginaProductos((p) => Math.min(totalPaginasProductos, p + 1))}
+                                            >
+                                                »
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </CardContent>
@@ -566,16 +628,17 @@ export default function MovimientosPage({
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span
-                                                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${movimiento.estado === 'pendiente_confirmacion'
-                                                        ? 'bg-yellow-100 text-yellow-800'
-                                                        : movimiento.estado === 'en_transito'
-                                                            ? 'bg-orange-100 text-orange-800'
-                                                            : movimiento.estado === 'recibido_completo'
+                                                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${
+                                                        movimiento.estado === 'pendiente_confirmacion'
+                                                            ? 'bg-yellow-100 text-yellow-800'
+                                                            : movimiento.estado === 'en_transito'
+                                                              ? 'bg-orange-100 text-orange-800'
+                                                              : movimiento.estado === 'recibido_completo'
                                                                 ? 'bg-green-100 text-green-800'
                                                                 : movimiento.estado === 'recibido_parcial'
-                                                                    ? 'bg-cyan-100 text-cyan-800'
-                                                                    : 'bg-red-100 text-red-800'
-                                                        }`}
+                                                                  ? 'bg-cyan-100 text-cyan-800'
+                                                                  : 'bg-red-100 text-red-800'
+                                                    }`}
                                                 >
                                                     {movimiento.estado === 'pendiente_confirmacion' && <Clock className="h-3.5 w-3.5" />}
                                                     {movimiento.estado === 'en_transito' && <Send className="h-3.5 w-3.5" />}
@@ -593,17 +656,14 @@ export default function MovimientosPage({
                                                         size="sm"
                                                         onClick={() => handleVerSeguimiento(movimiento)}
                                                         title="Ver seguimiento"
-                                                        className='cursor-pointer'
+                                                        className="cursor-pointer"
                                                     >
                                                         <Eye className="h-4 w-4" />
                                                     </Button>
 
                                                     {['recibido_completo', 'recibido_parcial', 'rechazado'].includes(movimiento.estado) && (
-                                                        <Link
-                                                            href={`/movimientos/${movimiento.id}`}
-
-                                                        >
-                                                            <Button variant='outline' size="sm" title="Ver movimientos" className='cursor-pointer'>
+                                                        <Link href={`/movimientos/${movimiento.id}`}>
+                                                            <Button variant="outline" size="sm" title="Ver movimientos" className="cursor-pointer">
                                                                 <ListCheck className="h-4 w-4" />
                                                             </Button>
                                                         </Link>
@@ -693,16 +753,17 @@ export default function MovimientosPage({
                                     <div key={seguimiento.id} className="relative border-l-4 border-blue-300 pb-3 pl-4">
                                         <div className="mb-2 flex items-start justify-between">
                                             <span
-                                                className={`rounded-full px-2 py-1 text-sm font-semibold ${seguimiento.estado === 'pendiente_confirmacion'
-                                                    ? 'bg-yellow-100 text-yellow-800'
-                                                    : seguimiento.estado === 'en_transito'
-                                                        ? 'bg-orange-100 text-orange-800'
-                                                        : seguimiento.estado === 'recibido_completo'
+                                                className={`rounded-full px-2 py-1 text-sm font-semibold ${
+                                                    seguimiento.estado === 'pendiente_confirmacion'
+                                                        ? 'bg-yellow-100 text-yellow-800'
+                                                        : seguimiento.estado === 'en_transito'
+                                                          ? 'bg-orange-100 text-orange-800'
+                                                          : seguimiento.estado === 'recibido_completo'
                                                             ? 'bg-green-100 text-green-800'
                                                             : seguimiento.estado === 'recibido_parcial'
-                                                                ? 'bg-cyan-100 text-cyan-800'
-                                                                : 'bg-red-100 text-red-800'
-                                                    }`}
+                                                              ? 'bg-cyan-100 text-cyan-800'
+                                                              : 'bg-red-100 text-red-800'
+                                                }`}
                                             >
                                                 {estados[seguimiento.estado]}
                                             </span>
