@@ -17,6 +17,7 @@ import {
     LucideBaggageClaim,
     LucideBoomBox,
     Notebook,
+    Search,
     ShoppingBagIcon,
     TrendingUp,
     Users,
@@ -25,8 +26,10 @@ import * as React from 'react';
 import { useEffect, useState } from 'react';
 import { Area, AreaChart, CartesianGrid, XAxis } from 'recharts';
 
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartConfig, ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
@@ -144,6 +147,9 @@ export default function Dashboard({
     const [usuarioSeleccionado, setUsuarioSeleccionado] = useState<string>('');
     const [estadosFinancieros, setEstadosFinancieros] = useState<EstadoFinanciero[]>([]);
     const [isLoadingFinancial, setIsLoadingFinancial] = useState(false);
+    const [busquedaEstado, setBusquedaEstado] = useState('');
+    const [paginaEstado, setPaginaEstado] = useState(1);
+    const CUENTAS_POR_PAGINA = 10;
     const [monedas, setMonedas] = useState<Moneda[]>([]);
     const [isLoadingMonedas, setIsLoadingMonedas] = useState(true);
 
@@ -218,6 +224,22 @@ export default function Dashboard({
 
         fetchFinancialStates();
     }, [usuarioSeleccionado]);
+
+    // Filtrar y paginar estados financieros
+    const estadosFiltrados = estadosFinancieros.filter((estado) => {
+        if (!busquedaEstado.trim()) return true;
+        const termino = busquedaEstado.toLowerCase();
+        return (
+            estado.nombre_cuenta?.toLowerCase().includes(termino) ||
+            estado.tipo?.toLowerCase().includes(termino) ||
+            estado.moneda?.nombre_moneda?.toLowerCase().includes(termino) ||
+            estado.moneda?.codigo_moneda?.toLowerCase().includes(termino) ||
+            estado.moneda?.simbolo_moneda?.toLowerCase().includes(termino)
+        );
+    });
+
+    const totalPaginasEstado = Math.ceil(estadosFiltrados.length / CUENTAS_POR_PAGINA);
+    const estadosPaginados = estadosFiltrados.slice((paginaEstado - 1) * CUENTAS_POR_PAGINA, paginaEstado * CUENTAS_POR_PAGINA);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -345,7 +367,9 @@ export default function Dashboard({
                         <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-green-800 to-green-400">
                             <CursorProvider>
                                 <CursorFollow>
-                                    <div className="rounded-lg bg-emerald-500 px-2 py-1 text-sm text-white shadow-lg">Movimientos Internos de Dinero</div>
+                                    <div className="rounded-lg bg-emerald-500 px-2 py-1 text-sm text-white shadow-lg">
+                                        Movimientos Internos de Dinero
+                                    </div>
                                 </CursorFollow>
                             </CursorProvider>
                             {/* Ícono de fondo transparente */}
@@ -501,7 +525,7 @@ export default function Dashboard({
                                     {(userRole === 'admin' || userRole === 'moderador') && (
                                         <button
                                             onClick={() => window.open(route('dashboard.historial.comparaciones.view'), '_blank')}
-                                            className="flex items-center gap-2 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 cursor-pointer"
+                                            className="flex cursor-pointer items-center gap-2 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
                                         >
                                             <TrendingUp className="h-4 w-4" />
                                             Ver Historial
@@ -683,10 +707,11 @@ export default function Dashboard({
                                     {monedas.map((moneda) => (
                                         <div
                                             key={moneda.id}
-                                            className={`rounded-lg border p-4 transition-all hover:shadow-md ${moneda.principal
-                                                ? 'border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-950'
-                                                : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
-                                                }`}
+                                            className={`rounded-lg border p-4 transition-all hover:shadow-md ${
+                                                moneda.principal
+                                                    ? 'border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-950'
+                                                    : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
+                                            }`}
                                         >
                                             {/* Header con símbolo y código */}
                                             <div className="mb-3 flex items-start justify-between">
@@ -963,8 +988,8 @@ export default function Dashboard({
                                                                         cambio.es_ganancia
                                                                             ? 'text-green-600 dark:text-green-400'
                                                                             : cambio.es_perdida
-                                                                                ? 'text-red-600 dark:text-red-400'
-                                                                                : 'text-gray-600 dark:text-gray-400'
+                                                                              ? 'text-red-600 dark:text-red-400'
+                                                                              : 'text-gray-600 dark:text-gray-400'
                                                                     }
                                                                 >
                                                                     {cambio.impacto_formateado}
@@ -976,15 +1001,15 @@ export default function Dashboard({
                                                                         cambio.es_ganancia
                                                                             ? 'default'
                                                                             : cambio.es_perdida
-                                                                                ? 'destructive'
-                                                                                : 'secondary'
+                                                                              ? 'destructive'
+                                                                              : 'secondary'
                                                                     }
                                                                     className={
                                                                         cambio.es_ganancia
                                                                             ? 'bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900 dark:text-green-200'
                                                                             : cambio.es_perdida
-                                                                                ? 'bg-red-100 text-red-800 hover:bg-red-200 dark:bg-red-900 dark:text-red-200'
-                                                                                : ''
+                                                                              ? 'bg-red-100 text-red-800 hover:bg-red-200 dark:bg-red-900 dark:text-red-200'
+                                                                              : ''
                                                                     }
                                                                 >
                                                                     {cambio.es_ganancia ? 'Ganancia' : cambio.es_perdida ? 'Pérdida' : 'Neutro'}
@@ -1026,170 +1051,201 @@ export default function Dashboard({
                 {/* Tabla de Estados Financieros */}
                 <div>
                     <Card className="border-sidebar-border dark:border-sidebar-border">
-                        <CardHeader className="border-b-sidebar-border dark:border-b-sidebar-border">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <CardTitle className="flex items-center gap-2">
-                                        <DollarSign className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                                        Estados Financieros
-                                    </CardTitle>
-                                    <CardDescription className="mt-1">
-                                        {userRole === 'vendedor' ? 'Mis Cuentas Asignadas' : 'Cuentas por Moneda y Usuarios Asignados'}
-                                    </CardDescription>
+                        <CardHeader className="flex items-center gap-2 space-y-0 border-b py-5 sm:flex-row">
+                            <div className="grid flex-1 gap-1 text-center sm:text-left">
+                                <div className="flex items-center gap-2">
+                                    <DollarSign className="h-5 w-5 text-green-600" />
+                                    <CardTitle>Estados Financieros</CardTitle>
                                 </div>
-                                {userRole !== 'vendedor' && (
-                                    <Select value={usuarioSeleccionado} onValueChange={setUsuarioSeleccionado}>
-                                        <SelectTrigger className="w-[220px] rounded-lg" aria-label="Filtrar por usuario">
-                                            <SelectValue placeholder="Todos los usuarios" />
-                                        </SelectTrigger>
-                                        <SelectContent className="rounded-xl">
-                                            <SelectItem value="all">Todos los usuarios</SelectItem>
-                                            {usuarios.map((usuario) => (
-                                                <SelectItem key={usuario.id} value={usuario.id.toString()}>
-                                                    {usuario.name} ({usuario.role})
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                )}
+                                <CardDescription>Resumen de cuentas y saldos asignados</CardDescription>
                             </div>
+                            {/* Búsqueda */}
+                            <div className="relative w-[250px]">
+                                <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                                <Input
+                                    type="text"
+                                    placeholder="Buscar cuenta, tipo, moneda..."
+                                    value={busquedaEstado}
+                                    onChange={(e) => {
+                                        setBusquedaEstado(e.target.value);
+                                        setPaginaEstado(1);
+                                    }}
+                                    className="pl-9"
+                                />
+                            </div>
+                            {/* Selector de usuario */}
+                            {userRole !== 'vendedor' && (
+                                <Select value={usuarioSeleccionado} onValueChange={setUsuarioSeleccionado}>
+                                    <SelectTrigger className="w-[220px] rounded-lg" aria-label="Filtrar por usuario">
+                                        <SelectValue placeholder="Todos los usuarios" />
+                                    </SelectTrigger>
+                                    <SelectContent className="rounded-xl">
+                                        <SelectItem value="all">Todos los usuarios</SelectItem>
+                                        {usuarios.map((usuario) => (
+                                            <SelectItem key={usuario.id} value={usuario.id.toString()}>
+                                                {usuario.name} ({usuario.role})
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
                         </CardHeader>
                         <CardContent className="pt-6">
                             {isLoadingFinancial ? (
                                 <div className="flex h-[300px] items-center justify-center text-center">Cargando datos financieros...</div>
-                            ) : estadosFinancieros.length > 0 ? (
-                                <div className="overflow-x-auto">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow className="border-b-sidebar-border dark:border-b-sidebar-border hover:bg-transparent">
-                                                <TableHead className="text-gray-700 dark:text-gray-300">Cuenta</TableHead>
-                                                <TableHead className="text-gray-700 dark:text-gray-300">Tipo</TableHead>
-                                                <TableHead className="text-gray-700 dark:text-gray-300">Moneda</TableHead>
-                                                <TableHead className="text-right text-gray-700 dark:text-gray-300">Saldo</TableHead>
-                                                <TableHead className="text-gray-700 dark:text-gray-300">Tipo Cuenta</TableHead>
-                                                <TableHead className="text-gray-700 dark:text-gray-300">Vendedores</TableHead>
-                                                <TableHead className="text-gray-700 dark:text-gray-300">Estado</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {estadosFinancieros.map((estado) => {
-                                                // Determinar color basado en el nombre de la cuenta o el tipo
-                                                const getColorClass = () => {
-                                                    if (
-                                                        estado.nombre_cuenta.toLowerCase().includes('efectivo') ||
-                                                        estado.nombre_cuenta.toLowerCase().includes('cash')
-                                                    ) {
-                                                        return 'bg-amber-100 dark:bg-amber-900/50';
-                                                    } else if (estado.nombre_cuenta.toLowerCase().includes('banco')) {
-                                                        return 'bg-blue-100 dark:bg-blue-900/50';
-                                                    } else if (
-                                                        estado.nombre_cuenta.toLowerCase().includes('tarjeta') ||
-                                                        estado.nombre_cuenta.toLowerCase().includes('card')
-                                                    ) {
-                                                        return 'bg-green-100 dark:bg-green-900/50';
-                                                    } else if (
-                                                        estado.nombre_cuenta.toLowerCase().includes('digital') ||
-                                                        estado.nombre_cuenta.toLowerCase().includes('paypal') ||
-                                                        estado.nombre_cuenta.toLowerCase().includes('zelle')
-                                                    ) {
-                                                        return 'bg-purple-100 dark:bg-purple-900/50';
-                                                    } else if (estado.tipo_cuenta === 'permanentes') {
-                                                        return 'bg-sky-100 dark:bg-sky-900/50';
-                                                    } else if (estado.tipo_cuenta === 'temporales') {
-                                                        return 'bg-emerald-100 dark:bg-emerald-900/50';
-                                                    } else {
+                            ) : estadosFiltrados.length > 0 ? (
+                                <div className="space-y-4">
+                                    <div className="overflow-x-auto">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow className="border-b-sidebar-border dark:border-b-sidebar-border hover:bg-transparent">
+                                                    <TableHead className="text-gray-700 dark:text-gray-300">Cuenta</TableHead>
+                                                    <TableHead className="text-gray-700 dark:text-gray-300">Tipo</TableHead>
+                                                    <TableHead className="text-gray-700 dark:text-gray-300">Moneda</TableHead>
+                                                    <TableHead className="text-right text-gray-700 dark:text-gray-300">Saldo</TableHead>
+                                                    <TableHead className="text-gray-700 dark:text-gray-300">Tipo Cuenta</TableHead>
+                                                    <TableHead className="text-gray-700 dark:text-gray-300">Vendedores</TableHead>
+                                                    <TableHead className="text-gray-700 dark:text-gray-300">Estado</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {estadosPaginados.map((estado) => {
+                                                    const getColorClass = () => {
+                                                        const nombre = estado.nombre_cuenta.toLowerCase();
+                                                        if (nombre.includes('efectivo') || nombre.includes('cash'))
+                                                            return 'bg-amber-100 dark:bg-amber-900/50';
+                                                        if (nombre.includes('tarjeta') || nombre.includes('card'))
+                                                            return 'bg-blue-100 dark:bg-blue-900/50';
                                                         return 'bg-gray-100 dark:bg-gray-700';
-                                                    }
-                                                };
-
-                                                return (
-                                                    <TableRow
-                                                        key={estado.cuenta_id}
-                                                        className={`border-b-sidebar-border/50 dark:border-b-sidebar-border/50 hover:bg-sidebar/10 dark:hover:bg-sidebar/20 transition-colors ${getColorClass()}`}
-                                                    >
-                                                        <TableCell className="font-medium">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="font-semibold">{estado.nombre_cuenta}</span>
-                                                                <Badge variant="secondary" className="text-xs">
-                                                                    #{estado.cuenta_id}
+                                                    };
+                                                    return (
+                                                        <TableRow
+                                                            key={estado.cuenta_id}
+                                                            className={`border-b-sidebar-border/50 dark:border-b-sidebar-border/50 hover:bg-sidebar/10 dark:hover:bg-sidebar/20 transition-colors ${getColorClass()}`}
+                                                        >
+                                                            <TableCell className="font-medium">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-semibold">{estado.nombre_cuenta}</span>
+                                                                    <Badge variant="secondary" className="text-xs">
+                                                                        #{estado.cuenta_id}
+                                                                    </Badge>
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <span className="text-sm capitalize">{estado.tipo}</span>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-mono font-bold">{estado.moneda.simbolo_moneda}</span>
+                                                                    <span className="text-muted-foreground text-sm">
+                                                                        {estado.moneda.codigo_moneda}
+                                                                    </span>
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell className="text-right font-medium">
+                                                                {estado.saldo_cuenta.toLocaleString('es-ES', {
+                                                                    minimumFractionDigits: 2,
+                                                                    maximumFractionDigits: 2,
+                                                                })}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className={
+                                                                        estado.tipo_cuenta === 'permanentes'
+                                                                            ? 'border-blue-300 text-blue-800 dark:text-blue-300'
+                                                                            : estado.tipo_cuenta === 'temporales'
+                                                                              ? 'border-green-300 text-green-800 dark:text-green-300'
+                                                                              : 'border-red-300 text-red-800 dark:text-red-300'
+                                                                    }
+                                                                >
+                                                                    {estado.tipo_cuenta}
                                                                 </Badge>
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <span className="text-sm capitalize">{estado.tipo}</span>
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="font-mono font-bold">{estado.moneda.simbolo_moneda}</span>
-                                                                <span className="text-muted-foreground text-sm">{estado.moneda.codigo_moneda}</span>
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-medium">
-                                                            {estado.saldo_cuenta.toLocaleString('es-ES', {
-                                                                minimumFractionDigits: 2,
-                                                                maximumFractionDigits: 2,
-                                                            })}
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <Badge
-                                                                variant="outline"
-                                                                className={
-                                                                    estado.tipo_cuenta === 'permanentes'
-                                                                        ? 'border-blue-300 text-blue-800 dark:text-blue-300'
-                                                                        : estado.tipo_cuenta === 'temporales'
-                                                                            ? 'border-green-300 text-green-800 dark:text-green-300'
-                                                                            : 'border-red-300 text-red-800 dark:text-red-300'
-                                                                }
-                                                            >
-                                                                {estado.tipo_cuenta}
-                                                            </Badge>
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            {estado.usuarios.length > 0 ? (
-                                                                <TooltipProvider>
-                                                                    <Tooltip>
-                                                                        <TooltipTrigger asChild>
-                                                                            <button className="inline-flex cursor-pointer items-center justify-center rounded-lg bg-blue-100 p-1.5 transition-colors hover:bg-blue-200 dark:bg-blue-900/40 dark:hover:bg-blue-800">
-                                                                                <Users className="h-3 w-3 text-blue-600 dark:text-blue-400" />
-                                                                                <span className="ml-1 text-xs font-semibold text-blue-600 dark:text-blue-300">
-                                                                                    {estado.usuarios.length}
-                                                                                </span>
-                                                                            </button>
-                                                                        </TooltipTrigger>
-                                                                        <TooltipContent side="left" className="max-w-sm bg-gray-800 text-white">
-                                                                            <div className="space-y-1">
-                                                                                <p className="font-semibold">Vendedores asignados:</p>
-                                                                                {estado.usuarios.map((usuario) => (
-                                                                                    <div key={usuario.id} className="text-xs">
-                                                                                        <p className="font-medium">{usuario.name}</p>
-                                                                                        <p className="opacity-80">({usuario.role})</p>
-                                                                                    </div>
-                                                                                ))}
-                                                                            </div>
-                                                                        </TooltipContent>
-                                                                    </Tooltip>
-                                                                </TooltipProvider>
-                                                            ) : (
-                                                                <span className="text-xs text-gray-400 italic">Ninguno</span>
-                                                            )}
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <Badge
-                                                                variant={estado.estado_cuenta ? 'default' : 'secondary'}
-                                                                className={
-                                                                    estado.estado_cuenta
-                                                                        ? 'border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-300'
-                                                                        : 'border-gray-500/30 bg-gray-500/10 text-gray-600 dark:text-gray-400'
-                                                                }
-                                                            >
-                                                                {estado.estado_cuenta ? 'Activa' : 'Inactiva'}
-                                                            </Badge>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                );
-                                            })}
-                                        </TableBody>
-                                    </Table>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                {estado.usuarios.length > 0 ? (
+                                                                    <TooltipProvider>
+                                                                        <Tooltip>
+                                                                            <TooltipTrigger asChild>
+                                                                                <button className="inline-flex cursor-pointer items-center justify-center rounded-lg bg-blue-100 p-1.5 transition-colors hover:bg-blue-200 dark:bg-blue-900/40 dark:hover:bg-blue-800">
+                                                                                    <Users className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                                                                                    <span className="ml-1 text-xs font-semibold text-blue-600 dark:text-blue-300">
+                                                                                        {estado.usuarios.length}
+                                                                                    </span>
+                                                                                </button>
+                                                                            </TooltipTrigger>
+                                                                            <TooltipContent side="left" className="max-w-sm bg-gray-800 text-white">
+                                                                                <div className="space-y-1">
+                                                                                    <p className="font-semibold">Vendedores asignados:</p>
+                                                                                    {estado.usuarios.map((usuario) => (
+                                                                                        <div key={usuario.id} className="text-xs">
+                                                                                            <p className="font-medium">{usuario.name}</p>
+                                                                                            <p className="opacity-80">({usuario.role})</p>
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </div>
+                                                                            </TooltipContent>
+                                                                        </Tooltip>
+                                                                    </TooltipProvider>
+                                                                ) : (
+                                                                    <span className="text-xs text-gray-400 italic">Ninguno</span>
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Badge
+                                                                    variant={estado.estado_cuenta ? 'default' : 'secondary'}
+                                                                    className={
+                                                                        estado.estado_cuenta
+                                                                            ? 'border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-300'
+                                                                            : 'border-gray-500/30 bg-gray-500/10 text-gray-600 dark:text-gray-400'
+                                                                    }
+                                                                >
+                                                                    {estado.estado_cuenta ? 'Activa' : 'Inactiva'}
+                                                                </Badge>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    );
+                                                })}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                    {totalPaginasEstado > 1 && (
+                                        <div className="flex items-center justify-between">
+                                            <div className="text-sm text-gray-600">
+                                                {(paginaEstado - 1) * CUENTAS_POR_PAGINA + 1} -{' '}
+                                                {Math.min(paginaEstado * CUENTAS_POR_PAGINA, estadosFiltrados.length)} de {estadosFiltrados.length}{' '}
+                                                cuentas
+                                            </div>
+                                            <div className="flex space-x-2">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    disabled={paginaEstado === 1}
+                                                    onClick={() => setPaginaEstado((p) => Math.max(1, p - 1))}
+                                                >
+                                                    «
+                                                </Button>
+                                                {Array.from({ length: totalPaginasEstado }, (_, i) => i + 1).map((p) => (
+                                                    <Button
+                                                        key={p}
+                                                        variant={p === paginaEstado ? 'default' : 'outline'}
+                                                        size="sm"
+                                                        onClick={() => setPaginaEstado(p)}
+                                                    >
+                                                        {p}
+                                                    </Button>
+                                                ))}
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    disabled={paginaEstado === totalPaginasEstado}
+                                                    onClick={() => setPaginaEstado((p) => Math.min(totalPaginasEstado, p + 1))}
+                                                >
+                                                    »
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             ) : (
                                 <div className="flex h-[300px] items-center justify-center text-center">No hay cuentas disponibles para mostrar.</div>
