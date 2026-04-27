@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, BreadcrumbItem, Movimiento, ProductoPorAlmacenDetalleRef } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { AlertCircle, Caravan, CheckCircle2, Clock, Eye, ListCheck, Package, Send, TrendingUp, XCircle } from 'lucide-react';
+import { AlertCircle, Caravan, CheckCircle2, Clock, Eye, ListCheck, Package, Search, Send, TrendingUp, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast, Toaster } from 'sonner';
 
@@ -125,13 +125,30 @@ export default function MovimientosPage({
     const [cantidades, setCantidades] = useState<Record<number, number>>({});
     const [observacionesProd, setObservacionesProd] = useState<Record<number, string>>({});
     const [paginaProductos, setPaginaProductos] = useState(1);
+    const [busquedaProducto, setBusquedaProducto] = useState('');
     const PRODUCTOS_POR_PAGINA = 15;
 
     useEffect(() => {
         setCantidades({});
         setObservacionesProd({});
         setPaginaProductos(1);
+        setBusquedaProducto('');
     }, [productosEmisor]);
+
+    const productosFiltrados = productosEmisor.filter((p) => {
+        if (!busquedaProducto.trim()) return true;
+        const termino = busquedaProducto.toLowerCase();
+        return (
+            p.nombre?.toLowerCase().includes(termino) ||
+            p.codigo?.toLowerCase().includes(termino) ||
+            p.marca?.toLowerCase().includes(termino) ||
+            p.modelo?.toLowerCase().includes(termino) ||
+            p.capacidad?.toLowerCase().includes(termino)
+        );
+    });
+
+    const totalPaginasProductos = Math.ceil(productosFiltrados.length / PRODUCTOS_POR_PAGINA);
+    const productosPaginados = productosFiltrados.slice((paginaProductos - 1) * PRODUCTOS_POR_PAGINA, paginaProductos * PRODUCTOS_POR_PAGINA);
 
     const [showDialogs, setShowDialogs] = useState({
         seguimiento: false,
@@ -156,9 +173,6 @@ export default function MovimientosPage({
     const almacenesOrigen = isVendedor && userAlmacenesIds.length > 0 ? almacenes.filter((a) => userAlmacenesIds.includes(a.id)) : almacenes;
 
     const almacenesDestino = almacenOrigenId ? almacenes.filter((a) => a.id !== parseInt(almacenOrigenId)) : almacenes;
-
-    const totalPaginasProductos = Math.ceil(productosEmisor.length / PRODUCTOS_POR_PAGINA);
-    const productosPaginados = productosEmisor.slice((paginaProductos - 1) * PRODUCTOS_POR_PAGINA, paginaProductos * PRODUCTOS_POR_PAGINA);
 
     const handleAlmacenOrigenChange = (value: string) => {
         console.log('[Movimientos] Cambiando almacén origen a:', value);
@@ -451,6 +465,19 @@ export default function MovimientosPage({
                                 <h3 className="flex items-center gap-2 text-lg font-semibold">
                                     <Package className="h-5 w-5" /> Productos Disponibles
                                 </h3>
+                                <div className="relative">
+                                    <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                                    <Input
+                                        type="text"
+                                        placeholder="Buscar por nombre, código, marca, modelo o capacidad..."
+                                        value={busquedaProducto}
+                                        onChange={(e) => {
+                                            setBusquedaProducto(e.target.value);
+                                            setPaginaProductos(1);
+                                        }}
+                                        className="pl-9"
+                                    />
+                                </div>
                                 <div className="overflow-x-auto rounded-lg border">
                                     <table className="w-full text-sm">
                                         <thead className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
