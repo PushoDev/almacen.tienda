@@ -14,6 +14,15 @@ import { Badge } from '@/Components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import {
+    Pagination,
+    PaginationContent,
+    PaginationEllipsis,
+    PaginationItem,
+    PaginationLink,
+    PaginationNext,
+    PaginationPrevious,
+} from '@/components/ui/pagination';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -249,13 +258,22 @@ export default function CuentasPage({ cuentas, monedaPrincipal }: { cuentas: Cue
                                         placeholder="Buscar cuentas..."
                                         className="pl-8"
                                         value={busqueda}
-                                        onChange={(e) => setBusqueda(e.target.value)}
+                                        onChange={(e) => {
+                                            setBusqueda(e.target.value);
+                                            setPaginaActual(1);
+                                        }}
                                     />
                                 </div>
                             </div>
 
                             <div className="flex items-center gap-2">
-                                <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+                                <Select
+                                    value={filtroTipo}
+                                    onValueChange={(value) => {
+                                        setFiltroTipo(value);
+                                        setPaginaActual(1);
+                                    }}
+                                >
                                     <SelectTrigger className="w-[150px]">
                                         <SelectValue placeholder="Tipo de cuenta" />
                                     </SelectTrigger>
@@ -266,7 +284,13 @@ export default function CuentasPage({ cuentas, monedaPrincipal }: { cuentas: Cue
                                     </SelectContent>
                                 </Select>
 
-                                <Select value={filtroMoneda} onValueChange={setFiltroMoneda}>
+                                <Select
+                                    value={filtroMoneda}
+                                    onValueChange={(value) => {
+                                        setFiltroMoneda(value);
+                                        setPaginaActual(1);
+                                    }}
+                                >
                                     <SelectTrigger className="w-[180px]">
                                         <SelectValue placeholder="Todas las monedas" />
                                     </SelectTrigger>
@@ -507,33 +531,44 @@ export default function CuentasPage({ cuentas, monedaPrincipal }: { cuentas: Cue
 
                 {/* Paginación */}
                 {totalPaginas > 1 && (
-                    <Card>
-                        <CardContent className="p-4">
-                            <div className="flex items-center justify-between">
-                                <Button
-                                    onClick={() => setPaginaActual((prev) => Math.max(prev - 1, 1))}
-                                    disabled={paginaActual === 1}
-                                    variant="outline"
-                                    className="cursor-pointer"
-                                >
-                                    Anterior
-                                </Button>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-muted-foreground text-sm">
-                                        Página <strong>{paginaActual}</strong> de <strong>{totalPaginas}</strong>
-                                    </span>
-                                </div>
-                                <Button
-                                    onClick={() => setPaginaActual((prev) => Math.min(prev + 1, totalPaginas))}
-                                    disabled={paginaActual === totalPaginas}
-                                    variant="outline"
-                                    className="cursor-pointer"
-                                >
-                                    Siguiente
-                                </Button>
-                            </div>
-                        </CardContent>
-                    </Card>
+                    <div className="flex items-center justify-between">
+                        <div className="text-muted-foreground text-sm">
+                            {(paginaActual - 1) * elementosPorPagina + 1} - {Math.min(paginaActual * elementosPorPagina, cuentasFiltradas.length)} de{' '}
+                            {cuentasFiltradas.length} cuentas
+                        </div>
+                        <Pagination>
+                            <PaginationContent>
+                                <PaginationItem>
+                                    <PaginationPrevious
+                                        onClick={() => setPaginaActual((p) => Math.max(1, p - 1))}
+                                        className={paginaActual === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                    />
+                                </PaginationItem>
+                                {Array.from({ length: totalPaginas }, (_, i) => i + 1).map((pagina) => (
+                                    <PaginationItem key={pagina}>
+                                        <PaginationLink
+                                            isActive={paginaActual === pagina}
+                                            onClick={() => setPaginaActual(pagina)}
+                                            className="cursor-pointer"
+                                        >
+                                            {pagina}
+                                        </PaginationLink>
+                                    </PaginationItem>
+                                ))}
+                                {totalPaginas > 5 && paginaActual < totalPaginas - 2 && (
+                                    <PaginationItem>
+                                        <PaginationEllipsis />
+                                    </PaginationItem>
+                                )}
+                                <PaginationItem>
+                                    <PaginationNext
+                                        onClick={() => setPaginaActual((p) => Math.min(totalPaginas, p + 1))}
+                                        className={paginaActual === totalPaginas ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                    />
+                                </PaginationItem>
+                            </PaginationContent>
+                        </Pagination>
+                    </div>
                 )}
             </div>
             <Toaster position="top-center" />

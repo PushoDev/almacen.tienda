@@ -22,20 +22,20 @@ class DatabaseSeeder extends Seeder
         // Usuario Development
         User::factory()->create([
             'name' => 'Luis Alberto',
-            'email' => 'pushodevs@posglorietashop.com',
+            'email' => 'desarrollo@glorietashop.com',
             'password' => Hash::make('guisa290**'),
             'role' => 'admin',
         ]);
         // Nuevos usuarios administradores
         User::factory()->create([
-            'name' => 'Lazaro',
-            'email' => 'lazaro2025@posglorietashop.com',
+            'name' => 'Lazaro Tabares',
+            'email' => 'administrador.gral@glorietashop.com',
             'password' => Hash::make('lazaro2025'),
             'role' => 'admin',
         ]);
         User::factory()->create([
-            'name' => 'Angel',
-            'email' => 'angel2025@posglorietashop.com',
+            'name' => 'Angel Sanchez',
+            'email' => 'administrador@posglorietashop.com',
             'password' => Hash::make('angel2025'),
             'role' => 'admin',
         ]);
@@ -83,7 +83,7 @@ class DatabaseSeeder extends Seeder
                 'codigo_moneda' => 'CUP',
                 'nombre_moneda' => 'Peso Cubano MN',
                 'simbolo_moneda' => 'CUP',
-                'tasa_cambio' => 450.0,
+                'tasa_cambio' => 540.0,
                 'commission' => 0,
                 'estado' => true,
                 'principal' => false,
@@ -117,14 +117,14 @@ class DatabaseSeeder extends Seeder
         // ========== FIN MONEDA POR DEFECTO ==========
 
         // ========== CUENTAS MONETARIAS POR DEFECTO ==========
-        $codigosMoneda = Moneda::whereIn('codigo_moneda', ['USD', 'CUP', 'MLC', 'EUR'])
+        $codigosMoneda = Moneda::whereIn('codigo_moneda', ['USD', 'CUP', 'EUR'])
             ->get()
             ->keyBy('codigo_moneda');
 
         $basesCuentas = [
             'QUIVICAN',
             'LA SALUD',
-            'BEJUCAL ALMACEN',
+            'BEJUCAL',
             'MANZANILLO 1',
             'MANZANILLO 2',
             'COTORRO',
@@ -144,7 +144,7 @@ class DatabaseSeeder extends Seeder
                         'tipo_cuenta' => 'permanentes',
                         'moneda_id' => $moneda->id,
                         'notas_cuenta' => null,
-                        'tipo' => 'caja',
+                        'tipo' => 'efectivo',
                         'estado' => 'activa',
                     ]
                 );

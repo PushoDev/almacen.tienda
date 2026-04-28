@@ -14,6 +14,15 @@ import { Badge } from '@/Components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import {
+    Pagination,
+    PaginationContent,
+    PaginationEllipsis,
+    PaginationItem,
+    PaginationLink,
+    PaginationNext,
+    PaginationPrevious,
+} from '@/components/ui/pagination';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -233,12 +242,13 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                             </CardHeader>
                             <CardContent>
                                 <div
-                                    className={`text-2xl font-bold ${metricas.fondoTotal > metricas.deudaTotal
+                                    className={`text-2xl font-bold ${
+                                        metricas.fondoTotal > metricas.deudaTotal
                                             ? 'text-green-600'
                                             : metricas.deudaTotal > metricas.fondoTotal
-                                                ? 'text-red-600'
-                                                : 'text-gray-600'
-                                        }`}
+                                              ? 'text-red-600'
+                                              : 'text-gray-600'
+                                    }`}
                                 >
                                     {formatearMoneda(metricas.fondoTotal - metricas.deudaTotal)}
                                 </div>
@@ -246,8 +256,8 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                     {metricas.fondoTotal > metricas.deudaTotal
                                         ? 'A favor empresa'
                                         : metricas.deudaTotal > metricas.fondoTotal
-                                            ? 'A favor clientes'
-                                            : 'Equilibrado'}
+                                          ? 'A favor clientes'
+                                          : 'Equilibrado'}
                                 </p>
                             </CardContent>
                         </Card>
@@ -406,17 +416,18 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                                                         <span className="text-muted-foreground">{estado.texto}</span>
                                                                     ) : (
                                                                         <div
-                                                                            className={`flex items-center gap-1 ${estado.color === 'red'
+                                                                            className={`flex items-center gap-1 ${
+                                                                                estado.color === 'red'
                                                                                     ? 'text-red-600'
                                                                                     : estado.color === 'green'
-                                                                                        ? 'text-green-600'
-                                                                                        : 'text-gray-500'
-                                                                                }`}
+                                                                                      ? 'text-green-600'
+                                                                                      : 'text-gray-500'
+                                                                            }`}
                                                                         >
                                                                             <IconComponent size={14} />
                                                                             <span className="font-medium">
                                                                                 {cliente.deuda_pago_cliente !== null &&
-                                                                                    cliente.deuda_pago_cliente !== undefined
+                                                                                cliente.deuda_pago_cliente !== undefined
                                                                                     ? estado.tipo === 'deuda'
                                                                                         ? formatearMoneda(Math.abs(cliente.deuda_pago_cliente))
                                                                                         : formatearMoneda(cliente.deuda_pago_cliente)
@@ -424,12 +435,13 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                                                             </span>
                                                                             <Badge
                                                                                 variant="outline"
-                                                                                className={`ml-2 ${estado.color === 'red'
+                                                                                className={`ml-2 ${
+                                                                                    estado.color === 'red'
                                                                                         ? 'border-red-200 bg-red-50 text-red-700'
                                                                                         : estado.color === 'green'
-                                                                                            ? 'border-green-200 bg-green-50 text-green-700'
-                                                                                            : 'border-gray-200 bg-gray-50 text-gray-700'
-                                                                                    }`}
+                                                                                          ? 'border-green-200 bg-green-50 text-green-700'
+                                                                                          : 'border-gray-200 bg-gray-50 text-gray-700'
+                                                                                }`}
                                                                             >
                                                                                 {estado.texto}
                                                                             </Badge>
@@ -564,55 +576,43 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
 
                             {/* Paginación */}
                             {totalPaginas > 1 && (
-                                <div className="mt-4 flex items-center justify-between">
+                                <div className="flex items-center justify-between">
                                     <div className="text-muted-foreground text-sm">
-                                        Mostrando {indicePrimerElemento + 1}-{Math.min(indiceUltimoElemento, clientesFiltrados.length)} de{' '}
-                                        {clientesFiltrados.length} clientes
+                                        {(paginaActual - 1) * elementosPorPagina + 1} -{' '}
+                                        {Math.min(paginaActual * elementosPorPagina, clientesFiltrados.length)} de {clientesFiltrados.length} clientes
                                     </div>
-                                    <div className="flex gap-2">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => setPaginaActual((prev) => Math.max(prev - 1, 1))}
-                                            disabled={paginaActual === 1}
-                                        >
-                                            Anterior
-                                        </Button>
-                                        <div className="flex items-center gap-1">
-                                            {Array.from({ length: Math.min(5, totalPaginas) }, (_, i) => {
-                                                let pageNum;
-                                                if (totalPaginas <= 5) {
-                                                    pageNum = i + 1;
-                                                } else if (paginaActual <= 3) {
-                                                    pageNum = i + 1;
-                                                } else if (paginaActual >= totalPaginas - 2) {
-                                                    pageNum = totalPaginas - 4 + i;
-                                                } else {
-                                                    pageNum = paginaActual - 2 + i;
-                                                }
-
-                                                return (
-                                                    <Button
-                                                        key={pageNum}
-                                                        variant={paginaActual === pageNum ? 'default' : 'outline'}
-                                                        size="sm"
-                                                        className="h-8 w-8"
-                                                        onClick={() => setPaginaActual(pageNum)}
+                                    <Pagination>
+                                        <PaginationContent>
+                                            <PaginationItem>
+                                                <PaginationPrevious
+                                                    onClick={() => setPaginaActual((p) => Math.max(1, p - 1))}
+                                                    className={paginaActual === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                                />
+                                            </PaginationItem>
+                                            {Array.from({ length: totalPaginas }, (_, i) => i + 1).map((pagina) => (
+                                                <PaginationItem key={pagina}>
+                                                    <PaginationLink
+                                                        isActive={paginaActual === pagina}
+                                                        onClick={() => setPaginaActual(pagina)}
+                                                        className="cursor-pointer"
                                                     >
-                                                        {pageNum}
-                                                    </Button>
-                                                );
-                                            })}
-                                        </div>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => setPaginaActual((prev) => Math.min(prev + 1, totalPaginas))}
-                                            disabled={paginaActual === totalPaginas}
-                                        >
-                                            Siguiente
-                                        </Button>
-                                    </div>
+                                                        {pagina}
+                                                    </PaginationLink>
+                                                </PaginationItem>
+                                            ))}
+                                            {totalPaginas > 5 && paginaActual < totalPaginas - 2 && (
+                                                <PaginationItem>
+                                                    <PaginationEllipsis />
+                                                </PaginationItem>
+                                            )}
+                                            <PaginationItem>
+                                                <PaginationNext
+                                                    onClick={() => setPaginaActual((p) => Math.min(totalPaginas, p + 1))}
+                                                    className={paginaActual === totalPaginas ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                                />
+                                            </PaginationItem>
+                                        </PaginationContent>
+                                    </Pagination>
                                 </div>
                             )}
                         </CardContent>
