@@ -13,6 +13,15 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Pagination,
+    PaginationContent,
+    PaginationEllipsis,
+    PaginationItem,
+    PaginationLink,
+    PaginationNext,
+    PaginationPrevious,
+} from '@/components/ui/pagination';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -290,8 +299,8 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                                                             ? proveedor.saldo_proveedor < 0
                                                                 ? 'text-red-600 dark:text-red-400'
                                                                 : proveedor.saldo_proveedor === 0
-                                                                    ? 'text-green-600 dark:text-green-400'
-                                                                    : 'text-green-600 dark:text-green-400'
+                                                                  ? 'text-green-600 dark:text-green-400'
+                                                                  : 'text-green-600 dark:text-green-400'
                                                             : 'text-gray-400 italic'
                                                     }
                                                 >
@@ -299,8 +308,8 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                                                         ? proveedor.saldo_proveedor < 0
                                                             ? `- ${formatearMoneda(Math.abs(proveedor.saldo_proveedor))}`
                                                             : proveedor.saldo_proveedor === 0
-                                                                ? 'Sin saldo'
-                                                                : formatearMoneda(proveedor.saldo_proveedor)
+                                                              ? 'Sin saldo'
+                                                              : formatearMoneda(proveedor.saldo_proveedor)
                                                         : 'Sin dato'}
                                                 </span>
                                             </div>
@@ -383,17 +392,46 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                 </div>
 
                 {/* Controles de Paginación */}
-                <div className="mt-4 flex justify-between">
-                    <Button onClick={() => setPaginaActual((prev) => Math.max(prev - 1, 1))} disabled={paginaActual === 1}>
-                        Anterior
-                    </Button>
-                    <span>
-                        Página {paginaActual} de {totalPaginas}
-                    </span>
-                    <Button onClick={() => setPaginaActual((prev) => Math.min(prev + 1, totalPaginas))} disabled={paginaActual === totalPaginas}>
-                        Siguiente
-                    </Button>
-                </div>
+                {totalPaginas > 1 && (
+                    <div className="flex items-center justify-between">
+                        <div className="text-muted-foreground text-sm">
+                            {(paginaActual - 1) * elementosPorPagina + 1} - {Math.min(paginaActual * elementosPorPagina, proveedores.length)} de{' '}
+                            {proveedores.length} proveedores
+                        </div>
+                        <Pagination>
+                            <PaginationContent>
+                                <PaginationItem>
+                                    <PaginationPrevious
+                                        onClick={() => setPaginaActual((p) => Math.max(1, p - 1))}
+                                        className={paginaActual === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                    />
+                                </PaginationItem>
+                                {Array.from({ length: totalPaginas }, (_, i) => i + 1).map((pagina) => (
+                                    <PaginationItem key={pagina}>
+                                        <PaginationLink
+                                            isActive={pagina === paginaActual}
+                                            onClick={() => setPaginaActual(pagina)}
+                                            className="cursor-pointer"
+                                        >
+                                            {pagina}
+                                        </PaginationLink>
+                                    </PaginationItem>
+                                ))}
+                                {totalPaginas > 5 && paginaActual < totalPaginas - 2 && (
+                                    <PaginationItem>
+                                        <PaginationEllipsis />
+                                    </PaginationItem>
+                                )}
+                                <PaginationItem>
+                                    <PaginationNext
+                                        onClick={() => setPaginaActual((p) => Math.min(totalPaginas, p + 1))}
+                                        className={paginaActual === totalPaginas ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                    />
+                                </PaginationItem>
+                            </PaginationContent>
+                        </Pagination>
+                    </div>
+                )}
             </div>
             <ScrollProgress />
         </AppLayout>
