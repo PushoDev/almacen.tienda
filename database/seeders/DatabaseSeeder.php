@@ -35,33 +35,45 @@ class DatabaseSeeder extends Seeder
         ]);
         User::factory()->create([
             'name' => 'Angel Sanchez',
-            'email' => 'administrador@posglorietashop.com',
+            'email' => 'administrador@glorietashop.com',
             'password' => Hash::make('angel2025'),
             'role' => 'admin',
         ]);
         User::factory()->create([
-            'name' => 'Aylin',
-            'email' => 'aylin2025@posglorietashop.com',
-            'password' => Hash::make('aylin2025'),
+            'name' => 'Auditoria Glorieta',
+            'email' => 'soporte.general@glorietashop.com',
+            'password' => Hash::make('auditoria2025'),
             'role' => 'admin',
         ]);
         // Usuarios Vendedores
         User::factory()->create([
-            'name' => 'Aismaray',
-            'email' => 'icha8506@posglorietashop.com',
-            'password' => Hash::make('icha8506'),
+            'name' => 'Bejucal',
+            'email' => 'bejucal.pventa@glorietashop.com',
+            'password' => Hash::make('bejucal2025'),
             'role' => 'vendedor',
         ]);
         User::factory()->create([
-            'name' => 'Manuel',
-            'email' => 'manuel2025@posglorietashop.com',
-            'password' => Hash::make('manuel2025'),
+            'name' => 'La Salud',
+            'email' => 'lasalud.pventa@glorietashop.com',
+            'password' => Hash::make('lasalud2025'),
             'role' => 'vendedor',
         ]);
         User::factory()->create([
-            'name' => 'Yusi',
-            'email' => 'yusi2025@posglorietashop.com',
-            'password' => Hash::make('yusi2025'),
+            'name' => 'Quivican',
+            'email' => 'quivican.pventa@glorietashop.com',
+            'password' => Hash::make('quivican2025'),
+            'role' => 'vendedor',
+        ]);
+        User::factory()->create([
+            'name' => 'Manzanillo 1',
+            'email' => 'manzanillo1.pventa@glorietashop.com',
+            'password' => Hash::make('manzanillo12025'),
+            'role' => 'vendedor',
+        ]);
+        User::factory()->create([
+            'name' => 'Manzanillo 2',
+            'email' => 'manzanillo2.pventa@glorietashop.com',
+            'password' => Hash::make('manzanillo22025'),
             'role' => 'vendedor',
         ]);
 
@@ -122,14 +134,11 @@ class DatabaseSeeder extends Seeder
             ->keyBy('codigo_moneda');
 
         $basesCuentas = [
-            'QUIVICAN',
-            'LA SALUD',
             'BEJUCAL',
+            'LA SALUD',
+            'QUIVICAN',
             'MANZANILLO 1',
             'MANZANILLO 2',
-            'COTORRO',
-            'GUANABACOA',
-            'SAN ANTONIO',
         ];
 
         foreach ($basesCuentas as $base) {
@@ -173,16 +182,25 @@ class DatabaseSeeder extends Seeder
                 'correo_almacen' => 'manzanillo@glorietashop.com',
                 'provincia_almacen' => 'Granma',
                 'ciudad_almacen' => 'Manzanillo',
-                'notas_almacen' => 'Almacén principal de Manzanillo',
+                'notas_almacen' => 'Almacén principal de Manzanillo, mas conocido como Acopio',
             ],
             [
-                'nombre_almacen' => 'TIENDA MANZANILLO',
+                'nombre_almacen' => 'TIENDA MANZANILLO 1',
                 'tipo_almacen' => 'punto_venta',
                 'telefono_almacen' => '+53 5 7654321',
-                'correo_almacen' => 'tiendamanzanillo@glorietashop.com',
+                'correo_almacen' => 'tiendamanzanillo1@glorietashop.com',
                 'provincia_almacen' => 'Granma',
                 'ciudad_almacen' => 'Manzanillo',
-                'notas_almacen' => 'Punto de venta en Manzanillo',
+                'notas_almacen' => 'Punto de venta en Manzanillo, Calle Marti como referencia',
+            ],
+            [
+                'nombre_almacen' => 'TIENDA MANZANILLO 2',
+                'tipo_almacen' => 'punto_venta',
+                'telefono_almacen' => '+53 5 7654322',
+                'correo_almacen' => 'tiendamanzanillo2@glorietashop.com',
+                'provincia_almacen' => 'Granma',
+                'ciudad_almacen' => 'Manzanillo',
+                'notas_almacen' => 'Punto de venta en Manzanillo, En el frente al telecentro de TV Golfovision',
             ],
             [
                 'nombre_almacen' => 'ALMACEN BEJUCAL',
