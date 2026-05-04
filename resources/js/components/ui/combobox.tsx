@@ -54,9 +54,15 @@ function ComboboxInput({
     showClear?: boolean
 }) {
     return (
-        <InputGroup className={cn("w-auto", className)}>
+        <InputGroup className={cn("w-auto uppercase", className)}>
             <ComboboxPrimitive.Input
                 render={<InputGroupInput disabled={disabled} />}
+                onInput={(e) => {
+                    const input = e.target as HTMLInputElement;
+                    const start = input.selectionStart;
+                    input.value = input.value.toUpperCase();
+                    if (start) input.setSelectionRange(start, start);
+                }}
                 {...props}
             />
             <InputGroupAddon align="inline-end">

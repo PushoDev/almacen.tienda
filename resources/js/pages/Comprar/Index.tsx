@@ -162,8 +162,6 @@ export default function ComprarPage() {
     const [cuentaSelectOpen, setCuentaSelectOpen] = useState(false);
 
     // Estados para búsqueda de almacenes
-    const [almacenSearchTerm, setAlmacenSearchTerm] = useState('');
-    const [filteredAlmacens, setFilteredAlmacens] = useState<AlmacenProps[]>([]);
     const [lastSelectedAlmacenId, setLastSelectedAlmacenId] = useState<string>('');
 
     // Estado para el modal de crear almacén
@@ -200,8 +198,6 @@ export default function ComprarPage() {
         productos: [] as ProductoComprarProps[],
     });
 
-    const [searchCategoria, setSearchCategoria] = useState('');
-
     // Estado para el modal de crear cliente
     const [isCrearClienteDialogOpen, setIsCrearClienteDialogOpen] = useState(false);
 
@@ -230,15 +226,7 @@ export default function ComprarPage() {
         return () => clearTimeout(debounceTimer);
     }, [clienteSearchTerm, clientes]);
 
-    // 🔍 EFECTO PARA BÚSQUEDA EN TIEMPO REAL DE ALMACENES
-    useEffect(() => {
-        if (almacenSearchTerm) {
-            const filtered = almacens.filter((almacen) => almacen.nombre_almacen.toLowerCase().includes(almacenSearchTerm.toLowerCase()));
-            setFilteredAlmacens(filtered);
-        } else {
-            setFilteredAlmacens(almacens);
-        }
-    }, [almacenSearchTerm, almacens]);
+    // 🔍 EFECTO PARA BÚSQUEDA EN TIEMPO REAL DE ALMACENES - ELIMINADO: El Combobox maneja el filtrado nativamente
 
     // 🔍 EFECTO PARA BÚSQUEDA EN TIEMPO REAL DE CUENTAS
     useEffect(() => {
@@ -291,7 +279,6 @@ export default function ComprarPage() {
                 setFilteredCuentas(cuentasRes.data);
                 setClientes(clientesRes.data);
                 setFilteredClientes(clientesRes.data);
-                setFilteredAlmacens(almacenesRes.data);
             } catch (error) {
                 console.error('Error al cargar datos:', error);
                 toast.error('Error al cargar los datos necesarios');
@@ -439,7 +426,8 @@ export default function ComprarPage() {
 
     const allProviders = [...proveedoresList, ...clientesList];
     const selectedProvider = allProviders.find((p) => p.nombre === data.proveedor) || null;
-    const filteredCategorias = categorias.filter((cat) => cat.nombre_categoria.toLowerCase().includes(searchCategoria.toLowerCase()));
+    const selectedAlmacen = almacens.find((a) => a.id.toString() === tempFormData.almacen_id) || null;
+    const selectedCategoria = categorias.find((c) => c.nombre_categoria === tempFormData.categoria) || null;
 
     const realizarCompra = () => {
         if (productos.length === 0) {
@@ -535,7 +523,6 @@ export default function ComprarPage() {
 
                 // Agregar a la lista de almacenes
                 setAlmacens((prev) => [...prev, almacen]);
-                setFilteredAlmacens((prev) => [...prev, almacen]);
 
                 // Seleccionar automáticamente el nuevo almacén
                 setLastSelectedAlmacenId(almacen.id.toString());
@@ -557,7 +544,6 @@ export default function ComprarPage() {
 
                 setLocalErrors({});
                 setIsCrearAlmacenDialogOpen(false);
-                setAlmacenSearchTerm('');
             } catch (error: any) {
                 console.error('Error al crear almacén:', error);
 
@@ -581,7 +567,6 @@ export default function ComprarPage() {
                     }
 
                     setIsCrearAlmacenDialogOpen(false);
-                    setAlmacenSearchTerm('');
                 } else if (error.response?.data?.errors) {
                     setLocalErrors(error.response.data.errors);
                     toast.error('Error de validación', {
@@ -1374,7 +1359,7 @@ export default function ComprarPage() {
                                             <ComboboxList>
                                                 {(provider) => (
                                                     <ComboboxItem key={provider.id} value={provider}>
-                                                        <div className="flex w-full items-center justify-between gap-2">
+                                                        <div className="flex w-full items-center justify-between gap-2 uppercase">
                                                             <span className="flex items-center gap-2">
                                                                 {provider.tipo === 'proveedor' ? (
                                                                     <Truck className="h-4 w-4 text-blue-600" />
@@ -1424,45 +1409,39 @@ export default function ComprarPage() {
                             {/* Fila 1 - ALMACÉN CON BÚSQUEDA Y MODAL */}
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="almacen_id">Almacén Destino *</Label>
-                                <Select
-                                    name="almacen_id"
-                                    value={tempFormData.almacen_id}
-                                    onValueChange={(value) => handleTempSelectChange('almacen_id', value)}
+                                <Combobox
+                                    items={almacens}
+                                    itemToStringValue={(item) => item.nombre_almacen}
+                                    value={selectedAlmacen}
+                                    onValueChange={(almacen) => {
+                                        if (almacen) {
+                                            handleTempSelectChange('almacen_id', almacen.id.toString());
+                                        } else {
+                                            handleTempSelectChange('almacen_id', '');
+                                        }
+                                    }}
                                 >
-                                    <SelectTrigger className="w-full">
-                                        <SelectValue placeholder={lastSelectedAlmacenId ? 'Último seleccionado' : 'Seleccione Almacén'} />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <div className="p-2">
-                                            <Input
-                                                type="text"
-                                                placeholder="Buscar almacén..."
-                                                value={almacenSearchTerm}
-                                                onChange={(e) => setAlmacenSearchTerm(e.target.value)}
-                                                className="text-sm"
-                                            />
-                                        </div>
-                                        <div className="max-h-60 overflow-y-auto">
-                                            {filteredAlmacens.length > 0 ? (
-                                                filteredAlmacens.map((almacen) => (
-                                                    <SelectItem key={almacen.id} value={almacen.id.toString()}>
-                                                        <div className="flex items-center gap-2">
-                                                            <Warehouse className="h-4 w-4 text-gray-500" />
-                                                            <span>{almacen.nombre_almacen}</span>
-                                                            {almacen.tipo_almacen && (
-                                                                <Badge variant="outline" className="ml-auto text-xs">
-                                                                    {almacen.tipo_almacen}
-                                                                </Badge>
-                                                            )}
-                                                        </div>
-                                                    </SelectItem>
-                                                ))
-                                            ) : (
-                                                <div className="text-muted-foreground px-2 py-4 text-center text-sm">
-                                                    {almacenSearchTerm ? 'No se encontraron almacenes' : 'No hay almacenes disponibles'}
-                                                </div>
+                                    <ComboboxInput
+                                        placeholder={lastSelectedAlmacenId ? 'Último seleccionado' : 'Seleccione Almacén'}
+                                        showClear={!!tempFormData.almacen_id}
+                                    />
+                                    <ComboboxContent>
+                                        <ComboboxEmpty>No se encontraron almacenes.</ComboboxEmpty>
+                                        <ComboboxList>
+                                            {(almacen) => (
+                                                <ComboboxItem key={almacen.id} value={almacen}>
+                                                    <div className="flex items-center gap-2 uppercase">
+                                                        <Warehouse className="h-4 w-4 text-gray-500" />
+                                                        <span>{almacen.nombre_almacen}</span>
+                                                        {almacen.tipo_almacen && (
+                                                            <Badge variant="outline" className="ml-auto text-xs">
+                                                                {almacen.tipo_almacen}
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                </ComboboxItem>
                                             )}
-                                        </div>
+                                        </ComboboxList>
                                         <Separator className="my-2" />
                                         <div
                                             className="flex cursor-pointer items-center rounded-md bg-blue-50 px-3 py-3 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-300"
@@ -1472,10 +1451,9 @@ export default function ComprarPage() {
                                         >
                                             <PlusCircle className="mr-2 h-4 w-4" />
                                             <span className="font-medium">Crear nuevo almacén</span>
-                                            {almacenSearchTerm && <span className="ml-2 text-sm">"{almacenSearchTerm}"</span>}
                                         </div>
-                                    </SelectContent>
-                                </Select>
+                                    </ComboboxContent>
+                                </Combobox>
                                 {!tempFormData.almacen_id && productos.some((p) => !p.almacen_id) && (
                                     <p className="text-sm text-red-500">Debe seleccionar un almacén válido</p>
                                 )}
@@ -1516,35 +1494,28 @@ export default function ComprarPage() {
                             {/* Categorias */}
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="categorias">Categoría *</Label>
-                                <Select
-                                    name="categoria"
-                                    value={tempFormData.categoria}
-                                    onValueChange={(value) => handleTempSelectChange('categoria', value)}
+                                <Combobox
+                                    items={categorias}
+                                    itemToStringValue={(item) => item.nombre_categoria}
+                                    value={selectedCategoria}
+                                    onValueChange={(categoria) => {
+                                        if (categoria) {
+                                            handleTempSelectChange('categoria', categoria.nombre_categoria);
+                                        } else {
+                                            handleTempSelectChange('categoria', '');
+                                        }
+                                    }}
                                 >
-                                    <SelectTrigger className="w-full">
-                                        <SelectValue placeholder="Seleccione Categoría" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <div className="p-2">
-                                            <Input
-                                                type="text"
-                                                placeholder="Buscar categoría..."
-                                                value={searchCategoria}
-                                                onChange={(e) => setSearchCategoria(e.target.value)}
-                                                className="text-sm"
-                                            />
-                                        </div>
-                                        <div className="max-h-60 overflow-y-auto">
-                                            {filteredCategorias.length > 0 ? (
-                                                filteredCategorias.map((categoria) => (
-                                                    <SelectItem key={categoria.id} value={categoria.nombre_categoria}>
-                                                        {categoria.nombre_categoria}
-                                                    </SelectItem>
-                                                ))
-                                            ) : (
-                                                <div className="text-muted-foreground px-2 py-4 text-center text-sm">No hay categorías</div>
+                                    <ComboboxInput placeholder="Seleccione Categoría" showClear={!!tempFormData.categoria} />
+                                    <ComboboxContent>
+                                        <ComboboxEmpty>No se encontraron categorías.</ComboboxEmpty>
+                                        <ComboboxList>
+                                            {(categoria) => (
+                                                <ComboboxItem key={categoria.id} value={categoria}>
+                                                    <span className="uppercase">{categoria.nombre_categoria}</span>
+                                                </ComboboxItem>
                                             )}
-                                        </div>
+                                        </ComboboxList>
                                         <Separator className="my-2" />
                                         <div
                                             className="hover:bg-accent flex cursor-pointer items-center gap-2 p-2 text-sm text-purple-600"
@@ -1553,32 +1524,20 @@ export default function ComprarPage() {
                                             <PlusCircle className="h-4 w-4" />
                                             Crear Nueva Categoría
                                         </div>
-                                    </SelectContent>
-                                </Select>
+                                    </ComboboxContent>
+                                </Combobox>
                                 {errors.categorias && <InputError message={errors.categorias} />}
                             </div>
 
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="precio_producto">Precio *</Label>
-                                <Input
-                                    type="number"
-                                    name="precio"
-                                    placeholder="$ 0.00"
-                                    value={tempFormData.precio || ''}
-                                    onChange={handleTempInputChange}
-                                />
+                                <Input name="precio" placeholder="$ 0.00" value={tempFormData.precio || ''} onChange={handleTempInputChange} />
                                 {errors['productos.0.precio'] && <InputError message={errors['productos.0.precio']} />}
                             </div>
 
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="cantidad_producto">Cantidad *</Label>
-                                <Input
-                                    type="number"
-                                    name="cantidad"
-                                    placeholder="0"
-                                    value={tempFormData.cantidad || ''}
-                                    onChange={handleTempInputChange}
-                                />
+                                <Input name="cantidad" placeholder="0" value={tempFormData.cantidad || ''} onChange={handleTempInputChange} />
                                 {errors['productos.0.cantidad'] && <InputError message={errors['productos.0.cantidad']} />}
                             </div>
                         </div>
@@ -1770,40 +1729,64 @@ export default function ComprarPage() {
 
                                                                 <div>
                                                                     <Label>Almacén Destino *</Label>
-                                                                    <Select
-                                                                        value={tempFormData.almacen_id}
-                                                                        onValueChange={(value) => handleTempSelectChange('almacen_id', value)}
+                                                                    <Combobox
+                                                                        items={almacens}
+                                                                        itemToStringValue={(item) => item.nombre_almacen}
+                                                                        value={selectedAlmacen}
+                                                                        onValueChange={(almacen) => {
+                                                                            if (almacen) {
+                                                                                handleTempSelectChange('almacen_id', almacen.id.toString());
+                                                                            } else {
+                                                                                handleTempSelectChange('almacen_id', '');
+                                                                            }
+                                                                        }}
                                                                     >
-                                                                        <SelectTrigger>
-                                                                            <SelectValue placeholder="Seleccione Almacén" />
-                                                                        </SelectTrigger>
-                                                                        <SelectContent>
-                                                                            {filteredAlmacens.map((almacen) => (
-                                                                                <SelectItem key={almacen.id} value={almacen.id.toString()}>
-                                                                                    {almacen.nombre_almacen}
-                                                                                </SelectItem>
-                                                                            ))}
-                                                                        </SelectContent>
-                                                                    </Select>
+                                                                        <ComboboxInput
+                                                                            placeholder="Seleccione Almacén"
+                                                                            showClear={!!tempFormData.almacen_id}
+                                                                        />
+                                                                        <ComboboxContent>
+                                                                            <ComboboxEmpty>No se encontraron almacenes.</ComboboxEmpty>
+                                                                            <ComboboxList>
+                                                                                {(almacen) => (
+                                                                                    <ComboboxItem key={almacen.id} value={almacen}>
+                                                                                        <span className="uppercase">{almacen.nombre_almacen}</span>
+                                                                                    </ComboboxItem>
+                                                                                )}
+                                                                            </ComboboxList>
+                                                                        </ComboboxContent>
+                                                                    </Combobox>
                                                                 </div>
 
                                                                 <div>
                                                                     <Label>Categoría *</Label>
-                                                                    <Select
-                                                                        value={tempFormData.categoria}
-                                                                        onValueChange={(value) => handleTempSelectChange('categoria', value)}
+                                                                    <Combobox
+                                                                        items={categorias}
+                                                                        itemToStringValue={(item) => item.nombre_categoria}
+                                                                        value={selectedCategoria}
+                                                                        onValueChange={(categoria) => {
+                                                                            if (categoria) {
+                                                                                handleTempSelectChange('categoria', categoria.nombre_categoria);
+                                                                            } else {
+                                                                                handleTempSelectChange('categoria', '');
+                                                                            }
+                                                                        }}
                                                                     >
-                                                                        <SelectTrigger>
-                                                                            <SelectValue placeholder="Seleccione o cree" />
-                                                                        </SelectTrigger>
-                                                                        <SelectContent>
-                                                                            {filteredCategorias.map((cat) => (
-                                                                                <SelectItem key={cat.id} value={cat.nombre_categoria}>
-                                                                                    {cat.nombre_categoria}
-                                                                                </SelectItem>
-                                                                            ))}
-                                                                        </SelectContent>
-                                                                    </Select>
+                                                                        <ComboboxInput
+                                                                            placeholder="Seleccione o cree"
+                                                                            showClear={!!tempFormData.categoria}
+                                                                        />
+                                                                        <ComboboxContent>
+                                                                            <ComboboxEmpty>No se encontraron categorías.</ComboboxEmpty>
+                                                                            <ComboboxList>
+                                                                                {(categoria) => (
+                                                                                    <ComboboxItem key={categoria.id} value={categoria}>
+                                                                                        {categoria.nombre_categoria}
+                                                                                    </ComboboxItem>
+                                                                                )}
+                                                                            </ComboboxList>
+                                                                        </ComboboxContent>
+                                                                    </Combobox>
                                                                 </div>
 
                                                                 <div>
