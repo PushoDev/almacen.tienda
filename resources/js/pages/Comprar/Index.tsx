@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSeparator, FieldSet } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -199,7 +200,6 @@ export default function ComprarPage() {
         productos: [] as ProductoComprarProps[],
     });
 
-    const [searchProveedor, setSearchProveedor] = useState('');
     const [searchCategoria, setSearchCategoria] = useState('');
 
     // Estado para el modal de crear cliente
@@ -437,17 +437,8 @@ export default function ComprarPage() {
         return productos.reduce((total, p) => total + p.cantidad * p.precio, 0).toFixed(2);
     };
 
-    const filteredProvedors =
-        searchProveedor.trim() === ''
-            ? [...proveedoresList, ...clientesList]
-            : [...proveedoresList, ...clientesList].filter((item) => item.nombre?.toLowerCase().includes(searchProveedor.toLowerCase()));
-
-    const filteredProvedorsExacto =
-        searchProveedor.trim() === ''
-            ? []
-            : [...proveedoresList, ...clientesList].filter((item) => item.nombre?.toLowerCase() === searchProveedor.toLowerCase());
-
-    const isProveedorDuplicado = filteredProvedorsExacto.length > 1;
+    const allProviders = [...proveedoresList, ...clientesList];
+    const selectedProvider = allProviders.find((p) => p.nombre === data.proveedor) || null;
     const filteredCategorias = categorias.filter((cat) => cat.nombre_categoria.toLowerCase().includes(searchCategoria.toLowerCase()));
 
     const realizarCompra = () => {
@@ -1364,60 +1355,48 @@ export default function ComprarPage() {
                                     <Label htmlFor="proveedor" className="text-sm font-medium">
                                         Proveedor / Cliente
                                     </Label>
-                                    <Select
-                                        name="proveedor"
-                                        value={data.proveedor}
-                                        onValueChange={(value) => {
-                                            setData('proveedor', value);
-                                            setSearchProveedor('');
+                                    <Combobox
+                                        items={allProviders}
+                                        itemToStringValue={(item) => item.nombre}
+                                        value={selectedProvider}
+                                        onValueChange={(provider) => {
+                                            if (provider) {
+                                                setData('proveedor', provider.nombre);
+                                                setData('tipo_proveedor', provider.tipo);
+                                            } else {
+                                                setData('proveedor', '');
+                                            }
                                         }}
                                     >
-                                        <SelectTrigger className="h-11 w-full">
-                                            <SelectValue placeholder="Seleccione Proveedor o Cliente" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <div className="p-2">
-                                                <Input
-                                                    type="text"
-                                                    placeholder="Buscar proveedor o cliente..."
-                                                    value={searchProveedor}
-                                                    onChange={(e) => setSearchProveedor(e.target.value)}
-                                                    className="text-sm"
-                                                    autoFocus
-                                                />
-                                            </div>
-                                            <div className="max-h-60 overflow-y-auto">
-                                                {filteredProvedors.length > 0 ? (
-                                                    filteredProvedors.map((proveedor) => (
-                                                        <SelectItem key={proveedor.id} value={proveedor.nombre}>
-                                                            <div className="flex w-full items-center justify-between gap-2">
-                                                                <span className="flex items-center gap-2">
-                                                                    {proveedor.tipo === 'proveedor' ? (
-                                                                        <Truck className="h-4 w-4 text-blue-600" />
-                                                                    ) : (
-                                                                        <Users className="h-4 w-4 text-green-600" />
-                                                                    )}
-                                                                    <span>{proveedor.nombre}</span>
-                                                                </span>
-                                                                <Badge
-                                                                    variant={proveedor.tipo === 'proveedor' ? 'default' : 'secondary'}
-                                                                    className={
-                                                                        proveedor.tipo === 'proveedor'
-                                                                            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
-                                                                            : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                                                                    }
-                                                                >
-                                                                    {proveedor.tipo === 'proveedor' ? 'Proveedor' : 'Cliente'}
-                                                                </Badge>
-                                                            </div>
-                                                        </SelectItem>
-                                                    ))
-                                                ) : (
-                                                    <div className="text-muted-foreground px-2 py-4 text-center text-sm">
-                                                        {searchProveedor ? 'No se encontró' : 'No hay opciones'}
-                                                    </div>
+                                        <ComboboxInput placeholder="Buscar proveedor o cliente..." showClear={!!data.proveedor} />
+                                        <ComboboxContent>
+                                            <ComboboxEmpty>No se encontraron proveedores.</ComboboxEmpty>
+                                            <ComboboxList>
+                                                {(provider) => (
+                                                    <ComboboxItem key={provider.id} value={provider}>
+                                                        <div className="flex w-full items-center justify-between gap-2">
+                                                            <span className="flex items-center gap-2">
+                                                                {provider.tipo === 'proveedor' ? (
+                                                                    <Truck className="h-4 w-4 text-blue-600" />
+                                                                ) : (
+                                                                    <Users className="h-4 w-4 text-green-600" />
+                                                                )}
+                                                                <span>{provider.nombre}</span>
+                                                            </span>
+                                                            <Badge
+                                                                variant={provider.tipo === 'proveedor' ? 'default' : 'secondary'}
+                                                                className={
+                                                                    provider.tipo === 'proveedor'
+                                                                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                                                                        : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                                                                }
+                                                            >
+                                                                {provider.tipo === 'proveedor' ? 'Proveedor' : 'Cliente'}
+                                                            </Badge>
+                                                        </div>
+                                                    </ComboboxItem>
                                                 )}
-                                            </div>
+                                            </ComboboxList>
                                             <Separator className="my-2" />
                                             <div
                                                 className="hover:bg-accent flex cursor-pointer items-center gap-2 p-2 text-sm text-blue-600"
@@ -1426,8 +1405,8 @@ export default function ComprarPage() {
                                                 <PlusCircle className="h-4 w-4" />
                                                 Crear Nuevo Proveedor
                                             </div>
-                                        </SelectContent>
-                                    </Select>
+                                        </ComboboxContent>
+                                    </Combobox>
                                     {errors.proveedor && <InputError message={errors.proveedor} />}
                                 </div>
                             </div>
