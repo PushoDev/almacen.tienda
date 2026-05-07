@@ -1342,6 +1342,7 @@ export default function ComprarPage() {
                                     </Label>
                                     <Combobox
                                         items={allProviders}
+                                        itemToStringLabel={(item) => item.nombre}
                                         itemToStringValue={(item) => item.nombre}
                                         value={selectedProvider}
                                         onValueChange={(provider) => {
@@ -1353,7 +1354,7 @@ export default function ComprarPage() {
                                             }
                                         }}
                                     >
-                                        <ComboboxInput placeholder="Buscar proveedor o cliente..." showClear={!!data.proveedor} />
+                                        <ComboboxInput placeholder="Buscar proveedor o cliente..." showClear={!!data.proveedor} className="uppercase" />
                                         <ComboboxContent>
                                             <ComboboxEmpty>No se encontraron proveedores.</ComboboxEmpty>
                                             <ComboboxList>
@@ -1411,6 +1412,7 @@ export default function ComprarPage() {
                                 <Label htmlFor="almacen_id">Almacén Destino *</Label>
                                 <Combobox
                                     items={almacens}
+                                    itemToStringLabel={(item) => item.nombre_almacen}
                                     itemToStringValue={(item) => item.nombre_almacen}
                                     value={selectedAlmacen}
                                     onValueChange={(almacen) => {
@@ -1424,6 +1426,7 @@ export default function ComprarPage() {
                                     <ComboboxInput
                                         placeholder={lastSelectedAlmacenId ? 'Último seleccionado' : 'Seleccione Almacén'}
                                         showClear={!!tempFormData.almacen_id}
+                                        className="uppercase"
                                     />
                                     <ComboboxContent>
                                         <ComboboxEmpty>No se encontraron almacenes.</ComboboxEmpty>
@@ -1496,6 +1499,7 @@ export default function ComprarPage() {
                                 <Label htmlFor="categorias">Categoría *</Label>
                                 <Combobox
                                     items={categorias}
+                                    itemToStringLabel={(item) => item.nombre_categoria}
                                     itemToStringValue={(item) => item.nombre_categoria}
                                     value={selectedCategoria}
                                     onValueChange={(categoria) => {
@@ -1506,7 +1510,7 @@ export default function ComprarPage() {
                                         }
                                     }}
                                 >
-                                    <ComboboxInput placeholder="Seleccione Categoría" showClear={!!tempFormData.categoria} />
+                                    <ComboboxInput placeholder="Seleccione Categoría" showClear={!!tempFormData.categoria} className="uppercase" />
                                     <ComboboxContent>
                                         <ComboboxEmpty>No se encontraron categorías.</ComboboxEmpty>
                                         <ComboboxList>
@@ -1731,6 +1735,7 @@ export default function ComprarPage() {
                                                                     <Label>Almacén Destino *</Label>
                                                                     <Combobox
                                                                         items={almacens}
+                                                                        itemToStringLabel={(item) => item.nombre_almacen}
                                                                         itemToStringValue={(item) => item.nombre_almacen}
                                                                         value={selectedAlmacen}
                                                                         onValueChange={(almacen) => {
@@ -1744,6 +1749,7 @@ export default function ComprarPage() {
                                                                         <ComboboxInput
                                                                             placeholder="Seleccione Almacén"
                                                                             showClear={!!tempFormData.almacen_id}
+                                                                            className="uppercase"
                                                                         />
                                                                         <ComboboxContent>
                                                                             <ComboboxEmpty>No se encontraron almacenes.</ComboboxEmpty>
@@ -1762,6 +1768,7 @@ export default function ComprarPage() {
                                                                     <Label>Categoría *</Label>
                                                                     <Combobox
                                                                         items={categorias}
+                                                                        itemToStringLabel={(item) => item.nombre_categoria}
                                                                         itemToStringValue={(item) => item.nombre_categoria}
                                                                         value={selectedCategoria}
                                                                         onValueChange={(categoria) => {
@@ -1775,6 +1782,7 @@ export default function ComprarPage() {
                                                                         <ComboboxInput
                                                                             placeholder="Seleccione o cree"
                                                                             showClear={!!tempFormData.categoria}
+                                                                            className="uppercase"
                                                                         />
                                                                         <ComboboxContent>
                                                                             <ComboboxEmpty>No se encontraron categorías.</ComboboxEmpty>
