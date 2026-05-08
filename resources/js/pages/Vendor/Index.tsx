@@ -12,10 +12,10 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from '@/components/ui/sonner';
@@ -419,10 +419,10 @@ export default function PuntoVentaOficial({
                 carrito.map((item) =>
                     item.id === idItem
                         ? {
-                              ...item,
-                              cantidad: nuevaCantidad,
-                              subtotal: nuevaCantidad * item.precio_venta,
-                          }
+                            ...item,
+                            cantidad: nuevaCantidad,
+                            subtotal: nuevaCantidad * item.precio_venta,
+                        }
                         : item,
                 ),
             );
@@ -454,10 +454,10 @@ export default function PuntoVentaOficial({
             carrito.map((itemCarrito) =>
                 itemCarrito.id === id
                     ? {
-                          ...itemCarrito,
-                          cantidad: nuevaCantidad,
-                          subtotal: nuevaCantidad * itemCarrito.precio_venta,
-                      }
+                        ...itemCarrito,
+                        cantidad: nuevaCantidad,
+                        subtotal: nuevaCantidad * itemCarrito.precio_venta,
+                    }
                     : itemCarrito,
             ),
         );
@@ -469,10 +469,10 @@ export default function PuntoVentaOficial({
             carrito.map((item) =>
                 item.id === id
                     ? {
-                          ...item,
-                          precio_venta: nuevoPrecio,
-                          subtotal: item.cantidad * nuevoPrecio,
-                      }
+                        ...item,
+                        precio_venta: nuevoPrecio,
+                        subtotal: item.cantidad * nuevoPrecio,
+                    }
                     : item,
             ),
         );
@@ -754,6 +754,8 @@ export default function PuntoVentaOficial({
     };
 
     const selectedCurrencyInfo = currentPayment.moneda_id ? getCurrencyInfo(currentPayment.moneda_id) : null;
+    const selectedAlmacen = almacenes.find((almacen) => almacen.id.toString() === almacenSeleccionado) || null;
+    const selectedCliente = clientes.find((cliente) => cliente.id.toString() === clienteSeleccionado) || null;
 
     const CrearClienteDialogContent = () => {
         const [localCliente, setLocalCliente] = useState({
@@ -975,39 +977,61 @@ export default function PuntoVentaOficial({
                                 </CardHeader>
                                 <CardContent className="pt-5">
                                     <div className="grid gap-4 sm:grid-cols-2">
+                                        {/* Seleccionar Almacen */}
                                         <div className="space-y-2">
                                             <Label htmlFor="almacen" className="text-sm font-medium">
                                                 Almacén
                                             </Label>
-                                            <Select value={almacenSeleccionado} onValueChange={handleAlmacenChange}>
-                                                <SelectTrigger className="h-11">
-                                                    <SelectValue placeholder="Seleccionar almacén" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {almacenes.map((almacen) => (
-                                                        <SelectItem key={almacen.id} value={almacen.id.toString()}>
-                                                            {almacen.nombre_almacen}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
+                                            <Combobox
+                                                items={almacenes}
+                                                itemToStringLabel={(item) => item.nombre_almacen}
+                                                itemToStringValue={(item) => item.nombre_almacen}
+                                                value={selectedAlmacen}
+                                                onValueChange={(almacen) => handleAlmacenChange(almacen ? almacen.id.toString() : '')}
+                                            >
+                                                <ComboboxInput
+                                                    placeholder="Seleccionar almacén"
+                                                    showClear={!!almacenSeleccionado}
+                                                    className="uppercase"
+                                                />
+                                                <ComboboxContent>
+                                                    <ComboboxEmpty>No se encontraron almacenes.</ComboboxEmpty>
+                                                    <ComboboxList>
+                                                        {(almacen) => (
+                                                            <ComboboxItem key={almacen.id} value={almacen}>
+                                                                <span className="uppercase">{almacen.nombre_almacen}</span>
+                                                            </ComboboxItem>
+                                                        )}
+                                                    </ComboboxList>
+                                                </ComboboxContent>
+                                            </Combobox>
                                         </div>
+                                        {/* Seleccionar Cliente registrado del sistema */}
                                         <div className="space-y-2">
                                             <Label htmlFor="cliente" className="text-sm font-medium">
                                                 Cliente
                                             </Label>
-                                            <Select value={clienteSeleccionado} onValueChange={handleClienteChange}>
-                                                <SelectTrigger className="h-11">
-                                                    <SelectValue placeholder="Seleccionar cliente (Opcional)" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <ScrollArea className="max-h-60">
-                                                        {clientes.map((cliente) => (
-                                                            <SelectItem key={cliente.id} value={cliente.id.toString()}>
-                                                                {cliente.nombre_cliente}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </ScrollArea>
+                                            <Combobox
+                                                items={clientes}
+                                                itemToStringLabel={(item) => item.nombre_cliente}
+                                                itemToStringValue={(item) => item.nombre_cliente}
+                                                value={selectedCliente}
+                                                onValueChange={(cliente) => handleClienteChange(cliente ? cliente.id.toString() : '')}
+                                            >
+                                                <ComboboxInput
+                                                    placeholder="Seleccionar cliente (Opcional)"
+                                                    showClear={!!clienteSeleccionado}
+                                                    className="uppercase"
+                                                />
+                                                <ComboboxContent>
+                                                    <ComboboxEmpty>No se encontraron clientes.</ComboboxEmpty>
+                                                    <ComboboxList>
+                                                        {(cliente) => (
+                                                            <ComboboxItem key={cliente.id} value={cliente}>
+                                                                <span className="uppercase">{cliente.nombre_cliente}</span>
+                                                            </ComboboxItem>
+                                                        )}
+                                                    </ComboboxList>
                                                     <Separator className="my-1" />
                                                     <div
                                                         className="hover:bg-accent flex cursor-pointer items-center gap-2 p-2 text-sm text-blue-600"
@@ -1016,8 +1040,8 @@ export default function PuntoVentaOficial({
                                                         <PlusCircle className="h-4 w-4" />
                                                         Crear Nuevo Cliente
                                                     </div>
-                                                </SelectContent>
-                                            </Select>
+                                                </ComboboxContent>
+                                            </Combobox>
                                         </div>
                                     </div>
                                     {almacenSeleccionado && (
@@ -1479,8 +1503,8 @@ export default function PuntoVentaOficial({
                                                                                     currentPayment.cuenta_id
                                                                                         ? `cuenta_${currentPayment.cuenta_id}`
                                                                                         : currentPayment.cliente_id
-                                                                                          ? `cliente_${currentPayment.cliente_id}`
-                                                                                          : ''
+                                                                                            ? `cliente_${currentPayment.cliente_id}`
+                                                                                            : ''
                                                                                 }
                                                                                 onValueChange={(value) => {
                                                                                     let updatedPayment = { ...currentPayment };
