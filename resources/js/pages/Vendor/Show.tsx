@@ -397,6 +397,16 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
             setActiveTab('receptor');
             return;
         }
+        if (!formDestinatario.carnet_identidad?.trim()) {
+            toast.error('El carnet de identidad es obligatorio');
+            setActiveTab('receptor');
+            return;
+        }
+        if (!formDestinatario.telefono_contacto?.trim()) {
+            toast.error('El teléfono de contacto es obligatorio');
+            setActiveTab('receptor');
+            return;
+        }
 
         if (esVentaGestor) {
             if (!gestorCuentaId) {
@@ -704,7 +714,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                             />
                                         </div>
                                         <div className="space-y-2">
-                                            <Label htmlFor="carnet_identidad">Carnet de Identidad</Label>
+                                            <Label htmlFor="carnet_identidad">Carnet de Identidad *</Label>
                                             <Input
                                                 id="carnet_identidad"
                                                 value={formDestinatario.carnet_identidad}
@@ -713,7 +723,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                             />
                                         </div>
                                         <div className="space-y-2">
-                                            <Label htmlFor="telefono_contacto">Teléfono Contacto</Label>
+                                            <Label htmlFor="telefono_contacto">Teléfono Contacto *</Label>
                                             <Input
                                                 id="telefono_contacto"
                                                 value={formDestinatario.telefono_contacto}
@@ -850,7 +860,13 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                 <AlertDialogAction
                                     onClick={handleGuardarDestinatario}
                                     className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
-                                    disabled={isSavingDestinatario || !formDestinatario.nombre?.trim() || !formDestinatario.apellidos?.trim()}
+                                    disabled={
+                                        isSavingDestinatario ||
+                                        !formDestinatario.nombre?.trim() ||
+                                        !formDestinatario.apellidos?.trim() ||
+                                        !formDestinatario.carnet_identidad?.trim() ||
+                                        !formDestinatario.telefono_contacto?.trim()
+                                    }
                                 >
                                     {isSavingDestinatario ? (
                                         <div className="flex items-center gap-2">
@@ -1077,7 +1093,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                     )}
 
                     {/* Anular venta */}
-                    {(isVentaPendiente || isVentaCompletada) && (
+                    {isVentaPendiente && (
                         <AlertDialog>
                             <AlertDialogTrigger asChild>
                                 <Button

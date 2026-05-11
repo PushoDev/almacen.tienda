@@ -1308,7 +1308,7 @@ export default function PuntoVentaOficial({
                                                         </div>
                                                         <div className="text-right">
                                                             <Input
-                                                                type="number"
+
                                                                 value={item.precio_venta}
                                                                 onChange={(e) => {
                                                                     const value = parseFloat(e.target.value);
