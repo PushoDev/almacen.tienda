@@ -1093,7 +1093,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                     )}
 
                     {/* Anular venta */}
-                    {(isVentaPendiente || isVentaCompletada) && (
+                    {isVentaPendiente && (
                         <AlertDialog>
                             <AlertDialogTrigger asChild>
                                 <Button

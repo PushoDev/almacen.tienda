@@ -1011,12 +1011,23 @@ class VentaController extends Controller
             }
         });
 
-        $venta->load('gestorCuenta');
+        // Refrescar el modelo y relaciones para devolver datos actualizados
+        // inmediatamente al frontend (sin necesidad de F5).
+        $venta->refresh()->load(['destinatario', 'gestorCuenta.moneda']);
 
         return response()->json([
             'success' => true,
             'message' => 'Información del receptor guardada correctamente',
-            'destinatario' => $venta->destinatario,
+            'destinatario' => $venta->destinatario ? [
+                'id' => $venta->destinatario->id,
+                'nombre' => $venta->destinatario->nombre,
+                'apellidos' => $venta->destinatario->apellidos,
+                'carnet_identidad' => $venta->destinatario->carnet_identidad,
+                'direccion_residencia' => $venta->destinatario->direccion_residencia,
+                'telefono_contacto' => $venta->destinatario->telefono_contacto,
+                'parentesco_cliente' => $venta->destinatario->parentesco_cliente,
+                'observaciones' => $venta->destinatario->observaciones,
+            ] : null,
             'gestor' => $venta->es_venta_gestor && $venta->gestor_cuenta_id ? [
                 'monto' => (float) $venta->gestor_monto,
                 'cuenta_id' => $venta->gestor_cuenta_id,
