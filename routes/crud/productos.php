@@ -18,9 +18,10 @@ Route::middleware(['auth', 'verified'])->group(
             'destroy' => 'productos.destroy',
         ]);
 
-        // Ruta para regenerar código de barras desde la UI (Inertia)
-        Route::post('/listado-productos/{producto}/regenerar-barcode', [ProductoController::class, 'regenerarBarcode'])
-            ->name('productos.regenerar-barcode');
+
+        // Ruta para transferir cantidad entre códigos o agregar un nuevo código escaneado
+        Route::post('/listado-productos/{producto}/transferir-codigo', [ProductoController::class, 'transferirCodigo'])
+            ->name('productos.transferir-codigo');
 
         // Rutas para importar/exportar
         // Exportar productos

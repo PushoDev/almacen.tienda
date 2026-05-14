@@ -117,6 +117,28 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
                 ]);
             }
 
+            // Manejo de Códigos de Barras
+            $codigoBarrasInput = $row['codigo_barras'] ?? null;
+            if ($codigoBarrasInput) {
+                $productoCodigo = \App\Models\ProductoCodigo::firstOrNew([
+                    'producto_id' => $producto->id,
+                    'codigo_barras' => $codigoBarrasInput,
+                ]);
+                $productoCodigo->cantidad = ($productoCodigo->cantidad ?? 0) + $cantidad;
+                $productoCodigo->es_default = false;
+                $productoCodigo->save();
+            } else {
+                $defaultCodigo = \App\Models\ProductoCodigo::where('producto_id', $producto->id)
+                    ->where('es_default', true)
+                    ->first();
+                
+                if ($defaultCodigo) {
+                    $defaultCodigo->increment('cantidad', $cantidad);
+                } else {
+                    \App\Models\ProductoCodigo::generarYGuardarDefault($producto, $cantidad);
+                }
+            }
+
             // Asignar/actualizar producto en el almacén con cantidad
             // IMPORTANTE: INCREMENTAR cantidad si ya existe, no reemplazar
             $almacenProducto = AlmacenProducto::where('almacen_id', $this->almacenId)

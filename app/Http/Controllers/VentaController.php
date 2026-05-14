@@ -129,6 +129,7 @@ class VentaController extends Controller
         })
             ->with([
                 'categoria',
+                'codigos',
                 'vendedores' => function ($q) use ($userId) {
                     // Buscar precio del vendedor actual Y del admin (user_id = 1)
                     $q->whereIn('user_id', [$userId, 1])
@@ -164,6 +165,11 @@ class VentaController extends Controller
                     'tiene_precio' => ($vendedor?->pivot->precio_venta ?? 0) > 0,
                     'imagen_url' => $producto->imagen_url,
                     'codigo_barras' => $producto->codigo_producto,
+                    'codigos' => $producto->codigos->map(fn($c) => [
+                        'id' => $c->id,
+                        'codigo_barras' => $c->codigo_barras,
+                        'cantidad' => $c->cantidad
+                    ]),
                     'barcode_image_url' => $producto->barcode_image_url,
                     'precio_base' => $vendedor?->pivot->precio_venta ?? null, // Precio base del vendedor o admin
                     'es_precio_vendedor' => $esPrecioVendedor, // Indica si es precio personalizado del vendedor
@@ -795,6 +801,19 @@ class VentaController extends Controller
                     'observaciones' => 'Stock reservado por venta pendiente',
                     'user_id' => $user->id,
                 ]);
+
+                // ✅ Descontar de producto_codigos (FIFO)
+                $cantidadRestante = $item['cantidad'];
+                $codigos = \App\Models\ProductoCodigo::where('producto_id', $item['producto_id'])
+                            ->where('cantidad', '>', 0)
+                            ->orderBy('es_default', 'asc')
+                            ->get();
+                foreach ($codigos as $codigo) {
+                    if ($cantidadRestante <= 0) break;
+                    $descontar = min($codigo->cantidad, $cantidadRestante);
+                    $codigo->decrement('cantidad', $descontar);
+                    $cantidadRestante -= $descontar;
+                }
             }
 
             // ✅ CAMBIO 3: Modificar validación de cuentas (solo si tiene cuenta_id)
@@ -1285,6 +1304,14 @@ class VentaController extends Controller
                 
                 if ($almacenProducto) {
                     $almacenProducto->increment('cantidad', $detalle->cantidad);
+                }
+
+                // ✅ Devolver stock a producto_codigos (al default o primero)
+                $codigoDefault = \App\Models\ProductoCodigo::where('producto_id', $detalle->producto_id)
+                                    ->orderByDesc('es_default')
+                                    ->first();
+                if ($codigoDefault) {
+                    $codigoDefault->increment('cantidad', $detalle->cantidad);
                 }
 
                 HistorialStock::create([

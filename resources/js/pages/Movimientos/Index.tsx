@@ -73,6 +73,7 @@ interface ProductoConStock extends ProductoPorAlmacenDetalleRef {
     modelo?: string;
     capacidad?: string;
     codigo?: string;
+    codigos_adicionales?: string[];
     categoria?: string;
     imagen_url?: string;
 }
@@ -141,6 +142,7 @@ export default function MovimientosPage({
         return (
             p.nombre?.toLowerCase().includes(termino) ||
             p.codigo?.toLowerCase().includes(termino) ||
+            p.codigos_adicionales?.some(c => c.toLowerCase().includes(termino)) ||
             p.marca?.toLowerCase().includes(termino) ||
             p.modelo?.toLowerCase().includes(termino) ||
             p.capacidad?.toLowerCase().includes(termino)

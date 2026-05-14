@@ -92,7 +92,7 @@ class MovimientosController extends Controller
         }
 
         $productos = $almacen->productos()
-            ->with('categoria') // Carga la relación con la categoría
+            ->with(['categoria', 'codigos']) // Carga la relación con la categoría y códigos
             ->select(
                 'productos.id',
                 'productos.nombre_producto',
@@ -115,6 +115,7 @@ class MovimientosController extends Controller
                     'modelo' => $producto->modelo_producto,
                     'capacidad' => $producto->capacidad_producto,
                     'codigo' => $producto->codigo_producto,
+                    'codigos_adicionales' => $producto->codigos->pluck('codigo_barras')->toArray(),
                     'categoria' => $producto->categoria ? $producto->categoria->nombre_categoria : 'N/A',
                     'imagen_url' => $producto->imagen_url, // Accessor del modelo
                     'stock_total' => $producto->pivot->cantidad,

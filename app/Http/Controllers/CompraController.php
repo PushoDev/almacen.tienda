@@ -322,7 +322,6 @@ class CompraController extends Controller
 
                 if ($isNew) {
                     $producto = new Producto();
-                    $producto->codigo_producto = null;
                 }
 
                 $producto->fill([
@@ -335,6 +334,28 @@ class CompraController extends Controller
                     'imagen_producto' => $producto->imagen_producto ?? 'productos/producto-default.png',
                 ]);
                 $producto->save();
+
+                // Manejo de Códigos de Barras
+                $codigoBarrasInput = $item['codigo_barras'] ?? null;
+                if ($codigoBarrasInput) {
+                    $productoCodigo = \App\Models\ProductoCodigo::firstOrNew([
+                        'producto_id' => $producto->id,
+                        'codigo_barras' => $codigoBarrasInput,
+                    ]);
+                    $productoCodigo->cantidad = ($productoCodigo->cantidad ?? 0) + $item['cantidad'];
+                    $productoCodigo->es_default = false;
+                    $productoCodigo->save();
+                } else {
+                    $defaultCodigo = \App\Models\ProductoCodigo::where('producto_id', $producto->id)
+                        ->where('es_default', true)
+                        ->first();
+                    
+                    if ($defaultCodigo) {
+                        $defaultCodigo->increment('cantidad', $item['cantidad']);
+                    } else {
+                        \App\Models\ProductoCodigo::generarYGuardarDefault($producto, $item['cantidad']);
+                    }
+                }
 
                 // Castear almacen_id a integer
                 $almacenId = (int) $item['almacen_id'];
