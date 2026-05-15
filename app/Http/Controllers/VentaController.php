@@ -13,6 +13,7 @@ use App\Models\Producto;
 use App\Models\Cliente;
 use App\Models\Moneda;
 use App\Models\User;
+use App\Services\DashboardStatsService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -370,47 +371,21 @@ class VentaController extends Controller
      * @param \Illuminate\Http\Request $request
      * @return \Illuminate\Http\JsonResponse
      */
-    public function getVentasReporte(Request $request)
+    public function getVentasReporte(Request $request, DashboardStatsService $dashboardStatsService)
     {
         $request->validate([
             'periodo' => 'required|in:diario,semanal,mensual',
         ]);
 
         $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Usuario no autenticado'], 401);
+        }
+
         $periodo = $request->input('periodo');
+        $kpis = $dashboardStatsService->getPeriodKpis($user, $periodo);
 
-        $query = Venta::query()->where('estado', 'completada');
-
-        // Filtrar por rol de usuario
-        if (!in_array($user->role, ['admin', 'moderador'])) {
-            $query->where('user_id', $user->id);
-        }
-
-        // Configurar rango de fechas según el período
-        switch ($periodo) {
-            case 'diario':
-                $query->whereDate('created_at', today());
-                break;
-            case 'semanal':
-                $query->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()]);
-                break;
-            case 'mensual':
-                $query->whereMonth('created_at', now()->month)->whereYear('created_at', now()->year);
-                break;
-        }
-
-        // Obtener y agregar los resultados
-        $reporte = $query->select(
-            DB::raw('SUM(total) as total_vendido'),
-            DB::raw('COUNT(id) as cantidad_ventas'),
-            DB::raw('SUM(total_ganancia) as ganancia_total')
-        )->first();
-
-        return response()->json([
-            'total_vendido' => $reporte->total_vendido ?? 0,
-            'cantidad_ventas' => $reporte->cantidad_ventas ?? 0,
-            'ganancia_total' => $reporte->ganancia_total ?? 0,
-        ]);
+        return response()->json($kpis['legacy_ventas']);
     }
 
     // ========================================================================

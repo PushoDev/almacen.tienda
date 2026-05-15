@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Compra;
 use App\Models\Venta;
+use App\Services\DashboardStatsService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
@@ -489,78 +490,24 @@ class ReporteController extends Controller
      * Resumen de KPIs de Ventas y Compras (Dashboard).
      * Reemplaza y expande la lógica de VentaController::getVentasReporte
      */
-    public function kpiResumen(Request $request)
+    public function kpiResumen(Request $request, DashboardStatsService $dashboardStatsService)
     {
         $request->validate([
             'periodo' => 'required|in:diario,semanal,mensual',
         ]);
 
         $user = auth()->user();
+        if (!$user) {
+            return response()->json(['message' => 'No autenticado'], 401);
+        }
+
         $periodo = $request->input('periodo');
-
-        // --- VENTAS ---
-        $ventasQuery = Venta::query()->where('estado', 'completada');
-
-        if (!in_array($user->role, ['admin', 'moderador'])) {
-            $ventasQuery->where('user_id', $user->id);
-        }
-
-        $this->aplicarFiltroFecha($ventasQuery, $periodo, 'created_at');
-
-        $ventasReporte = $ventasQuery->select(
-            DB::raw('SUM(total) as total_vendido'),
-            DB::raw('COUNT(id) as cantidad_ventas'),
-            DB::raw('SUM(total_ganancia) as ganancia_producto'),
-            DB::raw('SUM(monto_diferencia_cambiaria) as ganancia_cambiaria')
-        )->first();
-
-        // Calcular ganancia real total
-        $totalGananciaVentas = ($ventasReporte->ganancia_producto ?? 0) + ($ventasReporte->ganancia_cambiaria ?? 0);
-
-        // --- COMPRAS ---
-        // (Solo admin suele ver compras, o restringir según permisos)
-        $comprasReporte = null;
-        if (in_array($user->role, ['admin', 'moderador'])) {
-            $comprasQuery = Compra::query();
-            $this->aplicarFiltroFecha($comprasQuery, $periodo, 'fecha_compra');
-
-            $comprasReporte = $comprasQuery->select(
-                DB::raw('SUM(total_compra) as total_comprado'),
-                DB::raw('COUNT(id) as cantidad_compras')
-            )->first();
-        }
+        $kpis = $dashboardStatsService->getPeriodKpis($user, $periodo);
 
         return response()->json([
-            'ventas' => [
-                'total_vendido' => (float) ($ventasReporte->total_vendido ?? 0),
-                'cantidad_ventas' => (int) ($ventasReporte->cantidad_ventas ?? 0),
-                'ganancia_operativa' => (float) ($ventasReporte->ganancia_producto ?? 0),
-                'ganancia_cambiaria' => (float) ($ventasReporte->ganancia_cambiaria ?? 0),
-                'ganancia_total' => (float) $totalGananciaVentas,
-            ],
-            'compras' => $comprasReporte ? [
-                'total_comprado' => (float) ($comprasReporte->total_comprado ?? 0),
-                'cantidad_compras' => (int) ($comprasReporte->cantidad_compras ?? 0),
-            ] : null,
+            'ventas' => $kpis['ventas'],
+            'compras' => $kpis['compras'],
         ]);
-    }
-
-    /**
-     * Helper para filtrar por fecha
-     */
-    private function aplicarFiltroFecha($query, $periodo, $columna)
-    {
-        switch ($periodo) {
-            case 'diario':
-                $query->whereDate($columna, Carbon::today());
-                break;
-            case 'semanal':
-                $query->whereBetween($columna, [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]);
-                break;
-            case 'mensual':
-                $query->whereMonth($columna, Carbon::now()->month)->whereYear($columna, Carbon::now()->year);
-                break;
-        }
     }
 
     /**
