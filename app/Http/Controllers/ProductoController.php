@@ -34,10 +34,7 @@ class ProductoController extends Controller
         if ($request->has('search') && $request->search != '') {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
-                $q->where('nombre_producto', 'LIKE', "%{$search}%")
-                    ->orWhere('marca_producto', 'LIKE', "%{$search}%")
-                    ->orWhere('modelo_producto', 'LIKE', "%{$search}%")
-                    ->orWhere('codigo_producto', 'LIKE', "%{$search}%")
+                $q->buscar($search)
                     ->orWhereHas('categoria', function ($q) use ($search) {
                         $q->where('nombre_categoria', 'LIKE', "%{$search}%");
                     });
@@ -132,7 +129,7 @@ class ProductoController extends Controller
         $user = Auth::user();
 
         // ✅ FORZAR recarga de relaciones para datos ACTUALIZADOS
-        $producto->load(['categoria', 'almacenes']);
+        $producto->load(['categoria', 'almacenes', 'codigos']);
 
         return Inertia::render('Productos/Show', [
             'producto' => [
@@ -149,6 +146,13 @@ class ProductoController extends Controller
                 'imagen_url' => $producto->imagen_url,
                 'barcode_image_url' => $producto->barcode_image_url,
                 'stock_bajo' => $producto->stock_bajo,
+                'codigos' => $producto->codigos->map(fn($codigo) => [
+                    'id' => $codigo->id,
+                    'codigo_barras' => $codigo->codigo_barras,
+                    'cantidad' => $codigo->cantidad,
+                    'es_default' => $codigo->es_default,
+                    'imagen_barcode' => $codigo->imagen_barcode ? asset($codigo->imagen_barcode) : null,
+                ]),
                 'almacenes' => $producto->almacenes->map(fn($almacen) => [
                     'id' => $almacen->id,
                     'nombre_almacen' => $almacen->nombre_almacen,
@@ -171,7 +175,7 @@ class ProductoController extends Controller
     public function edit(Producto $producto)
     {
         // ✅ FORZAR recarga de relaciones
-        $producto->load(['almacenes', 'categoria']);
+        $producto->load(['almacenes', 'categoria', 'codigos']);
 
         return Inertia::render('Productos/Edit', [
             'producto' => [
@@ -189,6 +193,13 @@ class ProductoController extends Controller
                 'barcode_image_url' => $producto->barcode_image_url,
                 'cantidad_total' => $producto->cantidad_total,
                 'stock_bajo' => $producto->stock_bajo,
+                'codigos' => $producto->codigos->map(fn($codigo) => [
+                    'id' => $codigo->id,
+                    'codigo_barras' => $codigo->codigo_barras,
+                    'cantidad' => $codigo->cantidad,
+                    'es_default' => $codigo->es_default,
+                    'imagen_barcode' => $codigo->imagen_barcode ? asset($codigo->imagen_barcode) : null,
+                ]),
             ],
             'categorias' => Categoria::select('id', 'nombre_categoria')->get(),
         ]);
@@ -303,11 +314,7 @@ class ProductoController extends Controller
 
         if ($request->has('q') && $request->q != '') {
             $search = $request->q;
-            $query->where(function ($q) use ($search) {
-                $q->where('nombre_producto', 'LIKE', "%{$search}%")
-                    ->orWhere('marca_producto', 'LIKE', "%{$search}%")
-                    ->orWhere('codigo_producto', 'LIKE', "%{$search}%");
-            });
+            $query->buscar($search);
         }
 
         $productos = $query->limit(10)->get()->map(function ($producto) {
@@ -329,31 +336,51 @@ class ProductoController extends Controller
         return response()->json($productos);
     }
 
+
+
     /**
-     * Regenerar código de barras para un producto
+     * Transferir cantidad entre códigos de barras o crear nuevo escaneado
      */
-    public function regenerarBarcode(Producto $producto)
+    public function transferirCodigo(Request $request, Producto $producto)
     {
+        $request->validate([
+            'codigo_origen_id' => 'required|exists:producto_codigos,id',
+            'nuevo_codigo' => 'required|string|max:255',
+            'cantidad' => 'required|integer|min:1'
+        ]);
+
+        $codigoOrigen = \App\Models\ProductoCodigo::where('producto_id', $producto->id)
+                            ->where('id', $request->codigo_origen_id)
+                            ->firstOrFail();
+
+        if ($codigoOrigen->cantidad < $request->cantidad) {
+            return redirect()->back()->withErrors(['cantidad' => 'La cantidad a transferir es mayor a la disponible en el código de origen.']);
+        }
+
+        DB::beginTransaction();
         try {
-            $success = $producto->regenerarBarcodeImage();
+            // Descontar del origen
+            $codigoOrigen->decrement('cantidad', $request->cantidad);
 
-            if ($success) {
-                return response()->json([
-                    'success' => true,
-                    'barcode_image_url' => $producto->barcode_image_url,
-                    'message' => 'Código de barras regenerado correctamente'
-                ]);
+            // Buscar o crear el nuevo código
+            $nuevoCodigo = \App\Models\ProductoCodigo::firstOrNew([
+                'producto_id' => $producto->id,
+                'codigo_barras' => $request->nuevo_codigo,
+            ]);
+
+            // Asignar cantidad y asegurar que no es el default (solo el generado inicialmente es default)
+            $nuevoCodigo->cantidad = ($nuevoCodigo->cantidad ?? 0) + $request->cantidad;
+            if (!$nuevoCodigo->exists) {
+                $nuevoCodigo->es_default = false;
             }
+            $nuevoCodigo->save();
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Error al regenerar el código de barras'
-            ], 500);
+            DB::commit();
+
+            return redirect()->back()->with('success', 'Código de barras asignado y cantidad transferida correctamente.');
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error: ' . $e->getMessage()
-            ], 500);
+            DB::rollBack();
+            return redirect()->back()->withErrors(['error' => 'Error al transferir cantidad: ' . $e->getMessage()]);
         }
     }
 

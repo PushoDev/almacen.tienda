@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Compra;
 use App\Models\Venta;
+use App\Services\DashboardStatsService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
@@ -489,78 +490,24 @@ class ReporteController extends Controller
      * Resumen de KPIs de Ventas y Compras (Dashboard).
      * Reemplaza y expande la lógica de VentaController::getVentasReporte
      */
-    public function kpiResumen(Request $request)
+    public function kpiResumen(Request $request, DashboardStatsService $dashboardStatsService)
     {
         $request->validate([
             'periodo' => 'required|in:diario,semanal,mensual',
         ]);
 
         $user = auth()->user();
+        if (!$user) {
+            return response()->json(['message' => 'No autenticado'], 401);
+        }
+
         $periodo = $request->input('periodo');
-
-        // --- VENTAS ---
-        $ventasQuery = Venta::query()->where('estado', 'completada');
-
-        if (!in_array($user->role, ['admin', 'moderador'])) {
-            $ventasQuery->where('user_id', $user->id);
-        }
-
-        $this->aplicarFiltroFecha($ventasQuery, $periodo, 'created_at');
-
-        $ventasReporte = $ventasQuery->select(
-            DB::raw('SUM(total) as total_vendido'),
-            DB::raw('COUNT(id) as cantidad_ventas'),
-            DB::raw('SUM(total_ganancia) as ganancia_producto'),
-            DB::raw('SUM(monto_diferencia_cambiaria) as ganancia_cambiaria')
-        )->first();
-
-        // Calcular ganancia real total
-        $totalGananciaVentas = ($ventasReporte->ganancia_producto ?? 0) + ($ventasReporte->ganancia_cambiaria ?? 0);
-
-        // --- COMPRAS ---
-        // (Solo admin suele ver compras, o restringir según permisos)
-        $comprasReporte = null;
-        if (in_array($user->role, ['admin', 'moderador'])) {
-            $comprasQuery = Compra::query();
-            $this->aplicarFiltroFecha($comprasQuery, $periodo, 'fecha_compra');
-
-            $comprasReporte = $comprasQuery->select(
-                DB::raw('SUM(total_compra) as total_comprado'),
-                DB::raw('COUNT(id) as cantidad_compras')
-            )->first();
-        }
+        $kpis = $dashboardStatsService->getPeriodKpis($user, $periodo);
 
         return response()->json([
-            'ventas' => [
-                'total_vendido' => (float) ($ventasReporte->total_vendido ?? 0),
-                'cantidad_ventas' => (int) ($ventasReporte->cantidad_ventas ?? 0),
-                'ganancia_operativa' => (float) ($ventasReporte->ganancia_producto ?? 0),
-                'ganancia_cambiaria' => (float) ($ventasReporte->ganancia_cambiaria ?? 0),
-                'ganancia_total' => (float) $totalGananciaVentas,
-            ],
-            'compras' => $comprasReporte ? [
-                'total_comprado' => (float) ($comprasReporte->total_comprado ?? 0),
-                'cantidad_compras' => (int) ($comprasReporte->cantidad_compras ?? 0),
-            ] : null,
+            'ventas' => $kpis['ventas'],
+            'compras' => $kpis['compras'],
         ]);
-    }
-
-    /**
-     * Helper para filtrar por fecha
-     */
-    private function aplicarFiltroFecha($query, $periodo, $columna)
-    {
-        switch ($periodo) {
-            case 'diario':
-                $query->whereDate($columna, Carbon::today());
-                break;
-            case 'semanal':
-                $query->whereBetween($columna, [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]);
-                break;
-            case 'mensual':
-                $query->whereMonth($columna, Carbon::now()->month)->whereYear($columna, Carbon::now()->year);
-                break;
-        }
     }
 
     /**
@@ -728,6 +675,123 @@ class ReporteController extends Controller
         return Inertia::render('Reportes/Report/MovimientosFinancieros', [
             'movimientos' => $movimientos,
             'tipos' => DB::table('tipos_movimiento_financiero')->get(),
+        ]);
+    }
+
+    /**
+     * Reporte de Rastreo de Operaciones (Auditoría General).
+     */
+    public function rastreoOperaciones(Request $request)
+    {
+        $request->validate([
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+            'user_id' => 'nullable|exists:users,id',
+            'tipo_operacion' => 'nullable|string',
+        ]);
+
+        $startDate = $request->input('start_date');
+        $endDate = $request->input('end_date');
+        $userId = $request->input('user_id');
+        $tipoOperacion = $request->input('tipo_operacion');
+
+        // Subconsulta de Ventas
+        $ventas = DB::table('ventas')
+            ->join('users', 'ventas.user_id', '=', 'users.id')
+            ->select(
+                'ventas.id',
+                'ventas.created_at as fecha',
+                DB::raw("'Venta' as tipo"),
+                'ventas.total as monto',
+                'users.name as usuario',
+                'ventas.user_id',
+                DB::raw("CONCAT('Venta #', ventas.id) as referencia"),
+                'ventas.estado as descripcion'
+            );
+
+        // Subconsulta de Compras
+        $compras = DB::table('compras')
+            ->leftJoin('proveedors', 'compras.proveedor_id', '=', 'proveedors.id')
+            ->select(
+                'compras.id',
+                'compras.fecha_compra as fecha',
+                DB::raw("'Compra' as tipo"),
+                'compras.total_compra as monto',
+                DB::raw("'Admin/Sistema' as usuario"),
+                DB::raw("NULL as user_id"),
+                DB::raw("CONCAT('Compra #', compras.id) as referencia"),
+                DB::raw("COALESCE(proveedors.nombre_proveedor, 'S/P') as descripcion")
+            );
+
+        // Subconsulta de Movimientos Financieros
+        $movimientos = DB::table('movimientos_financieros')
+            ->join('users', 'movimientos_financieros.user_id', '=', 'users.id')
+            ->join('tipos_movimiento_financiero', 'movimientos_financieros.tipo_movimiento_id', '=', 'tipos_movimiento_financiero.id')
+            ->select(
+                'movimientos_financieros.id',
+                'movimientos_financieros.fecha_operacion as fecha',
+                DB::raw("'Finanzas' as tipo"),
+                'movimientos_financieros.monto',
+                'users.name as usuario',
+                'movimientos_financieros.user_id',
+                'tipos_movimiento_financiero.nombre as referencia',
+                'movimientos_financieros.descripcion'
+            );
+
+        // Subconsulta de Cierres de Caja
+        $cierres = DB::table('cierre_cajas')
+            ->join('users', 'cierre_cajas.user_id', '=', 'users.id')
+            ->select(
+                'cierre_cajas.id',
+                'cierre_cajas.fecha_cierre as fecha',
+                DB::raw("'Cierre' as tipo"),
+                'cierre_cajas.saldo_contado as monto',
+                'users.name as usuario',
+                'cierre_cajas.user_id',
+                DB::raw("CONCAT('Cierre #', cierre_cajas.id) as referencia"),
+                'cierre_cajas.estado as descripcion'
+            );
+
+        // Aplicar filtros a cada subconsulta si es necesario (excepto tipo_operacion que se filtra al final)
+        if ($startDate) {
+            $ventas->whereDate('ventas.created_at', '>=', $startDate);
+            $compras->whereDate('compras.fecha_compra', '>=', $startDate);
+            $movimientos->whereDate('movimientos_financieros.fecha_operacion', '>=', $startDate);
+            $cierres->whereDate('cierre_cajas.fecha_cierre', '>=', $startDate);
+        }
+        if ($endDate) {
+            $ventas->whereDate('ventas.created_at', '<=', $endDate);
+            $compras->whereDate('compras.fecha_compra', '<=', $endDate);
+            $movimientos->whereDate('movimientos_financieros.fecha_operacion', '<=', $endDate);
+            $cierres->whereDate('cierre_cajas.fecha_cierre', '<=', $endDate);
+        }
+        if ($userId) {
+            $ventas->where('ventas.user_id', $userId);
+            // Compras no tiene user_id, así que se vacía si hay filtro por usuario específico
+            if ($userId != 0) $compras->whereRaw('1=0'); 
+            $movimientos->where('movimientos_financieros.user_id', $userId);
+            $cierres->where('cierre_cajas.user_id', $userId);
+        }
+
+        // Combinar todo
+        $query = $ventas->unionAll($compras)
+            ->unionAll($movimientos)
+            ->unionAll($cierres);
+
+        // Envolver en una subconsulta para ordenar y filtrar por tipo globalmente
+        $finalQuery = DB::table(DB::raw("({$query->toSql()}) as operaciones"))
+            ->mergeBindings($query);
+
+        if ($tipoOperacion) {
+            $finalQuery->where('tipo', $tipoOperacion);
+        }
+
+        $operaciones = $finalQuery->orderByDesc('fecha')->get();
+
+        return Inertia::render('Reportes/Report/RastreoOperaciones', [
+            'operaciones' => $operaciones,
+            'usuarios' => DB::table('users')->select('id', 'name')->get(),
+            'filtros' => $request->all(),
         ]);
     }
 }

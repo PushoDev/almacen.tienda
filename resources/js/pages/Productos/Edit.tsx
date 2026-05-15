@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import AppLayout from '@/layouts/app-layout';
 import { CategoriasProps, ProductoProps, SharedData, type BreadcrumbItem } from '@/types';
 import { Head, useForm, usePage } from '@inertiajs/react';
-import { FileBox, Package, QrCode, RefreshCw } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { FileBox, Package, QrCode, ArrowRightLeft } from 'lucide-react';
 import { useState } from 'react';
 import { toast, Toaster } from 'sonner';
 
@@ -44,29 +45,27 @@ export default function EditarProductosPage({ producto, categorias }: { producto
         });
     };
 
-    // Regenerar código de barras
-    const regenerarBarcode = async () => {
-        try {
-            const response = await fetch(route('productos.regenerar-barcode', { producto: producto.id }), {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-                },
-            });
+    const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+    
+    const transferForm = useForm({
+        codigo_origen_id: '',
+        nuevo_codigo: '',
+        cantidad: 1,
+    });
 
-            const result = await response.json();
-
-            if (result.success) {
-                toast.success('Código de barras regenerado correctamente');
-                // Recargar la página para ver los cambios
-                window.location.reload();
-            } else {
-                toast.error(result.message || 'Error al regenerar el código de barras');
+    const submitTransfer = (e: React.FormEvent) => {
+        e.preventDefault();
+        transferForm.post(route('productos.transferir-codigo', { producto: producto.id }), {
+            onSuccess: () => {
+                toast.success('Código de barras transferido correctamente');
+                setIsTransferModalOpen(false);
+                transferForm.reset();
+            },
+            onError: (errors) => {
+                if (errors.cantidad) toast.error(errors.cantidad);
+                else toast.error('Error al transferir el código de barras');
             }
-        } catch {
-            toast.error('Error al regenerar el código de barras');
-        }
+        });
     };
 
     return (
@@ -187,28 +186,17 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                                 </div>
 
                                 <div>
-                                    <Label htmlFor="codigo_producto">Código del Producto</Label>
+                                    <Label htmlFor="codigo_producto">Código del Producto (Por defecto)</Label>
                                     <div className="flex gap-2">
                                         <Input
                                             id="codigo_producto"
                                             value={data.codigo_producto}
-                                            onChange={(e) => setData('codigo_producto', e.target.value)}
-                                            placeholder="Código automático o manual"
-                                            className="mt-1 flex-1"
+                                            disabled
+                                            className="mt-1 flex-1 bg-gray-50 text-gray-500"
                                         />
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            onClick={regenerarBarcode}
-                                            className="mt-1"
-                                            title="Regenerar código de barras"
-                                        >
-                                            <RefreshCw size={16} />
-                                        </Button>
                                     </div>
-                                    <InputError message={errors.codigo_producto} />
                                     <p className="mt-1 text-xs text-gray-500">
-                                        Déjalo vacío para generar automáticamente, o ingresa un código personalizado
+                                        Para transferir cantidades o ver otros códigos, ve al detalle del producto.
                                     </p>
                                 </div>
 
@@ -253,18 +241,6 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                                                 <img src={preview} alt={data.nombre_producto} className="h-24 w-24 rounded-lg border object-cover" />
                                             </div>
                                         )}
-
-                                        {/* Código de barras actual */}
-                                        {producto.barcode_image_url && (
-                                            <div className="flex flex-col items-center">
-                                                <p className="mb-2 text-sm font-medium">Código de barras:</p>
-                                                <img
-                                                    src={producto.barcode_image_url}
-                                                    alt={`Código de barras ${data.codigo_producto}`}
-                                                    className="h-24 rounded-lg border"
-                                                />
-                                            </div>
-                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -301,6 +277,127 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                         </div>
                     </form>
                 </div>
+
+                {/* Sección de Gestión de Códigos de Barras */}
+                <div className="border-sidebar-border/70 dark:border-sidebar-border mt-6 overflow-hidden rounded-xl border bg-white p-6 shadow-sm dark:bg-gray-900">
+                    <div className="flex flex-row items-center justify-between mb-4">
+                        <div className="flex items-center gap-2 text-xl font-semibold">
+                            <QrCode size={24} />
+                            Gestión de Códigos de Barras ({producto.codigos?.length || 0})
+                        </div>
+                        <Dialog open={isTransferModalOpen} onOpenChange={setIsTransferModalOpen}>
+                            <DialogTrigger asChild>
+                                <Button variant="outline" size="sm" className="h-9 gap-2">
+                                    <ArrowRightLeft size={16} />
+                                    Asignar / Transferir
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-[425px]">
+                                <form onSubmit={submitTransfer}>
+                                    <DialogHeader>
+                                        <DialogTitle>Transferir a Nuevo Código</DialogTitle>
+                                        <DialogDescription>
+                                            Escanea el código de barras de la caja y asigna la cantidad desde el inventario existente.
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="grid gap-4 py-4">
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="codigo_origen">Código de Origen</Label>
+                                            <Select
+                                                value={transferForm.data.codigo_origen_id}
+                                                onValueChange={(val) => transferForm.setData('codigo_origen_id', val)}
+                                            >
+                                                <SelectTrigger id="codigo_origen">
+                                                    <SelectValue placeholder="Selecciona el código origen" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {producto.codigos?.filter(c => c.cantidad > 0).map((codigo) => (
+                                                        <SelectItem key={codigo.id} value={codigo.id.toString()}>
+                                                            {codigo.codigo_barras} ({codigo.cantidad} disponibles)
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            {transferForm.errors.codigo_origen_id && (
+                                                <p className="text-xs text-red-500">{transferForm.errors.codigo_origen_id}</p>
+                                            )}
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="nuevo_codigo">Código Escaneado</Label>
+                                            <Input
+                                                id="nuevo_codigo"
+                                                value={transferForm.data.nuevo_codigo}
+                                                onChange={(e) => transferForm.setData('nuevo_codigo', e.target.value)}
+                                                placeholder="Escanea el código aquí"
+                                                autoFocus
+                                            />
+                                            {transferForm.errors.nuevo_codigo && (
+                                                <p className="text-xs text-red-500">{transferForm.errors.nuevo_codigo}</p>
+                                            )}
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="cantidad">Cantidad a Asignar</Label>
+                                            <Input
+                                                id="cantidad"
+                                                type="number"
+                                                min="1"
+                                                value={transferForm.data.cantidad}
+                                                onChange={(e) => transferForm.setData('cantidad', parseInt(e.target.value))}
+                                            />
+                                            {transferForm.errors.cantidad && (
+                                                <p className="text-xs text-red-500">{transferForm.errors.cantidad}</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <DialogFooter>
+                                        <Button type="submit" disabled={transferForm.processing}>
+                                            Transferir Cantidad
+                                        </Button>
+                                    </DialogFooter>
+                                </form>
+                            </DialogContent>
+                        </Dialog>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                        {producto.codigos && producto.codigos.length > 0 ? (
+                            producto.codigos.map((codigo) => (
+                                <div key={codigo.id} className="flex flex-col items-center rounded-lg border p-4 bg-gray-50 dark:bg-gray-800">
+                                    {codigo.imagen_barcode ? (
+                                        <img
+                                            src={codigo.imagen_barcode}
+                                            alt={`Código de barras ${codigo.codigo_barras}`}
+                                            className="h-24 w-full rounded-md border object-contain bg-white mb-3"
+                                        />
+                                    ) : (
+                                        <div className="flex h-24 w-full items-center justify-center rounded-md border border-dashed bg-white mb-3">
+                                            <QrCode size={32} className="text-gray-400" />
+                                        </div>
+                                    )}
+                                    <div className="w-full space-y-1 text-center">
+                                        <p className="font-mono font-semibold">{codigo.codigo_barras}</p>
+                                        <div className="flex items-center justify-between mt-2 text-sm">
+                                            <span className="text-muted-foreground">Cantidad:</span>
+                                            <span className="font-medium bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full dark:bg-blue-900 dark:text-blue-100">
+                                                {codigo.cantidad}
+                                            </span>
+                                        </div>
+                                        {codigo.es_default && (
+                                            <span className="inline-block mt-2 text-xs font-medium text-purple-600 bg-purple-100 px-2 py-1 rounded dark:bg-purple-900 dark:text-purple-100">
+                                                Código por defecto
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="col-span-full py-8 text-center text-gray-500">
+                                No hay códigos de barras asignados
+                            </div>
+                        )}
+                    </div>
+                </div>
+
                 <Toaster position="top-center" />
             </div>
         </AppLayout>

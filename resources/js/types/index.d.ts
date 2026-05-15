@@ -164,6 +164,13 @@ export interface ProductoProps {
         cantidad: number;
         stock_bajo: boolean;
     }>;
+    codigos?: Array<{
+        id: number;
+        codigo_barras: string;
+        cantidad: number;
+        es_default: boolean;
+        imagen_barcode: string | null;
+    }>;
 }
 
 // Interface para la respuesta paginada

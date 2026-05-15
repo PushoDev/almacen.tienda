@@ -13,6 +13,7 @@ use App\Models\Producto;
 use App\Models\Cliente;
 use App\Models\Moneda;
 use App\Models\User;
+use App\Services\DashboardStatsService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -129,6 +130,7 @@ class VentaController extends Controller
         })
             ->with([
                 'categoria',
+                'codigos',
                 'vendedores' => function ($q) use ($userId) {
                     // Buscar precio del vendedor actual Y del admin (user_id = 1)
                     $q->whereIn('user_id', [$userId, 1])
@@ -164,6 +166,11 @@ class VentaController extends Controller
                     'tiene_precio' => ($vendedor?->pivot->precio_venta ?? 0) > 0,
                     'imagen_url' => $producto->imagen_url,
                     'codigo_barras' => $producto->codigo_producto,
+                    'codigos' => $producto->codigos->map(fn($c) => [
+                        'id' => $c->id,
+                        'codigo_barras' => $c->codigo_barras,
+                        'cantidad' => $c->cantidad
+                    ]),
                     'barcode_image_url' => $producto->barcode_image_url,
                     'precio_base' => $vendedor?->pivot->precio_venta ?? null, // Precio base del vendedor o admin
                     'es_precio_vendedor' => $esPrecioVendedor, // Indica si es precio personalizado del vendedor
@@ -364,47 +371,21 @@ class VentaController extends Controller
      * @param \Illuminate\Http\Request $request
      * @return \Illuminate\Http\JsonResponse
      */
-    public function getVentasReporte(Request $request)
+    public function getVentasReporte(Request $request, DashboardStatsService $dashboardStatsService)
     {
         $request->validate([
             'periodo' => 'required|in:diario,semanal,mensual',
         ]);
 
         $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Usuario no autenticado'], 401);
+        }
+
         $periodo = $request->input('periodo');
+        $kpis = $dashboardStatsService->getPeriodKpis($user, $periodo);
 
-        $query = Venta::query()->where('estado', 'completada');
-
-        // Filtrar por rol de usuario
-        if (!in_array($user->role, ['admin', 'moderador'])) {
-            $query->where('user_id', $user->id);
-        }
-
-        // Configurar rango de fechas según el período
-        switch ($periodo) {
-            case 'diario':
-                $query->whereDate('created_at', today());
-                break;
-            case 'semanal':
-                $query->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()]);
-                break;
-            case 'mensual':
-                $query->whereMonth('created_at', now()->month)->whereYear('created_at', now()->year);
-                break;
-        }
-
-        // Obtener y agregar los resultados
-        $reporte = $query->select(
-            DB::raw('SUM(total) as total_vendido'),
-            DB::raw('COUNT(id) as cantidad_ventas'),
-            DB::raw('SUM(total_ganancia) as ganancia_total')
-        )->first();
-
-        return response()->json([
-            'total_vendido' => $reporte->total_vendido ?? 0,
-            'cantidad_ventas' => $reporte->cantidad_ventas ?? 0,
-            'ganancia_total' => $reporte->ganancia_total ?? 0,
-        ]);
+        return response()->json($kpis['legacy_ventas']);
     }
 
     // ========================================================================
@@ -795,6 +776,19 @@ class VentaController extends Controller
                     'observaciones' => 'Stock reservado por venta pendiente',
                     'user_id' => $user->id,
                 ]);
+
+                // ✅ Descontar de producto_codigos (FIFO)
+                $cantidadRestante = $item['cantidad'];
+                $codigos = \App\Models\ProductoCodigo::where('producto_id', $item['producto_id'])
+                            ->where('cantidad', '>', 0)
+                            ->orderBy('es_default', 'asc')
+                            ->get();
+                foreach ($codigos as $codigo) {
+                    if ($cantidadRestante <= 0) break;
+                    $descontar = min($codigo->cantidad, $cantidadRestante);
+                    $codigo->decrement('cantidad', $descontar);
+                    $cantidadRestante -= $descontar;
+                }
             }
 
             // ✅ CAMBIO 3: Modificar validación de cuentas (solo si tiene cuenta_id)
@@ -1285,6 +1279,14 @@ class VentaController extends Controller
                 
                 if ($almacenProducto) {
                     $almacenProducto->increment('cantidad', $detalle->cantidad);
+                }
+
+                // ✅ Devolver stock a producto_codigos (al default o primero)
+                $codigoDefault = \App\Models\ProductoCodigo::where('producto_id', $detalle->producto_id)
+                                    ->orderByDesc('es_default')
+                                    ->first();
+                if ($codigoDefault) {
+                    $codigoDefault->increment('cantidad', $detalle->cantidad);
                 }
 
                 HistorialStock::create([
