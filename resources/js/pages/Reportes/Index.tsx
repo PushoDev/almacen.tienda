@@ -125,6 +125,16 @@ const reportesVentasRentabilidad: ReportCardProps[] = [
     },
 ];
 
+const reportesAuditoria: ReportCardProps[] = [
+    {
+        title: 'Rastreo de Operaciones',
+        description: 'Auditoría general de todas las acciones del sistema.',
+        href: route('reportes.rastreo_operaciones'),
+        icon: History,
+        colors: 'from-slate-900 to-slate-600',
+    },
+];
+
 const reportesFinanzasOtros: ReportCardProps[] = [
     {
         title: 'Historial de Precios',
@@ -202,6 +212,7 @@ export default function ReportesPage() {
                 <div className="grid auto-rows-min gap-4 md:grid-cols-2 lg:grid-cols-4">
                     <ReportSection title="Compras e Inventario" reports={reportesComprasInventario} />
                     <ReportSection title="Ventas y Rentabilidad" reports={reportesVentasRentabilidad} />
+                    <ReportSection title="Auditoría y Rastreo" reports={reportesAuditoria} />
                     <ReportSection title="Finanzas y Otros" reports={reportesFinanzasOtros} />
                 </div>
 

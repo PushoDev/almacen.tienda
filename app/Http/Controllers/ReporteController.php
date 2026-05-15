@@ -730,4 +730,121 @@ class ReporteController extends Controller
             'tipos' => DB::table('tipos_movimiento_financiero')->get(),
         ]);
     }
+
+    /**
+     * Reporte de Rastreo de Operaciones (Auditoría General).
+     */
+    public function rastreoOperaciones(Request $request)
+    {
+        $request->validate([
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+            'user_id' => 'nullable|exists:users,id',
+            'tipo_operacion' => 'nullable|string',
+        ]);
+
+        $startDate = $request->input('start_date');
+        $endDate = $request->input('end_date');
+        $userId = $request->input('user_id');
+        $tipoOperacion = $request->input('tipo_operacion');
+
+        // Subconsulta de Ventas
+        $ventas = DB::table('ventas')
+            ->join('users', 'ventas.user_id', '=', 'users.id')
+            ->select(
+                'ventas.id',
+                'ventas.created_at as fecha',
+                DB::raw("'Venta' as tipo"),
+                'ventas.total as monto',
+                'users.name as usuario',
+                'ventas.user_id',
+                DB::raw("CONCAT('Venta #', ventas.id) as referencia"),
+                'ventas.estado as descripcion'
+            );
+
+        // Subconsulta de Compras
+        $compras = DB::table('compras')
+            ->leftJoin('proveedors', 'compras.proveedor_id', '=', 'proveedors.id')
+            ->select(
+                'compras.id',
+                'compras.fecha_compra as fecha',
+                DB::raw("'Compra' as tipo"),
+                'compras.total_compra as monto',
+                DB::raw("'Admin/Sistema' as usuario"),
+                DB::raw("NULL as user_id"),
+                DB::raw("CONCAT('Compra #', compras.id) as referencia"),
+                DB::raw("COALESCE(proveedors.nombre_proveedor, 'S/P') as descripcion")
+            );
+
+        // Subconsulta de Movimientos Financieros
+        $movimientos = DB::table('movimientos_financieros')
+            ->join('users', 'movimientos_financieros.user_id', '=', 'users.id')
+            ->join('tipos_movimiento_financiero', 'movimientos_financieros.tipo_movimiento_id', '=', 'tipos_movimiento_financiero.id')
+            ->select(
+                'movimientos_financieros.id',
+                'movimientos_financieros.fecha_operacion as fecha',
+                DB::raw("'Finanzas' as tipo"),
+                'movimientos_financieros.monto',
+                'users.name as usuario',
+                'movimientos_financieros.user_id',
+                'tipos_movimiento_financiero.nombre as referencia',
+                'movimientos_financieros.descripcion'
+            );
+
+        // Subconsulta de Cierres de Caja
+        $cierres = DB::table('cierre_cajas')
+            ->join('users', 'cierre_cajas.user_id', '=', 'users.id')
+            ->select(
+                'cierre_cajas.id',
+                'cierre_cajas.fecha_cierre as fecha',
+                DB::raw("'Cierre' as tipo"),
+                'cierre_cajas.saldo_contado as monto',
+                'users.name as usuario',
+                'cierre_cajas.user_id',
+                DB::raw("CONCAT('Cierre #', cierre_cajas.id) as referencia"),
+                'cierre_cajas.estado as descripcion'
+            );
+
+        // Aplicar filtros a cada subconsulta si es necesario (excepto tipo_operacion que se filtra al final)
+        if ($startDate) {
+            $ventas->whereDate('ventas.created_at', '>=', $startDate);
+            $compras->whereDate('compras.fecha_compra', '>=', $startDate);
+            $movimientos->whereDate('movimientos_financieros.fecha_operacion', '>=', $startDate);
+            $cierres->whereDate('cierre_cajas.fecha_cierre', '>=', $startDate);
+        }
+        if ($endDate) {
+            $ventas->whereDate('ventas.created_at', '<=', $endDate);
+            $compras->whereDate('compras.fecha_compra', '<=', $endDate);
+            $movimientos->whereDate('movimientos_financieros.fecha_operacion', '<=', $endDate);
+            $cierres->whereDate('cierre_cajas.fecha_cierre', '<=', $endDate);
+        }
+        if ($userId) {
+            $ventas->where('ventas.user_id', $userId);
+            // Compras no tiene user_id, así que se vacía si hay filtro por usuario específico
+            if ($userId != 0) $compras->whereRaw('1=0'); 
+            $movimientos->where('movimientos_financieros.user_id', $userId);
+            $cierres->where('cierre_cajas.user_id', $userId);
+        }
+
+        // Combinar todo
+        $query = $ventas->unionAll($compras)
+            ->unionAll($movimientos)
+            ->unionAll($cierres);
+
+        // Envolver en una subconsulta para ordenar y filtrar por tipo globalmente
+        $finalQuery = DB::table(DB::raw("({$query->toSql()}) as operaciones"))
+            ->mergeBindings($query);
+
+        if ($tipoOperacion) {
+            $finalQuery->where('tipo', $tipoOperacion);
+        }
+
+        $operaciones = $finalQuery->orderByDesc('fecha')->get();
+
+        return Inertia::render('Reportes/Report/RastreoOperaciones', [
+            'operaciones' => $operaciones,
+            'usuarios' => DB::table('users')->select('id', 'name')->get(),
+            'filtros' => $request->all(),
+        ]);
+    }
 }
