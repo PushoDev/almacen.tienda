@@ -131,6 +131,17 @@ class ProductoController extends Controller
         // ✅ FORZAR recarga de relaciones para datos ACTUALIZADOS
         $producto->load(['categoria', 'almacenes', 'codigos']);
 
+        foreach ($producto->codigos as $codigo) {
+            if (!$codigo->imagen_barcode) {
+                try {
+                    $imagen = \App\Models\ProductoCodigo::generarImagenBarcode($codigo->codigo_barras);
+                    $codigo->update(['imagen_barcode' => $imagen]);
+                } catch (\Exception $e) {
+                    logger()->warning('No se pudo generar barcode para ' . $codigo->codigo_barras . ': ' . $e->getMessage());
+                }
+            }
+        }
+
         return Inertia::render('Productos/Show', [
             'producto' => [
                 'id' => $producto->id,

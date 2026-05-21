@@ -349,6 +349,11 @@ class CompraController extends Controller
                     $productoCodigo->cantidad = ($productoCodigo->cantidad ?? 0) + $item['cantidad'];
                     if (!$productoCodigo->exists) {
                         $productoCodigo->es_default = $esPrimerCodigo;
+                        try {
+                            $productoCodigo->imagen_barcode = \App\Models\ProductoCodigo::generarImagenBarcode($codigoBarrasInput);
+                        } catch (\Exception $e) {
+                            logger()->warning('No se pudo generar barcode para ' . $codigoBarrasInput . ': ' . $e->getMessage());
+                        }
                     }
                     $productoCodigo->save();
                 } else {
