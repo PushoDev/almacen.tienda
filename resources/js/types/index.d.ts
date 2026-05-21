@@ -536,6 +536,7 @@ export interface VentaDetalleProps {
     id: number;
     venta_id: number;
     producto_id: number;
+    producto_codigo_id?: number | null;
     cantidad: number;
     precio_venta: number;
     subtotal: number;
@@ -552,6 +553,7 @@ export interface VentaDetalleProps {
         imagen_producto: string | null;
         created_at: string;
         updated_at: string;
+        codigo_vendido?: string | null;
     };
 }
 

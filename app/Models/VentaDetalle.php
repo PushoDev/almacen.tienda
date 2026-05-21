@@ -12,6 +12,7 @@ class VentaDetalle extends Model
     protected $fillable = [
         'venta_id',
         'producto_id',
+        'producto_codigo_id',
         'cantidad',
         'precio_venta',
         'precio_base',
@@ -28,5 +29,10 @@ class VentaDetalle extends Model
     public function producto()
     {
         return $this->belongsTo(Producto::class);
+    }
+
+    public function productoCodigo()
+    {
+        return $this->belongsTo(ProductoCodigo::class);
     }
 }
