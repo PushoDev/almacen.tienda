@@ -118,14 +118,17 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
             }
 
             // Manejo de Códigos de Barras
-            $codigoBarrasInput = $row['codigo_barras'] ?? null;
-            if ($codigoBarrasInput) {
+            $codigoBarrasInput = trim((string) ($row['codigo_barras'] ?? ''));
+            if ($codigoBarrasInput !== '') {
+                $esPrimerCodigo = !\App\Models\ProductoCodigo::where('producto_id', $producto->id)->exists();
                 $productoCodigo = \App\Models\ProductoCodigo::firstOrNew([
                     'producto_id' => $producto->id,
                     'codigo_barras' => $codigoBarrasInput,
                 ]);
                 $productoCodigo->cantidad = ($productoCodigo->cantidad ?? 0) + $cantidad;
-                $productoCodigo->es_default = false;
+                if (!$productoCodigo->exists) {
+                    $productoCodigo->es_default = $esPrimerCodigo;
+                }
                 $productoCodigo->save();
             } else {
                 $defaultCodigo = \App\Models\ProductoCodigo::where('producto_id', $producto->id)

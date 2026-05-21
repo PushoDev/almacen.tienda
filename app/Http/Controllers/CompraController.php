@@ -188,6 +188,8 @@ class CompraController extends Controller
             'productos.*.modelo' => 'nullable|string|max:255',
             'productos.*.capacidad' => 'nullable|string|max:255',
             'productos.*.categoria' => 'required|string|max:255',
+            'productos.*.codigo' => 'nullable|string|max:255',
+            'productos.*.codigo_barras' => 'nullable|string|max:255',
             'productos.*.cantidad' => 'required|integer|min:1',
             'productos.*.precio' => 'required|numeric|min:0',
             'pagos' => 'array|nullable',
@@ -306,6 +308,7 @@ class CompraController extends Controller
             }
 
             $productosConAlmacen = [];
+            $pivotResumen = [];
             foreach ($validated['productos'] as $item) {
                 $categoria = Categoria::firstOrCreate(['nombre_categoria' => $item['categoria']]);
 
@@ -336,14 +339,17 @@ class CompraController extends Controller
                 $producto->save();
 
                 // Manejo de Códigos de Barras
-                $codigoBarrasInput = $item['codigo_barras'] ?? null;
-                if ($codigoBarrasInput) {
+                $codigoBarrasInput = trim((string) ($item['codigo_barras'] ?? $item['codigo'] ?? ''));
+                if ($codigoBarrasInput !== '') {
+                    $esPrimerCodigo = !\App\Models\ProductoCodigo::where('producto_id', $producto->id)->exists();
                     $productoCodigo = \App\Models\ProductoCodigo::firstOrNew([
                         'producto_id' => $producto->id,
                         'codigo_barras' => $codigoBarrasInput,
                     ]);
                     $productoCodigo->cantidad = ($productoCodigo->cantidad ?? 0) + $item['cantidad'];
-                    $productoCodigo->es_default = false;
+                    if (!$productoCodigo->exists) {
+                        $productoCodigo->es_default = $esPrimerCodigo;
+                    }
                     $productoCodigo->save();
                 } else {
                     $defaultCodigo = \App\Models\ProductoCodigo::where('producto_id', $producto->id)
@@ -359,13 +365,45 @@ class CompraController extends Controller
 
                 // Castear almacen_id a integer
                 $almacenId = (int) $item['almacen_id'];
+                $lineaCantidad = (int) $item['cantidad'];
+                $lineaPrecio = (float) $item['precio'];
+                $lineaSubtotal = $lineaCantidad * $lineaPrecio;
 
-                // Asociar producto a la compra
-                $compra->productos()->attach($producto->id, [
-                    'cantidad' => $item['cantidad'],
-                    'precio' => $item['precio'],
-                    'almacen_id' => $almacenId,
-                ]);
+                // Asociar producto a la compra (evita duplicado en pivote compra_producto)
+                if (!isset($pivotResumen[$producto->id])) {
+                    $compra->productos()->attach($producto->id, [
+                        'cantidad' => $lineaCantidad,
+                        'precio' => $lineaPrecio,
+                        'almacen_id' => $almacenId,
+                    ]);
+
+                    $pivotResumen[$producto->id] = [
+                        'cantidad' => $lineaCantidad,
+                        'subtotal' => $lineaSubtotal,
+                        'almacen_id' => $almacenId,
+                    ];
+                } else {
+                    $resumen = $pivotResumen[$producto->id];
+                    $nuevaCantidad = $resumen['cantidad'] + $lineaCantidad;
+                    $nuevoSubtotal = $resumen['subtotal'] + $lineaSubtotal;
+                    $precioPromedio = $nuevaCantidad > 0 ? round($nuevoSubtotal / $nuevaCantidad, 2) : $lineaPrecio;
+
+                    // Si el producto entra a la misma compra desde distintos almacenes, dejamos null en pivote
+                    // para reflejar mezcla de origen en ese documento de compra.
+                    $almacenPivot = ($resumen['almacen_id'] === $almacenId) ? $almacenId : null;
+
+                    $compra->productos()->updateExistingPivot($producto->id, [
+                        'cantidad' => $nuevaCantidad,
+                        'precio' => $precioPromedio,
+                        'almacen_id' => $almacenPivot,
+                    ]);
+
+                    $pivotResumen[$producto->id] = [
+                        'cantidad' => $nuevaCantidad,
+                        'subtotal' => $nuevoSubtotal,
+                        'almacen_id' => $almacenPivot,
+                    ];
+                }
 
                 // Actualizar inventario en el almacén específico
                 $almacenProducto = AlmacenProducto::firstOrNew([

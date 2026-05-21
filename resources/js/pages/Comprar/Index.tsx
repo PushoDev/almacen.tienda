@@ -73,6 +73,7 @@ export interface ProductoComprarProps {
     capacidad?: string;
     categoria: string;
     codigo: string;
+    codigo_barras?: string;
     cantidad: number;
     precio: number;
 }
@@ -252,7 +253,7 @@ export default function ComprarPage() {
         const productosParaBackend = productos.map((p) => ({
             ...p,
             almacen_id: parseInt(p.almacen_id as any),
-            codigo: '',
+            codigo_barras: (p.codigo || '').trim(),
         }));
         setData('productos', productosParaBackend as ProductoComprarProps[]);
     }, [productos]);
