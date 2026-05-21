@@ -65,6 +65,12 @@ interface Cuenta {
     };
     saldo_actual?: number;
 }
+interface ProductoCodigoVenta {
+    id: number;
+    codigo_barras: string;
+    cantidad: number;
+    es_default?: boolean;
+}
 interface Producto {
     id: number | string;
     nombre_producto: string;
@@ -78,6 +84,7 @@ interface Producto {
     tiene_precio: boolean;
     imagen_url: string;
     codigo_barras: string;
+    codigos?: ProductoCodigoVenta[];
     barcode_image_url: string | null;
     precio_base: number | null; // Precio del vendedor o admin
     es_precio_vendedor: boolean;
@@ -85,6 +92,8 @@ interface Producto {
 interface ItemCarrito {
     id: string;
     producto: Producto;
+    producto_codigo_id: number;
+    codigo_barras_usado: string;
     cantidad: number;
     precio_venta: number;
     precio_base: number; // Precio original antes de editar
@@ -161,6 +170,7 @@ export default function PuntoVentaOficial({
     const [clienteSeleccionado, setClienteSeleccionado] = useState<string>('');
     const [busqueda, setBusqueda] = useState<string>('');
     const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
+    const [codigoSeleccionadoPorProducto, setCodigoSeleccionadoPorProducto] = useState<Record<string, number>>({});
     const [procesandoVenta, setProcesandoVenta] = useState<boolean>(false);
     const [payments, setPayments] = useState<Payment[]>([]);
     const [currentPayment, setCurrentPayment] = useState<{
@@ -333,6 +343,11 @@ export default function PuntoVentaOficial({
                 stock_disponible: Number(producto.stock_disponible) || 0,
                 imagen_url: producto.imagen_url || '/placeholder-product.png',
                 codigo_barras: producto.codigo_barras || 'N/A',
+                codigos: (producto.codigos || []).map((codigo) => ({
+                    ...codigo,
+                    id: Number(codigo.id),
+                    cantidad: Number(codigo.cantidad) || 0,
+                })),
             }));
             console.log('Productos cargados:', productosProcesados.length);
             setProductos(productosProcesados);
@@ -359,6 +374,7 @@ export default function PuntoVentaOficial({
         cargarProductos(value);
         setBusqueda('');
         setCarrito([]);
+        setCodigoSeleccionadoPorProducto({});
     };
 
     const handleClienteChange = (value: string) => {
@@ -385,11 +401,12 @@ export default function PuntoVentaOficial({
         if (!busqueda.trim()) return productos;
         const termino = busqueda.toLowerCase().trim();
         return productos.filter(
-            (producto) =>
-                (producto.nombre_producto?.toLowerCase().includes(termino) ||
-                    producto.marca_producto?.toLowerCase().includes(termino) ||
-                    producto.codigo_barras?.toLowerCase().includes(termino) ||
-                    producto.categoria_nombre?.toLowerCase().includes(termino)) ??
+                (producto) =>
+                    (producto.nombre_producto?.toLowerCase().includes(termino) ||
+                        producto.marca_producto?.toLowerCase().includes(termino) ||
+                        producto.codigo_barras?.toLowerCase().includes(termino) ||
+                        producto.codigos?.some((codigo) => codigo.codigo_barras.toLowerCase().includes(termino)) ||
+                        producto.categoria_nombre?.toLowerCase().includes(termino)) ??
                 false,
         );
     }, [productos, busqueda]);
@@ -398,7 +415,46 @@ export default function PuntoVentaOficial({
         setBusqueda('');
     };
 
-    const agregarAlCarrito = (producto: Producto) => {
+    const obtenerCodigosDisponibles = (producto: Producto): ProductoCodigoVenta[] => {
+        return (producto.codigos || []).filter((codigo) => codigo.cantidad > 0);
+    };
+
+    const resolverCodigoParaVenta = (producto: Producto, codigoForzadoId?: number): ProductoCodigoVenta | null => {
+        const codigosDisponibles = obtenerCodigosDisponibles(producto);
+
+        if (codigosDisponibles.length === 0) {
+            return null;
+        }
+
+        if (codigoForzadoId) {
+            return codigosDisponibles.find((codigo) => codigo.id === codigoForzadoId) || null;
+        }
+
+        const keyProducto = String(producto.id);
+        const codigoSeleccionado = codigoSeleccionadoPorProducto[keyProducto];
+        if (codigoSeleccionado) {
+            const codigoPorSeleccion = codigosDisponibles.find((codigo) => codigo.id === codigoSeleccionado);
+            if (codigoPorSeleccion) {
+                return codigoPorSeleccion;
+            }
+        }
+
+        const termino = busqueda.trim().toLowerCase();
+        if (termino) {
+            const codigoEscaneado = codigosDisponibles.find((codigo) => codigo.codigo_barras.toLowerCase() === termino);
+            if (codigoEscaneado) {
+                return codigoEscaneado;
+            }
+        }
+
+        if (codigosDisponibles.length === 1) {
+            return codigosDisponibles[0];
+        }
+
+        return codigosDisponibles.find((codigo) => codigo.es_default) || codigosDisponibles[0];
+    };
+
+    const agregarAlCarrito = (producto: Producto, codigoForzadoId?: number) => {
         if (!producto.tiene_precio || !producto.precio_venta || producto.precio_venta <= 0) {
             toast.error('Este producto no tiene un precio de venta configurado');
             return;
@@ -407,12 +463,21 @@ export default function PuntoVentaOficial({
             toast.error('Stock insuficiente para este producto');
             return;
         }
-        const idItem = `${producto.id}`;
+
+        const codigoVenta = resolverCodigoParaVenta(producto, codigoForzadoId);
+        if (!codigoVenta) {
+            toast.error('No hay stock disponible en los códigos de barras de este producto');
+            return;
+        }
+
+        const stockMaximoPorCodigo = Math.min(producto.stock_disponible, codigoVenta.cantidad);
+        const idItem = `${producto.id}-${codigoVenta.id}`;
         const itemExistente = carrito.find((item) => item.id === idItem);
+
         if (itemExistente) {
-            const nuevaCantidad = Math.min(itemExistente.cantidad + 1, producto.stock_disponible);
+            const nuevaCantidad = Math.min(itemExistente.cantidad + 1, stockMaximoPorCodigo);
             if (nuevaCantidad === itemExistente.cantidad) {
-                toast.warning('No hay más stock disponible para este producto');
+                toast.warning(`No hay más stock disponible para el código ${codigoVenta.codigo_barras}`);
                 return;
             }
             setCarrito(
@@ -432,13 +497,15 @@ export default function PuntoVentaOficial({
             const nuevoItem: ItemCarrito = {
                 id: idItem,
                 producto: producto,
+                producto_codigo_id: codigoVenta.id,
+                codigo_barras_usado: codigoVenta.codigo_barras,
                 cantidad: 1,
                 precio_venta: precioVenta,
                 precio_base: precioBase,
                 subtotal: precioVenta,
             };
             setCarrito([...carrito, nuevoItem]);
-            toast.success('Producto agregado al carrito');
+            toast.success(`Producto agregado (${codigoVenta.codigo_barras})`);
         }
     };
 
@@ -446,9 +513,13 @@ export default function PuntoVentaOficial({
         if (nuevaCantidad < 1) return;
         const item = carrito.find((item) => item.id === id);
         if (!item) return;
-        if (nuevaCantidad > item.producto.stock_disponible) {
-            nuevaCantidad = item.producto.stock_disponible;
-            toast.warning('No hay más stock disponible');
+        const codigo = item.producto.codigos?.find((c) => c.id === item.producto_codigo_id);
+        const stockCodigo = codigo ? Number(codigo.cantidad) : 0;
+        const stockMaximo = Math.min(item.producto.stock_disponible, stockCodigo);
+
+        if (nuevaCantidad > stockMaximo) {
+            nuevaCantidad = stockMaximo;
+            toast.warning(`No hay más stock disponible para el código ${item.codigo_barras_usado}`);
         }
         setCarrito(
             carrito.map((itemCarrito) =>
@@ -492,10 +563,14 @@ export default function PuntoVentaOficial({
 
     const incrementarCantidad = (id: string) => {
         const item = carrito.find((item) => item.id === id);
-        if (item && item.cantidad < item.producto.stock_disponible) {
+        const codigo = item?.producto.codigos?.find((c) => c.id === item?.producto_codigo_id);
+        const stockCodigo = codigo ? Number(codigo.cantidad) : 0;
+        const stockMaximo = item ? Math.min(item.producto.stock_disponible, stockCodigo) : 0;
+
+        if (item && item.cantidad < stockMaximo) {
             actualizarCantidad(id, item.cantidad + 1);
         } else {
-            toast.warning('No hay más stock disponible');
+            toast.warning(item ? `No hay más stock para el código ${item.codigo_barras_usado}` : 'No hay más stock disponible');
         }
     };
 
@@ -648,6 +723,39 @@ export default function PuntoVentaOficial({
         toast.info('Pago removido');
     };
 
+    const handleSeleccionCodigoProducto = (productoId: string | number, codigoId: string) => {
+        if (!codigoId) {
+            return;
+        }
+
+        setCodigoSeleccionadoPorProducto((prev) => ({
+            ...prev,
+            [String(productoId)]: Number(codigoId),
+        }));
+    };
+
+    const handleAgregarDesdeBusqueda = () => {
+        const termino = busqueda.trim().toLowerCase();
+        if (!termino) {
+            return;
+        }
+
+        for (const producto of productos) {
+            const codigoExacto = (producto.codigos || []).find((codigo) => codigo.codigo_barras.toLowerCase() === termino);
+            if (codigoExacto) {
+                agregarAlCarrito(producto, codigoExacto.id);
+                setBusqueda('');
+                return;
+            }
+        }
+
+        const productoPrincipal = productos.find((producto) => (producto.codigo_barras || '').toLowerCase() === termino);
+        if (productoPrincipal) {
+            agregarAlCarrito(productoPrincipal);
+            setBusqueda('');
+        }
+    };
+
     const handleCompleteSale = async () => {
         console.log('Iniciando proceso de venta...');
         if (!almacenSeleccionado) {
@@ -662,6 +770,12 @@ export default function PuntoVentaOficial({
             const producto = productos.find((p) => p.id === item.producto.id);
             if (!producto || producto.stock_disponible < item.cantidad) {
                 toast.error(`Stock insuficiente para: ${item.producto.nombre_producto}`);
+                return;
+            }
+
+            const codigo = producto.codigos?.find((c) => c.id === item.producto_codigo_id);
+            if (!codigo || codigo.cantidad < item.cantidad) {
+                toast.error(`Stock insuficiente para el código ${item.codigo_barras_usado}`);
                 return;
             }
         }
@@ -685,6 +799,7 @@ export default function PuntoVentaOficial({
             cliente_id: clienteSeleccionado || null,
             items: carrito.map((item) => ({
                 producto_id: item.producto.id,
+                producto_codigo_id: item.producto_codigo_id,
                 cantidad: item.cantidad,
                 precio_venta: item.precio_venta,
                 precio_base: item.precio_base, // Usar el precio original guardado
@@ -720,6 +835,7 @@ export default function PuntoVentaOficial({
                 setAlmacenSeleccionado('');
                 setClienteSeleccionado('');
                 setProductos([]);
+                setCodigoSeleccionadoPorProducto({});
                 if (response.data.redirect) {
                     setTimeout(() => {
                         window.location.href = response.data.redirect;
@@ -1055,6 +1171,12 @@ export default function PuntoVentaOficial({
                                                     placeholder="Nombre, marca, categoría o código de barras..."
                                                     value={busqueda}
                                                     onChange={(e) => setBusqueda(e.target.value)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            handleAgregarDesdeBusqueda();
+                                                        }
+                                                    }}
                                                     className="h-11 pl-10"
                                                 />
                                                 {busqueda && (
@@ -1094,6 +1216,8 @@ export default function PuntoVentaOficial({
                                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                                                 {productosFiltrados.map((producto, index) => {
                                                     const stockStatus = getStockStatus(producto.stock_disponible);
+                                                    const codigosDisponibles = (producto.codigos || []).filter((codigo) => codigo.cantidad > 0);
+                                                    const codigoSeleccionadoActual = codigoSeleccionadoPorProducto[String(producto.id)]?.toString() || '';
                                                     return (
                                                         <div
                                                             key={producto.id}
@@ -1168,7 +1292,7 @@ export default function PuntoVentaOficial({
                                                                             {producto.marca_producto || 'N/A'}
                                                                         </span>
                                                                     </div>
-                                                                    {producto.modelo_producto && (
+                                                                {producto.modelo_producto && (
                                                                         <div className="text-muted-foreground flex gap-1">
                                                                             <span className="font-semibold">Modelo:</span>
                                                                             <span className="text-foreground truncate">
@@ -1185,6 +1309,26 @@ export default function PuntoVentaOficial({
                                                                         </div>
                                                                     )}
                                                                 </div>
+                                                                {codigosDisponibles.length > 1 && (
+                                                                    <div className="mt-3 space-y-1">
+                                                                        <Label className="text-xs">Codebar para esta venta</Label>
+                                                                        <Select
+                                                                            value={codigoSeleccionadoActual}
+                                                                            onValueChange={(value) => handleSeleccionCodigoProducto(producto.id, value)}
+                                                                        >
+                                                                            <SelectTrigger className="h-8 text-xs">
+                                                                                <SelectValue placeholder="Seleccionar código" />
+                                                                            </SelectTrigger>
+                                                                            <SelectContent>
+                                                                                {codigosDisponibles.map((codigo) => (
+                                                                                    <SelectItem key={codigo.id} value={codigo.id.toString()}>
+                                                                                        {codigo.codigo_barras} ({codigo.cantidad})
+                                                                                    </SelectItem>
+                                                                                ))}
+                                                                            </SelectContent>
+                                                                        </Select>
+                                                                    </div>
+                                                                )}
                                                                 <div className="mt-4 flex items-end justify-between">
                                                                     <div>
                                                                         <p className="text-muted-foreground mb-0.5 text-xs">Precio</p>
@@ -1206,7 +1350,8 @@ export default function PuntoVentaOficial({
                                                                             !producto.tiene_precio ||
                                                                             producto.stock_disponible <= 0 ||
                                                                             !producto.precio_venta ||
-                                                                            producto.precio_venta <= 0
+                                                                            producto.precio_venta <= 0 ||
+                                                                            codigosDisponibles.length === 0
                                                                         }
                                                                         size="sm"
                                                                         className="bg-primary text-primary-foreground h-10 w-10 rounded-full p-0 shadow-md transition-all hover:scale-105 hover:shadow-lg disabled:opacity-50"
@@ -1274,6 +1419,7 @@ export default function PuntoVentaOficial({
                                                         <div className="flex-1 space-y-1">
                                                             <p className="text-sm font-medium">{item.producto.nombre_producto}</p>
                                                             <p className="text-xs text-gray-500">{item.producto.marca_producto || 'Sin marca'}</p>
+                                                            <p className="font-mono text-xs text-gray-500">Codebar: {item.codigo_barras_usado}</p>
                                                         </div>
                                                         <Button
                                                             variant="ghost"
@@ -1300,7 +1446,13 @@ export default function PuntoVentaOficial({
                                                                 variant="outline"
                                                                 size="sm"
                                                                 onClick={() => incrementarCantidad(item.id)}
-                                                                disabled={item.cantidad >= item.producto.stock_disponible}
+                                                                disabled={
+                                                                    item.cantidad >=
+                                                                    Math.min(
+                                                                        item.producto.stock_disponible,
+                                                                        item.producto.codigos?.find((c) => c.id === item.producto_codigo_id)?.cantidad || 0,
+                                                                    )
+                                                                }
                                                                 className="h-8 w-8 p-0"
                                                             >
                                                                 <Plus className="h-3 w-3" />
@@ -1769,7 +1921,10 @@ export default function PuntoVentaOficial({
                         <DialogDescription>Información detallada del producto seleccionado.</DialogDescription>
                     </DialogHeader>
 
-                    {productoVistaRapida && (
+                    {productoVistaRapida && (() => {
+                        const codigosDisponiblesModal = (productoVistaRapida.codigos || []).filter((c) => c.cantidad > 0);
+                        const codigoSeleccionadoModal = codigoSeleccionadoPorProducto[String(productoVistaRapida.id)]?.toString() || '';
+                        return (
                         <div className="grid grid-cols-1 gap-6 py-4 md:grid-cols-2">
                             {/* Columna de Imagen */}
                             <div className="space-y-4">
@@ -1818,7 +1973,25 @@ export default function PuntoVentaOficial({
                                     </div>
                                     <div className="space-y-1">
                                         <p className="text-muted-foreground text-xs tracking-wider uppercase">Código</p>
-                                        <p className="font-mono">{productoVistaRapida.codigo_barras}</p>
+                                        {codigosDisponiblesModal.length > 1 ? (
+                                            <Select
+                                                value={codigoSeleccionadoModal}
+                                                onValueChange={(value) => handleSeleccionCodigoProducto(productoVistaRapida.id, value)}
+                                            >
+                                                <SelectTrigger className="h-8 text-xs">
+                                                    <SelectValue placeholder="Seleccionar código" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {codigosDisponiblesModal.map((codigo) => (
+                                                        <SelectItem key={codigo.id} value={codigo.id.toString()}>
+                                                            {codigo.codigo_barras} ({codigo.cantidad})
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        ) : (
+                                            <p className="font-mono">{codigosDisponiblesModal[0]?.codigo_barras ?? productoVistaRapida.codigo_barras}</p>
+                                        )}
                                     </div>
                                 </div>
 
@@ -1838,10 +2011,6 @@ export default function PuntoVentaOficial({
                                         </div>
                                     </div>
 
-                                    {/* Opcional: Mostrar precio de compra si es relevante para el vendedor,
-                                        aunque generalmente esto es privado. El usuario dijo 'todos los campos',
-                                        pero mostrar costo suele ser sensible. Lo mostraré de forma discreta o lo omitiré si no es seguro.
-                                        Dado que es una vista de vendedor/admin, puede ser útil. */}
                                     {(meta.role_usuario === 'admin' || meta.role_usuario === 'moderador') && (
                                         <div className="text-muted-foreground flex items-center justify-between px-2 text-xs">
                                             <span>Costo unitario:</span>
@@ -1857,7 +2026,11 @@ export default function PuntoVentaOficial({
                                             agregarAlCarrito(productoVistaRapida);
                                             setIsVistaRapidaOpen(false);
                                         }}
-                                        disabled={!productoVistaRapida.tiene_precio || productoVistaRapida.stock_disponible <= 0}
+                                        disabled={
+                                            !productoVistaRapida.tiene_precio ||
+                                            productoVistaRapida.stock_disponible <= 0 ||
+                                            codigosDisponiblesModal.length === 0
+                                        }
                                     >
                                         <ShoppingCart className="mr-2 h-4 w-4" />
                                         Agregar a la Venta
@@ -1865,7 +2038,8 @@ export default function PuntoVentaOficial({
                                 </div>
                             </div>
                         </div>
-                    )}
+                        );
+                    })()}
                 </DialogContent>
             </Dialog>
         </AppLayout>

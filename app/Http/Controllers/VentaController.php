@@ -10,6 +10,7 @@ use App\Models\Cuenta;
 use App\Models\HistorialStock;
 use App\Models\Almacen;
 use App\Models\Producto;
+use App\Models\ProductoCodigo;
 use App\Models\Cliente;
 use App\Models\Moneda;
 use App\Models\User;
@@ -169,7 +170,8 @@ class VentaController extends Controller
                     'codigos' => $producto->codigos->map(fn($c) => [
                         'id' => $c->id,
                         'codigo_barras' => $c->codigo_barras,
-                        'cantidad' => $c->cantidad
+                        'cantidad' => $c->cantidad,
+                        'es_default' => (bool) $c->es_default,
                     ]),
                     'barcode_image_url' => $producto->barcode_image_url,
                     'precio_base' => $vendedor?->pivot->precio_venta ?? null, // Precio base del vendedor o admin
@@ -465,6 +467,7 @@ class VentaController extends Controller
         $venta = Venta::with([
             'destinatario',
             'detalles.producto.categoria',
+            'detalles.productoCodigo',
             'pagos.cuenta.moneda',
             'pagos.cliente', // ✅ AGREGAR: relación con cliente para pagos
             'pagos.moneda',
@@ -505,6 +508,7 @@ class VentaController extends Controller
                         'modelo' => $detalle->producto->modelo_producto,
                         'capacidad' => $detalle->producto->capacidad_producto,
                         'codigo' => $detalle->producto->codigo_producto,
+                        'codigo_vendido' => $detalle->productoCodigo?->codigo_barras ?? $detalle->producto->codigo_producto,
                         'imagen_url' => $detalle->producto->imagen_url,
                         'categoria' => $detalle->producto->categoria->nombre_categoria ?? 'Sin categoría',
                     ],
@@ -671,6 +675,7 @@ class VentaController extends Controller
             'cliente_id' => 'nullable|exists:clientes,id',
             'items' => 'required|array|min:1',
             'items.*.producto_id' => 'required|exists:productos,id',
+            'items.*.producto_codigo_id' => 'required|exists:producto_codigos,id',
             'items.*.cantidad' => 'required|integer|min:1',
             'items.*.precio_venta' => 'required|numeric|min:0',
             'items.*.subtotal' => 'required|numeric|min:0',
@@ -691,6 +696,11 @@ class VentaController extends Controller
             'tasa_aplicada_venta' => 'nullable|numeric|min:0.0001',
             'moneda_cobro_id' => 'nullable|exists:monedas,id',
         ]);
+
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['error' => 'Usuario no autenticado'], 401);
+        }
 
         // ✅ CAMBIO 2: Agregar validación lógica después del validate
         foreach ($validatedData['pagos'] as $pago) {
@@ -736,11 +746,6 @@ class VentaController extends Controller
         DB::beginTransaction();
 
         try {
-            $user = Auth::user();
-            if (!$user) {
-                throw new \Exception('Usuario no autenticado');
-            }
-
             if (!in_array($user->role, ['admin', 'moderador']) && !$user->almacenes->contains('id', $validatedData['almacen_id'])) {
                 throw new \Exception('No tienes acceso a este almacén');
             }
@@ -761,6 +766,18 @@ class VentaController extends Controller
                     throw new \Exception("Stock insuficiente para: {$producto->nombre_producto}.");
                 }
 
+                $codigoVenta = ProductoCodigo::where('id', $item['producto_codigo_id'])
+                    ->where('producto_id', $item['producto_id'])
+                    ->first();
+
+                if (!$codigoVenta) {
+                    throw new \Exception("El código seleccionado no pertenece al producto: {$producto->nombre_producto}.");
+                }
+
+                if ($codigoVenta->cantidad < $item['cantidad']) {
+                    throw new \Exception("Stock insuficiente para el código {$codigoVenta->codigo_barras}.");
+                }
+
                 $costo = $producto->precio_compra_producto * $item['cantidad'];
                 $costo_total_productos += $costo;
 
@@ -777,18 +794,8 @@ class VentaController extends Controller
                     'user_id' => $user->id,
                 ]);
 
-                // ✅ Descontar de producto_codigos (FIFO)
-                $cantidadRestante = $item['cantidad'];
-                $codigos = \App\Models\ProductoCodigo::where('producto_id', $item['producto_id'])
-                            ->where('cantidad', '>', 0)
-                            ->orderBy('es_default', 'asc')
-                            ->get();
-                foreach ($codigos as $codigo) {
-                    if ($cantidadRestante <= 0) break;
-                    $descontar = min($codigo->cantidad, $cantidadRestante);
-                    $codigo->decrement('cantidad', $descontar);
-                    $cantidadRestante -= $descontar;
-                }
+                // ✅ Descontar del código exacto utilizado en la venta
+                $codigoVenta->decrement('cantidad', $item['cantidad']);
             }
 
             // ✅ CAMBIO 3: Modificar validación de cuentas (solo si tiene cuenta_id)
@@ -835,6 +842,7 @@ class VentaController extends Controller
                 VentaDetalle::create([
                     'venta_id' => $venta->id,
                     'producto_id' => $item['producto_id'],
+                    'producto_codigo_id' => $item['producto_codigo_id'],
                     'cantidad' => $item['cantidad'],
                     'precio_venta' => $item['precio_venta'],
                     'precio_base' => $precioBase,
@@ -1281,12 +1289,21 @@ class VentaController extends Controller
                     $almacenProducto->increment('cantidad', $detalle->cantidad);
                 }
 
-                // ✅ Devolver stock a producto_codigos (al default o primero)
-                $codigoDefault = \App\Models\ProductoCodigo::where('producto_id', $detalle->producto_id)
-                                    ->orderByDesc('es_default')
-                                    ->first();
-                if ($codigoDefault) {
-                    $codigoDefault->increment('cantidad', $detalle->cantidad);
+                // ✅ Devolver stock al mismo código usado en la venta.
+                // Para ventas antiguas sin producto_codigo_id, usar default o primero.
+                if ($detalle->producto_codigo_id) {
+                    $codigoUsado = ProductoCodigo::find($detalle->producto_codigo_id);
+                    if ($codigoUsado) {
+                        $codigoUsado->increment('cantidad', $detalle->cantidad);
+                    }
+                } else {
+                    $codigoDefault = ProductoCodigo::where('producto_id', $detalle->producto_id)
+                        ->orderByDesc('es_default')
+                        ->first();
+
+                    if ($codigoDefault) {
+                        $codigoDefault->increment('cantidad', $detalle->cantidad);
+                    }
                 }
 
                 HistorialStock::create([

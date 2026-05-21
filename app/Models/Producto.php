@@ -129,6 +129,15 @@ class Producto extends Model
         return asset($this->imagen_producto);
     }
 
+    public function getBarcodeImageUrlAttribute(): ?string
+    {
+        if (!$this->barcode_image || !file_exists(public_path($this->barcode_image))) {
+            return null;
+        }
+
+        return asset($this->barcode_image);
+    }
+
     /**
      * Scope para buscar por código de barras
      */
