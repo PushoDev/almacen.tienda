@@ -448,27 +448,15 @@ export default function ProductosPage({
         }
     };
 
-    // Descargar plantilla
+    // Descargar plantilla desde el servidor (genera un .xlsx real)
     const downloadTemplate = () => {
-        // Crear contenido CSV con las columnas correctas
-        const headers = ['nombre_producto', 'categoria', 'precio_compra', 'cantidad', 'marca', 'modelo', 'capacidad'];
-        const exampleData = ['Laptop Dell', 'Electrónicos', '1500.00', '10', 'Dell', 'XPS 13', '512GB SSD'];
-
-        let csvContent = headers.join(',') + '\n';
-        csvContent += exampleData.join(',') + '\n';
-        csvContent += 'Smartphone Samsung,Tecnología,800.00,5,Samsung,Galaxy S23,256GB' + '\n';
-
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.setAttribute('href', url);
-        link.setAttribute('download', 'plantilla-productos.csv');
-        link.style.visibility = 'hidden';
+        link.href = route('productos.template');
+        link.download = 'plantilla-importacion-productos.xlsx';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-
-        toast.info('Plantilla descargada. Recuerda: El código de barras se genera automáticamente.');
+        toast.info('Descargando plantilla Excel...');
     };
 
     // Aplicar filtros
