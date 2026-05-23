@@ -3,6 +3,15 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Pagination,
+    PaginationContent,
+    PaginationEllipsis,
+    PaginationItem,
+    PaginationLink,
+    PaginationNext,
+    PaginationPrevious,
+} from '@/components/ui/pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
@@ -34,8 +43,18 @@ interface Operacion {
     descripcion: string;
 }
 
+interface PaginatedOperaciones {
+    data: Operacion[];
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+    from: number;
+    to: number;
+}
+
 interface RastreoOperacionesPageProps {
-    operaciones: Operacion[];
+    operaciones: PaginatedOperaciones;
     usuarios: User[];
     filtros: {
         start_date?: string;
@@ -51,16 +70,43 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros 
     const [userId, setUserId] = useState(filtros.user_id || 'all');
     const [tipoOperacion, setTipoOperacion] = useState(filtros.tipo_operacion || 'all');
 
+    const buildParams = (page: number = 1) => ({
+        start_date: startDate,
+        end_date: endDate,
+        user_id: userId === 'all' ? '' : userId,
+        tipo_operacion: tipoOperacion === 'all' ? '' : tipoOperacion,
+        page,
+    });
+
     const handleFilter = () => {
-        router.get(route('reportes.rastreo_operaciones'), {
-            start_date: startDate,
-            end_date: endDate,
-            user_id: userId === 'all' ? '' : userId,
-            tipo_operacion: tipoOperacion === 'all' ? '' : tipoOperacion,
-        }, {
+        router.get(route('reportes.rastreo_operaciones'), buildParams(1), {
             preserveState: true,
             replace: true,
         });
+    };
+
+    const handlePageChange = (page: number) => {
+        router.get(route('reportes.rastreo_operaciones'), buildParams(page), {
+            preserveState: true,
+            replace: true,
+        });
+    };
+
+    const getPageNumbers = (current: number, last: number): (number | '...')[] => {
+        if (last <= 7) return Array.from({ length: last }, (_, i) => i + 1);
+
+        const pages: (number | '...')[] = [1];
+
+        if (current > 3) pages.push('...');
+
+        for (let i = Math.max(2, current - 1); i <= Math.min(last - 1, current + 1); i++) {
+            pages.push(i);
+        }
+
+        if (current < last - 2) pages.push('...');
+        pages.push(last);
+
+        return pages;
     };
 
     const exportToPDF = async () => {
@@ -78,7 +124,7 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros 
                 doc.text(`Periodo: ${startDate || 'Inicio'} al ${endDate || 'Fin'}`, 20, 35);
             }
 
-            const tableData = operaciones.map((op) => [
+            const tableData = operaciones.data.map((op) => [
                 new Date(op.fecha).toLocaleString(),
                 op.tipo,
                 op.referencia,
@@ -112,6 +158,9 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros 
             default: return '';
         }
     };
+
+    const { data: ops, current_page, last_page, total, from, to } = operaciones;
+    const pageNumbers = getPageNumbers(current_page, last_page);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -211,14 +260,14 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros 
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-sidebar-border">
-                                    {operaciones.length === 0 ? (
+                                    {ops.length === 0 ? (
                                         <tr>
                                             <td colSpan={6} className="px-6 py-10 text-center text-muted-foreground">
                                                 No se encontraron operaciones con los filtros seleccionados.
                                             </td>
                                         </tr>
                                     ) : (
-                                        operaciones.map((op, idx) => (
+                                        ops.map((op, idx) => (
                                             <tr key={`${op.tipo}-${op.id}-${idx}`} className="hover:bg-sidebar-accent/30 transition-colors">
                                                 <td className="px-6 py-4 text-sm whitespace-nowrap">
                                                     {new Date(op.fecha).toLocaleString()}
@@ -244,6 +293,60 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros 
                                 </tbody>
                             </table>
                         </div>
+
+                        {/* Paginación */}
+                        {last_page > 1 && (
+                            <div className="flex items-center justify-between border-t border-sidebar-border px-6 py-4">
+                                <p className="text-sm text-muted-foreground">
+                                    Mostrando {from}–{to} de {total} operaciones
+                                </p>
+                                <Pagination className="mx-0 w-auto">
+                                    <PaginationContent>
+                                        <PaginationItem>
+                                            <PaginationPrevious
+                                                href="#"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    if (current_page > 1) handlePageChange(current_page - 1);
+                                                }}
+                                                className={current_page === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                            />
+                                        </PaginationItem>
+                                        {pageNumbers.map((page, idx) =>
+                                            page === '...' ? (
+                                                <PaginationItem key={`ellipsis-${idx}`}>
+                                                    <PaginationEllipsis />
+                                                </PaginationItem>
+                                            ) : (
+                                                <PaginationItem key={page}>
+                                                    <PaginationLink
+                                                        href="#"
+                                                        isActive={page === current_page}
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            handlePageChange(page as number);
+                                                        }}
+                                                        className="cursor-pointer"
+                                                    >
+                                                        {page}
+                                                    </PaginationLink>
+                                                </PaginationItem>
+                                            )
+                                        )}
+                                        <PaginationItem>
+                                            <PaginationNext
+                                                href="#"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    if (current_page < last_page) handlePageChange(current_page + 1);
+                                                }}
+                                                className={current_page === last_page ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                            />
+                                        </PaginationItem>
+                                    </PaginationContent>
+                                </Pagination>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             </div>
