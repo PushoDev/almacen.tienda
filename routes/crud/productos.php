@@ -33,8 +33,8 @@ Route::middleware(['auth', 'verified'])->group(
         // Importar a almacén específico (ruta con parámetro)
         Route::post('/listado-productos/importar/almacen/{almacenId}', [ProductoController::class, 'importToAlmacen'])->name('productos.import.almacen');
 
-        // Plantilla (opcional)
-        // Route::get('/productos/descargar/plantilla', [ProductoController::class, 'downloadTemplate'])->name('productos.template');
+        // Plantilla de importación
+        Route::get('/listado-productos/descargar/plantilla', [ProductoController::class, 'downloadTemplate'])->name('productos.template');
 
         // Ruta para agregar el precio de venta a los Productos
         Route::resource('disponibles', ProductoVendedorController::class);

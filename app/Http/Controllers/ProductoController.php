@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 // NOTE: Removed automatic migration/seed calls for safety in production
 use App\Exports\ProductoExport;
+use App\Exports\PlantillaProductoExport;
 use App\Imports\ProductoImport;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\DB;
@@ -534,6 +535,14 @@ class ProductoController extends Controller
                 ->withErrors(['error' => 'Error al importar productos: ' . $e->getMessage()])
                 ->withInput();
         }
+    }
+
+    /**
+     * Descarga la plantilla Excel para importar productos
+     */
+    public function downloadTemplate()
+    {
+        return Excel::download(new PlantillaProductoExport(), 'plantilla-importacion-productos.xlsx', \Maatwebsite\Excel\Excel::XLSX);
     }
 
     /**
