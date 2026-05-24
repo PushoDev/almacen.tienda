@@ -20,8 +20,17 @@ import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import { BadgeDollarSign, Eye, FileText, Sheet, Warehouse } from 'lucide-react';
-import { useState } from 'react';
+import {
+    Pagination,
+    PaginationContent,
+    PaginationEllipsis,
+    PaginationItem,
+    PaginationLink,
+    PaginationNext,
+    PaginationPrevious,
+} from '@/components/ui/pagination';
+import { BadgeDollarSign, Eye, FileText, Package, Sheet, Warehouse } from 'lucide-react';
+import { useMemo, useState } from 'react';
 
 // Interfaces
 interface Producto {
@@ -35,6 +44,8 @@ interface Producto {
     stock_almacen: number;
     precio_venta: number | null;
     ganancia: number | null;
+    comision: number | null;
+    imagen_producto?: string;
     tiene_precio: boolean;
     almacen_id: number;
 }
@@ -63,6 +74,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState<Producto | null>(null);
     const [newPrice, setNewPrice] = useState<string>('');
+    const [newComision, setNewComision] = useState<string>('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isEditMode, setIsEditMode] = useState(true);
@@ -112,6 +124,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
     const openEditModal = (producto: Producto) => {
         setSelectedProduct(producto);
         setNewPrice(producto.precio_venta?.toString() || '');
+        setNewComision(producto.comision?.toString() || '');
         setError(null);
         setIsEditMode(true);
         setIsModalOpen(true);
@@ -145,6 +158,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                 body: JSON.stringify({
                     precio_venta: parsedPrice,
                     almacen_id: selectedProduct.almacen_id,
+                    comision: newComision !== '' ? parseFloat(newComision) : null,
                 }),
             });
 
@@ -169,6 +183,9 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                       ...p,
                                       precio_venta: parsedPrice,
                                       ganancia: parsedPrice - p.precio_compra,
+                                      comision: responseData.new_comision !== undefined && responseData.new_comision !== null
+                                          ? responseData.new_comision
+                                          : p.comision,
                                   }
                                 : p,
                         ),
@@ -232,6 +249,13 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
 
     const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
     const currentProducts = filteredProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+    const getPageNumbers = (): (number | 'ellipsis')[] => {
+        if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+        if (currentPage <= 4) return [1, 2, 3, 4, 5, 'ellipsis', totalPages];
+        if (currentPage >= totalPages - 3) return [1, 'ellipsis', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+        return [1, 'ellipsis', currentPage - 1, currentPage, currentPage + 1, 'ellipsis', totalPages];
+    };
 
     const handleAlmacenChange = (almacenId: string) => {
         if (selectedProduct) {
@@ -376,14 +400,12 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                             <Table>
                                 <TableHeader>
                                     <TableRow className="bg-gray-100 hover:bg-gray-100 dark:bg-gray-900 dark:hover:bg-gray-900">
-                                        <TableHead className="w-[200px]">Producto</TableHead>
-                                        <TableHead>Marca</TableHead>
-                                        <TableHead>Modelo</TableHead>
-                                        <TableHead>Capacidad</TableHead>
+                                        <TableHead className="w-[220px]">Producto</TableHead>
                                         <TableHead>Categoría</TableHead>
                                         {canViewSensitiveData && <TableHead>Precio Compra</TableHead>}
                                         <TableHead>Stock</TableHead>
                                         <TableHead>Precio Venta</TableHead>
+                                        <TableHead>Comisión</TableHead>
                                         {canViewSensitiveData && <TableHead>Ganancia</TableHead>}
                                         <TableHead className="text-center">Acciones</TableHead>
                                     </TableRow>
@@ -401,6 +423,16 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                                         </TooltipTrigger>
                                                         <TooltipContent className="border-primary/20 max-w-xs p-4 shadow-xl">
                                                             <div className="space-y-2">
+                                                                {producto.imagen_producto && (
+                                                                    <div className="mb-2 flex justify-center">
+                                                                        <img
+                                                                            src={`/storage/${producto.imagen_producto}`}
+                                                                            alt={producto.nombre_producto}
+                                                                            className="h-20 w-20 rounded-lg object-cover"
+                                                                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                                                        />
+                                                                    </div>
+                                                                )}
                                                                 <p className="text-base font-bold text-white">{producto.nombre_producto}</p>
                                                                 <Separator className="bg-border/50" />
                                                                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
@@ -438,9 +470,6 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                                     </Tooltip>
                                                 </TooltipProvider>
                                             </TableCell>
-                                            <TableCell>{producto.marca_producto}</TableCell>
-                                            <TableCell>{producto.modelo_producto || '-'}</TableCell>
-                                            <TableCell>{producto.capacidad_producto || '-'}</TableCell>
                                             <TableCell>{producto.categoria || 'Sin categoría'}</TableCell>
                                             {canViewSensitiveData && <TableCell>{formatCurrency(producto.precio_compra)}</TableCell>}
                                             <TableCell>
@@ -448,6 +477,11 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                             </TableCell>
                                             <TableCell className={cn(producto.precio_venta === null ? 'text-amber-400 italic' : 'text-amber-800')}>
                                                 {formatCurrency(producto.precio_venta)}
+                                            </TableCell>
+                                            <TableCell className="font-medium text-indigo-600">
+                                                {producto.comision && producto.comision > 0
+                                                    ? formatCurrency(producto.comision)
+                                                    : <span className="text-gray-400 italic text-xs">Sin comisión</span>}
                                             </TableCell>
                                             {canViewSensitiveData && (
                                                 <TableCell
@@ -530,17 +564,41 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                 </div>
 
                 {/* Paginación */}
-                <div className="mt-4 flex justify-between">
-                    <Button onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))} disabled={currentPage === 1}>
-                        Anterior
-                    </Button>
-                    <span>
-                        Página {currentPage} de {totalPages}
-                    </span>
-                    <Button onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>
-                        Siguiente
-                    </Button>
-                </div>
+                {totalPages > 1 && (
+                    <Pagination className="mt-2">
+                        <PaginationContent>
+                            <PaginationItem>
+                                <PaginationPrevious
+                                    onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                                    className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                />
+                            </PaginationItem>
+                            {getPageNumbers().map((page, index) =>
+                                page === 'ellipsis' ? (
+                                    <PaginationItem key={`ellipsis-${index}`}>
+                                        <PaginationEllipsis />
+                                    </PaginationItem>
+                                ) : (
+                                    <PaginationItem key={page}>
+                                        <PaginationLink
+                                            onClick={() => setCurrentPage(page as number)}
+                                            isActive={currentPage === page}
+                                            className="cursor-pointer"
+                                        >
+                                            {page}
+                                        </PaginationLink>
+                                    </PaginationItem>
+                                ),
+                            )}
+                            <PaginationItem>
+                                <PaginationNext
+                                    onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                                    className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                />
+                            </PaginationItem>
+                        </PaginationContent>
+                    </Pagination>
+                )}
 
                 {/* Modal de Editar Precio */}
                 {selectedProduct && (
@@ -660,6 +718,31 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                         </div>
                                         {error && <p className="text-destructive animate-in slide-in-from-top-1 px-1 text-xs font-medium">{error}</p>}
                                     </div>
+
+                                    {/* Campo de comisión — visible para todos */}
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="new-comision" className="text-sm font-medium">
+                                            {meta.role_usuario === 'vendedor' ? 'Mi Comisión (USD)' : 'Comisión del Vendedor (USD)'}
+                                        </Label>
+                                        <div className="relative">
+                                            <span className="text-muted-foreground absolute top-1/2 left-3 -translate-y-1/2 font-semibold">$</span>
+                                            <Input
+                                                id="new-comision"
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                value={newComision}
+                                                onChange={(e) => setNewComision(e.target.value)}
+                                                className="bg-background border-input hover:border-primary/50 focus-visible:ring-primary/20 h-11 pl-7 text-lg font-semibold shadow-sm transition-all"
+                                                placeholder="0.00"
+                                            />
+                                        </div>
+                                        <p className="text-muted-foreground ml-1 text-[10px]">
+                                            {meta.role_usuario === 'vendedor'
+                                                ? 'Lo que ganarás por cada unidad vendida a este precio'
+                                                : 'Monto fijo que ganará el vendedor por cada unidad vendida'}
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
 
@@ -707,7 +790,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                             {preciosVendedores.producto.modelo && <span>Modelo: {preciosVendedores.producto.modelo}</span>}
                                             {preciosVendedores.producto.capacidad && <span>• {preciosVendedores.producto.capacidad}</span>}
                                         </div>
-                                        <div className="flex items-center gap-4 pt-2">
+                                        <div className="flex flex-wrap items-center gap-4 pt-2">
                                             <span className="flex items-center gap-2 text-sm">
                                                 <Warehouse className="h-4 w-4 text-blue-600" />
                                                 <span className="font-medium">{preciosVendedores.almacen.nombre}</span>
@@ -717,6 +800,20 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                                 <span className="text-muted-foreground">Precio Compra:</span>{' '}
                                                 <span className="font-semibold text-amber-700">
                                                     {formatCurrency(preciosVendedores.producto.precio_compra)}
+                                                </span>
+                                            </span>
+                                            <Separator orientation="vertical" className="h-4" />
+                                            <span className="text-sm">
+                                                <span className="text-muted-foreground">Precio Admin:</span>{' '}
+                                                <span className="font-semibold text-blue-700">
+                                                    {preciosVendedores.precio_admin !== null ? formatCurrency(preciosVendedores.precio_admin) : 'Sin precio'}
+                                                </span>
+                                            </span>
+                                            <Separator orientation="vertical" className="h-4" />
+                                            <span className="text-sm">
+                                                <span className="text-muted-foreground">Comisión Fija:</span>{' '}
+                                                <span className="font-semibold text-indigo-600">
+                                                    {Number(preciosVendedores.comision_fija ?? 0).toFixed(2)} USD
                                                 </span>
                                             </span>
                                         </div>
@@ -778,27 +875,41 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                                     <TableHead className="font-semibold">Email</TableHead>
                                                     <TableHead className="text-right font-semibold">Precio Venta</TableHead>
                                                     <TableHead className="text-right font-semibold">Ganancia</TableHead>
-                                                    <TableHead className="text-right font-semibold">% Margen</TableHead>
+                                                    <TableHead className="text-right font-semibold">Comisión Real</TableHead>
+                                                    <TableHead className="text-right font-semibold">Margen Neto</TableHead>
                                                     <TableHead className="text-right font-semibold">Última Actualización</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
                                                 {preciosVendedores.precios.map((precio: any, index: number) => {
-                                                    const margen = ((precio.ganancia / preciosVendedores.producto.precio_compra) * 100).toFixed(1);
+                                                    const comisionReal = precio.comision_real;
+                                                    const margenNeto = comisionReal !== null
+                                                        ? (precio.ganancia - comisionReal).toFixed(2)
+                                                        : null;
                                                     return (
                                                         <TableRow
                                                             key={precio.user_id}
                                                             className={cn(
-                                                                index % 2 === 0 ? 'bg-background' : 'bg-muted/30',
+                                                                precio.es_admin ? 'bg-blue-50 dark:bg-blue-950/30' : index % 2 === 0 ? 'bg-background' : 'bg-muted/30',
                                                                 'hover:bg-accent/50 transition-colors',
                                                             )}
                                                         >
                                                             <TableCell className="font-medium">
                                                                 <div className="flex items-center gap-2">
-                                                                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                                                                    <div className={cn(
+                                                                        'flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold',
+                                                                        precio.es_admin
+                                                                            ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                                                                            : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                                                                    )}>
                                                                         {precio.vendedor.charAt(0).toUpperCase()}
                                                                     </div>
-                                                                    {precio.vendedor}
+                                                                    <div className="flex flex-col">
+                                                                        <span>{precio.vendedor}</span>
+                                                                        {precio.es_admin && (
+                                                                            <span className="text-xs font-semibold text-red-600 dark:text-red-400">Admin</span>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                             </TableCell>
                                                             <TableCell className="text-muted-foreground text-sm">{precio.email}</TableCell>
@@ -808,24 +919,27 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                                                 </span>
                                                             </TableCell>
                                                             <TableCell className="text-right">
-                                                                <span
-                                                                    className={cn(
-                                                                        'font-semibold',
-                                                                        precio.ganancia >= 0
-                                                                            ? 'text-green-600 dark:text-green-400'
-                                                                            : 'text-red-600 dark:text-red-400',
-                                                                    )}
-                                                                >
+                                                                <span className={cn('font-semibold', precio.ganancia >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400')}>
                                                                     {formatCurrency(precio.ganancia)}
                                                                 </span>
                                                             </TableCell>
                                                             <TableCell className="text-right">
-                                                                <Badge
-                                                                    variant={parseFloat(margen) >= 0 ? 'default' : 'destructive'}
-                                                                    className="font-mono"
-                                                                >
-                                                                    {margen}%
-                                                                </Badge>
+                                                                {comisionReal !== null ? (
+                                                                    <span className="font-mono font-semibold text-indigo-600 dark:text-indigo-400">
+                                                                        {comisionReal.toFixed(2)}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-xs italic text-gray-400">N/A</span>
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                                {margenNeto !== null ? (
+                                                                    <span className={cn('font-mono font-semibold', parseFloat(margenNeto) >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-600 dark:text-red-400')}>
+                                                                        {parseFloat(margenNeto) >= 0 ? '+' : ''}{margenNeto}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-xs italic text-gray-400">N/A</span>
+                                                                )}
                                                             </TableCell>
                                                             <TableCell className="text-muted-foreground text-right text-xs">
                                                                 {precio.ultima_actualizacion}

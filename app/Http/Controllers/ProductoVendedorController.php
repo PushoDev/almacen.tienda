@@ -30,20 +30,30 @@ class ProductoVendedorController extends Controller
         }
 
         $almacenes = $almacenesQuery->with([
-            'productos' => function ($query) {
+            'productos' => function ($query) use ($user) {
                 $query->withPivot('cantidad');
 
-                $query->leftJoin('producto_vendedors', function ($join) {
-                    $join->on('productos.id', '=', 'producto_vendedors.producto_id')
-                        ->on('almacen_producto.almacen_id', '=', 'producto_vendedors.almacen_id')
-                        ->where('producto_vendedors.user_id', 1); // Siempre mostrar precio del admin
-                })
-                    ->select(
-                        'productos.*',
-                        'producto_vendedors.precio_venta',
-                        'producto_vendedors.venta_ganancia'
-                    )
-                    ->with('categoria');
+                // Fila de referencia del admin (precio oficial + comisión fija)
+                $query->leftJoin('producto_vendedors as pv_admin', function ($join) {
+                    $join->on('productos.id', '=', 'pv_admin.producto_id')
+                        ->on('almacen_producto.almacen_id', '=', 'pv_admin.almacen_id')
+                        ->where('pv_admin.user_id', 1);
+                });
+
+                // Fila propia del usuario logueado (si existe, su precio prevalece)
+                $query->leftJoin('producto_vendedors as pv_user', function ($join) use ($user) {
+                    $join->on('productos.id', '=', 'pv_user.producto_id')
+                        ->on('almacen_producto.almacen_id', '=', 'pv_user.almacen_id')
+                        ->where('pv_user.user_id', $user->id);
+                });
+
+                $query->select(
+                    'productos.*',
+                    DB::raw('COALESCE(pv_user.precio_venta, pv_admin.precio_venta) as precio_venta'),
+                    DB::raw('COALESCE(pv_user.venta_ganancia, pv_admin.venta_ganancia) as venta_ganancia'),
+                    // Si el usuario tiene su propia fila con precio, muestra su comisión; si no, la del admin
+                    DB::raw('CASE WHEN pv_user.precio_venta IS NOT NULL THEN pv_user.comision ELSE pv_admin.comision END as comision')
+                )->with('categoria');
             }
         ])->get();
 
@@ -53,6 +63,7 @@ class ProductoVendedorController extends Controller
                 $stockAlmacen = $producto->pivot->cantidad;
                 $precioVenta = $producto->precio_venta;
                 $ganancia = $producto->venta_ganancia;
+                $comision = $producto->comision;
 
                 return [
                     'id' => $producto->id,
@@ -61,10 +72,12 @@ class ProductoVendedorController extends Controller
                     'modelo_producto' => $producto->modelo_producto,
                     'capacidad_producto' => $producto->capacidad_producto,
                     'categoria' => $producto->categoria->nombre_categoria ?? 'Sin categoría',
+                    'imagen_producto' => $producto->imagen_producto,
                     'precio_compra' => $producto->precio_compra_producto,
                     'stock_almacen' => $stockAlmacen,
                     'precio_venta' => $precioVenta,
                     'ganancia' => $ganancia,
+                    'comision' => $comision,
                     'tiene_precio' => ($precioVenta ?? 0) > 0,
                     'almacen_id' => $almacen->id,
                 ];
@@ -83,6 +96,7 @@ class ProductoVendedorController extends Controller
                 'total_almacenes' => $almacenesTransformados->count(),
                 'role_usuario' => $user->role,
             ],
+            'canViewSensitiveData' => in_array($user->role, ['admin', 'moderador']),
         ]);
     }
 
@@ -94,9 +108,13 @@ class ProductoVendedorController extends Controller
         $user = Auth::user();
         $producto = Producto::findOrFail($productoId);
 
+        // Admin/moderador guardan en la fila oficial (user_id=1); vendedores en la suya propia
+        $saveUserId = in_array($user->role, ['admin', 'moderador']) ? 1 : $user->id;
+
         $validated = $request->validate([
             'precio_venta' => ['required', 'numeric', 'min:0.01'],
             'almacen_id' => ['required', 'integer', 'exists:almacens,id'],
+            'comision' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $almacenId = $validated['almacen_id'];
@@ -113,23 +131,30 @@ class ProductoVendedorController extends Controller
         $precioAnterior = DB::table('producto_vendedors')
             ->where('producto_id', $productoId)
             ->where('almacen_id', $almacenId)
+            ->where('user_id', $saveUserId)
             ->value('precio_venta');
 
         $precioCambio = $precioAnterior !== null &&
             round($precioAnterior, 2) != $precioVenta;
 
-        // Guardar siempre en la fila del admin (user_id = 1) para que todos vean el mismo precio
+        $updateData = [
+            'precio_venta' => $precioVenta,
+            'venta_ganancia' => $ganancia,
+            'updated_at' => now(),
+        ];
+
+        // Todos los usuarios pueden fijar su propia comisión
+        if (isset($validated['comision'])) {
+            $updateData['comision'] = round($validated['comision'], 2);
+        }
+
         DB::table('producto_vendedors')->updateOrInsert(
             [
                 'producto_id' => $productoId,
-                'user_id' => 1, // Siempre guardar como admin
+                'user_id' => $saveUserId,
                 'almacen_id' => $almacenId,
             ],
-            [
-                'precio_venta' => $precioVenta,
-                'venta_ganancia' => $ganancia,
-                'updated_at' => now(),
-            ]
+            $updateData
         );
 
         if ($precioCambio) {
@@ -163,6 +188,7 @@ class ProductoVendedorController extends Controller
             'message' => 'Precio actualizado correctamente',
             'new_profit' => $ganancia,
             'new_price' => $precioVenta,
+            'new_comision' => $updateData['comision'] ?? null,
             'history_recorded' => $precioCambio,
         ]);
     }
@@ -231,6 +257,17 @@ class ProductoVendedorController extends Controller
             $producto = Producto::findOrFail($productoId);
             $almacen = Almacen::findOrFail($almacenId);
 
+            // Fila del admin: precio de referencia y comisión fija
+            $adminRow = DB::table('producto_vendedors')
+                ->where('producto_id', $productoId)
+                ->where('almacen_id', $almacenId)
+                ->where('user_id', 1)
+                ->select('precio_venta', 'comision')
+                ->first();
+
+            $precioAdmin = $adminRow ? round((float)$adminRow->precio_venta, 2) : null;
+            $comisionFija = $adminRow ? round((float)$adminRow->comision, 2) : 0.00;
+
             $precios = DB::table('producto_vendedors')
                 ->join('users', 'producto_vendedors.user_id', '=', 'users.id')
                 ->where('producto_vendedors.producto_id', $productoId)
@@ -242,6 +279,7 @@ class ProductoVendedorController extends Controller
                     'users.email as email',
                     'producto_vendedors.precio_venta',
                     'producto_vendedors.venta_ganancia',
+                    'producto_vendedors.comision',
                     'producto_vendedors.updated_at as ultima_actualizacion'
                 )
                 ->orderBy('producto_vendedors.precio_venta', 'desc')
@@ -251,8 +289,11 @@ class ProductoVendedorController extends Controller
                         'user_id' => $item->user_id,
                         'vendedor' => $item->vendedor,
                         'email' => $item->email,
+                        'es_admin' => $item->user_id == 1,
                         'precio_venta' => round((float)$item->precio_venta, 2),
                         'ganancia' => round((float)$item->venta_ganancia, 2),
+                        // Cada usuario define su propia comisión al asignar el precio
+                        'comision_real' => round((float)$item->comision, 2),
                         'ultima_actualizacion' => \Carbon\Carbon::parse($item->ultima_actualizacion)->format('d/m/Y H:i'),
                     ];
                 });
@@ -271,6 +312,8 @@ class ProductoVendedorController extends Controller
                     'id' => $almacen->id,
                     'nombre' => $almacen->nombre_almacen,
                 ],
+                'precio_admin' => $precioAdmin,
+                'comision_fija' => $comisionFija,
                 'precios' => $precios,
                 'total_vendedores' => $precios->count(),
             ]);
