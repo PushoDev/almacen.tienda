@@ -1064,9 +1064,9 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                         <span className="font-semibold text-green-500">
                                             Esta acción:
                                             <br />
-                                            • Descontará stock de los productos
+                                            • Acreditará saldos en cuentas bancarias
                                             <br />
-                                            • Actualizará saldos de cuentas bancarias
+                                            • Registrará deudas de clientes destino
                                             <br />• Cambiará el estado a "Completada"
                                         </span>
                                     </AlertDialogDescription>

@@ -695,6 +695,11 @@ class VentaController extends Controller
             'tasa_cambio_principal' => 'required|numeric|min:0.0001',
             'tasa_aplicada_venta' => 'nullable|numeric|min:0.0001',
             'moneda_cobro_id' => 'nullable|exists:monedas,id',
+            'es_venta_gestor' => 'nullable|boolean',
+            'gestor_monto' => 'nullable|numeric|min:0',
+            'gestor_cuenta_id' => 'nullable|exists:cuentas,id',
+            'gestor_comentario' => 'nullable|string|max:500',
+            'tasa_aplicada_gestor' => 'nullable|numeric|min:0.0001',
         ]);
 
         $user = Auth::user();
@@ -753,6 +758,7 @@ class VentaController extends Controller
             $costo_total_productos = 0;
 
             // Validación y descuento inmediato de stock
+            $historialStockIds = [];
             foreach ($validatedData['items'] as $item) {
                 $producto = Producto::find($item['producto_id']);
                 if ($item['precio_venta'] < $producto->precio_compra_producto) {
@@ -782,7 +788,7 @@ class VentaController extends Controller
                 $costo_total_productos += $costo;
 
                 $almacenProducto->decrement('cantidad', $item['cantidad']);
-                HistorialStock::create([
+                $historial = HistorialStock::create([
                     'producto_id' => $item['producto_id'],
                     'almacen_id' => $validatedData['almacen_id'],
                     'venta_id' => null,
@@ -793,8 +799,9 @@ class VentaController extends Controller
                     'observaciones' => 'Stock reservado por venta pendiente',
                     'user_id' => $user->id,
                 ]);
+                $historialStockIds[] = $historial->id;
 
-                // ✅ Descontar del código exacto utilizado en la venta
+                // Descontar del código exacto utilizado en la venta
                 $codigoVenta->decrement('cantidad', $item['cantidad']);
             }
 
@@ -828,7 +835,7 @@ class VentaController extends Controller
                 'tasa_aplicada_gestor' => $validatedData['tasa_aplicada_gestor'] ?? null,
             ]);
 
-            HistorialStock::where('user_id', $user->id)->where('tipo', 'venta_pendiente')->whereNull('venta_id')->update(['venta_id' => $venta->id]);
+            HistorialStock::whereIn('id', $historialStockIds)->update(['venta_id' => $venta->id]);
 
             // Crear detalles y calcular ganancia
             foreach ($validatedData['items'] as $item) {
