@@ -1893,7 +1893,7 @@ export default function PuntoVentaOficial({
                                                                         Procesando...
                                                                     </>
                                                                 ) : (
-                                                                    'Confirmar Venta'
+                                                                        'Procesar Venta'
                                                                 )}
                                                             </Button>
                                                             <AlertDialogCancel className="cursor-pointer">Cancelar</AlertDialogCancel>

@@ -1114,7 +1114,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                         <span className="font-semibold text-red-500">
                                             {isVentaCompletada
                                                 ? 'Se revertirá el stock de los productos y se deducirán los montos de las cuentas bancarias asociadas.'
-                                                : 'Se cancelará la venta sin afectar stock ni cuentas (estado pendiente).'}
+                                                : 'Se revertirá el stock reservado. Las cuentas y deudas de clientes no serán afectadas ya que la venta no fue aprobada.'}
                                         </span>
                                     </AlertDialogDescription>
                                 </AlertDialogHeader>
