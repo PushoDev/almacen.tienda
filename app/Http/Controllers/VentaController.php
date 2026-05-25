@@ -525,7 +525,7 @@ class VentaController extends Controller
             'total_ganancia' => $venta->total_ganancia,
             'total_comision' => (float) $venta->total_comision,
             'ganancia_agencia' => round($venta->detalles->sum(fn($d) =>
-                ((float)$d->precio_base - (float)$d->costo_unitario - (float)$d->comision_unitaria) * $d->cantidad
+                (float)$d->ganancia - ((float)$d->comision_unitaria * $d->cantidad)
             ), 2),
             'total_esperado_usd' => $venta->total_esperado_usd,
             'ganancia_perdida_cambiaria' => $venta->ganancia_perdida_cambiaria,
@@ -853,19 +853,20 @@ class VentaController extends Controller
                 $ganancia = ($item['precio_venta'] - $producto->precio_compra_producto) * $item['cantidad'];
                 $total_ganancia += $ganancia;
 
-                // Leer comision del almacén desde producto_vendedors (0 si es venta con gestor)
-                $comisionUnitaria = 0;
-                if (!$esGestor) {
-                    $comisionUnitaria = (float) DB::table('producto_vendedors')
-                        ->where('producto_id', $item['producto_id'])
-                        ->where('almacen_id', $validatedData['almacen_id'])
-                        ->where('user_id', $saveUserId)
-                        ->value('comision') ?? 0;
-                }
-                $total_comision += round($comisionUnitaria * $item['cantidad'], 2);
+                // Leer precio_base y comision desde producto_vendedors (siempre, incluso con gestor)
+                $productoVendedor = DB::table('producto_vendedors')
+                    ->where('producto_id', $item['producto_id'])
+                    ->where('almacen_id', $validatedData['almacen_id'])
+                    ->where('user_id', $saveUserId)
+                    ->first();
 
-                // Obtener precio base del vendedor para el cierre
-                $precioBase = $item['precio_base'] ?? $item['precio_venta'];
+                $precioBase = $productoVendedor ? (float) $productoVendedor->precio_venta : (float) $item['precio_venta'];
+                $baseComision = $productoVendedor ? (float) $productoVendedor->comision : 0;
+
+                // Comisión unitaria = base + markup del gestor (precio extra sobre el precio base)
+                $markup = max(0, (float) $item['precio_venta'] - $precioBase);
+                $comisionUnitaria = $baseComision + $markup;
+                $total_comision += round($comisionUnitaria * $item['cantidad'], 2);
 
                 VentaDetalle::create([
                     'venta_id' => $venta->id,
