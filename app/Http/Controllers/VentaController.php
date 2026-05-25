@@ -514,13 +514,19 @@ class VentaController extends Controller
                     ],
                     'cantidad' => $detalle->cantidad,
                     'precio_venta' => $detalle->precio_venta,
+                    'precio_base' => $detalle->precio_base,
                     'subtotal' => $detalle->subtotal,
                     'costo_unitario' => $detalle->costo_unitario,
                     'ganancia' => $detalle->ganancia,
+                    'comision_unitaria' => (float) $detalle->comision_unitaria,
                 ];
             }),
             'total' => $venta->total,
             'total_ganancia' => $venta->total_ganancia,
+            'total_comision' => (float) $venta->total_comision,
+            'ganancia_agencia' => round($venta->detalles->sum(fn($d) =>
+                ((float)$d->precio_base - (float)$d->costo_unitario - (float)$d->comision_unitaria) * $d->cantidad
+            ), 2),
             'total_esperado_usd' => $venta->total_esperado_usd,
             'ganancia_perdida_cambiaria' => $venta->ganancia_perdida_cambiaria,
             'ganancia_real_total' => $venta->ganancia_real_total,
@@ -755,7 +761,10 @@ class VentaController extends Controller
                 throw new \Exception('No tienes acceso a este almacén');
             }
             $total_ganancia = 0;
+            $total_comision = 0;
             $costo_total_productos = 0;
+            $esGestor = $validatedData['es_venta_gestor'] ?? false;
+            $saveUserId = in_array($user->role, ['admin', 'moderador']) ? 1 : $user->id;
 
             // Validación y descuento inmediato de stock
             $historialStockIds = [];
@@ -822,6 +831,7 @@ class VentaController extends Controller
                 'cliente_id' => $validatedData['cliente_id'],
                 'total' => $validatedData['total'],
                 'total_ganancia' => 0,
+                'total_comision' => 0,
                 'estado' => 'pendiente',
                 'moneda_id' => $validatedData['moneda_principal_id'],
                 'tasa_cambio_principal' => $validatedData['tasa_cambio_principal'],
@@ -837,11 +847,22 @@ class VentaController extends Controller
 
             HistorialStock::whereIn('id', $historialStockIds)->update(['venta_id' => $venta->id]);
 
-            // Crear detalles y calcular ganancia
+            // Crear detalles y calcular ganancia + comision
             foreach ($validatedData['items'] as $item) {
                 $producto = Producto::find($item['producto_id']);
                 $ganancia = ($item['precio_venta'] - $producto->precio_compra_producto) * $item['cantidad'];
                 $total_ganancia += $ganancia;
+
+                // Leer comision del almacén desde producto_vendedors (0 si es venta con gestor)
+                $comisionUnitaria = 0;
+                if (!$esGestor) {
+                    $comisionUnitaria = (float) DB::table('producto_vendedors')
+                        ->where('producto_id', $item['producto_id'])
+                        ->where('almacen_id', $validatedData['almacen_id'])
+                        ->where('user_id', $saveUserId)
+                        ->value('comision') ?? 0;
+                }
+                $total_comision += round($comisionUnitaria * $item['cantidad'], 2);
 
                 // Obtener precio base del vendedor para el cierre
                 $precioBase = $item['precio_base'] ?? $item['precio_venta'];
@@ -856,6 +877,7 @@ class VentaController extends Controller
                     'subtotal' => $item['subtotal'],
                     'costo_unitario' => $producto->precio_compra_producto,
                     'ganancia' => $ganancia,
+                    'comision_unitaria' => $comisionUnitaria,
                 ]);
             }
 
@@ -881,6 +903,7 @@ class VentaController extends Controller
 
             $venta->update([
                 'total_ganancia' => $total_ganancia,
+                'total_comision' => round($total_comision, 2),
                 'total_esperado_usd' => $usd_objetivo,
                 'monto_diferencia_cambiaria' => $monto_diferencia_cambiaria,
             ]);
@@ -1055,6 +1078,7 @@ class VentaController extends Controller
                 ] : null,
                 'tipo_cuenta' => $venta->gestorCuenta?->tipo,
             ] : null,
+            'total_comision' => (float) $venta->total_comision,
         ]);
     }
 
@@ -1209,6 +1233,7 @@ class VentaController extends Controller
                     ],
                     'total' => $venta->total,
                     'total_ganancia' => $venta->total_ganancia,
+                    'total_comision' => (float) $venta->total_comision,
                     'total_esperado_usd' => $venta->total_esperado_usd,
                     'ganancia_perdida_cambiaria' => $venta->ganancia_perdida_cambiaria,
                     'ganancia_real_total' => $venta->ganancia_real_total,

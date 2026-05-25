@@ -79,6 +79,7 @@ interface Item {
     subtotal: number;
     costo_unitario: number;
     ganancia: number;
+    comision_unitaria: number;
 }
 
 interface MonedaPago {
@@ -174,6 +175,8 @@ interface Venta {
     items: Item[];
     total: number;
     total_ganancia: number;
+    total_comision: number;
+    ganancia_agencia: number;
     ganancia_perdida_cambiaria: number;
     ganancia_real_total: number;
     fecha: string;
@@ -454,11 +457,11 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 toast.success(message);
 
                 // Actualizar estado local inmediatamente — sin setTimeout ni router.reload()
-                // data.gestor es null cuando no aplica gestor, y eso es correcto limpiarlo
                 setCurrentVenta((prev) => ({
                     ...prev,
                     destinatario: data.destinatario ?? prev.destinatario,
                     gestor: Object.prototype.hasOwnProperty.call(data, 'gestor') ? data.gestor : prev.gestor,
+                    total_comision: data.total_comision ?? prev.total_comision,
                 }));
 
                 cerrarModal();
@@ -549,13 +552,23 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
 
                 {/* ── Resumen de Ganancias (admin/moderador) ── */}
                 {(userRole === 'admin' || userRole === 'moderador') && (
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
                         <div className="bg-card rounded-xl border p-4 text-center">
                             <DollarSign size={24} className="mx-auto mb-2 text-green-500" />
                             <p className="text-muted-foreground mb-1 text-sm">Ganancia Operacional</p>
                             <p className="text-2xl font-bold text-green-600">
                                 {formatCurrency(currentVenta.total_ganancia, monedaPrincipal?.codigo || 'USD')}
                             </p>
+                        </div>
+                        <div className="bg-card rounded-xl border p-4 text-center">
+                            <Store size={24} className="mx-auto mb-2 text-orange-500" />
+                            <p className="text-muted-foreground mb-1 text-sm">Comisión Vendedor</p>
+                            <p className="text-2xl font-bold text-orange-600">
+                                {formatCurrency(currentVenta.total_comision, monedaPrincipal?.codigo || 'USD')}
+                            </p>
+                            {currentVenta.gestor && (
+                                <p className="text-muted-foreground mt-1 text-xs italic">Absorbida por gestor</p>
+                            )}
                         </div>
                         <div className="bg-card rounded-xl border p-4 text-center">
                             <DollarSign
@@ -565,6 +578,13 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                             <p className="text-muted-foreground mb-1 text-sm">Ganancia/Pérdida Cambiaria</p>
                             <p className={`text-2xl font-bold ${currentVenta.ganancia_perdida_cambiaria >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                 {formatCurrency(currentVenta.ganancia_perdida_cambiaria, monedaPrincipal?.codigo || 'USD')}
+                            </p>
+                        </div>
+                        <div className="bg-card rounded-xl border p-4 text-center">
+                            <TrendingUp size={24} className="mx-auto mb-2 text-indigo-500" />
+                            <p className="text-muted-foreground mb-1 text-sm">Ganancia Agencia</p>
+                            <p className="text-2xl font-bold text-indigo-600">
+                                {formatCurrency(currentVenta.ganancia_agencia, monedaPrincipal?.codigo || 'USD')}
                             </p>
                         </div>
                         <div className="bg-card rounded-xl border p-4 text-center">
@@ -1357,6 +1377,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                     <th className="px-4 py-3 text-left font-semibold">Precio Unitario</th>
                                     {userRole !== 'vendedor' && <th className="px-4 py-3 text-left font-semibold">Costo Unitario</th>}
                                     {userRole !== 'vendedor' && <th className="px-4 py-3 text-left font-semibold">Ganancia Unitaria</th>}
+                                    {userRole !== 'vendedor' && <th className="px-4 py-3 text-left font-semibold">Comisión Unit.</th>}
                                     <th className="px-4 py-3 text-left font-semibold">Subtotal</th>
                                 </tr>
                             </thead>
@@ -1390,13 +1411,18 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                         {userRole !== 'vendedor' && (
                                             <td className="px-4 py-2 text-green-600">{formatCurrency(item.ganancia, simboloMonedaPrincipal)}</td>
                                         )}
+                                        {userRole !== 'vendedor' && (
+                                            <td className="px-4 py-2 text-orange-600">
+                                                {item.comision_unitaria > 0 ? formatCurrency(item.comision_unitaria, simboloMonedaPrincipal) : '—'}
+                                            </td>
+                                        )}
                                         <td className="px-4 py-2 font-medium">{formatCurrency(item.subtotal, simboloMonedaPrincipal)}</td>
                                     </tr>
                                 ))}
                             </tbody>
                             <tfoot className="bg-sidebar-accent">
                                 <tr>
-                                    <td colSpan={userRole === 'vendedor' ? 7 : 9} className="px-4 py-3 text-right font-semibold text-white">
+                                    <td colSpan={userRole === 'vendedor' ? 7 : 10} className="px-4 py-3 text-right font-semibold text-white">
                                         Total Venta:
                                     </td>
                                     <td className="px-4 py-3 text-center text-lg font-semibold text-white">
@@ -1405,11 +1431,31 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                 </tr>
                                 {userRole !== 'vendedor' && (
                                     <tr className="bg-green-50 dark:bg-green-900/20">
-                                        <td colSpan={9} className="px-4 py-3 text-right font-semibold text-green-800 dark:text-green-400">
+                                        <td colSpan={10} className="px-4 py-3 text-right font-semibold text-green-800 dark:text-green-400">
                                             Ganancia Total:
                                         </td>
                                         <td className="px-4 py-3 text-center text-lg font-semibold text-green-800 dark:text-green-400">
                                             {formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}
+                                        </td>
+                                    </tr>
+                                )}
+                                {userRole !== 'vendedor' && currentVenta.total_comision > 0 && (
+                                    <tr className="bg-orange-50 dark:bg-orange-900/20">
+                                        <td colSpan={10} className="px-4 py-3 text-right font-semibold text-orange-700 dark:text-orange-400">
+                                            Comisión Vendedor:
+                                        </td>
+                                        <td className="px-4 py-3 text-center text-lg font-semibold text-orange-700 dark:text-orange-400">
+                                            {formatCurrency(currentVenta.total_comision, simboloMonedaPrincipal)}
+                                        </td>
+                                    </tr>
+                                )}
+                                {userRole !== 'vendedor' && (
+                                    <tr className="bg-blue-50 dark:bg-blue-900/20">
+                                        <td colSpan={10} className="px-4 py-3 text-right font-semibold text-blue-700 dark:text-blue-400">
+                                            Ganancia Agencia:
+                                        </td>
+                                        <td className="px-4 py-3 text-center text-lg font-semibold text-blue-700 dark:text-blue-400">
+                                            {formatCurrency(currentVenta.ganancia_agencia, simboloMonedaPrincipal)}
                                         </td>
                                     </tr>
                                 )}
@@ -1515,6 +1561,20 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                     <span className="text-muted-foreground">Ganancia Operacional:</span>
                                     <span className="font-semibold text-green-600">
                                         {formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}
+                                    </span>
+                                </div>
+                                {currentVenta.total_comision > 0 && (
+                                    <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Comisión Vendedor:</span>
+                                        <span className="font-semibold text-orange-600">
+                                            {formatCurrency(currentVenta.total_comision, simboloMonedaPrincipal)}
+                                        </span>
+                                    </div>
+                                )}
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Ganancia Agencia:</span>
+                                    <span className="font-semibold text-indigo-600">
+                                        {formatCurrency(currentVenta.ganancia_agencia, simboloMonedaPrincipal)}
                                     </span>
                                 </div>
                                 {isVentaCompletada && (
