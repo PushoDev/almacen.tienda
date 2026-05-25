@@ -34,9 +34,9 @@ class PreciosVendedorImport implements ToCollection, WithStartRow
         $saveUserId = in_array($this->userRole, ['admin', 'moderador']) ? 1 : $this->userId;
 
         foreach ($rows as $index => $row) {
-            $productoId = isset($row[0]) ? (int) $row[0] : null;
-            $precioVenta = isset($row[3]) && $row[3] !== '' && $row[3] !== null ? (float) $row[3] : null;
-            $comision    = isset($row[4]) && $row[4] !== '' && $row[4] !== null ? (float) $row[4] : null;
+            $productoId  = isset($row[0]) ? (int) $row[0] : null;
+            $precioVenta = isset($row[4]) && $row[4] !== '' && $row[4] !== null ? (float) $row[4] : null;
+            $comision    = isset($row[5]) && $row[5] !== '' && $row[5] !== null ? (float) $row[5] : null;
 
             // Si ambas celdas editables están vacías, omitir la fila
             if ($precioVenta === null && $comision === null) {

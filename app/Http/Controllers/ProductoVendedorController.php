@@ -437,8 +437,16 @@ class ProductoVendedorController extends Controller
         $user = Auth::user();
 
         $request->validate([
-            'archivo' => ['required', 'file', 'mimes:xlsx,xls', 'max:5120'],
+            'archivo' => [
+                'required', 'file', 'max:5120',
+                'mimetypes:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/octet-stream,application/zip,application/x-zip-compressed',
+            ],
         ]);
+
+        $extension = strtolower($request->file('archivo')->getClientOriginalExtension());
+        if (!in_array($extension, ['xlsx', 'xls'])) {
+            return response()->json(['success' => false, 'error' => 'Solo se aceptan archivos .xlsx o .xls'], 422);
+        }
 
         if (!in_array($user->role, ['admin', 'moderador']) && !$user->almacenes->contains($almacenId)) {
             return response()->json(['success' => false, 'error' => 'No tienes acceso a este almacén.'], 403);

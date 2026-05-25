@@ -4,6 +4,7 @@ import {
     AlertDialogAction,
     AlertDialogCancel,
     AlertDialogContent,
+    AlertDialogDescription,
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
@@ -285,12 +286,17 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
             if (response.ok && data.success) {
                 setImportResult({ actualizados: data.actualizados, omitidos: data.omitidos, errores: data.errores ?? [] });
                 setImportFile(null);
-                // Recargar la página para reflejar los nuevos precios
                 if (data.actualizados > 0) {
                     setTimeout(() => window.location.reload(), 2000);
                 }
             } else {
-                setImportResult({ actualizados: 0, omitidos: 0, errores: [data.error ?? 'Error desconocido'] });
+                // Laravel validation errors come as data.errors (object) or data.error (string)
+                let errorMsg = data.error ?? data.message ?? 'Error desconocido';
+                if (data.errors) {
+                    const firstField = Object.values(data.errors as Record<string, string[]>)[0];
+                    if (firstField?.length) errorMsg = firstField[0];
+                }
+                setImportResult({ actualizados: 0, omitidos: 0, errores: [errorMsg] });
             }
         } catch {
             setImportResult({ actualizados: 0, omitidos: 0, errores: ['Error de conexión al importar.'] });
@@ -1046,14 +1052,14 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                     <Upload className="h-6 w-6" />
                                     Importar Precios desde Excel
                                 </AlertDialogTitle>
-                                <div className="text-muted-foreground mt-1 text-sm">
+                                <AlertDialogDescription className="text-muted-foreground mt-1 text-sm">
                                     Sube el Excel exportado con los precios completados.
                                     {selectedAlmacen && (
                                         <span className="ml-1 font-medium text-emerald-700 dark:text-emerald-400">
                                             Almacén: {selectedAlmacen.nombre_almacen}
                                         </span>
                                     )}
-                                </div>
+                                </AlertDialogDescription>
                             </AlertDialogHeader>
                         </div>
 
