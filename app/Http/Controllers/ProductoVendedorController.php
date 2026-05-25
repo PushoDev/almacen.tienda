@@ -2,16 +2,19 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Producto;
-use App\Models\PrecioHistorial;
+use App\Exports\PreciosVendedorExport;
+use App\Imports\PreciosVendedorImport;
 use App\Models\Almacen;
+use App\Models\PrecioHistorial;
+use App\Models\Producto;
 use App\Models\User;
 use App\Notifications\CambioPrecioVendedorNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Inertia\Inertia;
+use Maatwebsite\Excel\Facades\Excel;
 
 class ProductoVendedorController extends Controller
 {
@@ -403,6 +406,62 @@ class ProductoVendedorController extends Controller
         return Inertia::render('Reportes/Report/HistorialPrecios', [
             'historial' => $historial,
         ]);
+    }
+
+    /**
+     * Exportar precios del almacén a Excel.
+     */
+    public function exportExcel(Request $request, int $almacenId)
+    {
+        $user = Auth::user();
+
+        $almacen = Almacen::findOrFail($almacenId);
+
+        if (!in_array($user->role, ['admin', 'moderador']) && !$user->almacenes->contains($almacenId)) {
+            abort(403, 'No tienes acceso a este almacén.');
+        }
+
+        $nombre = 'precios_' . str($almacen->nombre_almacen)->slug('_') . '_' . now()->format('Ymd_His') . '.xlsx';
+
+        return Excel::download(
+            new PreciosVendedorExport($almacenId, $user->id, $user->role),
+            $nombre
+        );
+    }
+
+    /**
+     * Importar precios desde Excel.
+     */
+    public function importExcel(Request $request, int $almacenId)
+    {
+        $user = Auth::user();
+
+        $request->validate([
+            'archivo' => ['required', 'file', 'mimes:xlsx,xls', 'max:5120'],
+        ]);
+
+        if (!in_array($user->role, ['admin', 'moderador']) && !$user->almacenes->contains($almacenId)) {
+            return response()->json(['success' => false, 'error' => 'No tienes acceso a este almacén.'], 403);
+        }
+
+        try {
+            $import = new PreciosVendedorImport($almacenId, $user->id, $user->role);
+            Excel::import($import, $request->file('archivo'));
+
+            return response()->json([
+                'success'     => true,
+                'actualizados' => $import->actualizados,
+                'omitidos'    => $import->omitidos,
+                'errores'     => $import->errores,
+                'message'     => "Se actualizaron {$import->actualizados} producto(s). {$import->omitidos} omitido(s) (sin cambios).",
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error al importar precios: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error'   => 'Error al procesar el archivo. Asegúrate de que sea el Excel exportado desde este sistema.',
+            ], 422);
+        }
     }
 
     /**

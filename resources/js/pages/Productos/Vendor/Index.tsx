@@ -29,7 +29,7 @@ import {
     PaginationNext,
     PaginationPrevious,
 } from '@/components/ui/pagination';
-import { BadgeDollarSign, Eye, FileText, Package, Sheet, Warehouse } from 'lucide-react';
+import { BadgeDollarSign, CheckCircle2, Eye, FileText, Package, Sheet, Upload, Warehouse, XCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 // Interfaces
@@ -82,10 +82,16 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
     const [searchTerm, setSearchTerm] = useState('');
     const itemsPerPage = 10;
 
-    // 🆕 Estados para el modal de precios de vendedores
+    // Estados para el modal de precios de vendedores
     const [isPreciosDialogOpen, setIsPreciosDialogOpen] = useState(false);
     const [preciosVendedores, setPreciosVendedores] = useState<any>(null);
     const [loadingPrecios, setLoadingPrecios] = useState(false);
+
+    // Estados para importar
+    const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+    const [importFile, setImportFile] = useState<File | null>(null);
+    const [isImporting, setIsImporting] = useState(false);
+    const [importResult, setImportResult] = useState<{ actualizados: number; omitidos: number; errores: string[] } | null>(null);
 
     // Obtener el almacén seleccionado
     const selectedAlmacen = almacenes.find((a) => a.almacen_id === selectedAlmacenId);
@@ -250,6 +256,49 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
     const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
     const currentProducts = filteredProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
+    const handleExport = () => {
+        if (!selectedAlmacenId) return;
+        window.location.href = `/disponibles/almacen/${selectedAlmacenId}/exportar`;
+    };
+
+    const handleImport = async () => {
+        if (!importFile || !selectedAlmacenId) return;
+        setIsImporting(true);
+        setImportResult(null);
+
+        const formData = new FormData();
+        formData.append('archivo', importFile);
+        formData.append('_method', 'POST');
+
+        try {
+            const response = await fetch(`/disponibles/almacen/${selectedAlmacenId}/importar`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: formData,
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                setImportResult({ actualizados: data.actualizados, omitidos: data.omitidos, errores: data.errores ?? [] });
+                setImportFile(null);
+                // Recargar la página para reflejar los nuevos precios
+                if (data.actualizados > 0) {
+                    setTimeout(() => window.location.reload(), 2000);
+                }
+            } else {
+                setImportResult({ actualizados: 0, omitidos: 0, errores: [data.error ?? 'Error desconocido'] });
+            }
+        } catch {
+            setImportResult({ actualizados: 0, omitidos: 0, errores: ['Error de conexión al importar.'] });
+        } finally {
+            setIsImporting(false);
+        }
+    };
+
     const getPageNumbers = (): (number | 'ellipsis')[] => {
         if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
         if (currentPage <= 4) return [1, 2, 3, 4, 5, 'ellipsis', totalPages];
@@ -293,13 +342,23 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                         className="max-w-md"
                     />
                     <div className="flex gap-2">
-                        <Button variant="outline" className="hover:bg-chart-5 gap-2">
-                            <FileText size={16} />
-                            Exportar PDF
-                        </Button>
-                        <Button variant="secondary" className="hover:bg-chart-2 gap-2">
+                        <Button
+                            variant="outline"
+                            className="gap-2"
+                            onClick={handleExport}
+                            disabled={!selectedAlmacenId}
+                        >
                             <Sheet size={16} />
                             Exportar Excel
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            className="gap-2"
+                            onClick={() => { setImportFile(null); setImportResult(null); setIsImportDialogOpen(true); }}
+                            disabled={!selectedAlmacenId}
+                        >
+                            <FileText size={16} />
+                            Importar Excel
                         </Button>
                     </div>
                 </div>
@@ -974,6 +1033,131 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                             >
                                 Cerrar
                             </AlertDialogCancel>
+                        </div>
+                    </AlertDialogContent>
+                </AlertDialog>
+
+                {/* Modal de Importar Excel */}
+                <AlertDialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+                    <AlertDialogContent className="overflow-hidden border-0 p-0 shadow-2xl sm:max-w-md">
+                        <div className="border-b border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50 p-6 dark:from-emerald-950 dark:to-teal-950">
+                            <AlertDialogHeader>
+                                <AlertDialogTitle className="flex items-center gap-2 text-xl text-emerald-700 dark:text-emerald-300">
+                                    <Upload className="h-6 w-6" />
+                                    Importar Precios desde Excel
+                                </AlertDialogTitle>
+                                <div className="text-muted-foreground mt-1 text-sm">
+                                    Sube el Excel exportado con los precios completados.
+                                    {selectedAlmacen && (
+                                        <span className="ml-1 font-medium text-emerald-700 dark:text-emerald-400">
+                                            Almacén: {selectedAlmacen.nombre_almacen}
+                                        </span>
+                                    )}
+                                </div>
+                            </AlertDialogHeader>
+                        </div>
+
+                        <div className="space-y-4 p-6">
+                            {/* Resultado de la importación */}
+                            {importResult && (
+                                <div className={cn(
+                                    'rounded-lg border p-4 text-sm',
+                                    importResult.errores.length === 0
+                                        ? 'border-green-200 bg-green-50 dark:bg-green-950/30'
+                                        : 'border-amber-200 bg-amber-50 dark:bg-amber-950/30'
+                                )}>
+                                    <div className="mb-2 flex items-center gap-2 font-semibold">
+                                        {importResult.errores.length === 0
+                                            ? <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                            : <XCircle className="h-4 w-4 text-amber-600" />
+                                        }
+                                        <span>Resultado de la importación</span>
+                                    </div>
+                                    <p className="text-green-700 dark:text-green-400">
+                                        ✓ {importResult.actualizados} producto(s) actualizados
+                                    </p>
+                                    {importResult.omitidos > 0 && (
+                                        <p className="text-gray-500">— {importResult.omitidos} fila(s) sin cambios (celdas vacías)</p>
+                                    )}
+                                    {importResult.errores.length > 0 && (
+                                        <ul className="mt-2 space-y-1 text-amber-700 dark:text-amber-400">
+                                            {importResult.errores.map((e, i) => (
+                                                <li key={i} className="text-xs">• {e}</li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                    {importResult.actualizados > 0 && (
+                                        <p className="mt-2 text-xs text-gray-500 italic">Recargando página en unos segundos...</p>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Zona de carga del archivo */}
+                            {!importResult && (
+                                <div>
+                                    <label
+                                        htmlFor="import-file"
+                                        className={cn(
+                                            'flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 transition-colors',
+                                            importFile
+                                                ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/20'
+                                                : 'border-gray-300 hover:border-emerald-400 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/10'
+                                        )}
+                                    >
+                                        <Upload className={cn('mb-3 h-10 w-10', importFile ? 'text-emerald-500' : 'text-gray-400')} />
+                                        {importFile ? (
+                                            <>
+                                                <p className="font-semibold text-emerald-700 dark:text-emerald-300">{importFile.name}</p>
+                                                <p className="mt-1 text-xs text-gray-500">
+                                                    {(importFile.size / 1024).toFixed(1)} KB — Click para cambiar
+                                                </p>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <p className="font-medium text-gray-600 dark:text-gray-300">Arrastra el archivo aquí</p>
+                                                <p className="mt-1 text-xs text-gray-400">o haz click para seleccionar</p>
+                                                <p className="mt-2 text-xs text-gray-400">Solo archivos .xlsx o .xls</p>
+                                            </>
+                                        )}
+                                        <input
+                                            id="import-file"
+                                            type="file"
+                                            accept=".xlsx,.xls"
+                                            className="hidden"
+                                            onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+                                        />
+                                    </label>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="bg-muted/50 border-border/50 flex justify-end gap-3 border-t p-4">
+                            <AlertDialogCancel
+                                onClick={() => { setIsImportDialogOpen(false); setImportResult(null); setImportFile(null); }}
+                                disabled={isImporting}
+                                className="h-9"
+                            >
+                                {importResult ? 'Cerrar' : 'Cancelar'}
+                            </AlertDialogCancel>
+                            {!importResult && (
+                                <AlertDialogAction
+                                    onClick={handleImport}
+                                    disabled={!importFile || isImporting}
+                                    className="h-9 min-w-[130px] bg-emerald-600 px-6 hover:bg-emerald-700"
+                                >
+                                    {isImporting ? (
+                                        <span className="flex items-center gap-2">
+                                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                            Importando...
+                                        </span>
+                                    ) : (
+                                        <span className="flex items-center gap-2">
+                                            <Upload className="h-4 w-4" />
+                                            Importar
+                                        </span>
+                                    )}
+                                </AlertDialogAction>
+                            )}
                         </div>
                     </AlertDialogContent>
                 </AlertDialog>

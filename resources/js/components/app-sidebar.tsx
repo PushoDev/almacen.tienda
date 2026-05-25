@@ -7,7 +7,6 @@ import type { PageProps as InertiaPageProps } from '@inertiajs/core';
 import { Link, usePage } from '@inertiajs/react';
 import {
     BookOpen,
-    Cctv,
     ChartNoAxesCombinedIcon,
     Contact,
     FileText,
@@ -112,7 +111,7 @@ const allNavItems: NavItem[] = [
         title: 'Reportes',
         href: '/reportes',
         icon: FileText,
-        roles: ['admin', 'moderador', 'vendedor'],
+        roles: ['admin', 'moderador'],
     },
     {
         title: 'Empleados',

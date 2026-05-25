@@ -51,5 +51,9 @@ Route::middleware(['auth', 'verified'])->group(
             '/disponibles/{producto}/precios-base',
             [ProductoVendedorController::class, 'setPreciosBase']
         )->name('disponibles.precios-base');
+
+        // Exportar/importar precios de vendedor por almacén
+        Route::get('/disponibles/almacen/{almacen}/exportar', [ProductoVendedorController::class, 'exportExcel'])->name('disponibles.exportar');
+        Route::post('/disponibles/almacen/{almacen}/importar', [ProductoVendedorController::class, 'importExcel'])->name('disponibles.importar');
     }
 );
