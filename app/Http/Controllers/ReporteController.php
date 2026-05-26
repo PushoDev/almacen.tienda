@@ -786,12 +786,12 @@ class ReporteController extends Controller
             $finalQuery->where('tipo', $tipoOperacion);
         }
 
-        $operaciones = $finalQuery->orderByDesc('fecha')->get();
+        $operaciones = $finalQuery->orderByDesc('fecha')->paginate(25)->withQueryString();
 
         return Inertia::render('Reportes/Report/RastreoOperaciones', [
             'operaciones' => $operaciones,
             'usuarios' => DB::table('users')->select('id', 'name')->get(),
-            'filtros' => $request->all(),
+            'filtros' => $request->except('page'),
         ]);
     }
 }

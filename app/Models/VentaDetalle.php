@@ -19,6 +19,7 @@ class VentaDetalle extends Model
         'subtotal',
         'costo_unitario',
         'ganancia',
+        'comision_unitaria',
     ];
 
     public function venta()

@@ -442,7 +442,7 @@ export default function Dashboard({
                 </div>
 
                 {/* Tablas de Montos y Comparaciones */}
-                <div className="animate__animated animate__fadeIn grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className={`animate__animated animate__fadeIn grid grid-cols-1 gap-4 ${userRole !== 'vendedor' ? 'md:grid-cols-2' : ''}`}>
                     {/* Tabla 1: Montos por Moneda */}
                     <div>
                         <Card className="border-sidebar-border dark:border-sidebar-border">
@@ -510,8 +510,8 @@ export default function Dashboard({
                         </Card>
                     </div>
 
-                    {/* Tabla 2: Comparaciones Mensuales */}
-                    <div>
+                    {/* Tabla 2: Comparaciones Mensuales - Solo Admin y Moderador */}
+                    {userRole !== 'vendedor' && <div>
                         <Card className="border-sidebar-border dark:border-sidebar-border">
                             <CardHeader className="border-b-sidebar-border dark:border-b-sidebar-border">
                                 <div className="flex items-center justify-between">
@@ -684,7 +684,7 @@ export default function Dashboard({
                                 )}
                             </CardContent>
                         </Card>
-                    </div>
+                    </div>}
                 </div>
 
                 {/* Sección de Monedas - Información de Tasas de Cambio */}

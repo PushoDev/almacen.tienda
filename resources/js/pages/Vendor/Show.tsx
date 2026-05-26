@@ -79,6 +79,7 @@ interface Item {
     subtotal: number;
     costo_unitario: number;
     ganancia: number;
+    comision_unitaria: number;
 }
 
 interface MonedaPago {
@@ -106,6 +107,7 @@ interface Cuenta {
     moneda: {
         codigo: string;
         simbolo: string;
+        tasa_cambio?: number;
     };
     tipo: string;
     tipo_moneda: string;
@@ -174,6 +176,8 @@ interface Venta {
     items: Item[];
     total: number;
     total_ganancia: number;
+    total_comision: number;
+    ganancia_agencia: number;
     ganancia_perdida_cambiaria: number;
     ganancia_real_total: number;
     fecha: string;
@@ -189,18 +193,25 @@ interface Venta {
     monedas_para_reporte: MonedaParaReporte[];
     gestor: {
         monto: number;
+        monto_usd?: number;
         cuenta_id?: number;
         comentario?: string;
         cuenta_nombre?: string;
         tasa_aplicada?: number;
         tasa_aplicada_gestor?: number;
-        monto_usd?: number;
+        moneda?: {
+            codigo: string;
+            simbolo: string;
+            nombre: string;
+            tasa_cambio: number;
+        };
     } | null;
 }
 
 interface Props {
     venta: Venta;
     userRole: 'admin' | 'moderador' | 'vendedor';
+    monedasSistema: MonedaParaReporte[];
 }
 
 // ─────────────────────────────────────────────
@@ -219,7 +230,7 @@ const FORM_VACIO = {
 // ─────────────────────────────────────────────
 // Componente principal
 // ─────────────────────────────────────────────
-export default function ResultadoCarrito({ venta, userRole }: Props) {
+export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Props) {
     // ── Estado principal ──────────────────────
     const [currentVenta, setCurrentVenta] = useState<Venta>(venta);
 
@@ -244,6 +255,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
     const [tasaAplicadaGestor, setTasaAplicadaGestor] = useState('');
     const [cuentasGestor, setCuentasGestor] = useState<Cuenta[]>([]);
     const [cuentaGestorSeleccionada, setCuentaGestorSeleccionada] = useState<Cuenta | null>(null);
+    const [monedaGestorSeleccionada, setMonedaGestorSeleccionada] = useState<MonedaParaReporte | null>(null);
 
     // ── Reporte ───────────────────────────────
     const [monedaReporteSeleccionada, setMonedaReporteSeleccionada] = useState<string>(() =>
@@ -272,12 +284,13 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
 
     // ─────────────────────────────────────────
     // Cargar / limpiar formulario al abrir modal
+    // cuentasGestor se maneja en un effect separado para evitar
+    // resetear esVentaGestor cuando las cuentas cargan async
     // ─────────────────────────────────────────
     useEffect(() => {
         if (!isDestinatarioDialogOpen) return;
 
         if (isEditingDestinatario && currentVenta.destinatario) {
-            // Modo edición: pre-rellenar datos del destinatario
             const d = currentVenta.destinatario;
             setFormDestinatario({
                 nombre: d.nombre,
@@ -289,7 +302,6 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 observaciones: d.observaciones || '',
             });
 
-            // Si ya existe gestor, pre-rellenar sus datos
             if (currentVenta.gestor) {
                 const g = currentVenta.gestor;
                 setEsVentaGestor(true);
@@ -297,16 +309,12 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 setGestorCuentaId(String(g.cuenta_id || ''));
                 setGestorComentario(g.comentario || '');
                 setTasaAplicadaGestor(g.tasa_aplicada_gestor ? String(g.tasa_aplicada_gestor) : '');
-
-                if (g.cuenta_id && cuentasGestor.length > 0) {
-                    const encontrada = cuentasGestor.find((c) => String(c.id) === String(g.cuenta_id));
-                    setCuentaGestorSeleccionada(encontrada ?? null);
-                }
+            } else {
+                const tasaDefault = currentVenta.tasa_aplicada_venta ?? currentVenta.tasa_cambio_principal;
+                setTasaAplicadaGestor(String(tasaDefault));
+                setGestorMonto((currentVenta.total_comision * tasaDefault).toFixed(2));
             }
-            // Nota: activeTab y esVentaGestor son seteados por el botón que abre el modal,
-            // así que no los sobreescribimos aquí para respetar la intención del usuario.
         } else if (!isEditingDestinatario) {
-            // Modo nuevo: limpiar todo
             setFormDestinatario(FORM_VACIO);
             setEsVentaGestor(false);
             setGestorMonto('');
@@ -314,8 +322,19 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
             setGestorComentario('');
             setTasaAplicadaGestor('');
             setCuentaGestorSeleccionada(null);
+            setMonedaGestorSeleccionada(null);
         }
-    }, [isDestinatarioDialogOpen, isEditingDestinatario, currentVenta.destinatario, currentVenta.gestor, cuentasGestor]);
+    }, [isDestinatarioDialogOpen, isEditingDestinatario, currentVenta.destinatario, currentVenta.gestor]);
+
+    // Buscar la cuenta seleccionada del gestor cuando cargan las cuentas (async)
+    useEffect(() => {
+        if (!isDestinatarioDialogOpen || !isEditingDestinatario || !currentVenta.gestor) return;
+        const g = currentVenta.gestor;
+        if (g.cuenta_id && cuentasGestor.length > 0) {
+            const encontrada = cuentasGestor.find((c) => String(c.id) === String(g.cuenta_id));
+            setCuentaGestorSeleccionada(encontrada ?? null);
+        }
+    }, [cuentasGestor, isDestinatarioDialogOpen, isEditingDestinatario, currentVenta.gestor]);
 
     // ─────────────────────────────────────────
     // Helpers
@@ -345,6 +364,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
         setGestorComentario('');
         setTasaAplicadaGestor('');
         setCuentaGestorSeleccionada(null);
+        setMonedaGestorSeleccionada(null);
     };
 
     const cerrarModal = () => {
@@ -402,11 +422,6 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
             setActiveTab('receptor');
             return;
         }
-        if (!formDestinatario.telefono_contacto?.trim()) {
-            toast.error('El teléfono de contacto es obligatorio');
-            setActiveTab('receptor');
-            return;
-        }
 
         if (esVentaGestor) {
             if (!gestorCuentaId) {
@@ -431,6 +446,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
         try {
             const payload = {
                 ...formDestinatario,
+                telefono_contacto: formDestinatario.telefono_contacto?.trim() || '53 0000 0000',
                 es_venta_gestor: esVentaGestor,
                 gestor_monto: esVentaGestor ? parseFloat(gestorMonto) || 0 : 0,
                 gestor_cuenta_id: esVentaGestor ? gestorCuentaId : null,
@@ -454,11 +470,11 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                 toast.success(message);
 
                 // Actualizar estado local inmediatamente — sin setTimeout ni router.reload()
-                // data.gestor es null cuando no aplica gestor, y eso es correcto limpiarlo
                 setCurrentVenta((prev) => ({
                     ...prev,
                     destinatario: data.destinatario ?? prev.destinatario,
                     gestor: Object.prototype.hasOwnProperty.call(data, 'gestor') ? data.gestor : prev.gestor,
+                    total_comision: data.total_comision ?? prev.total_comision,
                 }));
 
                 cerrarModal();
@@ -547,15 +563,48 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
 
                 <Separator />
 
-                {/* ── Resumen de Ganancias (admin/moderador) ── */}
+                {/* ── Widgets vendedor: Total + Comisión ── */}
+                {userRole === 'vendedor' && (
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-card rounded-xl border p-4 text-center">
+                            <ShoppingBag size={24} className="mx-auto mb-2 text-blue-500" />
+                            <p className="text-muted-foreground mb-1 text-sm">Total de la Venta</p>
+                            <p className="text-2xl font-bold text-blue-600">
+                                {formatCurrency(currentVenta.total, monedaPrincipal?.codigo || 'USD')}
+                            </p>
+                        </div>
+                        <div className="bg-card rounded-xl border p-4 text-center">
+                            <Store size={24} className="mx-auto mb-2 text-orange-500" />
+                            <p className="text-muted-foreground mb-1 text-sm">Comisión Vendedor</p>
+                            <p className="text-2xl font-bold text-orange-600">
+                                {formatCurrency(currentVenta.total_comision, monedaPrincipal?.codigo || 'USD')}
+                            </p>
+                            {currentVenta.gestor && (
+                                <p className="text-muted-foreground mt-1 text-xs italic">Absorbida por gestor</p>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* ── Widgets admin/moderador: 6 widgets en 2 filas de 3 ── */}
                 {(userRole === 'admin' || userRole === 'moderador') && (
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                         <div className="bg-card rounded-xl border p-4 text-center">
                             <DollarSign size={24} className="mx-auto mb-2 text-green-500" />
                             <p className="text-muted-foreground mb-1 text-sm">Ganancia Operacional</p>
                             <p className="text-2xl font-bold text-green-600">
                                 {formatCurrency(currentVenta.total_ganancia, monedaPrincipal?.codigo || 'USD')}
                             </p>
+                        </div>
+                        <div className="bg-card rounded-xl border p-4 text-center">
+                            <Store size={24} className="mx-auto mb-2 text-orange-500" />
+                            <p className="text-muted-foreground mb-1 text-sm">Comisión Vendedor</p>
+                            <p className="text-2xl font-bold text-orange-600">
+                                {formatCurrency(currentVenta.total_comision, monedaPrincipal?.codigo || 'USD')}
+                            </p>
+                            {currentVenta.gestor && (
+                                <p className="text-muted-foreground mt-1 text-xs italic">Absorbida por gestor</p>
+                            )}
                         </div>
                         <div className="bg-card rounded-xl border p-4 text-center">
                             <DollarSign
@@ -565,6 +614,13 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                             <p className="text-muted-foreground mb-1 text-sm">Ganancia/Pérdida Cambiaria</p>
                             <p className={`text-2xl font-bold ${currentVenta.ganancia_perdida_cambiaria >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                 {formatCurrency(currentVenta.ganancia_perdida_cambiaria, monedaPrincipal?.codigo || 'USD')}
+                            </p>
+                        </div>
+                        <div className="bg-card rounded-xl border p-4 text-center">
+                            <TrendingUp size={24} className="mx-auto mb-2 text-indigo-500" />
+                            <p className="text-muted-foreground mb-1 text-sm">Ganancia Agencia</p>
+                            <p className="text-2xl font-bold text-indigo-600">
+                                {formatCurrency(currentVenta.ganancia_agencia, monedaPrincipal?.codigo || 'USD')}
                             </p>
                         </div>
                         <div className="bg-card rounded-xl border p-4 text-center">
@@ -645,9 +701,9 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                         <AlertDialogTrigger asChild>
                             <span className="hidden" />
                         </AlertDialogTrigger>
-                        <AlertDialogContent className="max-w-2xl">
-                            <AlertDialogHeader>
-                                <AlertDialogTitle className="flex items-center gap-2 text-blue-600">
+                        <AlertDialogContent className="flex max-h-[92vh] max-w-2xl flex-col">
+                            <AlertDialogHeader className="shrink-0">
+                                <AlertDialogTitle className="flex items-center gap-2">
                                     <Users size={20} />
                                     {isEditingDestinatario ? 'Editar Información del Receptor' : 'Información del Receptor'}
                                 </AlertDialogTitle>
@@ -658,20 +714,20 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                 </AlertDialogDescription>
 
                                 {esVentaGestor && (
-                                    <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
+                                    <div className="bg-muted mt-3 rounded-lg border p-3">
                                         <div className="flex items-start gap-2">
-                                            <DollarSign className="mt-0.5 h-4 w-4 text-blue-600" />
+                                            <DollarSign className="text-muted-foreground mt-0.5 h-4 w-4" />
                                             <div className="flex-1">
-                                                <p className="text-sm font-medium text-blue-900">Venta con Gestor activada</p>
-                                                <p className="mt-1 text-xs text-blue-700">Se guardarán los datos del destinatario y del gestor.</p>
+                                                <p className="text-foreground text-sm font-medium">Venta con Gestor activada</p>
+                                                <p className="text-muted-foreground mt-1 text-xs">Se guardarán los datos del destinatario y del gestor.</p>
                                             </div>
                                         </div>
                                     </div>
                                 )}
                             </AlertDialogHeader>
 
-                            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'receptor' | 'gestor')} className="w-full">
-                                <TabsList className="grid w-full grid-cols-2">
+                            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'receptor' | 'gestor')} className="flex min-h-0 flex-1 flex-col">
+                                <TabsList className="grid w-full shrink-0 grid-cols-2">
                                     <TabsTrigger value="receptor" className="flex items-center gap-2">
                                         <Users className="h-4 w-4" />
                                         Receptor
@@ -692,6 +748,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                     </TabsTrigger>
                                 </TabsList>
 
+                                <ScrollProgress className="min-h-0 flex-1">
                                 {/* Tab: Receptor */}
                                 <TabsContent value="receptor" className="mt-4">
                                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -720,6 +777,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                                 value={formDestinatario.carnet_identidad}
                                                 onChange={(e) => setFormDestinatario((p) => ({ ...p, carnet_identidad: e.target.value }))}
                                                 placeholder="Número de carnet"
+                                                maxLength={11}
                                             />
                                         </div>
                                         <div className="space-y-2">
@@ -728,7 +786,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                                 id="telefono_contacto"
                                                 value={formDestinatario.telefono_contacto}
                                                 onChange={(e) => setFormDestinatario((p) => ({ ...p, telefono_contacto: e.target.value }))}
-                                                placeholder="Número de teléfono"
+                                                placeholder="53 0000 0000"
                                             />
                                         </div>
                                         <div className="space-y-2 md:col-span-2">
@@ -766,13 +824,13 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                 {/* Tab: Gestor */}
                                 <TabsContent value="gestor" className="mt-4">
                                     <div className="space-y-4">
-                                        <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+                                        <div className="bg-muted rounded-lg border p-4">
                                             <div className="flex items-center justify-between">
                                                 <div className="flex flex-col gap-1">
-                                                    <Label htmlFor="gestor-switch" className="font-bold text-blue-900">
+                                                    <Label htmlFor="gestor-switch" className="font-bold">
                                                         ¿Venta con Gestor?
                                                     </Label>
-                                                    <span className="text-xs text-blue-700">Asignar comisión a un tercero</span>
+                                                    <span className="text-muted-foreground text-xs">Asignar comisión a un tercero</span>
                                                 </div>
                                                 <Switch
                                                     id="gestor-switch"
@@ -787,6 +845,36 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
 
                                         {esVentaGestor && (
                                             <div className="space-y-4 rounded-lg border p-4">
+                                                {/* Badges de todas las monedas del sistema */}
+                                                {monedasSistema.length > 0 && (
+                                                    <div className="space-y-2">
+                                                        <Label>Moneda del Gestor</Label>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {monedasSistema.map((m) => (
+                                                                <button
+                                                                    key={m.id}
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setMonedaGestorSeleccionada(m);
+                                                                        setTasaAplicadaGestor(String(m.tasa));
+                                                                        setGestorCuentaId('');
+                                                                        setCuentaGestorSeleccionada(null);
+                                                                        const montoCalculado = currentVenta.total_comision * m.tasa;
+                                                                        setGestorMonto(montoCalculado.toFixed(2));
+                                                                    }}
+                                                                    className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                                                                        monedaGestorSeleccionada?.id === m.id
+                                                                            ? 'bg-primary text-primary-foreground border-primary'
+                                                                            : 'bg-background text-foreground hover:bg-muted'
+                                                                    }`}
+                                                                >
+                                                                    {m.codigo} · {m.tasa}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {/* Tasa aplicada — editable */}
                                                 <div className="space-y-2">
                                                     <Label>Tasa Aplicada del Gestor</Label>
                                                     <Input
@@ -812,7 +900,10 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                                                 <SelectValue placeholder="Seleccione cuenta..." />
                                                             </SelectTrigger>
                                                             <SelectContent>
-                                                                {cuentasGestor.map((cuenta) => (
+                                                                {(monedaGestorSeleccionada
+                                                                    ? cuentasGestor.filter((c) => (c.moneda?.codigo || c.tipo_moneda) === monedaGestorSeleccionada.codigo)
+                                                                    : cuentasGestor
+                                                                ).map((cuenta) => (
                                                                     <SelectItem key={cuenta.id} value={String(cuenta.id)}>
                                                                         {cuenta.nombre_cuenta} ({cuenta.moneda?.codigo || cuenta.tipo_moneda})
                                                                     </SelectItem>
@@ -822,14 +913,13 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                                     </div>
                                                     <div className="space-y-2">
                                                         <Label>Monto de Comisión</Label>
-                                                        <div className="relative">
-                                                            <span className="text-muted-foreground absolute top-2.5 left-3 text-sm">
-                                                                {cuentaGestorSeleccionada?.moneda?.simbolo || '$'}
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-muted-foreground shrink-0 text-sm font-medium">
+                                                                {cuentaGestorSeleccionada?.moneda?.codigo || monedaGestorSeleccionada?.codigo || 'USD'}
                                                             </span>
                                                             <Input
                                                                 type="number"
                                                                 step="0.01"
-                                                                className="pl-8"
                                                                 value={gestorMonto}
                                                                 onChange={(e) => setGestorMonto(e.target.value)}
                                                                 placeholder="0.00"
@@ -837,6 +927,25 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                                         </div>
                                                     </div>
                                                 </div>
+
+                                                {/* Gadget: monto a descontar de la cuenta */}
+                                                {parseFloat(gestorMonto) > 0 && parseFloat(tasaAplicadaGestor) > 0 && (
+                                                    <div className="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3 dark:border-green-800 dark:bg-green-950">
+                                                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-100 dark:bg-green-900">
+                                                            <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <p className="text-xs text-green-700 dark:text-green-400">Se descontará de la cuenta</p>
+                                                            <p className="text-lg font-bold text-green-700 dark:text-green-300">
+                                                                {parseFloat(gestorMonto).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                                                                {cuentaGestorSeleccionada?.moneda?.codigo || monedaGestorSeleccionada?.codigo || ''}
+                                                            </p>
+                                                            <p className="text-xs text-green-600 dark:text-green-400">
+                                                                ≈ {(parseFloat(gestorMonto) / parseFloat(tasaAplicadaGestor)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                )}
                                                 <div className="space-y-2">
                                                     <Label>Comentario</Label>
                                                     <Textarea
@@ -851,21 +960,20 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                         )}
                                     </div>
                                 </TabsContent>
+                                </ScrollProgress>
                             </Tabs>
 
-                            <AlertDialogFooter>
+                            <AlertDialogFooter className="shrink-0">
                                 <AlertDialogCancel disabled={isSavingDestinatario} onClick={cerrarModal}>
                                     Cancelar
                                 </AlertDialogCancel>
-                                <AlertDialogAction
+                                <Button
                                     onClick={handleGuardarDestinatario}
                                     className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
                                     disabled={
                                         isSavingDestinatario ||
                                         !formDestinatario.nombre?.trim() ||
-                                        !formDestinatario.apellidos?.trim() ||
-                                        !formDestinatario.carnet_identidad?.trim() ||
-                                        !formDestinatario.telefono_contacto?.trim()
+                                        !formDestinatario.apellidos?.trim()
                                     }
                                 >
                                     {isSavingDestinatario ? (
@@ -894,7 +1002,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                             Guardar
                                         </div>
                                     )}
-                                </AlertDialogAction>
+                                </Button>
                             </AlertDialogFooter>
                         </AlertDialogContent>
                     </AlertDialog>
@@ -1064,9 +1172,9 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                         <span className="font-semibold text-green-500">
                                             Esta acción:
                                             <br />
-                                            • Descontará stock de los productos
+                                            • Acreditará saldos en cuentas bancarias
                                             <br />
-                                            • Actualizará saldos de cuentas bancarias
+                                            • Registrará deudas de clientes destino
                                             <br />• Cambiará el estado a "Completada"
                                         </span>
                                     </AlertDialogDescription>
@@ -1114,7 +1222,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                         <span className="font-semibold text-red-500">
                                             {isVentaCompletada
                                                 ? 'Se revertirá el stock de los productos y se deducirán los montos de las cuentas bancarias asociadas.'
-                                                : 'Se cancelará la venta sin afectar stock ni cuentas (estado pendiente).'}
+                                                : 'Se revertirá el stock reservado. Las cuentas y deudas de clientes no serán afectadas ya que la venta no fue aprobada.'}
                                         </span>
                                     </AlertDialogDescription>
                                 </AlertDialogHeader>
@@ -1249,23 +1357,26 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                     )}
                                 </div>
                                 <div className="space-y-3">
+                                    {/* Monto descontado en moneda local */}
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2">
-                                            <DollarSign className="h-4 w-4 text-blue-600" />
-                                            <span className="text-muted-foreground text-xs font-medium">Monto:</span>
+                                            <TrendingUp className="h-4 w-4 text-green-600" />
+                                            <span className="text-muted-foreground text-xs font-medium">Descontado:</span>
                                         </div>
-                                        <Badge variant="secondary" className="font-bold">
-                                            {currentVenta.gestor.monto || 0} {currentVenta.gestor.moneda?.simbolo || ''}
+                                        <Badge variant="outline" className="font-bold text-green-600">
+                                            {Number(currentVenta.gestor.monto).toLocaleString('es-ES', { minimumFractionDigits: 2 })}{' '}
+                                            {currentVenta.gestor.moneda?.codigo || ''}
                                         </Badge>
                                     </div>
-                                    {currentVenta.gestor.monto_usd && (
+                                    {/* Equivalente en USD para control */}
+                                    {currentVenta.gestor.monto_usd !== undefined && (
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-2">
-                                                <DollarSign className="h-4 w-4 text-green-600" />
+                                                <DollarSign className="h-4 w-4 text-blue-600" />
                                                 <span className="text-muted-foreground text-xs font-medium">Equivalente USD:</span>
                                             </div>
-                                            <Badge variant="outline" className="font-bold text-green-600">
-                                                {currentVenta.gestor.monto_usd} USD
+                                            <Badge variant="secondary" className="font-bold">
+                                                {Number(currentVenta.gestor.monto_usd).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
                                             </Badge>
                                         </div>
                                     )}
@@ -1282,9 +1393,11 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-2">
                                                 <TrendingUp className="h-4 w-4 text-blue-600" />
-                                                <span className="text-muted-foreground text-xs font-medium">Tasa Gestor:</span>
+                                                <span className="text-muted-foreground text-xs font-medium">Tasa:</span>
                                             </div>
-                                            <span className="text-sm font-medium">{currentVenta.gestor.tasa_aplicada_gestor}</span>
+                                            <span className="text-sm font-medium">
+                                                1 USD = {currentVenta.gestor.tasa_aplicada_gestor} {currentVenta.gestor.moneda?.codigo || ''}
+                                            </span>
                                         </div>
                                     )}
                                     {currentVenta.gestor.comentario && (
@@ -1357,6 +1470,7 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                     <th className="px-4 py-3 text-left font-semibold">Precio Unitario</th>
                                     {userRole !== 'vendedor' && <th className="px-4 py-3 text-left font-semibold">Costo Unitario</th>}
                                     {userRole !== 'vendedor' && <th className="px-4 py-3 text-left font-semibold">Ganancia Unitaria</th>}
+                                    {userRole !== 'vendedor' && <th className="px-4 py-3 text-left font-semibold">Comisión Unit.</th>}
                                     <th className="px-4 py-3 text-left font-semibold">Subtotal</th>
                                 </tr>
                             </thead>
@@ -1390,13 +1504,18 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                         {userRole !== 'vendedor' && (
                                             <td className="px-4 py-2 text-green-600">{formatCurrency(item.ganancia, simboloMonedaPrincipal)}</td>
                                         )}
+                                        {userRole !== 'vendedor' && (
+                                            <td className="px-4 py-2 text-orange-600">
+                                                {item.comision_unitaria > 0 ? formatCurrency(item.comision_unitaria, simboloMonedaPrincipal) : '—'}
+                                            </td>
+                                        )}
                                         <td className="px-4 py-2 font-medium">{formatCurrency(item.subtotal, simboloMonedaPrincipal)}</td>
                                     </tr>
                                 ))}
                             </tbody>
                             <tfoot className="bg-sidebar-accent">
                                 <tr>
-                                    <td colSpan={userRole === 'vendedor' ? 7 : 9} className="px-4 py-3 text-right font-semibold text-white">
+                                    <td colSpan={userRole === 'vendedor' ? 7 : 10} className="px-4 py-3 text-right font-semibold text-white">
                                         Total Venta:
                                     </td>
                                     <td className="px-4 py-3 text-center text-lg font-semibold text-white">
@@ -1405,11 +1524,31 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                 </tr>
                                 {userRole !== 'vendedor' && (
                                     <tr className="bg-green-50 dark:bg-green-900/20">
-                                        <td colSpan={9} className="px-4 py-3 text-right font-semibold text-green-800 dark:text-green-400">
+                                        <td colSpan={10} className="px-4 py-3 text-right font-semibold text-green-800 dark:text-green-400">
                                             Ganancia Total:
                                         </td>
                                         <td className="px-4 py-3 text-center text-lg font-semibold text-green-800 dark:text-green-400">
                                             {formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}
+                                        </td>
+                                    </tr>
+                                )}
+                                {currentVenta.total_comision > 0 && (
+                                    <tr className="bg-orange-50 dark:bg-orange-900/20">
+                                        <td colSpan={userRole === 'vendedor' ? 7 : 10} className="px-4 py-3 text-right font-semibold text-orange-700 dark:text-orange-400">
+                                            Comisión Vendedor:
+                                        </td>
+                                        <td className="px-4 py-3 text-center text-lg font-semibold text-orange-700 dark:text-orange-400">
+                                            {formatCurrency(currentVenta.total_comision, simboloMonedaPrincipal)}
+                                        </td>
+                                    </tr>
+                                )}
+                                {userRole !== 'vendedor' && (
+                                    <tr className="bg-blue-50 dark:bg-blue-900/20">
+                                        <td colSpan={10} className="px-4 py-3 text-right font-semibold text-blue-700 dark:text-blue-400">
+                                            Ganancia Agencia:
+                                        </td>
+                                        <td className="px-4 py-3 text-center text-lg font-semibold text-blue-700 dark:text-blue-400">
+                                            {formatCurrency(currentVenta.ganancia_agencia, simboloMonedaPrincipal)}
                                         </td>
                                     </tr>
                                 )}
@@ -1515,6 +1654,20 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                     <span className="text-muted-foreground">Ganancia Operacional:</span>
                                     <span className="font-semibold text-green-600">
                                         {formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}
+                                    </span>
+                                </div>
+                                {currentVenta.total_comision > 0 && (
+                                    <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Comisión Vendedor:</span>
+                                        <span className="font-semibold text-orange-600">
+                                            {formatCurrency(currentVenta.total_comision, simboloMonedaPrincipal)}
+                                        </span>
+                                    </div>
+                                )}
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Ganancia Agencia:</span>
+                                    <span className="font-semibold text-indigo-600">
+                                        {formatCurrency(currentVenta.ganancia_agencia, simboloMonedaPrincipal)}
                                     </span>
                                 </div>
                                 {isVentaCompletada && (

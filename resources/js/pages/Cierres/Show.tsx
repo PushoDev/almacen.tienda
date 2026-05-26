@@ -226,6 +226,10 @@ interface Cierre {
 interface Props extends PageProps {
     cierre: Cierre;
     almacenes?: Array<{ id: number; nombre: string }>;
+    userRole?: string;
+    comision_pv_total?: number;
+    comision_gestor_total?: number;
+    ganancia_agencia_total?: number;
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -233,7 +237,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Detalle de Cierre', href: '#' },
 ];
 
-export default function Show({ cierre, almacenes = [] }: Props) {
+export default function Show({ cierre, almacenes = [], userRole = 'vendedor', comision_pv_total = 0, comision_gestor_total = 0, ganancia_agencia_total = 0 }: Props) {
     const [showTransaccionesDialog, setShowTransaccionesDialog] = useState(false);
     const [selectedVentaDetails, setSelectedVentaDetails] = useState<{
         show: boolean;
@@ -1101,7 +1105,8 @@ export default function Show({ cierre, almacenes = [] }: Props) {
                                                     <TableHead>Venta #</TableHead>
                                                     <TableHead>Cuenta</TableHead>
                                                     <TableHead>Comentario</TableHead>
-                                                    <TableHead className="w-28 text-right">Monto</TableHead>
+                                                    <TableHead className="w-36 text-right">Monto Local</TableHead>
+                                                    <TableHead className="w-28 text-right">Equiv. USD</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
@@ -1129,11 +1134,29 @@ export default function Show({ cierre, almacenes = [] }: Props) {
                                                             )}
                                                         </TableCell>
                                                         <TableCell className="text-right font-mono font-medium text-red-600">
-                                                            -${Number(item.monto).toFixed(2)} {item.moneda_codigo}
+                                                            -{Number(item.monto).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {item.moneda_codigo}
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-mono text-xs text-purple-600">
+                                                            ≈ {Number(item.monto_usd).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
                                                         </TableCell>
                                                     </TableRow>
                                                 ))}
                                             </TableBody>
+                                            <TableFooter>
+                                                <TableRow>
+                                                    <TableCell colSpan={3} className="font-bold">Total</TableCell>
+                                                    <TableCell className="text-right font-bold text-red-600" colSpan={1}>
+                                                        {Object.entries(comisionesPorMoneda).map(([moneda, data]) => (
+                                                            <div key={moneda}>
+                                                                -{Number(data.total).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {moneda}
+                                                            </div>
+                                                        ))}
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-bold text-purple-600">
+                                                        ≈ {comisionesGestorDetalles.reduce((s, i) => s + (Number(i.monto_usd) || 0), 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
+                                                    </TableCell>
+                                                </TableRow>
+                                            </TableFooter>
                                         </Table>
                                     </div>
                                 ) : (
@@ -1209,21 +1232,36 @@ export default function Show({ cierre, almacenes = [] }: Props) {
                             <p className="text-muted-foreground mt-2 text-xs">Total real de productos vendidos</p>
                         </div>
 
-                        {comisionesGestorDetalles.length > 0 && (
-                            <div className="rounded-lg border border-purple-200 bg-purple-50 p-4 dark:bg-purple-900/20">
-                                <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">- Comisiones a Gestores</p>
-                                <div className="space-y-1">
-                                    {Object.entries(comisionesPorMoneda).map(([moneda, data]) => (
-                                        <p key={moneda} className="text-2xl font-black text-purple-700">
-                                            -${Number(data.total).toFixed(2)} {moneda}
-                                        </p>
-                                    ))}
-                                </div>
-                                <p className="text-muted-foreground mt-1 text-xs">
-                                    {comisionesGestorDetalles.length} venta{comisionesGestorDetalles.length !== 1 ? 's' : ''} con gestor
+                        <div className="grid grid-cols-3 gap-3">
+                            {/* Comisión Punto de Venta — todos los roles */}
+                            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:bg-blue-900/20">
+                                <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Comisión P.V.</p>
+                                <p className="text-xl font-black text-blue-700 dark:text-blue-300">
+                                    ${Number(comision_pv_total).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </p>
+                                <p className="text-muted-foreground mt-1 text-xs">Sin gestor</p>
                             </div>
-                        )}
+
+                            {/* Comisión Gestor — todos los roles */}
+                            <div className="rounded-lg border border-purple-200 bg-purple-50 p-3 dark:bg-purple-900/20">
+                                <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Comisión Gestor</p>
+                                <p className="text-xl font-black text-purple-700 dark:text-purple-300">
+                                    ${Number(comision_gestor_total).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                                <p className="text-muted-foreground mt-1 text-xs">Con gestor</p>
+                            </div>
+
+                            {/* Ganancia Agencia — solo admin */}
+                            {userRole === 'admin' && (
+                                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:bg-emerald-900/20">
+                                    <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Ganancia Agencia</p>
+                                    <p className="text-xl font-black text-emerald-700 dark:text-emerald-300">
+                                        ${Number(ganancia_agencia_total).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </p>
+                                    <p className="text-muted-foreground mt-1 text-xs">Neto agencia</p>
+                                </div>
+                            )}
+                        </div>
                     </CardContent>
                 </Card>
 

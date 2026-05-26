@@ -18,6 +18,7 @@ class Venta extends Model
         'moneda_id',
         'tasa_cambio_principal',
         'total_ganancia',
+        'total_comision',
         'total_esperado_usd',
         'ganancia_perdida_cambiaria',
         'ganancia_real_total',
@@ -36,6 +37,7 @@ class Venta extends Model
     protected $casts = [
         'tasa_cambio_principal' => 'decimal:2',
         'total_ganancia' => 'decimal:2',
+        'total_comision' => 'decimal:2',
         'total_esperado_usd' => 'decimal:2',
         'ganancia_perdida_cambiaria' => 'decimal:2',
         'ganancia_real_total' => 'decimal:2',

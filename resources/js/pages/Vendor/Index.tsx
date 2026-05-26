@@ -210,7 +210,6 @@ export default function PuntoVentaOficial({
     const [isVistaRapidaOpen, setIsVistaRapidaOpen] = useState(false);
 
     const currencies = useMemo(() => {
-        console.log('Monedas disponibles:', monedas);
         return monedas.map((moneda) => ({
             id: moneda.id,
             code: moneda.codigo_moneda,
@@ -223,11 +222,9 @@ export default function PuntoVentaOficial({
 
     useEffect(() => {
         if (meta.monedas && meta.monedas.length > 0) {
-            console.log('Monedas del meta:', meta.monedas);
             setMonedas(meta.monedas);
             const principal = meta.monedas.find((m) => m.principal) || meta.monedas[0];
             if (principal) {
-                console.log('Moneda principal establecida:', principal);
                 setMonedaPrincipal(principal);
                 setTasaCambioPrincipal(principal.tasa_cambio);
             }
@@ -261,9 +258,7 @@ export default function PuntoVentaOficial({
 
     const cargarAlmacenes = async () => {
         try {
-            console.log('Cargando almacenes...');
             const response = await axios.get(route('ventas.getAlmacenes'));
-            console.log('Almacenes cargados:', response.data);
             setAlmacenes(response.data);
         } catch (error) {
             console.error('Error al cargar almacenes:', error);
@@ -273,9 +268,7 @@ export default function PuntoVentaOficial({
 
     const cargarClientes = async () => {
         try {
-            console.log('Cargando clientes...');
             const response = await axios.get(route('ventas.getClientes'));
-            console.log('Clientes cargados:', response.data);
             setClientes(response.data);
         } catch (error) {
             console.error('Error al cargar clientes:', error);
@@ -286,9 +279,7 @@ export default function PuntoVentaOficial({
     const cargarClientesFisicos = async () => {
         setCargandoClientesFisicos(true);
         try {
-            console.log('Cargando clientes físicos...');
             const response = await axios.get(route('ventas.getClientesFisicosParaPago'));
-            console.log('Clientes físicos cargados:', response.data);
             setClientesFisicos(response.data);
         } catch (error) {
             console.error('Error al cargar clientes físicos:', error);
@@ -301,26 +292,20 @@ export default function PuntoVentaOficial({
 
     const cargarCuentasFiltradas = async (monedaId: string, metodoPago: string) => {
         if (!monedaId) {
-            console.log('No hay moneda ID, limpiando cuentas filtradas');
             setCuentasFiltradas([]);
             return;
         }
         setCargandoCuentas(true);
         try {
-            console.log(`Cargando cuentas filtradas para moneda ID: ${monedaId}, método: ${metodoPago}`);
             const response = await axios.get(route('ventas.getCuentasFiltradas'), {
                 params: {
                     moneda_id: monedaId,
                     metodo_pago: metodoPago || undefined,
                 },
             });
-            console.log('Cuentas filtradas cargadas:', response.data);
             setCuentasFiltradas(response.data);
         } catch (error: unknown) {
             console.error('Error al cargar cuentas filtradas:', error);
-            if (axios.isAxiosError(error)) {
-                console.error('Detalles del error:', error.response?.data);
-            }
             toast.error('Error al cargar cuentas');
             setCuentasFiltradas([]);
         } finally {
@@ -334,7 +319,6 @@ export default function PuntoVentaOficial({
             return;
         }
         try {
-            console.log('Cargando productos para almacén:', almacenId);
             const response = await axios.get(route('ventas.getProductosPorAlmacen', almacenId));
             const productosProcesados = response.data.map((producto: Producto) => ({
                 ...producto,
@@ -349,7 +333,6 @@ export default function PuntoVentaOficial({
                     cantidad: Number(codigo.cantidad) || 0,
                 })),
             }));
-            console.log('Productos cargados:', productosProcesados.length);
             setProductos(productosProcesados);
         } catch (error: unknown) {
             console.error('Error al cargar productos:', error);
@@ -1893,7 +1876,7 @@ export default function PuntoVentaOficial({
                                                                         Procesando...
                                                                     </>
                                                                 ) : (
-                                                                    'Confirmar Venta'
+                                                                        'Procesar Venta'
                                                                 )}
                                                             </Button>
                                                             <AlertDialogCancel className="cursor-pointer">Cancelar</AlertDialogCancel>
