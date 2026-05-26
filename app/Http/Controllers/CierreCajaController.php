@@ -220,9 +220,13 @@ class CierreCajaController extends Controller
                 'ventas_a_cuentas_transferencia_usd' => $calculos['ventas_a_cuentas_transferencia_usd'],
                 'ventas_a_clientes_efectivo_usd' => $calculos['ventas_a_clientes_efectivo_usd'],
                 'ventas_a_clientes_transferencia_usd' => $calculos['ventas_a_clientes_transferencia_usd'],
-                // NUEVO: Comisiones a gestores
+                // Comisiones a gestores
                 'comisiones_gestor_total' => $calculos['comisiones_gestor_total'] ?? 0,
                 'comisiones_gestor_detalles' => $calculos['comisiones_gestor_detalles'] ?? [],
+                // Nuevos: comisiones y ganancia agencia
+                'comision_pv_total' => $calculos['comision_pv_total'] ?? 0,
+                'comision_gestor_total' => $calculos['comision_gestor_total'] ?? 0,
+                'ganancia_agencia_total' => $calculos['ganancia_agencia_total'] ?? 0,
             ],
             // NUEVO: Comparativa con cierre anterior
             'comparativa_cuentas' => $comparativaCuentas,
@@ -648,7 +652,7 @@ class CierreCajaController extends Controller
                     $marca = $producto ? $producto->marca_producto : '';
                     $modelo = $producto ? $producto->modelo_producto : '';
                     $capacidad = $producto ? $producto->capacidad_producto : '';
-                    $codigo = $producto ? $producto->codigo_producto : '';
+                    $codigoProducto = $producto ? $producto->codigo_producto : '';
                     $imagen = $producto ? $producto->imagen_url : '';
                     $categoria = $producto && $producto->categoria ? $producto->categoria->nombre_categoria : '';
                     $almacenId = $pago->venta->almacen_id;
@@ -664,7 +668,7 @@ class CierreCajaController extends Controller
                             'marca' => $marca,
                             'modelo' => $modelo,
                             'capacidad' => $capacidad,
-                            'codigo' => $codigo,
+                            'codigo' => $codigoProducto,
                             'imagen_url' => $imagen,
                             'categoria' => $categoria,
                             'cantidad' => 0,
@@ -843,21 +847,49 @@ class CierreCajaController extends Controller
             $saldoEsperadoTotalUSD += ($saldoCalculado / $tasa);
         }
 
+        // --- COMISIÓN PUNTO DE VENTA (ventas sin gestor) ---
+        $comisionPVTotal = Venta::where('user_id', $user->id)
+            ->where('created_at', '>=', $inicioTurno)
+            ->where('estado', 'completada')
+            ->where('es_venta_gestor', false)
+            ->sum('total_comision');
+
+        // --- COMISIÓN GESTOR (ventas con gestor, en USD) ---
+        $comisionGestorTotal = Venta::where('user_id', $user->id)
+            ->where('created_at', '>=', $inicioTurno)
+            ->where('estado', 'completada')
+            ->where('es_venta_gestor', true)
+            ->sum('total_comision');
+
+        // --- GANANCIA AGENCIA (total_ganancia - total_comision de todas las ventas) ---
+        $ventasDelTurno = Venta::where('user_id', $user->id)
+            ->where('created_at', '>=', $inicioTurno)
+            ->where('estado', 'completada')
+            ->get(['total_ganancia', 'total_comision']);
+
+        $gananciaAgenciaTotal = $ventasDelTurno->sum(fn($v) =>
+            (float) $v->total_ganancia - (float) $v->total_comision
+        );
+
         $result = [
             'detalles' => array_values($resumenPorMoneda),
             'ventas_efectivo' => round($ventasEfectivoTotalUSD, 2),
             'ventas_otros' => round($ventasOtrosTotalUSD, 2),
             'saldo_esperado_global' => round($saldoEsperadoTotalUSD, 2),
-            // NUEVO: Totales separados por destino
+            // Totales separados por destino
             'ventas_a_cuentas_total_usd' => round($ventasACuentasTotalUSD, 2),
             'ventas_a_clientes_total_usd' => round($ventasAClientesTotalUSD, 2),
             'ventas_a_cuentas_efectivo_usd' => round($ventasACuentasEfectivoUSD, 2),
             'ventas_a_cuentas_transferencia_usd' => round($ventasACuentasTransferenciaUSD, 2),
             'ventas_a_clientes_efectivo_usd' => round($ventasAClientesEfectivoUSD, 2),
             'ventas_a_clientes_transferencia_usd' => round($ventasAClientesTransferenciaUSD, 2),
-            // NUEVO: Comisiones a gestores
+            // Comisiones a gestores (legacy)
             'comisiones_gestor_total' => round($comisionesGestorTotalUSD, 2),
             'comisiones_gestor_detalles' => $comisionesGestorDetalles,
+            // Nuevos: comisiones y ganancia agencia
+            'comision_pv_total' => round((float) $comisionPVTotal, 2),
+            'comision_gestor_total' => round((float) $comisionGestorTotal, 2),
+            'ganancia_agencia_total' => round($gananciaAgenciaTotal, 2),
         ];
 
         Log::info('CIERRE: Resultado', [

@@ -284,12 +284,13 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
     // ─────────────────────────────────────────
     // Cargar / limpiar formulario al abrir modal
+    // cuentasGestor se maneja en un effect separado para evitar
+    // resetear esVentaGestor cuando las cuentas cargan async
     // ─────────────────────────────────────────
     useEffect(() => {
         if (!isDestinatarioDialogOpen) return;
 
         if (isEditingDestinatario && currentVenta.destinatario) {
-            // Modo edición: pre-rellenar datos del destinatario
             const d = currentVenta.destinatario;
             setFormDestinatario({
                 nombre: d.nombre,
@@ -301,7 +302,6 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                 observaciones: d.observaciones || '',
             });
 
-            // Si ya existe gestor, pre-rellenar sus datos
             if (currentVenta.gestor) {
                 const g = currentVenta.gestor;
                 setEsVentaGestor(true);
@@ -309,21 +309,12 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                 setGestorCuentaId(String(g.cuenta_id || ''));
                 setGestorComentario(g.comentario || '');
                 setTasaAplicadaGestor(g.tasa_aplicada_gestor ? String(g.tasa_aplicada_gestor) : '');
-
-                if (g.cuenta_id && cuentasGestor.length > 0) {
-                    const encontrada = cuentasGestor.find((c) => String(c.id) === String(g.cuenta_id));
-                    setCuentaGestorSeleccionada(encontrada ?? null);
-                }
             } else {
-                // Gestor nuevo: pre-rellenar tasa y calcular monto en moneda local
                 const tasaDefault = currentVenta.tasa_aplicada_venta ?? currentVenta.tasa_cambio_principal;
                 setTasaAplicadaGestor(String(tasaDefault));
                 setGestorMonto((currentVenta.total_comision * tasaDefault).toFixed(2));
             }
-            // Nota: activeTab y esVentaGestor son seteados por el botón que abre el modal,
-            // así que no los sobreescribimos aquí para respetar la intención del usuario.
         } else if (!isEditingDestinatario) {
-            // Modo nuevo: limpiar todo
             setFormDestinatario(FORM_VACIO);
             setEsVentaGestor(false);
             setGestorMonto('');
@@ -331,8 +322,19 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
             setGestorComentario('');
             setTasaAplicadaGestor('');
             setCuentaGestorSeleccionada(null);
+            setMonedaGestorSeleccionada(null);
         }
-    }, [isDestinatarioDialogOpen, isEditingDestinatario, currentVenta.destinatario, currentVenta.gestor, cuentasGestor]);
+    }, [isDestinatarioDialogOpen, isEditingDestinatario, currentVenta.destinatario, currentVenta.gestor]);
+
+    // Buscar la cuenta seleccionada del gestor cuando cargan las cuentas (async)
+    useEffect(() => {
+        if (!isDestinatarioDialogOpen || !isEditingDestinatario || !currentVenta.gestor) return;
+        const g = currentVenta.gestor;
+        if (g.cuenta_id && cuentasGestor.length > 0) {
+            const encontrada = cuentasGestor.find((c) => String(c.id) === String(g.cuenta_id));
+            setCuentaGestorSeleccionada(encontrada ?? null);
+        }
+    }, [cuentasGestor, isDestinatarioDialogOpen, isEditingDestinatario, currentVenta.gestor]);
 
     // ─────────────────────────────────────────
     // Helpers
@@ -971,8 +973,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                     disabled={
                                         isSavingDestinatario ||
                                         !formDestinatario.nombre?.trim() ||
-                                        !formDestinatario.apellidos?.trim() ||
-                                        !formDestinatario.carnet_identidad?.trim()
+                                        !formDestinatario.apellidos?.trim()
                                     }
                                 >
                                     {isSavingDestinatario ? (

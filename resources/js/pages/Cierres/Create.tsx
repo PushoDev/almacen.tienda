@@ -214,9 +214,13 @@ interface Calculos {
     ventas_a_cuentas_transferencia_usd?: number;
     ventas_a_clientes_efectivo_usd?: number;
     ventas_a_clientes_transferencia_usd?: number;
-    // NUEVO: Comisiones a gestores
+    // Comisiones a gestores
     comisiones_gestor_total?: number;
     comisiones_gestor_detalles?: ComisionGestorItem[];
+    // Comisiones y ganancia agencia
+    comision_pv_total?: number;
+    comision_gestor_total?: number;
+    ganancia_agencia_total?: number;
 }
 
 interface ComisionGestorItem {
@@ -261,6 +265,7 @@ export default function Create({
     comparativa_cuentas = [],
     comparativa_clientes = [],
     tiene_cierre_anterior = false,
+    auth,
 }: Props) {
     const { data, setData, post, processing } = useForm({
         saldo_inicial: calculos.saldo_inicial || 0,
@@ -1372,22 +1377,38 @@ export default function Create({
                             <p className="text-muted-foreground mt-2 text-xs">Total real de productos vendidos</p>
                         </div>
 
-                        {/* Comisiones a Gestores - Si existen */}
-                        {comisionesGestorDetalles.length > 0 && (
-                            <div className="rounded-lg border border-purple-200 bg-purple-50 p-4 dark:bg-purple-900/20">
-                                <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">- Comisiones a Gestores</p>
-                                <div className="space-y-1">
-                                    {Object.entries(comisionesPorMoneda).map(([moneda, data]) => (
-                                        <p key={moneda} className="text-2xl font-black text-purple-700">
-                                            -${Number(data.total).toFixed(2)} {moneda}
-                                        </p>
-                                    ))}
-                                </div>
-                                <p className="text-muted-foreground mt-1 text-xs">
-                                    {comisionesGestorDetalles.length} venta{comisionesGestorDetalles.length !== 1 ? 's' : ''} con gestor
+                        {/* Widgets: Comisión PV, Comisión Gestor, Ganancia Agencia */}
+                        <div className="grid grid-cols-3 gap-3">
+                            {/* Comisión Punto de Venta — todos los roles */}
+                            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:bg-blue-900/20">
+                                <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Comisión P.V.</p>
+                                <p className="text-xl font-black text-blue-700 dark:text-blue-300">
+                                    ${Number(calculos.comision_pv_total ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </p>
+                                <p className="text-muted-foreground mt-1 text-xs">Sin gestor</p>
                             </div>
-                        )}
+
+                            {/* Comisión Gestor — todos los roles */}
+                            <div className="rounded-lg border border-purple-200 bg-purple-50 p-3 dark:bg-purple-900/20">
+                                <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Comisión Gestor</p>
+                                <p className="text-xl font-black text-purple-700 dark:text-purple-300">
+                                    ${Number(calculos.comision_gestor_total ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                                <p className="text-muted-foreground mt-1 text-xs">Con gestor</p>
+                            </div>
+
+                            {/* Ganancia Agencia — solo admin */}
+                            {auth.user.role === 'admin' && (
+                                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:bg-emerald-900/20">
+                                    <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Ganancia Agencia</p>
+                                    <p className="text-xl font-black text-emerald-700 dark:text-emerald-300">
+                                        ${Number(calculos.ganancia_agencia_total ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </p>
+                                    <p className="text-muted-foreground mt-1 text-xs">Neto agencia</p>
+                                </div>
+                            )}
+                        </div>
+
 
                         <div className="space-y-1">
                             <Label className="text-muted-foreground text-xs font-bold uppercase">Observaciones del Turno</Label>
