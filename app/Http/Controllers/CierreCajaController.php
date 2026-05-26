@@ -384,8 +384,39 @@ class CierreCajaController extends Controller
             'cierre_id' => $cierre->id,
         ]);
 
+        // Calcular comisiones y ganancia desde las ventas del turno del cierre
+        $comisionPVTotal = \App\Models\Venta::where('user_id', $cierre->user_id)
+            ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
+            ->where('estado', 'completada')
+            ->where('es_venta_gestor', false)
+            ->sum('total_comision');
+
+        $comisionGestorTotal = \App\Models\Venta::where('user_id', $cierre->user_id)
+            ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
+            ->where('estado', 'completada')
+            ->where('es_venta_gestor', true)
+            ->sum('total_comision');
+
+        $ventasDelCierre = \App\Models\Venta::where('user_id', $cierre->user_id)
+            ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
+            ->where('estado', 'completada')
+            ->get(['total_ganancia', 'total_comision']);
+
+        $gananciaAgenciaTotal = $ventasDelCierre->sum(fn($v) =>
+            (float) $v->total_ganancia - (float) $v->total_comision
+        );
+
+        $almacenes = \App\Models\Almacen::select('id', 'nombre_almacen')->get()->map(function ($a) {
+            return ['id' => $a->id, 'nombre' => $a->nombre_almacen];
+        })->toArray();
+
         return Inertia::render('Cierres/Show', [
-            'cierre' => $cierre,
+            'cierre'                => $cierre,
+            'userRole'              => $currentUser->role ?? 'vendedor',
+            'comision_pv_total'     => round((float) $comisionPVTotal, 2),
+            'comision_gestor_total' => round((float) $comisionGestorTotal, 2),
+            'ganancia_agencia_total'=> round($gananciaAgenciaTotal, 2),
+            'almacenes'             => $almacenes,
         ]);
     }
 
