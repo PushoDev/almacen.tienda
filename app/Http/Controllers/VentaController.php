@@ -336,6 +336,7 @@ class VentaController extends Controller
                 'moneda' => [
                     'codigo' => $cuenta->moneda?->codigo_moneda ?? $cuenta->tipo_moneda,
                     'simbolo' => $cuenta->moneda?->simbolo_moneda ?? $cuenta->tipo_moneda,
+                    'tasa_cambio' => (float) ($cuenta->moneda?->tasa_cambio ?? 1),
                 ],
                 'tipo' => $cuenta->tipo,
             ];
@@ -597,15 +598,14 @@ class VentaController extends Controller
             'monto_diferencia_cambiaria' => $venta->monto_diferencia_cambiaria,
             'gestor' => $venta->es_venta_gestor && $venta->gestor_cuenta_id ? [
                 'monto' => (float) $venta->gestor_monto,
+                'monto_usd' => $venta->tasa_aplicada_gestor > 0
+                    ? round((float) $venta->gestor_monto / (float) $venta->tasa_aplicada_gestor, 2)
+                    : (float) $venta->gestor_monto,
                 'cuenta_id' => $venta->gestor_cuenta_id,
                 'comentario' => $venta->gestor_comentario,
                 'cuenta_nombre' => $venta->gestorCuenta?->nombre_cuenta,
                 'tasa_aplicada' => $venta->tasa_aplicada_venta ? (float) $venta->tasa_aplicada_venta : null,
                 'tasa_aplicada_gestor' => $venta->tasa_aplicada_gestor ? (float) $venta->tasa_aplicada_gestor : null,
-                'monto_usd' => (float) $venta->gestor_monto, // gestor_monto siempre se guarda en USD
-                'monto_cuenta' => $venta->gestor_monto && $venta->tasa_aplicada_gestor
-                    ? round($venta->gestor_monto * $venta->tasa_aplicada_gestor, 2)
-                    : null,
                 'moneda' => $venta->gestorCuenta?->moneda ? [
                     'codigo' => $venta->gestorCuenta->moneda->codigo_moneda,
                     'simbolo' => $venta->gestorCuenta->moneda->simbolo_moneda,
@@ -616,9 +616,18 @@ class VentaController extends Controller
             ] : null,
         ];
 
+        $monedasSistema = Moneda::orderBy('codigo_moneda')->get()->map(fn($m) => [
+            'id'     => $m->id,
+            'codigo' => $m->codigo_moneda,
+            'nombre' => $m->nombre_moneda,
+            'simbolo' => $m->simbolo_moneda,
+            'tasa'   => (float) $m->tasa_cambio,
+        ])->values()->toArray();
+
         return Inertia::render('Vendor/Show', [
-            'venta' => $ventaData,
-            'userRole' => Auth::user()->role ?? 'vendedor'
+            'venta'         => $ventaData,
+            'userRole'      => Auth::user()->role ?? 'vendedor',
+            'monedasSistema' => $monedasSistema,
         ]);
     }
 
@@ -1064,15 +1073,14 @@ class VentaController extends Controller
             ] : null,
             'gestor' => $venta->es_venta_gestor && $venta->gestor_cuenta_id ? [
                 'monto' => (float) $venta->gestor_monto,
+                'monto_usd' => $venta->tasa_aplicada_gestor > 0
+                    ? round((float) $venta->gestor_monto / (float) $venta->tasa_aplicada_gestor, 2)
+                    : (float) $venta->gestor_monto,
                 'cuenta_id' => $venta->gestor_cuenta_id,
                 'comentario' => $venta->gestor_comentario,
                 'cuenta_nombre' => $venta->gestorCuenta?->nombre_cuenta,
                 'tasa_aplicada' => $venta->tasa_aplicada_venta ? (float) $venta->tasa_aplicada_venta : null,
                 'tasa_aplicada_gestor' => $venta->tasa_aplicada_gestor ? (float) $venta->tasa_aplicada_gestor : null,
-                'monto_usd' => (float) $venta->gestor_monto,
-                'monto_cuenta' => $venta->gestor_monto && $venta->tasa_aplicada_gestor
-                    ? round($venta->gestor_monto * $venta->tasa_aplicada_gestor, 2)
-                    : null,
                 'moneda' => $venta->gestorCuenta?->moneda ? [
                     'codigo' => $venta->gestorCuenta->moneda->codigo_moneda,
                     'simbolo' => $venta->gestorCuenta->moneda->simbolo_moneda,

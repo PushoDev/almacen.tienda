@@ -107,6 +107,7 @@ interface Cuenta {
     moneda: {
         codigo: string;
         simbolo: string;
+        tasa_cambio?: number;
     };
     tipo: string;
     tipo_moneda: string;
@@ -193,7 +194,6 @@ interface Venta {
     gestor: {
         monto: number;
         monto_usd?: number;
-        monto_cuenta?: number;
         cuenta_id?: number;
         comentario?: string;
         cuenta_nombre?: string;
@@ -211,6 +211,7 @@ interface Venta {
 interface Props {
     venta: Venta;
     userRole: 'admin' | 'moderador' | 'vendedor';
+    monedasSistema: MonedaParaReporte[];
 }
 
 // ─────────────────────────────────────────────
@@ -229,7 +230,7 @@ const FORM_VACIO = {
 // ─────────────────────────────────────────────
 // Componente principal
 // ─────────────────────────────────────────────
-export default function ResultadoCarrito({ venta, userRole }: Props) {
+export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Props) {
     // ── Estado principal ──────────────────────
     const [currentVenta, setCurrentVenta] = useState<Venta>(venta);
 
@@ -314,10 +315,10 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                     setCuentaGestorSeleccionada(encontrada ?? null);
                 }
             } else {
-                // Gestor nuevo: pre-rellenar tasa y monto, sin pre-filtrar cuentas
+                // Gestor nuevo: pre-rellenar tasa y calcular monto en moneda local
                 const tasaDefault = currentVenta.tasa_aplicada_venta ?? currentVenta.tasa_cambio_principal;
                 setTasaAplicadaGestor(String(tasaDefault));
-                setGestorMonto(String(currentVenta.total_comision));
+                setGestorMonto((currentVenta.total_comision * tasaDefault).toFixed(2));
             }
             // Nota: activeTab y esVentaGestor son seteados por el botón que abre el modal,
             // así que no los sobreescribimos aquí para respetar la intención del usuario.
@@ -842,12 +843,12 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
 
                                         {esVentaGestor && (
                                             <div className="space-y-4 rounded-lg border p-4">
-                                                {/* Badges de monedas usadas en la venta */}
-                                                {currentVenta.monedas_para_reporte.length > 0 && (
+                                                {/* Badges de todas las monedas del sistema */}
+                                                {monedasSistema.length > 0 && (
                                                     <div className="space-y-2">
                                                         <Label>Moneda del Gestor</Label>
                                                         <div className="flex flex-wrap gap-2">
-                                                            {currentVenta.monedas_para_reporte.map((m) => (
+                                                            {monedasSistema.map((m) => (
                                                                 <button
                                                                     key={m.id}
                                                                     type="button"
@@ -856,6 +857,8 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                                                         setTasaAplicadaGestor(String(m.tasa));
                                                                         setGestorCuentaId('');
                                                                         setCuentaGestorSeleccionada(null);
+                                                                        const montoCalculado = currentVenta.total_comision * m.tasa;
+                                                                        setGestorMonto(montoCalculado.toFixed(2));
                                                                     }}
                                                                     className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
                                                                         monedaGestorSeleccionada?.id === m.id
@@ -909,7 +912,9 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                                     <div className="space-y-2">
                                                         <Label>Monto de Comisión</Label>
                                                         <div className="flex items-center gap-2">
-                                                            <span className="text-muted-foreground shrink-0 text-sm font-medium">USD</span>
+                                                            <span className="text-muted-foreground shrink-0 text-sm font-medium">
+                                                                {cuentaGestorSeleccionada?.moneda?.codigo || monedaGestorSeleccionada?.codigo || 'USD'}
+                                                            </span>
                                                             <Input
                                                                 type="number"
                                                                 step="0.01"
@@ -930,8 +935,11 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                                         <div className="flex-1">
                                                             <p className="text-xs text-green-700 dark:text-green-400">Se descontará de la cuenta</p>
                                                             <p className="text-lg font-bold text-green-700 dark:text-green-300">
-                                                                {(parseFloat(gestorMonto) * parseFloat(tasaAplicadaGestor)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                                                                {parseFloat(gestorMonto).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
                                                                 {cuentaGestorSeleccionada?.moneda?.codigo || monedaGestorSeleccionada?.codigo || ''}
+                                                            </p>
+                                                            <p className="text-xs text-green-600 dark:text-green-400">
+                                                                ≈ {(parseFloat(gestorMonto) / parseFloat(tasaAplicadaGestor)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
                                                             </p>
                                                         </div>
                                                     </div>
@@ -1348,26 +1356,26 @@ export default function ResultadoCarrito({ venta, userRole }: Props) {
                                     )}
                                 </div>
                                 <div className="space-y-3">
-                                    {/* Comisión siempre en USD */}
+                                    {/* Monto descontado en moneda local */}
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2">
-                                            <DollarSign className="h-4 w-4 text-blue-600" />
-                                            <span className="text-muted-foreground text-xs font-medium">Comisión (USD):</span>
+                                            <TrendingUp className="h-4 w-4 text-green-600" />
+                                            <span className="text-muted-foreground text-xs font-medium">Descontado:</span>
                                         </div>
-                                        <Badge variant="secondary" className="font-bold">
-                                            {Number(currentVenta.gestor.monto).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
+                                        <Badge variant="outline" className="font-bold text-green-600">
+                                            {Number(currentVenta.gestor.monto).toLocaleString('es-ES', { minimumFractionDigits: 2 })}{' '}
+                                            {currentVenta.gestor.moneda?.codigo || ''}
                                         </Badge>
                                     </div>
-                                    {/* Deducción de la cuenta en moneda local */}
-                                    {currentVenta.gestor.monto_cuenta && (
+                                    {/* Equivalente en USD para control */}
+                                    {currentVenta.gestor.monto_usd !== undefined && (
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-2">
-                                                <TrendingUp className="h-4 w-4 text-green-600" />
-                                                <span className="text-muted-foreground text-xs font-medium">A descontar:</span>
+                                                <DollarSign className="h-4 w-4 text-blue-600" />
+                                                <span className="text-muted-foreground text-xs font-medium">Equivalente USD:</span>
                                             </div>
-                                            <Badge variant="outline" className="font-bold text-green-600">
-                                                {Number(currentVenta.gestor.monto_cuenta).toLocaleString('es-ES', { minimumFractionDigits: 2 })}{' '}
-                                                {currentVenta.gestor.moneda?.codigo || ''}
+                                            <Badge variant="secondary" className="font-bold">
+                                                {Number(currentVenta.gestor.monto_usd).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
                                             </Badge>
                                         </div>
                                     )}
