@@ -476,7 +476,7 @@ class VentaController extends Controller
             'usuario',
             'moneda',
             'monedaCobro',
-            'gestorCuenta',
+            'gestorCuenta.moneda',
         ])->findOrFail($id);
 
         $ventaData = [
@@ -602,8 +602,9 @@ class VentaController extends Controller
                 'cuenta_nombre' => $venta->gestorCuenta?->nombre_cuenta,
                 'tasa_aplicada' => $venta->tasa_aplicada_venta ? (float) $venta->tasa_aplicada_venta : null,
                 'tasa_aplicada_gestor' => $venta->tasa_aplicada_gestor ? (float) $venta->tasa_aplicada_gestor : null,
-                'monto_usd' => $venta->gestor_monto && $venta->tasa_aplicada_gestor 
-                    ? round($venta->gestor_monto / $venta->tasa_aplicada_gestor, 2) 
+                'monto_usd' => (float) $venta->gestor_monto, // gestor_monto siempre se guarda en USD
+                'monto_cuenta' => $venta->gestor_monto && $venta->tasa_aplicada_gestor
+                    ? round($venta->gestor_monto * $venta->tasa_aplicada_gestor, 2)
                     : null,
                 'moneda' => $venta->gestorCuenta?->moneda ? [
                     'codigo' => $venta->gestorCuenta->moneda->codigo_moneda,
@@ -1068,8 +1069,9 @@ class VentaController extends Controller
                 'cuenta_nombre' => $venta->gestorCuenta?->nombre_cuenta,
                 'tasa_aplicada' => $venta->tasa_aplicada_venta ? (float) $venta->tasa_aplicada_venta : null,
                 'tasa_aplicada_gestor' => $venta->tasa_aplicada_gestor ? (float) $venta->tasa_aplicada_gestor : null,
-                'monto_usd' => $venta->gestor_monto && $venta->tasa_aplicada_gestor 
-                    ? round($venta->gestor_monto / $venta->tasa_aplicada_gestor, 2) 
+                'monto_usd' => (float) $venta->gestor_monto,
+                'monto_cuenta' => $venta->gestor_monto && $venta->tasa_aplicada_gestor
+                    ? round($venta->gestor_monto * $venta->tasa_aplicada_gestor, 2)
                     : null,
                 'moneda' => $venta->gestorCuenta?->moneda ? [
                     'codigo' => $venta->gestorCuenta->moneda->codigo_moneda,
