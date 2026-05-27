@@ -139,15 +139,15 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
         const clientesFisicos = clientes.filter((c) => c.tipo_cliente === 'fisico').length;
         const clientesAsociados = clientes.filter((c) => c.tipo_cliente === 'asociado').length;
 
-        const fondoTotal = clientes.reduce(
-            (sum, cliente) => sum + (cliente.deuda_pago_cliente && cliente.deuda_pago_cliente > 0 ? cliente.deuda_pago_cliente : 0),
-            0,
-        );
+        const fondoTotal = clientes.reduce((sum, cliente) => {
+            const saldo = Number(cliente.deuda_pago_cliente);
+            return sum + (saldo > 0 ? saldo : 0);
+        }, 0);
 
-        const deudaTotal = clientes.reduce(
-            (sum, cliente) => sum + (cliente.deuda_pago_cliente && cliente.deuda_pago_cliente < 0 ? Math.abs(cliente.deuda_pago_cliente) : 0),
-            0,
-        );
+        const deudaTotal = clientes.reduce((sum, cliente) => {
+            const saldo = Number(cliente.deuda_pago_cliente);
+            return sum + (saldo < 0 ? Math.abs(saldo) : 0);
+        }, 0);
 
         return {
             totalClientes,
