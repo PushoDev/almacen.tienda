@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\PagoVenta;
 
 class Cliente extends Model
 {
@@ -72,6 +73,12 @@ class Cliente extends Model
     {
         return $this->hasMany(MovimientoFinanciero::class, 'cliente_destino_id')
             ->orderBy('fecha_operacion', 'desc');
+    }
+
+    // Relación con pagos de ventas donde el cliente es destino del pago
+    public function pagosVenta()
+    {
+        return $this->hasMany(PagoVenta::class, 'cliente_id');
     }
 
     // Relación combinada para todos los movimientos del cliente
