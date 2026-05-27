@@ -82,7 +82,8 @@ class ClienteController extends Controller
                 'pagos.moneda',
                 'almacen',
                 'usuario',
-                'moneda'
+                'moneda',
+                'gestorCuenta'
             ])->orderBy('created_at', 'desc');
         }]);
 
@@ -106,6 +107,17 @@ class ClienteController extends Controller
                 ])->orderBy('created_at', 'desc');
             }
         ]);
+
+        // ✅ CARGAR LOS PAGOS DE VENTAS RECIBIDOS POR EL CLIENTE
+        $cliente->load(['pagosVenta' => function ($query) {
+            $query->with([
+                'venta.almacen',
+                'venta.usuario',
+                'venta.cliente',
+                'venta.moneda',
+                'moneda'
+            ])->orderBy('created_at', 'desc');
+        }]);
 
         return Inertia::render('Clientes/Show', [
             'cliente' => $cliente,

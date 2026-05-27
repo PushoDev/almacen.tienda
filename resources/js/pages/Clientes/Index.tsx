@@ -8,7 +8,6 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/Components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -41,6 +40,7 @@ import {
     FileText,
     HandHeart,
     Home,
+    Lock,
     MapPin,
     Minus,
     Phone,
@@ -71,15 +71,51 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
     const { props } = usePage<PageProps>();
     const isAdmin = props.auth?.user?.role === 'admin';
 
+    // ── Estado para dialogs controlados ─────────────────────────────────────
+    const [accessDeniedOpen, setAccessDeniedOpen] = useState(false);
+    const [cantDeleteBalanceOpen, setCantDeleteBalanceOpen] = useState(false);
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const [clienteSeleccionado, setClienteSeleccionado] = useState<ClienteProps | null>(null);
+
     const deleteCliente = (id: number) => {
         router.delete(route('clientes.destroy', { cliente: id }), {
             onSuccess: () => {
                 toast.success('Cliente eliminado correctamente');
+                setDeleteConfirmOpen(false);
+                setClienteSeleccionado(null);
             },
             onError: () => {
                 toast.error('Error al eliminar el cliente');
             },
         });
+    };
+
+    const handleDeleteClick = (cliente: ClienteProps) => {
+        if (!isAdmin) {
+            setAccessDeniedOpen(true);
+            return;
+        }
+        setClienteSeleccionado(cliente);
+        const saldo = Number(cliente.deuda_pago_cliente);
+        if (cliente.deuda_pago_cliente !== null && cliente.deuda_pago_cliente !== undefined && saldo !== 0) {
+            setCantDeleteBalanceOpen(true);
+            return;
+        }
+        setDeleteConfirmOpen(true);
+    };
+
+    const handleEditClick = (e: React.MouseEvent) => {
+        if (!isAdmin) {
+            e.preventDefault();
+            setAccessDeniedOpen(true);
+        }
+    };
+
+    const handleViewClick = (e: React.MouseEvent) => {
+        if (!isAdmin) {
+            e.preventDefault();
+            setAccessDeniedOpen(true);
+        }
     };
 
     const formatearMoneda = (valor: number | null) => {
@@ -98,35 +134,30 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
     const [paginaActual, setPaginaActual] = useState(1);
     const elementosPorPagina = 10;
 
-    // Calcular métricas para los widgets (ACTUALIZADO con nueva lógica)
     const metricas = useMemo(() => {
         const totalClientes = clientes.length;
         const clientesFisicos = clientes.filter((c) => c.tipo_cliente === 'fisico').length;
         const clientesAsociados = clientes.filter((c) => c.tipo_cliente === 'asociado').length;
 
-        // NUEVA LÓGICA (igual que Proveedores):
-        // > 0 = Fondo disponible (tienes fondo con cliente)
-        // < 0 = Deuda pendiente (le debes al cliente)
-        const fondoTotal = clientes.reduce(
-            (sum, cliente) => sum + (cliente.deuda_pago_cliente && cliente.deuda_pago_cliente > 0 ? cliente.deuda_pago_cliente : 0),
-            0,
-        );
+        const fondoTotal = clientes.reduce((sum, cliente) => {
+            const saldo = Number(cliente.deuda_pago_cliente);
+            return sum + (saldo > 0 ? saldo : 0);
+        }, 0);
 
-        const deudaTotal = clientes.reduce(
-            (sum, cliente) => sum + (cliente.deuda_pago_cliente && cliente.deuda_pago_cliente < 0 ? Math.abs(cliente.deuda_pago_cliente) : 0),
-            0,
-        );
+        const deudaTotal = clientes.reduce((sum, cliente) => {
+            const saldo = Number(cliente.deuda_pago_cliente);
+            return sum + (saldo < 0 ? Math.abs(saldo) : 0);
+        }, 0);
 
         return {
             totalClientes,
             clientesFisicos,
             clientesAsociados,
-            fondoTotal, // Fondos disponibles con clientes
-            deudaTotal, // Deudas que tenemos con clientes
+            fondoTotal,
+            deudaTotal,
         };
     }, [clientes]);
 
-    // Filtrar clientes
     const clientesFiltrados = useMemo(() => {
         return clientes.filter((cliente) => {
             const coincideTipo = !filtroTipo || cliente.tipo_cliente === filtroTipo;
@@ -140,19 +171,15 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
         });
     }, [clientes, filtroTipo, busqueda]);
 
-    // Paginación
     const indiceUltimoElemento = paginaActual * elementosPorPagina;
     const indicePrimerElemento = indiceUltimoElemento - elementosPorPagina;
     const clientesAmostrar = clientesFiltrados.slice(indicePrimerElemento, indiceUltimoElemento);
     const totalPaginas = Math.ceil(clientesFiltrados.length / elementosPorPagina);
 
-    // Función para determinar el estado financiero (ACTUALIZADA con nueva lógica)
     const getEstadoFinanciero = (saldo: number | null) => {
         if (saldo === null || saldo === undefined) {
             return { tipo: 'sin-info', color: 'gray', icon: Minus, texto: 'Sin información' };
         }
-
-        // NUEVA LÓGICA (igual que Proveedores):
         if (saldo > 0) {
             return {
                 tipo: 'fondo',
@@ -180,6 +207,10 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
         }
     };
 
+    // Determinar el estado del cliente seleccionado para mostrar en dialogs
+    const saldoSeleccionado = clienteSeleccionado ? Number(clienteSeleccionado.deuda_pago_cliente) : 0;
+    const estadoSeleccionado = clienteSeleccionado ? getEstadoFinanciero(clienteSeleccionado.deuda_pago_cliente ?? null) : null;
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Clientes" />
@@ -198,7 +229,7 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                         />
                     </div>
 
-                    {/* Widgets de Métricas (ACTUALIZADOS con nueva lógica) */}
+                    {/* Widgets de Métricas */}
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                         <Card className="relative overflow-hidden">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -269,7 +300,6 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                     <Card>
                         <CardContent className="p-4">
                             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                                {/* Búsqueda y Filtros */}
                                 <div className="flex flex-1 flex-col gap-4 sm:flex-row">
                                     <div className="relative flex-1">
                                         <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform" />
@@ -305,7 +335,6 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                     </Tooltip>
                                 </div>
 
-                                {/* Botones de Acción */}
                                 <div className="flex gap-2">
                                     <Tooltip>
                                         <TooltipTrigger asChild>
@@ -375,11 +404,15 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                     </TableHeader>
                                     <TableBody>
                                         {clientesAmostrar.map((cliente) => {
-                                            const estado = getEstadoFinanciero(cliente.deuda_pago_cliente);
+                                            const estado = getEstadoFinanciero(cliente.deuda_pago_cliente ?? null);
                                             const IconComponent = estado.icon;
+                                            const tieneBalance =
+                                                cliente.deuda_pago_cliente !== null &&
+                                                cliente.deuda_pago_cliente !== undefined &&
+                                                Number(cliente.deuda_pago_cliente) !== 0;
 
                                             return (
-                                                <TableRow key={cliente.id} className="group hover:bg-muted/50">
+                                                <TableRow key={cliente.id} className="hover:bg-muted/50">
                                                     {/* Información del Cliente */}
                                                     <TableCell className="min-w-[200px]">
                                                         <div className="flex items-center gap-3">
@@ -407,7 +440,7 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                                         </Badge>
                                                     </TableCell>
 
-                                                    {/* Estado Financiero (ACTUALIZADO con nueva lógica) */}
+                                                    {/* Estado Financiero */}
                                                     <TableCell>
                                                         <Tooltip>
                                                             <TooltipTrigger asChild>
@@ -493,12 +526,16 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                                         </div>
                                                     </TableCell>
 
-                                                    {/* Acciones */}
+                                                    {/* Acciones — siempre visibles */}
                                                     <TableCell className="text-right">
-                                                        <div className="flex justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                                                        <div className="flex justify-end gap-1">
+                                                            {/* Ver detalles */}
                                                             <Tooltip>
                                                                 <TooltipTrigger asChild>
-                                                                    <Link href={route('clientes.show', { cliente: cliente.id })}>
+                                                                    <Link
+                                                                        href={route('clientes.show', { cliente: cliente.id })}
+                                                                        onClick={handleViewClick}
+                                                                    >
                                                                         <Button variant="ghost" size="sm" className="h-8 w-8 cursor-pointer p-0">
                                                                             <Eye size={14} />
                                                                         </Button>
@@ -509,9 +546,13 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                                                 </TooltipContent>
                                                             </Tooltip>
 
+                                                            {/* Editar */}
                                                             <Tooltip>
                                                                 <TooltipTrigger asChild>
-                                                                    <Link href={route('clientes.edit', { cliente: cliente.id })}>
+                                                                    <Link
+                                                                        href={route('clientes.edit', { cliente: cliente.id })}
+                                                                        onClick={handleEditClick}
+                                                                    >
                                                                         <Button variant="ghost" size="sm" className="h-8 w-8 cursor-pointer p-0">
                                                                             <Edit3 size={14} />
                                                                         </Button>
@@ -522,47 +563,34 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                                                 </TooltipContent>
                                                             </Tooltip>
 
+                                                            {/* Eliminar */}
                                                             <Tooltip>
                                                                 <TooltipTrigger asChild>
-                                                                    <AlertDialog>
-                                                                        <AlertDialogTrigger asChild>
-                                                                            <Button
-                                                                                variant="ghost"
-                                                                                size="sm"
-                                                                                className="h-8 w-8 cursor-pointer p-0 text-red-600 hover:text-red-700"
-                                                                                onClick={(e) => {
-                                                                                    if (!isAdmin) {
-                                                                                        e.preventDefault();
-                                                                                        toast.error('ud no tiene acceso para esta acción');
-                                                                                    }
-                                                                                }}
-                                                                            >
-                                                                                <Trash2 size={14} />
-                                                                            </Button>
-                                                                        </AlertDialogTrigger>
-                                                                        <AlertDialogContent>
-                                                                            <AlertDialogHeader>
-                                                                                <AlertDialogTitle>Confirmar Eliminación</AlertDialogTitle>
-                                                                                <AlertDialogDescription>
-                                                                                    ¿Estás seguro de eliminar al cliente "{cliente.nombre_cliente}"?
-                                                                                    Esta acción no se puede deshacer y se perderán todos los datos
-                                                                                    asociados.
-                                                                                </AlertDialogDescription>
-                                                                            </AlertDialogHeader>
-                                                                            <AlertDialogFooter>
-                                                                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                                                <AlertDialogAction
-                                                                                    onClick={() => deleteCliente(cliente.id)}
-                                                                                    className="bg-red-600 hover:bg-red-700"
-                                                                                >
-                                                                                    Eliminar
-                                                                                </AlertDialogAction>
-                                                                            </AlertDialogFooter>
-                                                                        </AlertDialogContent>
-                                                                    </AlertDialog>
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        className={`h-8 w-8 cursor-pointer p-0 ${
+                                                                            isAdmin && !tieneBalance
+                                                                                ? 'text-red-600 hover:text-red-700'
+                                                                                : 'text-muted-foreground'
+                                                                        }`}
+                                                                        onClick={() => handleDeleteClick(cliente)}
+                                                                    >
+                                                                        {isAdmin && tieneBalance ? (
+                                                                            <Lock size={14} />
+                                                                        ) : (
+                                                                            <Trash2 size={14} />
+                                                                        )}
+                                                                    </Button>
                                                                 </TooltipTrigger>
                                                                 <TooltipContent>
-                                                                    <p>Eliminar cliente</p>
+                                                                    {!isAdmin ? (
+                                                                        <p>Sin acceso — solo administradores</p>
+                                                                    ) : tieneBalance ? (
+                                                                        <p>No eliminable — cliente tiene saldo pendiente</p>
+                                                                    ) : (
+                                                                        <p>Eliminar cliente</p>
+                                                                    )}
                                                                 </TooltipContent>
                                                             </Tooltip>
                                                         </div>
@@ -618,6 +646,109 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                         </CardContent>
                     </Card>
                 </div>
+
+                {/* ── Dialog: Sin acceso ─────────────────────────────────────── */}
+                <AlertDialog open={accessDeniedOpen} onOpenChange={setAccessDeniedOpen}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2">
+                                <Lock size={18} className="text-orange-500" />
+                                Acceso restringido
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                                No tienes permisos para realizar esta operación. Solo los administradores pueden editar o eliminar clientes.
+                                Si necesitas realizar un cambio, comunícate con el administrador del sistema.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogAction onClick={() => setAccessDeniedOpen(false)}>
+                                Entendido
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+
+                {/* ── Dialog: No se puede eliminar — tiene saldo ────────────── */}
+                <AlertDialog open={cantDeleteBalanceOpen} onOpenChange={setCantDeleteBalanceOpen}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2">
+                                <AlertCircle size={18} className={estadoSeleccionado?.color === 'red' ? 'text-red-500' : 'text-green-500'} />
+                                No se puede eliminar este cliente
+                            </AlertDialogTitle>
+                            <AlertDialogDescription asChild>
+                                <div className="space-y-3">
+                                    <p>
+                                        El cliente <strong>{clienteSeleccionado?.nombre_cliente}</strong> no puede ser eliminado porque tiene un saldo
+                                        pendiente en el sistema.
+                                    </p>
+                                    {clienteSeleccionado && (
+                                        <div
+                                            className={`rounded-lg border p-3 ${
+                                                estadoSeleccionado?.color === 'red'
+                                                    ? 'border-red-200 bg-red-50'
+                                                    : 'border-green-200 bg-green-50'
+                                            }`}
+                                        >
+                                            <div className="flex items-center justify-between text-sm">
+                                                <span className="font-medium">Estado actual:</span>
+                                                <span
+                                                    className={`font-bold ${
+                                                        estadoSeleccionado?.color === 'red' ? 'text-red-700' : 'text-green-700'
+                                                    }`}
+                                                >
+                                                    {estadoSeleccionado?.texto}
+                                                </span>
+                                            </div>
+                                            <div className="mt-1 flex items-center justify-between text-sm">
+                                                <span className="font-medium">Monto:</span>
+                                                <span
+                                                    className={`font-bold ${
+                                                        estadoSeleccionado?.color === 'red' ? 'text-red-700' : 'text-green-700'
+                                                    }`}
+                                                >
+                                                    {formatearMoneda(Math.abs(saldoSeleccionado))}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
+                                    <p className="text-xs">
+                                        Para eliminar este cliente, primero debe liquidar el saldo pendiente llevándolo a $0.00.
+                                    </p>
+                                </div>
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogAction onClick={() => setCantDeleteBalanceOpen(false)}>
+                                Entendido
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+
+                {/* ── Dialog: Confirmar eliminación ─────────────────────────── */}
+                <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Confirmar Eliminación</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                ¿Estás seguro de eliminar al cliente{' '}
+                                <strong>"{clienteSeleccionado?.nombre_cliente}"</strong>? Esta acción no se puede deshacer y se perderán todos los
+                                datos asociados.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel onClick={() => setClienteSeleccionado(null)}>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={() => clienteSeleccionado && deleteCliente(clienteSeleccionado.id)}
+                                className="bg-red-600 hover:bg-red-700"
+                            >
+                                Eliminar
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+
             </TooltipProvider>
             <Toaster position="top-center" />
             <ScrollProgress />

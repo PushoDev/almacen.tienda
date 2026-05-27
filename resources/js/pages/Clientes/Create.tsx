@@ -9,8 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head, useForm } from '@inertiajs/react';
-import { AlertCircle, ArrowLeft, CheckCircle, DollarSign, Home, Info, MapPin, Phone, Save, User, UserCheck, UserCog } from 'lucide-react';
+import { Head, Link, useForm } from '@inertiajs/react';
+import { AlertCircle, ArrowLeft, CheckCircle, DollarSign, HandHeart, Home, Info, MapPin, Phone, Save, User, UserCheck, UserCog } from 'lucide-react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -58,11 +58,33 @@ export default function CreateClientePage() {
             <TooltipProvider>
                 <div className="flex h-full flex-1 flex-col gap-6 rounded-xl p-4">
                     {/* Header */}
-                    <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-6">
+                    <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-6">
                         <HeadingSmall
                             title="Nuevo Cliente"
                             description="Complete todos los datos requeridos para agregar un nuevo cliente al sistema"
                         />
+                        <HandHeart
+                            size={70}
+                            color="#d6d3d1"
+                            className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 transform opacity-40"
+                        />
+                    </div>
+
+                    {/* Navegación */}
+                    <div className="flex items-center gap-2">
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Link href={route('clientes.index')}>
+                                    <Button variant="outline" className="flex items-center gap-2">
+                                        <ArrowLeft size={16} />
+                                        Volver
+                                    </Button>
+                                </Link>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>Volver al listado de clientes</p>
+                            </TooltipContent>
+                        </Tooltip>
                     </div>
 
                     {/* Formulario de Creación */}

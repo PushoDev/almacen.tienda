@@ -9,13 +9,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { ClienteProps, type BreadcrumbItem } from '@/types';
-import { Head, useForm } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 import {
     AlertCircle,
     ArrowLeft,
     Calendar,
     CheckCircle,
     DollarSign,
+    Eye,
+    HandHeart,
     History,
     Home,
     Info,
@@ -125,15 +127,46 @@ export default function EditClientePage({ cliente }: EditClientePageProps) {
             <TooltipProvider>
                 <div className="flex h-full flex-1 flex-col gap-6 rounded-xl p-4">
                     {/* Header */}
-                    <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-6">
+                    <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-6">
                         <HeadingSmall
                             title={`Editar Cliente: ${cliente.nombre_cliente}`}
                             description="Actualice la información del cliente según sea necesario"
                         />
-                        <div className="absolute top-1/2 right-4 flex -translate-y-1/2 transform items-center gap-2 opacity-40">
-                            <User size={24} />
-                            <span className="text-sm">ID: {cliente.id}</span>
-                        </div>
+                        <HandHeart
+                            size={70}
+                            color="#d6d3d1"
+                            className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 transform opacity-40"
+                        />
+                    </div>
+
+                    {/* Navegación */}
+                    <div className="flex items-center gap-2">
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Link href={route('clientes.show', { cliente: cliente.id })}>
+                                    <Button variant="outline" className="flex items-center gap-2">
+                                        <Eye size={16} />
+                                        Ver Detalles
+                                    </Button>
+                                </Link>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>Ver detalles del cliente</p>
+                            </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Link href={route('clientes.index')}>
+                                    <Button variant="outline" className="flex items-center gap-2">
+                                        <ArrowLeft size={16} />
+                                        Volver
+                                    </Button>
+                                </Link>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>Volver al listado de clientes</p>
+                            </TooltipContent>
+                        </Tooltip>
                     </div>
 
                     {/* Información Actual del Cliente */}

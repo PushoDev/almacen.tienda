@@ -197,6 +197,7 @@ interface Venta {
         cuenta_id?: number;
         comentario?: string;
         cuenta_nombre?: string;
+        saldo_disponible?: number;
         tasa_aplicada?: number;
         tasa_aplicada_gestor?: number;
         moneda?: {
@@ -387,7 +388,14 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     const isVentaPendiente = currentVenta.estado === 'pendiente';
     const isVentaCompletada = currentVenta.estado === 'completada';
     const isVentaCancelada = currentVenta.estado === 'cancelada';
-    const puedeAprobar = isVentaPendiente && currentVenta.destinatario !== null;
+
+    // Verifica si la cuenta del gestor tiene saldo insuficiente para cubrir la comisión
+    const gestorSinSaldo =
+        currentVenta.gestor !== null &&
+        currentVenta.gestor.saldo_disponible !== undefined &&
+        currentVenta.gestor.saldo_disponible < currentVenta.gestor.monto;
+
+    const puedeAprobar = isVentaPendiente && currentVenta.destinatario !== null && !gestorSinSaldo;
 
     const monedaPrincipal = currentVenta.moneda_principal;
     const simboloMonedaPrincipal = getCurrencySymbol(monedaPrincipal);
@@ -906,6 +914,10 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                                 ).map((cuenta) => (
                                                                     <SelectItem key={cuenta.id} value={String(cuenta.id)}>
                                                                         {cuenta.nombre_cuenta} ({cuenta.moneda?.codigo || cuenta.tipo_moneda})
+                                                                        {' · '}
+                                                                        <span className={cuenta.saldo_actual <= 0 ? 'text-red-500' : 'text-green-600'}>
+                                                                            Saldo: {cuenta.saldo_actual.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                                        </span>
                                                                     </SelectItem>
                                                                 ))}
                                                             </SelectContent>
@@ -928,24 +940,45 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                     </div>
                                                 </div>
 
-                                                {/* Gadget: monto a descontar de la cuenta */}
-                                                {parseFloat(gestorMonto) > 0 && parseFloat(tasaAplicadaGestor) > 0 && (
-                                                    <div className="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3 dark:border-green-800 dark:bg-green-950">
-                                                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-100 dark:bg-green-900">
-                                                            <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                                {/* Gadget: monto a descontar de la cuenta + saldo disponible */}
+                                                {parseFloat(gestorMonto) > 0 && parseFloat(tasaAplicadaGestor) > 0 && (() => {
+                                                    const montoGestor = parseFloat(gestorMonto);
+                                                    const saldoDisponible = cuentaGestorSeleccionada?.saldo_actual ?? 0;
+                                                    const alcanza = saldoDisponible >= montoGestor;
+                                                    const codigoMoneda = cuentaGestorSeleccionada?.moneda?.codigo || monedaGestorSeleccionada?.codigo || '';
+                                                    return (
+                                                        <div className="space-y-2">
+                                                            {/* Saldo disponible */}
+                                                            {cuentaGestorSeleccionada && (
+                                                                <div className={`flex items-center justify-between rounded-lg border px-4 py-2 ${alcanza ? 'border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950' : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950'}`}>
+                                                                    <span className={`text-xs font-medium ${alcanza ? 'text-blue-700 dark:text-blue-300' : 'text-red-700 dark:text-red-300'}`}>
+                                                                        Saldo disponible en cuenta:
+                                                                    </span>
+                                                                    <span className={`text-sm font-bold ${alcanza ? 'text-blue-700 dark:text-blue-300' : 'text-red-700 dark:text-red-300'}`}>
+                                                                        {saldoDisponible.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {codigoMoneda}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                            {/* Monto a descontar */}
+                                                            <div className={`flex items-center gap-3 rounded-lg border px-4 py-3 ${alcanza ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950' : 'border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950'}`}>
+                                                                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${alcanza ? 'bg-green-100 dark:bg-green-900' : 'bg-red-100 dark:bg-red-900'}`}>
+                                                                    <DollarSign className={`h-4 w-4 ${alcanza ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} />
+                                                                </div>
+                                                                <div className="flex-1">
+                                                                    <p className={`text-xs ${alcanza ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
+                                                                        {alcanza ? 'Se descontará de la cuenta' : '⚠️ Saldo insuficiente para cubrir la comisión'}
+                                                                    </p>
+                                                                    <p className={`text-lg font-bold ${alcanza ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
+                                                                        {montoGestor.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {codigoMoneda}
+                                                                    </p>
+                                                                    <p className={`text-xs ${alcanza ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                                                        ≈ {(montoGestor / parseFloat(tasaAplicadaGestor)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                                                                    </p>
+                                                                </div>
+                                                            </div>
                                                         </div>
-                                                        <div className="flex-1">
-                                                            <p className="text-xs text-green-700 dark:text-green-400">Se descontará de la cuenta</p>
-                                                            <p className="text-lg font-bold text-green-700 dark:text-green-300">
-                                                                {parseFloat(gestorMonto).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
-                                                                {cuentaGestorSeleccionada?.moneda?.codigo || monedaGestorSeleccionada?.codigo || ''}
-                                                            </p>
-                                                            <p className="text-xs text-green-600 dark:text-green-400">
-                                                                ≈ {(parseFloat(gestorMonto) / parseFloat(tasaAplicadaGestor)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                )}
+                                                    );
+                                                })()}
                                                 <div className="space-y-2">
                                                     <Label>Comentario</Label>
                                                     <Textarea
@@ -1157,26 +1190,74 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                             <AlertDialogTrigger asChild>
                                 <Button
                                     variant="default"
-                                    className="flex cursor-pointer items-center gap-2 bg-green-600 text-white hover:bg-green-700"
+                                    className="flex cursor-pointer items-center gap-2 bg-green-600 text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
                                     disabled={isApproving || !puedeAprobar}
                                 >
                                     <CheckCircle size={16} />
-                                    {isApproving ? 'Aprobando...' : puedeAprobar ? 'Aprobar Venta' : 'Falta Receptor'}
+                                    {isApproving
+                                        ? 'Aprobando...'
+                                        : !currentVenta.destinatario
+                                          ? 'Falta Receptor'
+                                          : gestorSinSaldo
+                                            ? 'Sin Fondos Gestor'
+                                            : 'Aprobar Venta'}
                                 </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                                 <AlertDialogHeader>
                                     <AlertDialogTitle className="text-green-600">Confirmar Aprobación</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        ¿Está seguro que desea aprobar la Venta <strong>#{currentVenta.id}</strong>?<br />
-                                        <span className="font-semibold text-green-500">
-                                            Esta acción:
-                                            <br />
-                                            • Acreditará saldos en cuentas bancarias
-                                            <br />
-                                            • Registrará deudas de clientes destino
-                                            <br />• Cambiará el estado a "Completada"
-                                        </span>
+                                    <AlertDialogDescription asChild>
+                                        <div className="space-y-3">
+                                            <p>
+                                                ¿Está seguro que desea aprobar la Venta <strong>#{currentVenta.id}</strong>?
+                                            </p>
+                                            <div className="rounded-md bg-green-50 p-3 text-sm font-semibold text-green-600 dark:bg-green-950 dark:text-green-400">
+                                                Esta acción:
+                                                <ul className="mt-1 list-inside list-disc space-y-1 font-normal">
+                                                    <li>Acreditará saldos en cuentas bancarias</li>
+                                                    <li>Registrará deudas de clientes destino</li>
+                                                    <li>Cambiará el estado a "Completada"</li>
+                                                    {currentVenta.gestor && (
+                                                        <li>
+                                                            Descontará{' '}
+                                                            <strong>
+                                                                {currentVenta.gestor.monto.toLocaleString('es-ES', { minimumFractionDigits: 2 })}{' '}
+                                                                {currentVenta.gestor.moneda?.codigo || ''}
+                                                            </strong>{' '}
+                                                            de la cuenta <strong>{currentVenta.gestor.cuenta_nombre}</strong>
+                                                        </li>
+                                                    )}
+                                                </ul>
+                                            </div>
+                                            {/* Alerta de saldo del gestor */}
+                                            {currentVenta.gestor && currentVenta.gestor.saldo_disponible !== undefined && (
+                                                <div className={`rounded-md border p-3 text-sm ${currentVenta.gestor.saldo_disponible >= currentVenta.gestor.monto ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300' : 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300'}`}>
+                                                    {currentVenta.gestor.saldo_disponible >= currentVenta.gestor.monto ? (
+                                                        <span>
+                                                            ✅ Cuenta del gestor con saldo suficiente:{' '}
+                                                            <strong>
+                                                                {currentVenta.gestor.saldo_disponible.toLocaleString('es-ES', { minimumFractionDigits: 2 })}{' '}
+                                                                {currentVenta.gestor.moneda?.codigo || ''}
+                                                            </strong>
+                                                        </span>
+                                                    ) : (
+                                                        <span>
+                                                            ❌ Saldo insuficiente en cuenta del gestor.{' '}
+                                                            Disponible:{' '}
+                                                            <strong>
+                                                                {currentVenta.gestor.saldo_disponible.toLocaleString('es-ES', { minimumFractionDigits: 2 })}{' '}
+                                                                {currentVenta.gestor.moneda?.codigo || ''}
+                                                            </strong>{' '}
+                                                            — Necesario:{' '}
+                                                            <strong>
+                                                                {currentVenta.gestor.monto.toLocaleString('es-ES', { minimumFractionDigits: 2 })}{' '}
+                                                                {currentVenta.gestor.moneda?.codigo || ''}
+                                                            </strong>
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
                                     </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
@@ -1387,6 +1468,23 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                 <span className="text-muted-foreground text-xs font-medium">Cuenta:</span>
                                             </div>
                                             <span className="text-sm font-medium">{currentVenta.gestor.cuenta_nombre}</span>
+                                        </div>
+                                    )}
+                                    {/* Saldo disponible de la cuenta del gestor */}
+                                    {currentVenta.gestor.saldo_disponible !== undefined && isVentaPendiente && (
+                                        <div className={`flex items-center justify-between rounded-md border px-3 py-2 ${currentVenta.gestor.saldo_disponible >= currentVenta.gestor.monto ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950' : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950'}`}>
+                                            <div className="flex items-center gap-2">
+                                                <DollarSign className={`h-4 w-4 ${currentVenta.gestor.saldo_disponible >= currentVenta.gestor.monto ? 'text-green-600' : 'text-red-600'}`} />
+                                                <span className="text-xs font-medium">Saldo disponible:</span>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className={`text-sm font-bold ${currentVenta.gestor.saldo_disponible >= currentVenta.gestor.monto ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
+                                                    {currentVenta.gestor.saldo_disponible.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currentVenta.gestor.moneda?.codigo || ''}
+                                                </span>
+                                                {currentVenta.gestor.saldo_disponible < currentVenta.gestor.monto && (
+                                                    <p className="text-xs text-red-600 dark:text-red-400">⚠️ Fondos insuficientes para aprobar</p>
+                                                )}
+                                            </div>
                                         </div>
                                     )}
                                     {currentVenta.gestor.tasa_aplicada_gestor && (
@@ -1705,19 +1803,50 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                             </div>
 
                             {isVentaPendiente && (
-                                <div className="mt-4 rounded-md bg-yellow-50 p-3">
-                                    <p className="text-sm text-yellow-800">
-                                        <strong>Venta Pendiente:</strong> Esta venta requiere aprobación para afectar stock y cuentas.
-                                        {!currentVenta.destinatario ? (
-                                            <span className="mt-1 block font-semibold">
-                                                ❌ Para aprobar, primero debe registrar la información del receptor.
-                                            </span>
-                                        ) : (
-                                            <span className="mt-1 block font-semibold text-green-600">
-                                                ✅ Receptor registrado. Ya puede aprobar la venta.
-                                            </span>
-                                        )}
-                                    </p>
+                                <div className="mt-4 space-y-2">
+                                    <div className="rounded-md bg-yellow-50 p-3">
+                                        <p className="text-sm text-yellow-800">
+                                            <strong>Venta Pendiente:</strong> Esta venta requiere aprobación para afectar stock y cuentas.
+                                            {!currentVenta.destinatario ? (
+                                                <span className="mt-1 block font-semibold">
+                                                    ❌ Para aprobar, primero debe registrar la información del receptor.
+                                                </span>
+                                            ) : (
+                                                <span className="mt-1 block font-semibold text-green-600">
+                                                    ✅ Receptor registrado.
+                                                </span>
+                                            )}
+                                        </p>
+                                    </div>
+                                    {/* Estado del saldo del gestor */}
+                                    {currentVenta.gestor && currentVenta.gestor.saldo_disponible !== undefined && (
+                                        <div className={`rounded-md p-3 text-sm ${currentVenta.gestor.saldo_disponible >= currentVenta.gestor.monto ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+                                            {currentVenta.gestor.saldo_disponible >= currentVenta.gestor.monto ? (
+                                                <span>
+                                                    ✅ Cuenta del gestor <strong>({currentVenta.gestor.cuenta_nombre})</strong> con fondos suficientes:{' '}
+                                                    <strong>
+                                                        {currentVenta.gestor.saldo_disponible.toLocaleString('es-ES', { minimumFractionDigits: 2 })}{' '}
+                                                        {currentVenta.gestor.moneda?.codigo || ''}
+                                                    </strong>
+                                                </span>
+                                            ) : (
+                                                <span>
+                                                    ❌ La cuenta del gestor <strong>({currentVenta.gestor.cuenta_nombre})</strong> no tiene fondos suficientes.{' '}
+                                                    Saldo actual:{' '}
+                                                    <strong>
+                                                        {currentVenta.gestor.saldo_disponible.toLocaleString('es-ES', { minimumFractionDigits: 2 })}{' '}
+                                                        {currentVenta.gestor.moneda?.codigo || ''}
+                                                    </strong>{' '}
+                                                    — Necesario:{' '}
+                                                    <strong>
+                                                        {currentVenta.gestor.monto.toLocaleString('es-ES', { minimumFractionDigits: 2 })}{' '}
+                                                        {currentVenta.gestor.moneda?.codigo || ''}
+                                                    </strong>.{' '}
+                                                    Recargue la cuenta para poder aprobar.
+                                                </span>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
