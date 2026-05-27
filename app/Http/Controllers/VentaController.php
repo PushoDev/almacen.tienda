@@ -604,6 +604,7 @@ class VentaController extends Controller
                 'cuenta_id' => $venta->gestor_cuenta_id,
                 'comentario' => $venta->gestor_comentario,
                 'cuenta_nombre' => $venta->gestorCuenta?->nombre_cuenta,
+                'saldo_disponible' => (float) ($venta->gestorCuenta?->saldo_cuenta ?? 0),
                 'tasa_aplicada' => $venta->tasa_aplicada_venta ? (float) $venta->tasa_aplicada_venta : null,
                 'tasa_aplicada_gestor' => $venta->tasa_aplicada_gestor ? (float) $venta->tasa_aplicada_gestor : null,
                 'moneda' => $venta->gestorCuenta?->moneda ? [
