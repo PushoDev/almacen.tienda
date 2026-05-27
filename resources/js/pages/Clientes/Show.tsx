@@ -22,6 +22,7 @@ import {
     Edit3,
     ExternalLink,
     Eye,
+    HandHeart,
     History,
     Home,
     MapPin,
@@ -770,41 +771,46 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                 <div className="flex h-full flex-1 flex-col gap-6 rounded-xl p-4">
 
                     {/* ── Header ── NO MODIFICAR ───────────────────────────── */}
-                    <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-6">
-                        <div className="flex items-center justify-between">
-                            <HeadingSmall
-                                title={`Cliente: ${cliente.nombre_cliente}`}
-                                description="Información detallada e historial de compras, ventas y transacciones financieras"
-                            />
-                            <div className="flex items-center gap-3">
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Link href={route('clientes.edit', { cliente: cliente.id })}>
-                                            <Button variant="outline" className="flex items-center gap-2">
-                                                <Edit3 size={16} />
-                                                Editar
-                                            </Button>
-                                        </Link>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                        <p>Editar información del cliente</p>
-                                    </TooltipContent>
-                                </Tooltip>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Link href={route('clientes.index')}>
-                                            <Button variant="outline" className="flex items-center gap-2">
-                                                <ArrowLeft size={16} />
-                                                Volver
-                                            </Button>
-                                        </Link>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                        <p>Volver al listado de clientes</p>
-                                    </TooltipContent>
-                                </Tooltip>
-                            </div>
-                        </div>
+                    <div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-6">
+                        <HeadingSmall
+                            title={`Cliente: ${cliente.nombre_cliente}`}
+                            description="Información detallada e historial de compras, ventas y transacciones financieras"
+                        />
+                        <HandHeart
+                            size={70}
+                            color="#d6d3d1"
+                            className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 transform opacity-40"
+                        />
+                    </div>
+
+                    {/* Navegación */}
+                    <div className="flex items-center gap-2">
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Link href={route('clientes.edit', { cliente: cliente.id })}>
+                                    <Button variant="outline" className="flex items-center gap-2">
+                                        <Edit3 size={16} />
+                                        Editar
+                                    </Button>
+                                </Link>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>Editar información del cliente</p>
+                            </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Link href={route('clientes.index')}>
+                                    <Button variant="outline" className="flex items-center gap-2">
+                                        <ArrowLeft size={16} />
+                                        Volver
+                                    </Button>
+                                </Link>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>Volver al listado de clientes</p>
+                            </TooltipContent>
+                        </Tooltip>
                     </div>
 
                     {/* ── Info del Cliente + Métricas Financieras ────────────── */}
