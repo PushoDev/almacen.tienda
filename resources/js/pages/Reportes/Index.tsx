@@ -144,6 +144,13 @@ const reportesFinanzasOtros: ReportCardProps[] = [
         colors: 'from-amber-800 to-amber-400',
     },
     {
+        title: 'Cambios de Precio de Costo',
+        description: 'Auditoría de cambios al costo con impacto financiero (ganancias/pérdidas en papel).',
+        href: route('reportes.historial_costo_precio'),
+        icon: LibraryBig,
+        colors: 'from-rose-800 to-rose-400',
+    },
+    {
         title: 'Movimientos Financieros',
         description: 'Historial de ingresos, gastos y transferencias.',
         href: route('reportes.movimientos_financieros'),

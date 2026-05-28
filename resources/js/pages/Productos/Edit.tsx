@@ -8,7 +8,7 @@ import AppLayout from '@/layouts/app-layout';
 import { CategoriasProps, ProductoProps, SharedData, type BreadcrumbItem } from '@/types';
 import { Head, useForm, usePage } from '@inertiajs/react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { FileBox, Package, QrCode, ArrowRightLeft } from 'lucide-react';
+import { FileBox, Package, QrCode, ArrowRightLeft, ShieldAlert, Eye, EyeOff } from 'lucide-react';
 import { useState } from 'react';
 import { toast, Toaster } from 'sonner';
 
@@ -32,17 +32,48 @@ export default function EditarProductosPage({ producto, categorias }: { producto
         categoria_id: producto.categoria_id.toString(),
         precio_compra_producto: producto.precio_compra_producto,
         imagen_producto: null as File | null,
+        password_confirmacion: '',
+        motivo_cambio_costo: '',
     });
 
     const [preview, setPreview] = useState<string | null>(producto.imagen_url ?? null);
+    const [passwordDialog, setPasswordDialog] = useState(false);
+    const [passwordInput, setPasswordInput] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+
+    const priceChanged = isPrivileged && data.precio_compra_producto !== producto.precio_compra_producto;
+
+    const doPost = () => {
+        post(route('productos.update', { producto: producto.id }), {
+            onSuccess: () => {
+                toast.success('Producto actualizado correctamente');
+                setPasswordInput('');
+            },
+            onError: (errs) => {
+                if (errs.password_confirmacion) {
+                    toast.error(errs.password_confirmacion);
+                    setPasswordDialog(true);
+                } else {
+                    toast.error('Error al actualizar el producto');
+                }
+            },
+        });
+    };
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
+        if (priceChanged) {
+            setPasswordDialog(true);
+            return;
+        }
+        doPost();
+    };
 
-        post(route('productos.update', { producto: producto.id }), {
-            onSuccess: () => toast.success('Producto actualizado correctamente'),
-            onError: () => toast.error('Error al actualizar el producto'),
-        });
+    const confirmAndSubmit = () => {
+        setPasswordDialog(false);
+        setData('password_confirmacion', passwordInput);
+        // Inertia useForm stores data in a ref, so post() reads the updated value
+        setTimeout(() => doPost(), 0);
     };
 
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -201,20 +232,45 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                                 </div>
 
                                 <div>
-                                    <Label htmlFor="precio_compra_producto">Precio de Compra *</Label>
+                                    <Label htmlFor="precio_compra_producto">
+                                        Precio de Costo *
+                                        {isPrivileged && (
+                                            <span className="ml-2 text-xs font-normal text-amber-600 dark:text-amber-400">
+                                                (requiere contraseña para cambiar)
+                                            </span>
+                                        )}
+                                    </Label>
                                     <Input
                                         id="precio_compra_producto"
-                                        disabled
-                                        type="number"
+                                        disabled={!isPrivileged}
                                         step="0.01"
                                         min="0"
                                         value={data.precio_compra_producto}
                                         onChange={(e) => setData('precio_compra_producto', parseFloat(e.target.value) || 0)}
                                         placeholder="0.00"
-                                        className="mt-1"
+                                        className={`mt-1 ${priceChanged ? 'border-amber-500 ring-1 ring-amber-400' : ''}`}
                                     />
+                                    {priceChanged && (
+                                        <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                                            El precio cambia de {producto.precio_compra_producto} → {data.precio_compra_producto}. Se pedirá contraseña al guardar.
+                                        </p>
+                                    )}
                                     <InputError message={errors.precio_compra_producto} />
+                                    <InputError message={errors.password_confirmacion} />
                                 </div>
+
+                                {isPrivileged && priceChanged && (
+                                    <div>
+                                        <Label htmlFor="motivo_cambio_costo">Motivo del cambio (opcional)</Label>
+                                        <Input
+                                            id="motivo_cambio_costo"
+                                            value={data.motivo_cambio_costo}
+                                            onChange={(e) => setData('motivo_cambio_costo', e.target.value)}
+                                            placeholder="Ej: Nuevo proveedor, ajuste de mercado..."
+                                            className="mt-1"
+                                        />
+                                    </div>
+                                )}
 
                                 <div>
                                     <Label htmlFor="imagen_producto">Imagen del Producto</Label>
@@ -397,6 +453,66 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                         )}
                     </div>
                 </div>
+
+                {/* Dialog de confirmación de contraseña para cambio de precio de costo */}
+                <Dialog open={passwordDialog} onOpenChange={(open) => { setPasswordDialog(open); if (!open) { setPasswordInput(''); setShowPassword(false); } }}>
+                    <DialogContent className="sm:max-w-[400px]">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                                <ShieldAlert className="text-amber-500" size={20} />
+                                Confirmar cambio de precio de costo
+                            </DialogTitle>
+                            <DialogDescription>
+                                Estás cambiando el precio de costo de{' '}
+                                <strong>${producto.precio_compra_producto}</strong> a{' '}
+                                <strong>${data.precio_compra_producto}</strong>.
+                                Esta acción queda registrada en el historial. Ingresa tu contraseña para confirmar.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                            <div className="grid gap-2">
+                                <Label htmlFor="confirm-password">Contraseña</Label>
+                                <div className="relative">
+                                    <Input
+                                        id="confirm-password"
+                                        type={showPassword ? 'text' : 'password'}
+                                        value={passwordInput}
+                                        onChange={(e) => setPasswordInput(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' && passwordInput) confirmAndSubmit(); }}
+                                        placeholder="Ingresa tu contraseña"
+                                        className="pr-10"
+                                        autoFocus
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword((v) => !v)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                        tabIndex={-1}
+                                    >
+                                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => { setPasswordDialog(false); setPasswordInput(''); setShowPassword(false); }}
+                            >
+                                Cancelar
+                            </Button>
+                            <Button
+                                type="button"
+                                disabled={!passwordInput || processing}
+                                onClick={confirmAndSubmit}
+                                className="bg-amber-600 hover:bg-amber-700"
+                            >
+                                {processing ? 'Guardando...' : 'Confirmar cambio'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
 
                 <Toaster position="top-center" />
             </div>

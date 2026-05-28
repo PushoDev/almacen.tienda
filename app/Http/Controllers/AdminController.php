@@ -6,6 +6,7 @@ use App\Models\TasaCambio;
 use App\Models\TasaCambioMLC;
 use App\Models\HistorialTasaCambio;
 use App\Models\HistorialComparacionMensual;
+use App\Models\HistorialPrecioCosto;
 use App\Models\Cuenta;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -73,12 +74,21 @@ class AdminController extends Controller
             }
         }
 
+        $historialCostoPrecio = [];
+        $statsCostoPrecio     = [];
+        if ($user && in_array($user->role, ['admin', 'moderador'])) {
+            $historialCostoPrecio = $this->getHistorialCostoPrecioReciente();
+            $statsCostoPrecio     = $this->getStatsCostoPrecio();
+        }
+
         return Inertia::render('dashboard', [
-            'userRole' => auth()->user()->role,
-            'montosPorMoneda' => array_values($montosPorMoneda),
-            'totalCapital' => $totalCapital,
-            'comparaciones' => $comparaciones,
-            'historialCambios' => $historialCambios,
+            'userRole'            => auth()->user()->role,
+            'montosPorMoneda'     => array_values($montosPorMoneda),
+            'totalCapital'        => $totalCapital,
+            'comparaciones'       => $comparaciones,
+            'historialCambios'    => $historialCambios,
+            'historialCostoPrecio'=> $historialCostoPrecio,
+            'statsCostoPrecio'    => $statsCostoPrecio,
         ]);
     }
 
@@ -400,6 +410,99 @@ class AdminController extends Controller
             });
 
         return response()->json($historial);
+    }
+
+    /**
+     * Últimos cambios de precio de costo para el dashboard
+     */
+    private function getHistorialCostoPrecioReciente(): array
+    {
+        return HistorialPrecioCosto::with(['producto:id,nombre_producto', 'user:id,name'])
+            ->orderBy('created_at', 'desc')
+            ->limit(10)
+            ->get()
+            ->map(function ($h) {
+                return [
+                    'id'                 => $h->id,
+                    'producto'           => ['id' => $h->producto->id, 'nombre_producto' => $h->producto->nombre_producto],
+                    'usuario'            => ['id' => $h->user->id, 'name' => $h->user->name],
+                    'precio_anterior'    => (float) $h->precio_anterior,
+                    'precio_nuevo'       => (float) $h->precio_nuevo,
+                    'diferencia'         => (float) $h->diferencia,
+                    'stock_momento'      => $h->stock_momento,
+                    'impacto_financiero' => (float) $h->impacto_financiero,
+                    'impacto_formateado' => $h->getImpactoFormateadoAttribute(),
+                    'es_ganancia'        => $h->esGanancia(),
+                    'es_perdida'         => $h->es_perdida,
+                    'motivo'             => $h->motivo,
+                    'fecha_formateada'   => $h->created_at->format('d/m/Y H:i'),
+                ];
+            })
+            ->toArray();
+    }
+
+    /**
+     * Totales acumulados de impacto por cambios de precio de costo
+     */
+    private function getStatsCostoPrecio(): array
+    {
+        $ganancias = (float) HistorialPrecioCosto::ganancias()->sum('impacto_financiero');
+        $perdidas  = abs((float) HistorialPrecioCosto::perdidas()->sum('impacto_financiero'));
+
+        return [
+            'total_ganancias' => $ganancias,
+            'total_perdidas'  => $perdidas,
+            'neto_impacto'    => $ganancias - $perdidas,
+            'numero_cambios'  => HistorialPrecioCosto::count(),
+        ];
+    }
+
+    /**
+     * Estadísticas del impacto financiero por cambios de precio de costo
+     */
+    public function getEstadisticasCostoPrecio()
+    {
+        if (!in_array(auth()->user()->role, ['admin', 'moderador'])) {
+            abort(403);
+        }
+
+        $totalGanancias = HistorialPrecioCosto::ganancias()->sum('impacto_financiero');
+        $totalPerdidas  = abs(HistorialPrecioCosto::perdidas()->sum('impacto_financiero'));
+        $netoImpacto    = $totalGanancias - $totalPerdidas;
+        $numeroCambios  = HistorialPrecioCosto::count();
+
+        $cambiosConGanancia = HistorialPrecioCosto::ganancias()->count();
+        $cambiosConPerdida  = HistorialPrecioCosto::perdidas()->count();
+
+        $mayorGanancia = HistorialPrecioCosto::ganancias()
+            ->with('producto:id,nombre_producto')
+            ->orderBy('impacto_financiero', 'desc')
+            ->first();
+
+        $mayorPerdida = HistorialPrecioCosto::perdidas()
+            ->with('producto:id,nombre_producto')
+            ->orderBy('impacto_financiero', 'asc')
+            ->first();
+
+        return response()->json([
+            'total_ganancias'       => number_format($totalGanancias, 2),
+            'total_perdidas'        => number_format($totalPerdidas, 2),
+            'neto_impacto'          => number_format($netoImpacto, 2),
+            'es_neto_positivo'      => $netoImpacto >= 0,
+            'numero_cambios'        => $numeroCambios,
+            'cambios_con_ganancia'  => $cambiosConGanancia,
+            'cambios_con_perdida'   => $cambiosConPerdida,
+            'mayor_ganancia' => $mayorGanancia ? [
+                'monto'    => number_format($mayorGanancia->impacto_financiero, 2),
+                'producto' => $mayorGanancia->producto->nombre_producto ?? '-',
+                'fecha'    => $mayorGanancia->created_at->format('d/m/Y'),
+            ] : null,
+            'mayor_perdida' => $mayorPerdida ? [
+                'monto'    => number_format(abs($mayorPerdida->impacto_financiero), 2),
+                'producto' => $mayorPerdida->producto->nombre_producto ?? '-',
+                'fecha'    => $mayorPerdida->created_at->format('d/m/Y'),
+            ] : null,
+        ]);
     }
 
     /**
