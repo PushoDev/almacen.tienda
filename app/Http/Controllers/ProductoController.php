@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\Producto;
 use App\Models\Categoria;
 use App\Models\Almacen;
+use App\Models\HistorialPrecioCosto;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 // NOTE: Removed automatic migration/seed calls for safety in production
 use App\Exports\ProductoExport;
@@ -238,7 +240,29 @@ class ProductoController extends Controller
             'activo' => ['nullable', 'boolean'],
             'descripcion_producto' => ['nullable', 'string'],
             'imagen_producto' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:2048'],
+            'password_confirmacion' => ['nullable', 'string'],
+            'motivo_cambio_costo' => ['nullable', 'string', 'max:500'],
         ]);
+
+        $user = Auth::user();
+
+        $precioCostoAnterior = (float) $producto->precio_compra_producto;
+        $precioCostoNuevo    = (float) $validatedData['precio_compra_producto'];
+        $precioCostoChanged  = abs($precioCostoAnterior - $precioCostoNuevo) > 0.0001;
+
+        if ($precioCostoChanged) {
+            if (!in_array($user->role, ['admin', 'moderador'])) {
+                return redirect()->back()
+                    ->with('error', 'No tiene permisos para modificar el precio de costo.');
+            }
+
+            $password = $validatedData['password_confirmacion'] ?? '';
+            if (empty($password) || !Hash::check($password, $user->password)) {
+                return redirect()->back()
+                    ->withErrors(['password_confirmacion' => 'Contraseña incorrecta. El precio de costo no fue actualizado.'])
+                    ->withInput();
+            }
+        }
 
         DB::beginTransaction();
         try {
@@ -256,18 +280,37 @@ class ProductoController extends Controller
                 $imagenPath = 'productos/' . $filename;
             }
 
-            $updateData = array_merge($validatedData, [
-                'imagen_producto' => $imagenPath,
-            ]);
+            $stockMomento = $producto->cantidad_total;
 
-            // ✅ Restringir campos de ecommerce solo a admin/moderador
-            $user = Auth::user();
-            if ($user->role !== 'admin' && $user->role !== 'moderador') {
+            $updateData = $validatedData;
+            unset($updateData['password_confirmacion']);
+            unset($updateData['motivo_cambio_costo']);
+            $updateData['imagen_producto'] = $imagenPath;
+
+            // Restringir campos de ecommerce solo a admin/moderador
+            if (!in_array($user->role, ['admin', 'moderador'])) {
                 unset($updateData['activo']);
                 unset($updateData['descripcion_producto']);
             }
 
             $producto->update($updateData);
+
+            if ($precioCostoChanged) {
+                $diferencia         = $precioCostoNuevo - $precioCostoAnterior;
+                $impactoFinanciero  = $diferencia * $stockMomento;
+
+                HistorialPrecioCosto::create([
+                    'producto_id'       => $producto->id,
+                    'user_id'           => $user->id,
+                    'precio_anterior'   => $precioCostoAnterior,
+                    'precio_nuevo'      => $precioCostoNuevo,
+                    'diferencia'        => $diferencia,
+                    'stock_momento'     => $stockMomento,
+                    'impacto_financiero'=> $impactoFinanciero,
+                    'es_perdida'        => $impactoFinanciero < 0,
+                    'motivo'            => $validatedData['motivo_cambio_costo'] ?? null,
+                ]);
+            }
 
             DB::commit();
 

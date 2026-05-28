@@ -63,6 +63,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard/usuarios', [ReporteController::class, 'getUsuarios'])->name('dashboard.usuarios');
     Route::get('/dashboard/monedas', [ReporteController::class, 'getMonedas'])->name('dashboard.monedas');
     Route::get('/dashboard/historial-comparaciones', [AdminController::class, 'getHistorialComparaciones'])->name('dashboard.historial.comparaciones');
+    Route::get('/dashboard/estadisticas-costo-precio', [AdminController::class, 'getEstadisticasCostoPrecio'])->name('dashboard.estadisticas.costo_precio');
     Route::get('/dashboard/historial-comparaciones/view', function () {
         return Inertia::render('dashboard/historial-comparaciones');
     })->name('dashboard.historial.comparaciones.view');

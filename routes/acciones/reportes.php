@@ -26,6 +26,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         // --- REPORTES FINANCIEROS Y OTROS ---
         Route::get('/historial-precios', [ReporteController::class, 'historialPrecios'])->name('historial_precios');
+        Route::get('/historial-costo-precio', [ReporteController::class, 'historialCostoPrecio'])->name('historial_costo_precio');
         Route::get('/movimientos-financieros', [ReporteController::class, 'movimientosFinancieros'])->name('movimientos_financieros');
         Route::get('/rastreo-operaciones', [ReporteController::class, 'rastreoOperaciones'])->name('rastreo_operaciones');
     });

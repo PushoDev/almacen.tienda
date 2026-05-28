@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Compra;
 use App\Models\Venta;
+use App\Models\HistorialPrecioCosto;
 use App\Services\DashboardStatsService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -632,6 +633,55 @@ class ReporteController extends Controller
 
         return Inertia::render('Reportes/Report/HistorialPrecios', [
             'historial' => $historial,
+        ]);
+    }
+
+    /**
+     * Historial de cambios de precio de costo con estadísticas de impacto financiero.
+     */
+    public function historialCostoPrecio()
+    {
+        if (!in_array(auth()->user()->role, ['admin', 'moderador'])) {
+            abort(403);
+        }
+
+        $historial = HistorialPrecioCosto::with([
+            'producto:id,nombre_producto,marca_producto',
+            'user:id,name',
+        ])
+            ->orderBy('created_at', 'desc')
+            ->paginate(20)
+            ->through(function ($item) {
+                return [
+                    'id'                 => $item->id,
+                    'producto'           => $item->producto->nombre_producto ?? '-',
+                    'marca'              => $item->producto->marca_producto ?? '',
+                    'usuario'            => $item->user->name ?? '-',
+                    'precio_anterior'    => (float) $item->precio_anterior,
+                    'precio_nuevo'       => (float) $item->precio_nuevo,
+                    'diferencia'         => (float) $item->diferencia,
+                    'stock_momento'      => $item->stock_momento,
+                    'impacto_financiero' => (float) $item->impacto_financiero,
+                    'impacto_formateado' => $item->getImpactoFormateadoAttribute(),
+                    'es_perdida'         => $item->es_perdida,
+                    'es_ganancia'        => $item->esGanancia(),
+                    'motivo'             => $item->motivo,
+                    'fecha'              => $item->created_at->format('d/m/Y H:i'),
+                ];
+            });
+
+        $stats = [
+            'total_ganancias'      => (float) HistorialPrecioCosto::ganancias()->sum('impacto_financiero'),
+            'total_perdidas'       => abs((float) HistorialPrecioCosto::perdidas()->sum('impacto_financiero')),
+            'neto_impacto'         => (float) HistorialPrecioCosto::sum('impacto_financiero'),
+            'numero_cambios'       => HistorialPrecioCosto::count(),
+            'cambios_con_ganancia' => HistorialPrecioCosto::ganancias()->count(),
+            'cambios_con_perdida'  => HistorialPrecioCosto::perdidas()->count(),
+        ];
+
+        return Inertia::render('Reportes/Report/HistorialCostoPrecio', [
+            'historial' => $historial,
+            'stats'     => $stats,
         ]);
     }
 
