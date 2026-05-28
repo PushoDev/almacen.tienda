@@ -66,7 +66,8 @@ interface Proveedor {
 }
 
 interface Props {
-    cuentas: Cuenta[];
+    cuentasOrigen: Cuenta[];
+    cuentasDestino: Cuenta[];
     clientes: Cliente[];
     proveedores: Proveedor[];
     monedasActivas: Moneda[];
@@ -261,7 +262,7 @@ const ConversionTransferencia: React.FC<ConversionTransferenciaProps> = ({ data,
 // ------------------------------------
 // COMPONENTE PRINCIPAL (Movimientos) CORREGIDO
 // ------------------------------------
-export default function Movimientos({ cuentas, clientes, proveedores, monedasActivas }: Props) {
+export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, proveedores, monedasActivas }: Props) {
     const [alert, setAlert] = useState<AlertState>({ show: false, message: '', type: 'success' });
     const [limitValidation, setLimitValidation] = useState<LimitValidation | null>(null);
 
@@ -281,7 +282,7 @@ export default function Movimientos({ cuentas, clientes, proveedores, monedasAct
 
         switch (destinoTipo) {
             case 'cuenta':
-                const cuentaDestino = cuentas.find((c) => c.id === parseInt(destinoId));
+                const cuentaDestino = cuentasDestino.find((c) => c.id === parseInt(destinoId));
                 if (cuentaDestino) {
                     const limiteMaximo = 1000000; // 1 millón
                     const saldoActual = cuentaDestino.saldo_cuenta || 0;
@@ -558,7 +559,8 @@ export default function Movimientos({ cuentas, clientes, proveedores, monedasAct
         let initialTasa = '';
 
         if (tipoEntidad === 'cuenta') {
-            const selectedCuenta = cuentas.find((c) => c.id === id);
+            const listToSearch = (formSetter === setTransferData && campo === 'destino') ? cuentasDestino : cuentasOrigen;
+            const selectedCuenta = listToSearch.find((c) => c.id === id);
             selectedMoneda = selectedCuenta?.moneda.codigo_moneda || '';
 
             // ✅ ACTUALIZADO: Obtener tasa de la moneda seleccionada
@@ -633,7 +635,7 @@ export default function Movimientos({ cuentas, clientes, proveedores, monedasAct
      */
     const getEntidadInfo = (id: number, tipo: EntidadTipo): string => {
         if (tipo === 'cuenta') {
-            const cuenta = cuentas.find((c) => c.id === id);
+            const cuenta = cuentasDestino.find((c) => c.id === id) ?? cuentasOrigen.find((c) => c.id === id);
             return cuenta
                 ? `${cuenta.nombre_cuenta} (${cuenta.moneda.codigo_moneda}) - Saldo: ${cuenta.saldo_cuenta.toFixed(2)}`
                 : 'Cuenta no encontrada';
@@ -660,9 +662,9 @@ export default function Movimientos({ cuentas, clientes, proveedores, monedasAct
     /**
      * Renderiza las opciones de selector, excluyendo la entidad seleccionada en el lado opuesto (solo para Transferencia).
      */
-    const renderSelectOptions = (tipoEntidad: EntidadTipo, exclusionId: string = '', exclusionTipo: string = '') => {
+    const renderSelectOptions = (tipoEntidad: EntidadTipo, exclusionId: string = '', exclusionTipo: string = '', cuentasList: Cuenta[] = cuentasOrigen) => {
         if (tipoEntidad === 'cuenta') {
-            return cuentas
+            return cuentasList
                 .filter((c) => !(exclusionId === String(c.id) && exclusionTipo === 'cuenta'))
                 .map((cuenta) => (
                     <SelectItem key={`c-${cuenta.id}`} value={String(cuenta.id)}>
@@ -1044,6 +1046,7 @@ export default function Movimientos({ cuentas, clientes, proveedores, monedasAct
                                                 transferData.destino_tipo,
                                                 transferData.origen_tipo === transferData.destino_tipo ? transferData.origen_id : '',
                                                 transferData.origen_tipo,
+                                                transferData.destino_tipo === 'cuenta' ? cuentasDestino : cuentasOrigen,
                                             )}
                                         </SelectContent>
                                     </Select>

@@ -36,12 +36,13 @@ class TransaccionController extends Controller
             ->limit(50)
             ->get();
 
-        // ✅ Filtrar cuentas según el rol del usuario
+        // Origen: vendedor solo ve sus cuentas asignadas; destino: siempre todas
         if (auth()->user()->role === 'vendedor') {
-            $cuentas = auth()->user()->cuentas()->with('moneda')->get();
+            $cuentasOrigen = auth()->user()->cuentas()->with('moneda')->get();
         } else {
-            $cuentas = Cuenta::with('moneda')->get();
+            $cuentasOrigen = Cuenta::with('moneda')->get();
         }
+        $cuentasDestino = Cuenta::with('moneda')->get();
 
         $clientes = Cliente::all();
         $proveedores = Proveedor::all();
@@ -55,7 +56,8 @@ class TransaccionController extends Controller
 
         return Inertia::render('Transacciones/Index', [
             'compras' => $compras,
-            'cuentas' => $cuentas,
+            'cuentasOrigen' => $cuentasOrigen,
+            'cuentasDestino' => $cuentasDestino,
             'clientes' => $clientes,
             'proveedores' => $proveedores,
             'monedasActivas' => $monedasActivas,
@@ -625,9 +627,8 @@ class TransaccionController extends Controller
             $origen = $this->obtenerEntidadConMoneda($request->origen_tipo, $request->origen_id);
             $destino = $this->obtenerEntidadConMoneda($request->destino_tipo, $request->destino_id);
 
-            // Validar acceso para vendedores
+            // Validar acceso para vendedores solo en el origen
             $this->validarAccesoVendedor($origen, $request->origen_tipo);
-            $this->validarAccesoVendedor($destino, $request->destino_tipo);
 
             // Obtener monedas
             $monedaOrigen = $this->obtenerMonedaEntidad($origen, $request->origen_tipo);

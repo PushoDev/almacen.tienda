@@ -60,7 +60,8 @@ interface Compra {
 
 interface Props {
     compras: Compra[];
-    cuentas: Cuenta[];
+    cuentasOrigen: Cuenta[];
+    cuentasDestino: Cuenta[];
     clientes: Cliente[];
     proveedores: Proveedor[];
     tasaCambioActual: number;
@@ -87,7 +88,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function Transacciones({ compras, cuentas, clientes, proveedores, tasaCambioActual, monedasActivas, userRole }: Props) {
+export default function Transacciones({ compras, cuentasOrigen, cuentasDestino, clientes, proveedores, tasaCambioActual, monedasActivas, userRole }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Transacciones" />
@@ -123,7 +124,7 @@ export default function Transacciones({ compras, cuentas, clientes, proveedores,
 
                     {/* ✅ Pestaña Movimientos - Actualizada con proveedores */}
                     <TabsContent value="movimientos" className="space-y-4">
-                        <Movimientos cuentas={cuentas} clientes={clientes} proveedores={proveedores} monedasActivas={monedasActivas} />
+                        <Movimientos cuentasOrigen={cuentasOrigen} cuentasDestino={cuentasDestino} clientes={clientes} proveedores={proveedores} monedasActivas={monedasActivas} />
                     </TabsContent>
 
                     {/* ✅ Pestaña Distribuir Costos - Solo Admin y Moderador */}
@@ -131,7 +132,7 @@ export default function Transacciones({ compras, cuentas, clientes, proveedores,
                         <TabsContent value="costos" className="space-y-4">
                             <CostosAdicionales
                                 compras={compras}
-                                cuentas={cuentas}
+                                cuentas={cuentasOrigen}
                                 tasaCambioActual={tasaCambioActual}
                                 monedasActivas={monedasActivas}
                             />
