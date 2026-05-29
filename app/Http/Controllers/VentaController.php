@@ -890,6 +890,15 @@ class VentaController extends Controller
                     ->where('user_id', $saveUserId)
                     ->first();
 
+                // Fallback al registro del admin si el vendedor no tiene uno propio
+                if (!$productoVendedor && $saveUserId !== 1) {
+                    $productoVendedor = DB::table('producto_vendedors')
+                        ->where('producto_id', $item['producto_id'])
+                        ->where('almacen_id', $validatedData['almacen_id'])
+                        ->where('user_id', 1)
+                        ->first();
+                }
+
                 $precioBase = $productoVendedor ? (float) $productoVendedor->precio_venta : (float) $item['precio_venta'];
                 // Ventas especiales no generan comisión
                 $baseComision = (!$esEspecial && $productoVendedor) ? (float) $productoVendedor->comision : 0;
