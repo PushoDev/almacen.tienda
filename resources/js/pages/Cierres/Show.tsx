@@ -223,6 +223,16 @@ interface Cierre {
     comisiones_gestor_detalles?: ComisionGestorItem[];
 }
 
+interface VentaEspecialItemShow {
+    venta_id: number;
+    motivo: string;
+    total: number;
+    costo: number;
+    impacto: number;
+    es_regalo: boolean;
+    fecha: string;
+}
+
 interface Props extends PageProps {
     cierre: Cierre;
     almacenes?: Array<{ id: number; nombre: string }>;
@@ -230,6 +240,11 @@ interface Props extends PageProps {
     comision_pv_total?: number;
     comision_gestor_total?: number;
     ganancia_agencia_total?: number;
+    ventas_especiales_count?: number;
+    ventas_especiales_total_usd?: number;
+    ventas_especiales_costo_usd?: number;
+    ventas_especiales_impacto_usd?: number;
+    ventas_especiales_detalles?: VentaEspecialItemShow[];
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -237,7 +252,19 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Detalle de Cierre', href: '#' },
 ];
 
-export default function Show({ cierre, almacenes = [], userRole = 'vendedor', comision_pv_total = 0, comision_gestor_total = 0, ganancia_agencia_total = 0 }: Props) {
+export default function Show({
+    cierre,
+    almacenes = [],
+    userRole = 'vendedor',
+    comision_pv_total = 0,
+    comision_gestor_total = 0,
+    ganancia_agencia_total = 0,
+    ventas_especiales_count = 0,
+    ventas_especiales_total_usd = 0,
+    ventas_especiales_costo_usd = 0,
+    ventas_especiales_impacto_usd = 0,
+    ventas_especiales_detalles = [],
+}: Props) {
     const [showTransaccionesDialog, setShowTransaccionesDialog] = useState(false);
     const [selectedVentaDetails, setSelectedVentaDetails] = useState<{
         show: boolean;
@@ -1261,7 +1288,68 @@ export default function Show({ cierre, almacenes = [], userRole = 'vendedor', co
                                     <p className="text-muted-foreground mt-1 text-xs">Neto agencia</p>
                                 </div>
                             )}
+
+                            {/* Ventas Especiales — si hubo en el turno */}
+                            {ventas_especiales_count > 0 && (
+                                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
+                                    <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Ventas Especiales</p>
+                                    <p className="text-xl font-black text-amber-700 dark:text-amber-300">
+                                        {ventas_especiales_count} venta{ventas_especiales_count > 1 ? 's' : ''}
+                                    </p>
+                                    <p className={`mt-1 text-xs font-semibold ${ventas_especiales_impacto_usd < 0 ? 'text-red-600' : 'text-amber-600'}`}>
+                                        Impacto: ${Number(ventas_especiales_impacto_usd).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                                    </p>
+                                </div>
+                            )}
                         </div>
+
+                        {/* Detalle de ventas especiales del turno */}
+                        {ventas_especiales_count > 0 && (
+                            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
+                                <p className="mb-3 text-sm font-bold text-amber-800 dark:text-amber-200">
+                                    Ventas Especiales del Turno ({ventas_especiales_count})
+                                </p>
+                                <div className="space-y-2">
+                                    {ventas_especiales_detalles.map((ve) => (
+                                        <div key={ve.venta_id} className="flex items-center justify-between rounded-md border border-amber-200 bg-white px-3 py-2 text-xs dark:border-amber-700 dark:bg-amber-900/30">
+                                            <div className="flex-1 space-y-0.5">
+                                                <p className="font-semibold text-amber-800 dark:text-amber-200">
+                                                    Venta #{ve.venta_id}{' '}
+                                                    {ve.es_regalo && (
+                                                        <span className="ml-1 rounded-full bg-amber-200 px-1.5 py-0.5 text-amber-700 dark:bg-amber-800 dark:text-amber-200">
+                                                            Regalo
+                                                        </span>
+                                                    )}
+                                                </p>
+                                                <p className="italic text-amber-600 dark:text-amber-400">{ve.motivo}</p>
+                                                <p className="text-amber-500">{ve.fecha}</p>
+                                            </div>
+                                            <div className="ml-4 text-right">
+                                                <p className="text-amber-700 dark:text-amber-300">Cobrado: <strong>${ve.total.toFixed(2)}</strong></p>
+                                                <p className="text-red-600 dark:text-red-400">Costo: <strong>${ve.costo.toFixed(2)}</strong></p>
+                                                <p className={`font-bold ${ve.impacto < 0 ? 'text-red-700 dark:text-red-400' : 'text-amber-700 dark:text-amber-300'}`}>
+                                                    Impacto: ${ve.impacto.toFixed(2)}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="mt-3 border-t border-amber-200 pt-2 dark:border-amber-700">
+                                    <div className="flex justify-between text-xs font-bold text-amber-800 dark:text-amber-200">
+                                        <span>Total cobrado especiales:</span>
+                                        <span>${Number(ventas_especiales_total_usd).toFixed(2)} USD</span>
+                                    </div>
+                                    <div className="flex justify-between text-xs font-bold text-red-700 dark:text-red-400">
+                                        <span>Costo total especiales:</span>
+                                        <span>${Number(ventas_especiales_costo_usd).toFixed(2)} USD</span>
+                                    </div>
+                                    <div className={`flex justify-between text-sm font-black ${ventas_especiales_impacto_usd < 0 ? 'text-red-700 dark:text-red-400' : 'text-amber-700 dark:text-amber-300'}`}>
+                                        <span>Impacto neto:</span>
+                                        <span>${Number(ventas_especiales_impacto_usd).toFixed(2)} USD</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
 

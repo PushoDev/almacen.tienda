@@ -25,6 +25,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
 import {
+    AlertTriangle,
     BarChartIcon,
     BoxesIcon,
     Building2,
@@ -193,6 +194,10 @@ export default function PuntoVentaOficial({
         referencia: '',
     });
     const [cuentasFiltradas, setCuentasFiltradas] = useState<Cuenta[]>([]);
+
+    // ── Venta Especial ────────────────────────────────────────────────────────
+    const [esVentaEspecial, setEsVentaEspecial] = useState<boolean>(false);
+    const [motivoEspecial, setMotivoEspecial] = useState<string>('');
 
     const [clientesFisicos, setClientesFisicos] = useState<Cliente[]>([]);
     const [cargandoClientesFisicos, setCargandoClientesFisicos] = useState<boolean>(false);
@@ -438,7 +443,7 @@ export default function PuntoVentaOficial({
     };
 
     const agregarAlCarrito = (producto: Producto, codigoForzadoId?: number) => {
-        if (!producto.tiene_precio || !producto.precio_venta || producto.precio_venta <= 0) {
+        if (!esVentaEspecial && (!producto.tiene_precio || !producto.precio_venta || producto.precio_venta <= 0)) {
             toast.error('Este producto no tiene un precio de venta configurado');
             return;
         }
@@ -475,7 +480,7 @@ export default function PuntoVentaOficial({
                 ),
             );
         } else {
-            const precioVenta = producto.precio_venta;
+            const precioVenta = producto.precio_venta ?? 0;
             const precioBase = producto.precio_base ?? precioVenta;
             const nuevoItem: ItemCarrito = {
                 id: idItem,
@@ -763,16 +768,22 @@ export default function PuntoVentaOficial({
             }
         }
         for (const item of carrito) {
-            if (!item.precio_venta || item.precio_venta <= 0) {
+            // En ventas especiales el precio puede ser 0 (regalo)
+            if (!esVentaEspecial && (!item.precio_venta || item.precio_venta < 0)) {
                 toast.error(`Precio inválido para: ${item.producto.nombre_producto}`);
                 return;
             }
         }
-        if (remainingInUsd > 0.01) {
+        if (esVentaEspecial && !motivoEspecial.trim()) {
+            toast.error('Debe ingresar el motivo de la venta especial');
+            return;
+        }
+        const esRegalo = esVentaEspecial && calcularTotal === 0;
+        if (!esRegalo && remainingInUsd > 0.01) {
             toast.error(`El total a pagar no ha sido cubierto. Restante: $${remainingInUsd.toFixed(2)} USD`);
             return;
         }
-        if (payments.length === 0) {
+        if (!esRegalo && payments.length === 0) {
             toast.error('Debe agregar al menos un método de pago para completar la venta.');
             return;
         }
@@ -802,6 +813,8 @@ export default function PuntoVentaOficial({
             })),
             moneda_principal_id: monedaPrincipal?.id,
             tasa_cambio_principal: tasaCambioPrincipal,
+            es_venta_especial: esVentaEspecial,
+            nota_venta_especial: esVentaEspecial ? motivoEspecial.trim() : undefined,
         };
 
         console.log('Datos de venta a enviar:', datosVenta);
@@ -812,13 +825,18 @@ export default function PuntoVentaOficial({
             console.log('Respuesta del servidor:', response.data);
 
             if (response.data.success) {
-                toast.success('✅ Venta creada correctamente. Stock reservado pendiente de aprobación.');
+                const msgExito = esVentaEspecial
+                    ? '✅ Solicitud especial enviada. El admin revisará tu solicitud.'
+                    : '✅ Venta creada correctamente. Stock reservado pendiente de aprobación.';
+                toast.success(msgExito);
                 setCarrito([]);
                 setPayments([]);
                 setAlmacenSeleccionado('');
                 setClienteSeleccionado('');
                 setProductos([]);
                 setCodigoSeleccionadoPorProducto({});
+                setEsVentaEspecial(false);
+                setMotivoEspecial('');
                 if (response.data.redirect) {
                     setTimeout(() => {
                         window.location.href = response.data.redirect;
@@ -1330,10 +1348,8 @@ export default function PuntoVentaOficial({
                                                                     <Button
                                                                         onClick={() => agregarAlCarrito(producto)}
                                                                         disabled={
-                                                                            !producto.tiene_precio ||
+                                                                            (!esVentaEspecial && (!producto.tiene_precio || !producto.precio_venta || producto.precio_venta <= 0)) ||
                                                                             producto.stock_disponible <= 0 ||
-                                                                            !producto.precio_venta ||
-                                                                            producto.precio_venta <= 0 ||
                                                                             codigosDisponibles.length === 0
                                                                         }
                                                                         size="sm"
@@ -1370,19 +1386,42 @@ export default function PuntoVentaOficial({
 
                         {/* Right column - Carrito Sticky */}
                         <div className="space-y-6 lg:sticky lg:top-4 lg:self-start">
-                            <Card className="overflow-hidden border-0 shadow-lg">
-                                <CardHeader className="from-primary/10 to-primary/5 bg-linear-to-r pb-4">
+                            <Card className={`overflow-hidden border-0 shadow-lg ${esVentaEspecial ? 'ring-2 ring-amber-400' : ''}`}>
+                                <CardHeader className={`pb-4 ${esVentaEspecial ? 'bg-amber-50 dark:bg-amber-950' : 'from-primary/10 to-primary/5 bg-linear-to-r'}`}>
                                     <div className="flex items-center justify-between">
                                         <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                                            <ShoppingCart className="text-primary h-5 w-5" />
-                                            Carrito de Compras
+                                            <ShoppingCart className={`h-5 w-5 ${esVentaEspecial ? 'text-amber-600' : 'text-primary'}`} />
+                                            {esVentaEspecial ? 'Venta Especial' : 'Carrito de Compras'}
                                         </CardTitle>
-                                        {carrito.length > 0 && (
-                                            <Badge variant="secondary" className="ml-2">
-                                                {carrito.length}
-                                            </Badge>
-                                        )}
+                                        <div className="flex items-center gap-2">
+                                            {carrito.length > 0 && (
+                                                <Badge variant={esVentaEspecial ? 'outline' : 'secondary'} className={esVentaEspecial ? 'border-amber-400 text-amber-700' : ''}>
+                                                    {carrito.length}
+                                                </Badge>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setEsVentaEspecial(!esVentaEspecial);
+                                                    if (esVentaEspecial) setMotivoEspecial('');
+                                                }}
+                                                className={`flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition-colors ${
+                                                    esVentaEspecial
+                                                        ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900 dark:text-amber-300'
+                                                        : 'bg-muted text-muted-foreground hover:bg-amber-50 hover:text-amber-600'
+                                                }`}
+                                                title="Activar modo Venta Especial"
+                                            >
+                                                <AlertTriangle className="h-3 w-3" />
+                                                Especial
+                                            </button>
+                                        </div>
                                     </div>
+                                    {esVentaEspecial && (
+                                        <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                                            Precio libre · Sin comisión · Requiere aprobación del admin
+                                        </p>
+                                    )}
                                 </CardHeader>
                                 <CardContent className="p-0">
                                     {carrito.length === 0 ? (
@@ -1562,6 +1601,39 @@ export default function PuntoVentaOficial({
                                                                     Agregar Pago
                                                                 </h4>
                                                                 <div className="space-y-4">
+                                                                    {/* Motivo obligatorio en ventas especiales */}
+                                                                    {esVentaEspecial && (
+                                                                        <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
+                                                                            <Label className="flex items-center gap-2 font-semibold text-amber-700 dark:text-amber-300">
+                                                                                <AlertTriangle className="h-4 w-4" />
+                                                                                Motivo de la Venta Especial *
+                                                                            </Label>
+                                                                            <textarea
+                                                                                value={motivoEspecial}
+                                                                                onChange={(e) => setMotivoEspecial(e.target.value)}
+                                                                                placeholder="Ej: Rotura de equipo, regalo al cliente, rifa interna, descuento especial autorizado..."
+                                                                                rows={2}
+                                                                                className="border-input ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex w-full rounded-md border bg-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                                                                            />
+                                                                            <p className="text-xs text-amber-600 dark:text-amber-400">
+                                                                                Esta información será visible para el administrador al revisar la solicitud.
+                                                                            </p>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {/* Mensaje de regalo cuando total = 0 */}
+                                                                    {esVentaEspecial && calcularTotal === 0 && (
+                                                                        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-amber-300 bg-amber-50 p-8 text-center dark:border-amber-700 dark:bg-amber-950">
+                                                                            <ShoppingBag className="h-10 w-10 text-amber-400" />
+                                                                            <p className="font-semibold text-amber-700 dark:text-amber-300">Este producto será entregado como regalo</p>
+                                                                            <p className="text-sm text-amber-600 dark:text-amber-400">
+                                                                                Precio $0.00 — No se requiere ningún pago. La solicitud será enviada al administrador para su aprobación.
+                                                                            </p>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {/* Sección de pagos — oculta solo cuando es regalo */}
+                                                                    {!(esVentaEspecial && calcularTotal === 0) && (<>
                                                                     <div className="grid gap-4 md:grid-cols-2">
                                                                         <div className="space-y-2">
                                                                             <Label>Método de pago</Label>
@@ -1813,6 +1885,7 @@ export default function PuntoVentaOficial({
                                                                             </div>
                                                                         </div>
                                                                     </div>
+                                                                    </>)}
                                                                 </div>
                                                             </div>
                                                             <div className="bg-secondary/30 overflow-y-auto p-6">
@@ -1866,8 +1939,13 @@ export default function PuntoVentaOficial({
                                                         <AlertDialogFooter className="border-t p-6">
                                                             <Button
                                                                 onClick={handleCompleteSale}
-                                                                disabled={remainingInUsd > 0.01 || payments.length === 0 || procesandoVenta}
-                                                                className="w-full"
+                                                                disabled={
+                                                                    procesandoVenta ||
+                                                                    (esVentaEspecial && calcularTotal === 0
+                                                                        ? false
+                                                                        : remainingInUsd > 0.01 || payments.length === 0)
+                                                                }
+                                                                className={`w-full ${esVentaEspecial ? 'bg-amber-600 hover:bg-amber-700' : ''}`}
                                                                 size="lg"
                                                             >
                                                                 {procesandoVenta ? (
@@ -1875,8 +1953,13 @@ export default function PuntoVentaOficial({
                                                                         <div className="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-white"></div>
                                                                         Procesando...
                                                                     </>
+                                                                ) : esVentaEspecial ? (
+                                                                    <>
+                                                                        <AlertTriangle className="mr-2 h-4 w-4" />
+                                                                        Enviar Solicitud Especial
+                                                                    </>
                                                                 ) : (
-                                                                        'Procesar Venta'
+                                                                    'Procesar Venta'
                                                                 )}
                                                             </Button>
                                                             <AlertDialogCancel className="cursor-pointer">Cancelar</AlertDialogCancel>

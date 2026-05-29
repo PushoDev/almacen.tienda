@@ -22,6 +22,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Notification;
 use App\Notifications\VentaCreadaNotification;
+use App\Notifications\VentaEspecialSolicitudNotification;
+use App\Notifications\VentaEspecialDecisionNotification;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Log;
 
@@ -596,6 +598,9 @@ class VentaController extends Controller
             ] : null,
             'monedas_para_reporte' => $this->buildMonedasParaReporte($venta),
             'monto_diferencia_cambiaria' => $venta->monto_diferencia_cambiaria,
+            'es_venta_especial'   => (bool) $venta->es_venta_especial,
+            'nota_venta_especial'     => $venta->nota_venta_especial,
+            'decision_notificada' => (bool) $venta->decision_notificada,
             'gestor' => $venta->es_venta_gestor && $venta->gestor_cuenta_id ? [
                 'monto' => (float) $venta->gestor_monto,
                 'monto_usd' => $venta->tasa_aplicada_gestor > 0
@@ -687,6 +692,11 @@ class VentaController extends Controller
      */
     public function procesarVenta(Request $request)
     {
+        // Pagos requeridos solo si no es venta especial con total 0
+        $esEspecial  = (bool) $request->input('es_venta_especial', false);
+        $totalCero   = ((float) $request->input('total', 0)) == 0;
+        $pagosRule   = ($esEspecial && $totalCero) ? 'nullable|array' : 'required|array|min:1';
+
         $validatedData = $request->validate([
             'almacen_id' => 'required|exists:almacens,id',
             'cliente_id' => 'nullable|exists:clientes,id',
@@ -697,14 +707,13 @@ class VentaController extends Controller
             'items.*.precio_venta' => 'required|numeric|min:0',
             'items.*.subtotal' => 'required|numeric|min:0',
             'total' => 'required|numeric|min:0',
-            'pagos' => 'required|array|min:1',
-            'pagos.*.metodo' => 'required|in:transferencia,efectivo',
-            'pagos.*.moneda_id' => 'required|exists:monedas,id',
-            'pagos.*.monto' => 'required|numeric|min:0',
-            'pagos.*.via' => 'nullable|string|required_if:pagos.*.metodo,transferencia',
-            'pagos.*.tasa_cambio' => 'required|numeric|min:0.0001',
-            'pagos.*.monto_equivalente' => 'required|numeric|min:0',
-            // ✅ CAMBIO 1: Hacer nullable cuenta_id y agregar cliente_id
+            'pagos' => $pagosRule,
+            'pagos.*.metodo' => 'nullable|in:transferencia,efectivo',
+            'pagos.*.moneda_id' => 'nullable|exists:monedas,id',
+            'pagos.*.monto' => 'nullable|numeric|min:0',
+            'pagos.*.via' => 'nullable|string',
+            'pagos.*.tasa_cambio' => 'nullable|numeric|min:0.0001',
+            'pagos.*.monto_equivalente' => 'nullable|numeric|min:0',
             'pagos.*.cuenta_id' => 'nullable|exists:cuentas,id',
             'pagos.*.cliente_id' => 'nullable|exists:clientes,id',
             'pagos.*.referencia' => 'nullable|string',
@@ -717,6 +726,9 @@ class VentaController extends Controller
             'gestor_cuenta_id' => 'nullable|exists:cuentas,id',
             'gestor_comentario' => 'nullable|string|max:500',
             'tasa_aplicada_gestor' => 'nullable|numeric|min:0.0001',
+            // VENTA ESPECIAL
+            'es_venta_especial'    => 'nullable|boolean',
+            'nota_venta_especial'  => 'nullable|string|max:500|required_if:es_venta_especial,true',
         ]);
 
         $user = Auth::user();
@@ -774,14 +786,16 @@ class VentaController extends Controller
             $total_ganancia = 0;
             $total_comision = 0;
             $costo_total_productos = 0;
-            $esGestor = $validatedData['es_venta_gestor'] ?? false;
+            $esGestor   = $validatedData['es_venta_gestor'] ?? false;
+            $esEspecial = (bool) ($validatedData['es_venta_especial'] ?? false);
             $saveUserId = in_array($user->role, ['admin', 'moderador']) ? 1 : $user->id;
 
             // Validación y descuento inmediato de stock
             $historialStockIds = [];
             foreach ($validatedData['items'] as $item) {
                 $producto = Producto::find($item['producto_id']);
-                if ($item['precio_venta'] < $producto->precio_compra_producto) {
+                // Ventas especiales permiten precio por debajo del costo (descuento, regalo, rotura, etc.)
+                if (!$esEspecial && $item['precio_venta'] < $producto->precio_compra_producto) {
                     throw new \Exception("El precio de venta de {$producto->nombre_producto} no puede ser menor que su costo de compra.");
                 }
 
@@ -843,17 +857,22 @@ class VentaController extends Controller
                 'total' => $validatedData['total'],
                 'total_ganancia' => 0,
                 'total_comision' => 0,
-                'estado' => 'pendiente',
+                // Ventas especiales inician en solicitud_especial, esperando aprobación del admin
+                'estado' => $esEspecial ? 'solicitud_especial' : 'pendiente',
                 'moneda_id' => $validatedData['moneda_principal_id'],
                 'tasa_cambio_principal' => $validatedData['tasa_cambio_principal'],
                 'tasa_aplicada_venta' => $validatedData['tasa_aplicada_venta'] ?? null,
                 'moneda_cobro_id' => $validatedData['moneda_cobro_id'] ?? null,
-                // CAMPOS GESTOR
-                'es_venta_gestor' => $validatedData['es_venta_gestor'] ?? false,
-                'gestor_monto' => $validatedData['gestor_monto'] ?? 0,
-                'gestor_cuenta_id' => $validatedData['gestor_cuenta_id'] ?? null,
-                'gestor_comentario' => $validatedData['gestor_comentario'] ?? null,
-                'tasa_aplicada_gestor' => $validatedData['tasa_aplicada_gestor'] ?? null,
+                // CAMPOS GESTOR (no aplica en ventas especiales)
+                'es_venta_gestor' => $esEspecial ? false : ($validatedData['es_venta_gestor'] ?? false),
+                'gestor_monto' => $esEspecial ? 0 : ($validatedData['gestor_monto'] ?? 0),
+                'gestor_cuenta_id' => $esEspecial ? null : ($validatedData['gestor_cuenta_id'] ?? null),
+                'gestor_comentario' => $esEspecial ? null : ($validatedData['gestor_comentario'] ?? null),
+                'tasa_aplicada_gestor' => $esEspecial ? null : ($validatedData['tasa_aplicada_gestor'] ?? null),
+                // CAMPOS VENTA ESPECIAL
+                'es_venta_especial' => $esEspecial,
+                'nota_venta_especial'   => $esEspecial ? ($validatedData['nota_venta_especial'] ?? null) : null,
+                'decision_notificada' => false,
             ]);
 
             HistorialStock::whereIn('id', $historialStockIds)->update(['venta_id' => $venta->id]);
@@ -872,10 +891,10 @@ class VentaController extends Controller
                     ->first();
 
                 $precioBase = $productoVendedor ? (float) $productoVendedor->precio_venta : (float) $item['precio_venta'];
-                $baseComision = $productoVendedor ? (float) $productoVendedor->comision : 0;
+                // Ventas especiales no generan comisión
+                $baseComision = (!$esEspecial && $productoVendedor) ? (float) $productoVendedor->comision : 0;
 
-                // Comisión unitaria = base + markup del gestor (precio extra sobre el precio base)
-                $markup = max(0, (float) $item['precio_venta'] - $precioBase);
+                $markup = $esEspecial ? 0 : max(0, (float) $item['precio_venta'] - $precioBase);
                 $comisionUnitaria = $baseComision + $markup;
                 $total_comision += round($comisionUnitaria * $item['cantidad'], 2);
 
@@ -920,21 +939,19 @@ class VentaController extends Controller
                 'monto_diferencia_cambiaria' => $monto_diferencia_cambiaria,
             ]);
 
-            // ✅ CAMBIO 4: Modificar creación de pagos para incluir cliente_id
-            foreach ($validatedData['pagos'] as $pago) {
+            // Crear pagos — para regalos (total=0) el array puede estar vacío
+            foreach ($validatedData['pagos'] ?? [] as $pago) {
                 PagoVenta::create([
-                    'venta_id' => $venta->id,
-                    'tipo_pago' => $pago['metodo'],
-                    'moneda_id' => $pago['moneda_id'],
-                    // ✅ Permite null si el destino es cliente
-                    'cuenta_id' => $pago['cuenta_id'] ?? null,
-                    // ✅ Nuevo campo para cliente destino
-                    'cliente_id' => $pago['cliente_id'] ?? null,
-                    'via_pago' => $pago['via'] ?? null,
-                    'monto' => $pago['monto'],
+                    'venta_id'             => $venta->id,
+                    'tipo_pago'            => $pago['metodo'],
+                    'moneda_id'            => $pago['moneda_id'],
+                    'cuenta_id'            => $pago['cuenta_id'] ?? null,
+                    'cliente_id'           => $pago['cliente_id'] ?? null,
+                    'via_pago'             => $pago['via'] ?? null,
+                    'monto'                => $pago['monto'],
                     'tasa_cambio_aplicada' => $pago['tasa_cambio'],
-                    'monto_equivalente' => $pago['monto_equivalente'],
-                    'referencia' => $pago['referencia'] ?? null,
+                    'monto_equivalente'    => $pago['monto_equivalente'],
+                    'referencia'           => $pago['referencia'] ?? null,
                 ]);
             }
 
@@ -943,7 +960,11 @@ class VentaController extends Controller
             // Notificar a Admins y Moderadores
             try {
                 $admins = User::whereIn('role', ['admin', 'moderador'])->get();
-                Notification::send($admins, new VentaCreadaNotification($venta));
+                if ($esEspecial) {
+                    Notification::send($admins, new VentaEspecialSolicitudNotification($venta));
+                } else {
+                    Notification::send($admins, new VentaCreadaNotification($venta));
+                }
             } catch (\Exception $e) {
                 \Log::error('Error enviando notificación de venta: ' . $e->getMessage());
             }
@@ -1275,6 +1296,8 @@ class VentaController extends Controller
                         'simbolo' => $venta->monedaCobro->simbolo_moneda,
                     ] : null,
                     'monto_diferencia_cambiaria' => $venta->monto_diferencia_cambiaria,
+                    'es_venta_especial'   => (bool) $venta->es_venta_especial,
+                    'nota_venta_especial'     => $venta->nota_venta_especial,
                     // GESTOR
                     'gestor' => $venta->es_venta_gestor && $venta->gestor_cuenta_id ? [
                         'monto' => (float) $venta->gestor_monto,
@@ -1304,9 +1327,11 @@ class VentaController extends Controller
             'filters' => $request->only(['estado', 'almacen_id', 'fecha_desde', 'fecha_hasta']),
             'almacenes' => $almacenes,
             'estados_venta' => [
-                ['value' => 'pendiente', 'label' => 'Pendiente'],
-                ['value' => 'completada', 'label' => 'Completada'],
-                ['value' => 'cancelada', 'label' => 'Cancelada'],
+                ['value' => 'pendiente',           'label' => 'Pendiente'],
+                ['value' => 'completada',          'label' => 'Completada'],
+                ['value' => 'cancelada',           'label' => 'Cancelada'],
+                ['value' => 'solicitud_especial',  'label' => 'Solicitud Especial'],
+                ['value' => 'rechazada',           'label' => 'Rechazada'],
             ]
         ]);
     }
@@ -1397,5 +1422,102 @@ class VentaController extends Controller
             'success' => true,
             'message' => 'Venta anulada correctamente'
         ]);
+    }
+
+    // ========================================================================
+    // VENTAS ESPECIALES
+    // ========================================================================
+
+    /**
+     * Admin aprueba la solicitud especial → pasa a "pendiente" (flujo normal continúa).
+     */
+    public function aprobarSolicitudEspecial(Venta $venta)
+    {
+        if ($venta->estado !== 'solicitud_especial') {
+            return response()->json(['success' => false, 'message' => 'Esta venta no está pendiente de aprobación especial'], 400);
+        }
+
+        $venta->update([
+            'estado'              => 'pendiente',
+            'decision_notificada' => false,
+        ]);
+
+        try {
+            Notification::send(collect([$venta->usuario]), new VentaEspecialDecisionNotification($venta, 'aprobada'));
+        } catch (\Exception $e) {
+            \Log::error('Error enviando notificación de decisión especial: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Solicitud aprobada. La venta está ahora pendiente de receptor.'
+        ]);
+    }
+
+    /**
+     * Admin rechaza la solicitud especial → revierte stock y pasa a "rechazada".
+     */
+    public function rechazarSolicitudEspecial(Venta $venta)
+    {
+        if ($venta->estado !== 'solicitud_especial') {
+            return response()->json(['success' => false, 'message' => 'Esta venta no está pendiente de aprobación especial'], 400);
+        }
+
+        $venta->load(['detalles']);
+
+        DB::transaction(function () use ($venta) {
+            foreach ($venta->detalles as $detalle) {
+                $almacenProducto = AlmacenProducto::where('almacen_id', $venta->almacen_id)
+                    ->where('producto_id', $detalle->producto_id)->first();
+
+                if ($almacenProducto) {
+                    $almacenProducto->increment('cantidad', $detalle->cantidad);
+                }
+
+                if ($detalle->producto_codigo_id) {
+                    $codigo = ProductoCodigo::find($detalle->producto_codigo_id);
+                    if ($codigo) {
+                        $codigo->increment('cantidad', $detalle->cantidad);
+                    }
+                }
+
+                HistorialStock::create([
+                    'producto_id'      => $detalle->producto_id,
+                    'almacen_id'       => $venta->almacen_id,
+                    'venta_id'         => $venta->id,
+                    'cantidad_anterior'=> $almacenProducto?->cantidad ?? 0,
+                    'cantidad_nueva'   => ($almacenProducto?->cantidad ?? 0) + $detalle->cantidad,
+                    'diferencia'       => $detalle->cantidad,
+                    'tipo'             => 'venta_anulada',
+                    'observaciones'    => 'Stock revertido por rechazo de solicitud especial',
+                    'user_id'          => Auth::id(),
+                ]);
+            }
+
+            $venta->update([
+                'estado'              => 'rechazada',
+                'decision_notificada' => false,
+            ]);
+        });
+
+        try {
+            Notification::send(collect([$venta->usuario]), new VentaEspecialDecisionNotification($venta, 'rechazada'));
+        } catch (\Exception $e) {
+            \Log::error('Error enviando notificación de decisión especial: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Solicitud rechazada. El stock ha sido revertido.'
+        ]);
+    }
+
+    /**
+     * Marca que el vendedor ya vio el veredicto del admin.
+     */
+    public function marcarDecisionNotificada(Venta $venta)
+    {
+        $venta->update(['decision_notificada' => true]);
+        return response()->json(['success' => true]);
     }
 }

@@ -26,8 +26,10 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
 import {
+    AlertTriangle,
     Calendar,
     CheckCircle,
+    Clock,
     CreditCard,
     DollarSign,
     Edit,
@@ -207,6 +209,9 @@ interface Venta {
             tasa_cambio: number;
         };
     } | null;
+    es_venta_especial: boolean;
+    nota_venta_especial: string | null;
+    decision_notificada: boolean;
 }
 
 interface Props {
@@ -238,7 +243,11 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     // ── Estados de carga ──────────────────────
     const [isCancelling, setIsCancelling] = useState(false);
     const [isApproving, setIsApproving] = useState(false);
+    const [isRejecting, setIsRejecting] = useState(false);
     const [isSavingDestinatario, setIsSavingDestinatario] = useState(false);
+
+    // ── Venta Especial ────────────────────────
+    const [showDecisionAlert, setShowDecisionAlert] = useState(false);
 
     // ── Modal destinatario ────────────────────
     const [isDestinatarioDialogOpen, setIsDestinatarioDialogOpen] = useState(false);
@@ -271,6 +280,18 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
             .get(route('ventas.getCuentasParaGestor'))
             .then((r) => setCuentasGestor(r.data))
             .catch(() => {});
+    }, []);
+
+    // Auto-abrir AlertDialog si el vendedor aún no vio el veredicto del admin
+    useEffect(() => {
+        if (
+            currentVenta.es_venta_especial &&
+            !currentVenta.decision_notificada &&
+            (currentVenta.estado === 'pendiente' || currentVenta.estado === 'rechazada') &&
+            userRole === 'vendedor'
+        ) {
+            setShowDecisionAlert(true);
+        }
     }, []);
 
     // ─────────────────────────────────────────
@@ -385,9 +406,11 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     const codigoReporte = monedaReporte?.codigo || 'USD';
     const convertirMontoReporte = (monto: number) => monto * tasaReporte;
 
-    const isVentaPendiente = currentVenta.estado === 'pendiente';
-    const isVentaCompletada = currentVenta.estado === 'completada';
-    const isVentaCancelada = currentVenta.estado === 'cancelada';
+    const isVentaPendiente          = currentVenta.estado === 'pendiente';
+    const isVentaCompletada         = currentVenta.estado === 'completada';
+    const isVentaCancelada          = currentVenta.estado === 'cancelada';
+    const isVentaSolicitudEspecial  = currentVenta.estado === 'solicitud_especial';
+    const isVentaRechazada          = currentVenta.estado === 'rechazada';
 
     // Verifica si la cuenta del gestor tiene saldo insuficiente para cubrir la comisión
     const gestorSinSaldo =
@@ -408,6 +431,10 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                 return { color: 'bg-green-500', text: 'COMPLETADA', textColor: 'text-green-600' };
             case 'cancelada':
                 return { color: 'bg-red-500', text: 'ANULADA', textColor: 'text-red-600' };
+            case 'solicitud_especial':
+                return { color: 'bg-amber-500', text: 'SOLICITUD ESPECIAL', textColor: 'text-amber-600' };
+            case 'rechazada':
+                return { color: 'bg-red-800', text: 'RECHAZADA', textColor: 'text-red-800' };
             default:
                 return { color: 'bg-gray-500', text: 'DESCONOCIDO', textColor: 'text-gray-600' };
         }
@@ -526,6 +553,55 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
         }
     };
 
+    /** Admin aprueba la solicitud especial → pasa a pendiente */
+    const handleAprobarSolicitudEspecial = async () => {
+        setIsApproving(true);
+        try {
+            const { data } = await axios.post(route('ventas.especial.aprobar', currentVenta.id));
+            if (data.success) {
+                toast.success(data.message);
+                setCurrentVenta((prev) => ({ ...prev, estado: 'pendiente' }));
+            } else {
+                toast.error(data.message || 'Error al aprobar la solicitud');
+            }
+        } catch (error: unknown) {
+            if (axios.isAxiosError(error)) {
+                toast.error(error.response?.data?.message || 'Error al aprobar la solicitud');
+            }
+        } finally {
+            setIsApproving(false);
+        }
+    };
+
+    /** Admin rechaza la solicitud especial → revierte stock */
+    const handleRechazarSolicitudEspecial = async () => {
+        setIsRejecting(true);
+        try {
+            const { data } = await axios.post(route('ventas.especial.rechazar', currentVenta.id));
+            if (data.success) {
+                toast.success(data.message);
+                setCurrentVenta((prev) => ({ ...prev, estado: 'rechazada' }));
+            } else {
+                toast.error(data.message || 'Error al rechazar la solicitud');
+            }
+        } catch (error: unknown) {
+            if (axios.isAxiosError(error)) {
+                toast.error(error.response?.data?.message || 'Error al rechazar la solicitud');
+            }
+        } finally {
+            setIsRejecting(false);
+        }
+    };
+
+    /** Vendedor cierra el AlertDialog de decisión y marca como notificado */
+    const handleCerrarDecisionAlert = async () => {
+        setShowDecisionAlert(false);
+        try {
+            await axios.post(route('ventas.decision.notificada', currentVenta.id));
+            setCurrentVenta((prev) => ({ ...prev, decision_notificada: true }));
+        } catch { /* silencioso */ }
+    };
+
     /** Anular venta */
     const handleAnularVenta = async () => {
         setIsCancelling(true);
@@ -570,6 +646,77 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                 </div>
 
                 <Separator />
+
+                {/* ── AlertDialog de decisión para el vendedor ── */}
+                <AlertDialog open={showDecisionAlert} onOpenChange={(open) => { if (!open) handleCerrarDecisionAlert(); }}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className={currentVenta.estado === 'pendiente' ? 'text-green-600' : 'text-red-600'}>
+                                {currentVenta.estado === 'pendiente' ? '✅ Solicitud Aprobada' : '❌ Solicitud Rechazada'}
+                            </AlertDialogTitle>
+                            <AlertDialogDescription asChild>
+                                <div className="space-y-3">
+                                    {currentVenta.estado === 'pendiente' ? (
+                                        <div className="rounded-md bg-green-50 p-3 text-sm text-green-700 dark:bg-green-950 dark:text-green-300">
+                                            <p>El administrador aprobó tu solicitud de venta especial.</p>
+                                            <p className="mt-1 font-semibold">Ahora debes agregar el receptor para completar la venta.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+                                            <p>El administrador rechazó tu solicitud de venta especial.</p>
+                                            <p className="mt-1 font-semibold">El stock de los productos ha sido revertido automáticamente.</p>
+                                        </div>
+                                    )}
+                                    {currentVenta.nota_venta_especial && (
+                                        <p className="text-muted-foreground text-xs">Motivo registrado: <em>{currentVenta.nota_venta_especial}</em></p>
+                                    )}
+                                </div>
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogAction
+                                onClick={handleCerrarDecisionAlert}
+                                className={currentVenta.estado === 'pendiente' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}
+                            >
+                                Entendido
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+
+                {/* ── Banner venta especial ── */}
+                {currentVenta.es_venta_especial && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
+                        <div className="flex flex-wrap items-start gap-3">
+                            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                            <div className="flex-1">
+                                <p className="font-semibold text-amber-800 dark:text-amber-200">Venta Especial</p>
+                                {currentVenta.nota_venta_especial && (
+                                    <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+                                        <span className="font-medium">Motivo:</span> {currentVenta.nota_venta_especial}
+                                    </p>
+                                )}
+                                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                                    Precio libre · Sin comisión para el vendedor
+                                </p>
+                            </div>
+                            {/* Impacto financiero solo para admin/moderador */}
+                            {(userRole === 'admin' || userRole === 'moderador') && (() => {
+                                const costoTotal = currentVenta.items.reduce((acc, i) => acc + i.costo_unitario * i.cantidad, 0);
+                                const perdida = currentVenta.total - costoTotal;
+                                return (
+                                    <div className="rounded-lg border border-amber-300 bg-amber-100 px-4 py-2 text-xs dark:border-amber-700 dark:bg-amber-900">
+                                        <p className="text-amber-700 dark:text-amber-300">Costo total: <strong>{formatCurrency(costoTotal, simboloMonedaPrincipal)}</strong></p>
+                                        <p className="text-amber-700 dark:text-amber-300">Cobrado: <strong>{formatCurrency(currentVenta.total, simboloMonedaPrincipal)}</strong></p>
+                                        <p className={`font-bold ${perdida < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                            Impacto: {formatCurrency(perdida, simboloMonedaPrincipal)}
+                                        </p>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    </div>
+                )}
 
                 {/* ── Widgets vendedor: Total + Comisión ── */}
                 {userRole === 'vendedor' && (
@@ -665,6 +812,97 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                     >
                         Ver Todas las Ventas
                     </Link>
+
+                    {/* ── Acciones para Solicitud Especial ── */}
+                    {isVentaSolicitudEspecial && (userRole === 'admin' || userRole === 'moderador') && (
+                        <>
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button
+                                        variant="default"
+                                        className="flex cursor-pointer items-center gap-2 bg-green-600 text-white hover:bg-green-700"
+                                        disabled={isApproving}
+                                    >
+                                        <CheckCircle size={16} />
+                                        {isApproving ? 'Aprobando...' : 'Aprobar Solicitud'}
+                                    </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle className="text-green-600">Confirmar Aprobación</AlertDialogTitle>
+                                        <AlertDialogDescription asChild>
+                                            <div className="space-y-3">
+                                                <p>¿Aprobar la solicitud especial <strong>#{currentVenta.id}</strong>?</p>
+                                                {currentVenta.nota_venta_especial && (
+                                                    <div className="rounded-md bg-amber-50 p-3 text-sm dark:bg-amber-950">
+                                                        <p className="font-medium text-amber-700 dark:text-amber-300">Motivo del vendedor:</p>
+                                                        <p className="mt-1 italic text-amber-600 dark:text-amber-400">{currentVenta.nota_venta_especial}</p>
+                                                    </div>
+                                                )}
+                                                <div className="rounded-md bg-green-50 p-3 text-sm text-green-700 dark:bg-green-950 dark:text-green-300">
+                                                    Al aprobar, la venta pasará a estado <strong>Pendiente</strong> y el vendedor podrá agregar el receptor para completarla.
+                                                </div>
+                                            </div>
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel disabled={isApproving}>Cancelar</AlertDialogCancel>
+                                        <AlertDialogAction
+                                            onClick={handleAprobarSolicitudEspecial}
+                                            className="bg-green-600 hover:bg-green-700"
+                                            disabled={isApproving}
+                                        >
+                                            Sí, Aprobar
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button
+                                        variant="destructive"
+                                        className="flex cursor-pointer items-center gap-2"
+                                        disabled={isRejecting}
+                                    >
+                                        <XCircle size={16} />
+                                        {isRejecting ? 'Rechazando...' : 'Rechazar Solicitud'}
+                                    </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle className="text-red-600">Confirmar Rechazo</AlertDialogTitle>
+                                        <AlertDialogDescription asChild>
+                                            <div className="space-y-3">
+                                                <p>¿Rechazar la solicitud especial <strong>#{currentVenta.id}</strong>?</p>
+                                                <div className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+                                                    Al rechazar, el stock reservado se revertirá automáticamente y el vendedor será notificado.
+                                                </div>
+                                            </div>
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel disabled={isRejecting}>Cancelar</AlertDialogCancel>
+                                        <AlertDialogAction
+                                            onClick={handleRechazarSolicitudEspecial}
+                                            className="bg-red-600 hover:bg-red-700"
+                                            disabled={isRejecting}
+                                        >
+                                            Sí, Rechazar
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        </>
+                    )}
+
+                    {/* Indicador de espera para el vendedor en solicitud_especial */}
+                    {isVentaSolicitudEspecial && userRole === 'vendedor' && (
+                        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm dark:border-amber-800 dark:bg-amber-950">
+                            <Clock size={16} className="text-amber-500" />
+                            <span className="text-amber-700 dark:text-amber-300">Esperando aprobación del administrador</span>
+                        </div>
+                    )}
 
                     {/* Agregar receptor — solo si pendiente y sin destinatario */}
                     {isVentaPendiente && !currentVenta.destinatario && (
