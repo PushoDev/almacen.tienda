@@ -42,15 +42,20 @@ export const NotificationBell = () => {
             setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read_at: new Date().toISOString() } : n)));
             setUnreadCount((prev) => Math.max(0, prev - 1));
 
-            // Navigate if link exists (custom logic based on type)
+            // Navigate based on notification type
             const notification = notifications.find((n) => n.id === id);
             if (notification) {
-                if (notification.data.type === 'venta_creada') {
+                const { type } = notification.data;
+                if (type === 'venta_creada') {
                     router.visit(route('ventas.show', notification.data.venta_id));
-                } else if (notification.data.type === 'movimiento_stock') {
-                    router.visit(route('movimientos.index')); // O show si existiera ruta detalle
-                } else if (notification.data.type === 'cierre_caja') {
+                } else if (type === 'movimiento_stock') {
+                    router.visit(route('movimientos.show', notification.data.movimiento_id));
+                } else if (type === 'cierre_caja') {
                     router.visit(route('ventas.cierres.show', notification.data.cierre_id));
+                } else if (type === 'movimiento_financiero') {
+                    router.visit(route('transacciones.show', notification.data.movimiento_id));
+                } else if (type === 'cambio_precio') {
+                    router.visit(route('disponibles.precios-vendedores', { producto: notification.data.producto_id, almacen: notification.data.almacen_id }));
                 }
             }
         } catch (error) {
