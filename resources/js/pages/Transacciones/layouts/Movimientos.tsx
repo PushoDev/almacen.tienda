@@ -89,13 +89,6 @@ interface MovimientoForm {
     monto_convertido: string;
 }
 
-// ✅ Estados para validaciones de límites
-interface LimitValidation {
-    isValid: boolean;
-    message: string;
-    severity: 'warning' | 'error';
-}
-
 // ✅ TIPO SIMPLIFICADO para setData
 type FormSetter = (data: Partial<MovimientoForm> | ((data: MovimientoForm) => MovimientoForm)) => void;
 
@@ -264,110 +257,10 @@ const ConversionTransferencia: React.FC<ConversionTransferenciaProps> = ({ data,
 // ------------------------------------
 export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, proveedores, monedasActivas }: Props) {
     const [alert, setAlert] = useState<AlertState>({ show: false, message: '', type: 'success' });
-    const [limitValidation, setLimitValidation] = useState<LimitValidation | null>(null);
 
     const showToast = (message: string, type: 'success' | 'error') => {
         setAlert({ show: true, message, type });
         setTimeout(() => setAlert({ show: false, message: '', type: 'success' }), 4000);
-    };
-
-    // ✅ Validar límites en tiempo real para transferencias
-    const validarLimitesTransferencia = (monto: string, destinoId: string, destinoTipo: EntidadTipo, montoConvertido: string) => {
-        if (!monto || !destinoId || destinoId === '') {
-            setLimitValidation(null);
-            return;
-        }
-
-        const montoNum = parseFloat(montoConvertido) || 0;
-
-        switch (destinoTipo) {
-            case 'cuenta':
-                const cuentaDestino = cuentasDestino.find((c) => c.id === parseInt(destinoId));
-                if (cuentaDestino) {
-                    const limiteMaximo = 1000000; // 1 millón
-                    const saldoActual = cuentaDestino.saldo_cuenta || 0;
-                    const saldoDespues = saldoActual + montoNum;
-
-                    if (saldoDespues > limiteMaximo) {
-                        setLimitValidation({
-                            isValid: false,
-                            message: `⚠️ Esta transferencia excedería el límite de ${limiteMaximo.toLocaleString()} ${cuentaDestino.moneda.codigo_moneda} para esta cuenta.`,
-                            severity: 'error',
-                        });
-                        return;
-                    }
-
-                    if (saldoDespues > limiteMaximo * 0.9) {
-                        // 90% del límite
-                        setLimitValidation({
-                            isValid: true,
-                            message: `⚠️ Cercano al límite máximo de ${limiteMaximo.toLocaleString()} ${cuentaDestino.moneda.codigo_moneda}`,
-                            severity: 'warning',
-                        });
-                        return;
-                    }
-                }
-                break;
-
-            case 'cliente':
-                const clienteDestino = clientes.find((c) => c.id === parseInt(destinoId));
-                if (clienteDestino) {
-                    const limiteMaximo = 50000; // 50,000 USD
-                    const saldoActual = parseFloat(String(clienteDestino.deuda_pago_cliente)) || 0;
-                    const saldoDespues = saldoActual + montoNum;
-
-                    if (saldoDespues > limiteMaximo) {
-                        setLimitValidation({
-                            isValid: false,
-                            message: `⚠️ Esta transferencia excedería el límite de $${limiteMaximo.toLocaleString()} USD para este cliente.`,
-                            severity: 'error',
-                        });
-                        return;
-                    }
-
-                    if (saldoDespues > limiteMaximo * 0.9) {
-                        // 90% del límite
-                        setLimitValidation({
-                            isValid: true,
-                            message: `⚠️ Cercano al límite máximo de $${limiteMaximo.toLocaleString()} USD`,
-                            severity: 'warning',
-                        });
-                        return;
-                    }
-                }
-                break;
-
-            case 'proveedor':
-                const proveedorDestino = proveedores.find((p) => p.id === parseInt(destinoId));
-                if (proveedorDestino) {
-                    const limiteMaximo = 100000; // 100,000 USD
-                    const saldoActual = proveedorDestino.saldo_proveedor || 0;
-                    const saldoDespues = saldoActual + montoNum;
-
-                    if (saldoDespues > limiteMaximo) {
-                        setLimitValidation({
-                            isValid: false,
-                            message: `⚠️ Esta transferencia excedería el límite de $${limiteMaximo.toLocaleString()} USD para este proveedor.`,
-                            severity: 'error',
-                        });
-                        return;
-                    }
-
-                    if (saldoDespues > limiteMaximo * 0.9) {
-                        // 90% del límite
-                        setLimitValidation({
-                            isValid: true,
-                            message: `⚠️ Cercano al límite máximo de $${limiteMaximo.toLocaleString()} USD`,
-                            severity: 'warning',
-                        });
-                        return;
-                    }
-                }
-                break;
-        }
-
-        // Si pasa todas las validaciones
-        setLimitValidation(null);
     };
 
     // --- FORMULARIOS SIMPLIFICADOS ---
@@ -401,8 +294,8 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                 resetGasto();
             },
             onError: (errors) => {
-                console.error('Errores de Gasto:', errors);
-                showToast('Hubo un error al registrar el gasto. Revisa los campos.', 'error');
+                const errorMessage = errors.message || 'Hubo un error al registrar el gasto. Revisa los campos.';
+                showToast(errorMessage, 'error');
             },
         });
     };
@@ -436,8 +329,8 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                 resetIngreso();
             },
             onError: (errors) => {
-                console.error('Errores de Ingreso:', errors);
-                showToast('Hubo un error al registrar el ingreso. Revisa los campos.', 'error');
+                const errorMessage = errors.message || 'Hubo un error al registrar el ingreso. Revisa los campos.';
+                showToast(errorMessage, 'error');
             },
         });
     };
@@ -476,8 +369,7 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                 resetTransfer();
             },
             onError: (errors) => {
-                console.error('Errores de Transferencia:', errors);
-                const errorMessage = errors.destino_id || 'Hubo un error al realizar la transferencia. Revisa los campos.';
+                const errorMessage = errors.message || errors.destino_id || 'Hubo un error al realizar la transferencia. Revisa los campos.';
                 showToast(errorMessage, 'error');
             },
         });
@@ -536,9 +428,6 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                     ...prev,
                     monto_convertido: montoFinal.toFixed(2),
                 }));
-
-                // ✅ Validar límites después de calcular
-                validarLimitesTransferencia(transferData.monto, transferData.destino_id, transferData.destino_tipo, montoFinal.toFixed(2));
             }
         }
     }, [
@@ -596,11 +485,6 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                     newData.destino_tipo = tipoEntidad;
                     newData.destino_id = value;
                     newData.moneda_destino = selectedMoneda;
-
-                    // Limpiar validación de límites cuando cambia el destino
-                    if (formSetter === setTransferData) {
-                        setLimitValidation(null);
-                    }
                 }
                 return newData;
             });
@@ -1101,27 +985,6 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                             {/* ✅ CAMPO DE TASA DE CAMBIO EDITABLE PARA TRANSFERENCIAS */}
                             <TasaCambioInput data={transferData} setData={setTransferData} errors={transferErrors} monedasActivas={monedasActivas} />
 
-                            {/* ✅ ADVERTENCIA DE LÍMITES */}
-                            {limitValidation && (
-                                <div
-                                    className={`rounded-md p-3 ${
-                                        limitValidation.severity === 'error'
-                                            ? 'border border-red-200 bg-red-50 dark:border-red-700 dark:bg-red-900'
-                                            : 'border border-yellow-200 bg-yellow-50 dark:border-yellow-700 dark:bg-yellow-900'
-                                    }`}
-                                >
-                                    <p
-                                        className={`text-sm ${
-                                            limitValidation.severity === 'error'
-                                                ? 'text-red-800 dark:text-red-200'
-                                                : 'text-yellow-800 dark:text-yellow-200'
-                                        }`}
-                                    >
-                                        {limitValidation.message}
-                                    </p>
-                                </div>
-                            )}
-
                             <div>
                                 <Label htmlFor="comentario_transferir">Comentario</Label>
                                 <Textarea
@@ -1141,8 +1004,7 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                                     !transferData.destino_id ||
                                     !transferData.monto ||
                                     Number(transferData.monto) <= 0 ||
-                                    (transferData.origen_tipo === transferData.destino_tipo && transferData.origen_id === transferData.destino_id) ||
-                                    limitValidation?.severity === 'error'
+                                    (transferData.origen_tipo === transferData.destino_tipo && transferData.origen_id === transferData.destino_id)
                                 }
                                 className="w-full"
                             >

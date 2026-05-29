@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
 import axios from 'axios';
-import { ArrowLeft, ArrowRight, Bell, BellRing, CheckCircle, Lock, ShoppingCart, Truck } from 'lucide-react';
+import { ArrowDownCircle, ArrowLeft, ArrowRight, ArrowRightLeft, ArrowUpCircle, Bell, BellRing, CheckCircle, DollarSign, Lock, ShoppingCart, Truck } from 'lucide-react';
 
 interface Notification {
     id: string;
@@ -52,6 +52,14 @@ const getIcon = (iconName: string) => {
             return <Lock className="h-5 w-5" />;
         case 'check':
             return <CheckCircle className="h-5 w-5" />;
+        case 'dollar-sign':
+            return <DollarSign className="h-5 w-5" />;
+        case 'arrow-up-circle':
+            return <ArrowUpCircle className="h-5 w-5" />;
+        case 'arrow-down-circle':
+            return <ArrowDownCircle className="h-5 w-5" />;
+        case 'arrow-right-left':
+            return <ArrowRightLeft className="h-5 w-5" />;
         default:
             return <Bell className="h-5 w-5" />;
     }
@@ -67,6 +75,10 @@ const getColorClass = (color: string) => {
             return 'text-red-500 bg-red-100 dark:bg-red-900/20';
         case 'purple':
             return 'text-purple-500 bg-purple-100 dark:bg-purple-900/20';
+        case 'orange':
+            return 'text-orange-500 bg-orange-100 dark:bg-orange-900/20';
+        case 'amber':
+            return 'text-amber-500 bg-amber-100 dark:bg-amber-900/20';
         default:
             return 'text-gray-500 bg-gray-100 dark:bg-gray-800';
     }
@@ -76,15 +88,19 @@ export default function Index({ notifications }: IndexProps) {
     const handleMarkAsRead = async (id: string, type: string, data: any) => {
         try {
             await axios.post(route('notifications.markAsRead', id));
-            // Navigate if link exists (custom logic based on type)
+            // Navigate based on notification type
             if (data.type === 'venta_creada') {
                 router.visit(route('ventas.show', data.venta_id));
             } else if (data.type === 'movimiento_stock') {
-                router.visit(route('movimientos.index'));
+                router.visit(route('movimientos.show', data.movimiento_id));
             } else if (data.type === 'cierre_caja') {
                 router.visit(route('ventas.cierres.show', data.cierre_id));
+            } else if (data.type === 'movimiento_financiero') {
+                router.visit(route('transacciones.show', data.movimiento_id));
+            } else if (data.type === 'cambio_precio') {
+                router.visit(route('disponibles.precios-vendedores', { producto: data.producto_id, almacen: data.almacen_id }));
             } else {
-                router.reload(); // Refresh to show as read
+                router.reload();
             }
         } catch (error) {
             console.error('Error marking as read', error);

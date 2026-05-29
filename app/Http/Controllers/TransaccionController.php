@@ -19,6 +19,7 @@ use Inertia\Inertia;
 use Illuminate\Support\Facades\Log;
 use Exception;
 use Illuminate\Support\Facades\Redirect;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Notification;
 use App\Http\Controllers\ProductoVendedorController;
 use App\Notifications\MovimientoFinancieroNotification;
@@ -463,7 +464,7 @@ class TransaccionController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Error al registrar gasto: ' . $e->getMessage());
-            return Redirect::back()->with('error', '❌ Error al registrar el gasto: ' . $e->getMessage());
+            throw ValidationException::withMessages(['message' => [$e->getMessage()]]);
         }
     }
 
@@ -592,7 +593,7 @@ class TransaccionController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Error al registrar ingreso: ' . $e->getMessage());
-            return Redirect::back()->with('error', '❌ Error al registrar el ingreso: ' . $e->getMessage());
+            throw ValidationException::withMessages(['message' => [$e->getMessage()]]);
         }
     }
 
@@ -646,9 +647,6 @@ class TransaccionController extends Controller
 
             // Validar saldo suficiente
             $this->validarSaldoOrigen($origen, $request->origen_tipo, $montoOrigen);
-
-            // Validar límite máximo para el destino
-            $this->validarLimiteDestino($destino, $request->destino_tipo, $montoDestino, $monedaDestino);
 
             // ✅ GUARDAR SALDOS ANTES de las operaciones
             $saldoAnteriorOrigen = $this->obtenerSaldoEntidad($origen, $request->origen_tipo);
@@ -723,7 +721,7 @@ class TransaccionController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Error al registrar transferencia: ' . $e->getMessage());
-            return Redirect::back()->with('error', '❌ Error al registrar la transferencia: ' . $e->getMessage());
+            throw ValidationException::withMessages(['message' => [$e->getMessage()]]);
         }
     }
 
@@ -792,47 +790,6 @@ class TransaccionController extends Controller
             if (!in_array($entidad->id, $cuentasAsignadas)) {
                 throw new \Exception('No tiene permiso para operar con esta cuenta.');
             }
-        }
-    }
-
-    /**
-     * Valida que el monto no exceda el límite máximo permitido para el destino
-     */
-    private function validarLimiteDestino($entidad, string $tipo, float $montoDestino, Moneda $monedaDestino): void
-    {
-        switch ($tipo) {
-            case 'cuenta':
-                // Límite máximo para cuentas: 1,000,000 de su moneda
-                $limiteMaximoCuenta = 1000000;
-                $saldoActual = (float)$entidad->saldo_cuenta;
-                $saldoDespuesDeTransferencia = $saldoActual + $montoDestino;
-
-                if ($saldoDespuesDeTransferencia > $limiteMaximoCuenta) {
-                    throw new \Exception("La transferencia excedería el saldo máximo permitido para esta cuenta. Límite: {$limiteMaximoCuenta} {$monedaDestino->codigo_moneda}, Saldo actual: {$saldoActual}, Saldo después: {$saldoDespuesDeTransferencia} {$monedaDestino->codigo_moneda}");
-                }
-                break;
-
-            case 'cliente':
-                // Límite máximo para clientes: 50,000 USD
-                $limiteMaximoCliente = 50000;
-                $saldoActual = (float)$entidad->deuda_pago_cliente;
-                $saldoDespuesDeTransferencia = $saldoActual + $montoDestino;
-
-                if ($saldoDespuesDeTransferencia > $limiteMaximoCliente) {
-                    throw new \Exception("La transferencia excedería el límite máximo permitido para este cliente. Límite: {$limiteMaximoCliente} USD, Saldo actual: {$saldoActual}, Saldo después: {$saldoDespuesDeTransferencia} USD");
-                }
-                break;
-
-            case 'proveedor':
-                // Límite máximo para proveedores: 100,000 USD
-                $limiteMaximoProveedor = 100000;
-                $saldoActual = (float)$entidad->saldo_proveedor;
-                $saldoDespuesDeTransferencia = $saldoActual + $montoDestino;
-
-                if ($saldoDespuesDeTransferencia > $limiteMaximoProveedor) {
-                    throw new \Exception("La transferencia excedería el límite máximo permitido para este proveedor. Límite: {$limiteMaximoProveedor} USD, Saldo actual: {$saldoActual}, Saldo después: {$saldoDespuesDeTransferencia} USD");
-                }
-                break;
         }
     }
 
