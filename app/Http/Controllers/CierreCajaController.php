@@ -197,8 +197,9 @@ class CierreCajaController extends Controller
             ];
         }
 
-        // Preparar respuesta para Inertia con detalles mejorados de transferencias y claridad en pagos
-        return Inertia::render('Cierres/Create', [
+        $puedeVerCostoImpactoEspeciales = in_array($user->role, ['admin', 'moderador'], true);
+
+        $calculosPayload = [
             'fecha_apertura' => $inicioTurno instanceof Carbon ? $inicioTurno->toDateTimeString() : $inicioTurno,
             'moneda_referencia' => $monedaRef ? $monedaRef->codigo_moneda : 'USD',
             'almacenes' => $almacenes,
@@ -238,7 +239,22 @@ class CierreCajaController extends Controller
             'comparativa_cuentas' => $comparativaCuentas,
             'comparativa_clientes' => $comparativaClientes,
             'tiene_cierre_anterior' => $ultimoCierre !== null,
-        ]);
+        ];
+
+        if (! $puedeVerCostoImpactoEspeciales) {
+            unset(
+                $calculosPayload['calculos']['ventas_especiales_costo_usd'],
+                $calculosPayload['calculos']['ventas_especiales_impacto_usd']
+            );
+
+            $calculosPayload['calculos']['ventas_especiales_detalles'] = array_map(function ($detalle) {
+                unset($detalle['costo'], $detalle['impacto']);
+                return $detalle;
+            }, $calculosPayload['calculos']['ventas_especiales_detalles']);
+        }
+
+        // Preparar respuesta para Inertia con detalles mejorados de transferencias y claridad en pagos
+        return Inertia::render('Cierres/Create', $calculosPayload);
     }
 
     /**
@@ -445,7 +461,9 @@ class CierreCajaController extends Controller
             ];
         }
 
-        return Inertia::render('Cierres/Show', [
+        $puedeVerCostoImpactoEspeciales = in_array($currentUser->role, ['admin', 'moderador'], true);
+
+        $showPayload = [
             'cierre'                => $cierre,
             'userRole'              => $currentUser->role ?? 'vendedor',
             'comision_pv_total'     => round((float) $comisionPVTotal, 2),
@@ -458,7 +476,21 @@ class CierreCajaController extends Controller
             'ventas_especiales_costo_usd'   => round($veCosto, 2),
             'ventas_especiales_impacto_usd' => round($veTotal - $veCosto, 2),
             'ventas_especiales_detalles'    => $veDetalles,
-        ]);
+        ];
+
+        if (! $puedeVerCostoImpactoEspeciales) {
+            unset(
+                $showPayload['ventas_especiales_costo_usd'],
+                $showPayload['ventas_especiales_impacto_usd']
+            );
+
+            $showPayload['ventas_especiales_detalles'] = array_map(function ($detalle) {
+                unset($detalle['costo'], $detalle['impacto']);
+                return $detalle;
+            }, $showPayload['ventas_especiales_detalles']);
+        }
+
+        return Inertia::render('Cierres/Show', $showPayload);
     }
 
     public function aprobar(Request $request, $id)

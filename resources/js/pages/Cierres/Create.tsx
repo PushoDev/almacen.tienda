@@ -294,6 +294,7 @@ export default function Create({
         fecha_apertura: fecha_apertura,
         confirmacion_transferencias: [] as string[],
     });
+    const canViewEspecialesCostImpact = auth.user.role === 'admin' || auth.user.role === 'moderador';
 
     const getAlmacenNombre = (almacenId: number) => {
         const almacen = almacenes.find((a: { id: number; nombre: string }) => a.id === almacenId);
@@ -1431,9 +1432,11 @@ export default function Create({
                                     <p className="text-xl font-black text-amber-700 dark:text-amber-300">
                                         {calculos.ventas_especiales_count} venta{(calculos.ventas_especiales_count ?? 0) > 1 ? 's' : ''}
                                     </p>
-                                    <p className={`mt-1 text-xs font-semibold ${(calculos.ventas_especiales_impacto_usd ?? 0) < 0 ? 'text-red-600' : 'text-amber-600'}`}>
-                                        Impacto: ${Number(calculos.ventas_especiales_impacto_usd ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
-                                    </p>
+                                    {canViewEspecialesCostImpact && (
+                                        <p className={`mt-1 text-xs font-semibold ${(calculos.ventas_especiales_impacto_usd ?? 0) < 0 ? 'text-red-600' : 'text-amber-600'}`}>
+                                            Impacto: ${Number(calculos.ventas_especiales_impacto_usd ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                                        </p>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -1456,10 +1459,14 @@ export default function Create({
                                             </div>
                                             <div className="ml-4 text-right">
                                                 <p className="text-amber-700 dark:text-amber-300">Cobrado: <strong>${ve.total.toFixed(2)}</strong></p>
-                                                <p className="text-red-600 dark:text-red-400">Costo: <strong>${ve.costo.toFixed(2)}</strong></p>
-                                                <p className={`font-bold ${ve.impacto < 0 ? 'text-red-700 dark:text-red-400' : 'text-amber-700 dark:text-amber-300'}`}>
-                                                    Impacto: ${ve.impacto.toFixed(2)}
-                                                </p>
+                                                {canViewEspecialesCostImpact && (
+                                                    <>
+                                                        <p className="text-red-600 dark:text-red-400">Costo: <strong>${ve.costo.toFixed(2)}</strong></p>
+                                                        <p className={`font-bold ${ve.impacto < 0 ? 'text-red-700 dark:text-red-400' : 'text-amber-700 dark:text-amber-300'}`}>
+                                                            Impacto: ${ve.impacto.toFixed(2)}
+                                                        </p>
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
@@ -1469,14 +1476,18 @@ export default function Create({
                                         <span>Total cobrado especiales:</span>
                                         <span>${Number(calculos.ventas_especiales_total_usd ?? 0).toFixed(2)} USD</span>
                                     </div>
-                                    <div className="flex justify-between text-xs font-bold text-red-700 dark:text-red-400">
-                                        <span>Costo total especiales:</span>
-                                        <span>${Number(calculos.ventas_especiales_costo_usd ?? 0).toFixed(2)} USD</span>
-                                    </div>
-                                    <div className={`flex justify-between text-sm font-black ${(calculos.ventas_especiales_impacto_usd ?? 0) < 0 ? 'text-red-700 dark:text-red-400' : 'text-amber-700 dark:text-amber-300'}`}>
-                                        <span>Impacto neto:</span>
-                                        <span>${Number(calculos.ventas_especiales_impacto_usd ?? 0).toFixed(2)} USD</span>
-                                    </div>
+                                    {canViewEspecialesCostImpact && (
+                                        <>
+                                            <div className="flex justify-between text-xs font-bold text-red-700 dark:text-red-400">
+                                                <span>Costo total especiales:</span>
+                                                <span>${Number(calculos.ventas_especiales_costo_usd ?? 0).toFixed(2)} USD</span>
+                                            </div>
+                                            <div className={`flex justify-between text-sm font-black ${(calculos.ventas_especiales_impacto_usd ?? 0) < 0 ? 'text-red-700 dark:text-red-400' : 'text-amber-700 dark:text-amber-300'}`}>
+                                                <span>Impacto neto:</span>
+                                                <span>${Number(calculos.ventas_especiales_impacto_usd ?? 0).toFixed(2)} USD</span>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         )}
