@@ -732,23 +732,12 @@ class CierreCajaController extends Controller
                     $prodId = $det->producto_id;
                     $precioVenta = (float) $det->precio_venta;
 
-                    // SIEMPRE obtener precio base desde producto_vendedors (precio configurado por admin/vendedor)
+                    // Obtener precio base desde la fila única del almacén
                     $precioBase = DB::table('producto_vendedors')
                         ->where('producto_id', $prodId)
                         ->where('almacen_id', $pago->venta->almacen_id)
-                        ->where('user_id', $pago->venta->user_id)
                         ->value('precio_venta');
 
-                    // Si no existe para ese usuario, buscar el del admin (user_id = 1)
-                    if (! $precioBase) {
-                        $precioBase = DB::table('producto_vendedors')
-                            ->where('producto_id', $prodId)
-                            ->where('almacen_id', $pago->venta->almacen_id)
-                            ->where('user_id', 1)
-                            ->value('precio_venta');
-                    }
-
-                    // Si no existe ningún precio, usar el precio de venta
                     $precioBase = $precioBase ? (float) $precioBase : $precioVenta;
 
                     $producto = $det->producto;
