@@ -25,22 +25,17 @@ class PreciosVendedorExport implements
     WithEvents
 {
     public function __construct(
-        private int $almacenId,
-        private int $userId,
-        private string $userRole
+        private int $almacenId
     ) {}
 
     public function collection()
     {
-        $saveUserId = in_array($this->userRole, ['admin', 'moderador']) ? 1 : $this->userId;
-
         $productos = DB::table('almacen_producto')
             ->join('productos', 'almacen_producto.producto_id', '=', 'productos.id')
             ->leftJoin('categorias', 'productos.categoria_id', '=', 'categorias.id')
-            ->leftJoin('producto_vendedors', function ($join) use ($saveUserId) {
+            ->leftJoin('producto_vendedors', function ($join) {
                 $join->on('productos.id', '=', 'producto_vendedors.producto_id')
-                    ->on('almacen_producto.almacen_id', '=', 'producto_vendedors.almacen_id')
-                    ->where('producto_vendedors.user_id', $saveUserId);
+                    ->on('almacen_producto.almacen_id', '=', 'producto_vendedors.almacen_id');
             })
             ->where('almacen_producto.almacen_id', $this->almacenId)
             ->where('almacen_producto.cantidad', '>', 0)

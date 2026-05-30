@@ -2,8 +2,8 @@
 
 namespace App\Imports;
 
-use App\Models\Producto;
 use App\Models\PrecioHistorial;
+use App\Models\Producto;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -13,17 +13,14 @@ use Maatwebsite\Excel\Concerns\WithStartRow;
 class PreciosVendedorImport implements ToCollection, WithStartRow
 {
     public int $actualizados = 0;
-    public int $omitidos = 0;
-    public array $errores = [];
-    private int $almacenIdExcel = 0;
+    public int $omitidos     = 0;
+    public array $errores    = [];
 
     public function __construct(
         private int $almacenId,
-        private int $userId,
-        private string $userRole
+        private int $userId
     ) {}
 
-    // Los datos empiezan en la fila 2 (fila 1 = encabezados)
     public function startRow(): int
     {
         return 2;
@@ -31,14 +28,11 @@ class PreciosVendedorImport implements ToCollection, WithStartRow
 
     public function collection(Collection $rows)
     {
-        $saveUserId = in_array($this->userRole, ['admin', 'moderador']) ? 1 : $this->userId;
-
         foreach ($rows as $index => $row) {
             $productoId  = isset($row[0]) ? (int) $row[0] : null;
             $precioVenta = isset($row[4]) && $row[4] !== '' && $row[4] !== null ? (float) $row[4] : null;
             $comision    = isset($row[5]) && $row[5] !== '' && $row[5] !== null ? (float) $row[5] : null;
 
-            // Si ambas celdas editables están vacías, omitir la fila
             if ($precioVenta === null && $comision === null) {
                 $this->omitidos++;
                 continue;
@@ -49,7 +43,6 @@ class PreciosVendedorImport implements ToCollection, WithStartRow
                 continue;
             }
 
-            // Verificar que el producto exista y pertenezca al almacén
             $existe = DB::table('almacen_producto')
                 ->where('almacen_id', $this->almacenId)
                 ->where('producto_id', $productoId)
@@ -67,30 +60,33 @@ class PreciosVendedorImport implements ToCollection, WithStartRow
                     continue;
                 }
 
-                // Obtener precio anterior para historial
                 $registroActual = DB::table('producto_vendedors')
                     ->where('producto_id', $productoId)
                     ->where('almacen_id', $this->almacenId)
-                    ->where('user_id', $saveUserId)
                     ->first();
 
-                $updateData = ['updated_at' => now()];
+                $updateData = [
+                    'puesto_por_user_id' => $this->userId,
+                    'updated_at'         => now(),
+                ];
 
                 if ($precioVenta !== null && $precioVenta >= 0.01) {
                     $precioVenta = round($precioVenta, 2);
-                    $ganancia = round($precioVenta - $producto->precio_compra_producto, 2);
-                    $updateData['precio_venta'] = $precioVenta;
-                    $updateData['venta_ganancia'] = $ganancia;
+                    $ganancia    = round($precioVenta - $producto->precio_compra_producto, 2);
+                    $updateData['precio_venta']    = $precioVenta;
+                    $updateData['venta_ganancia']  = $ganancia;
 
-                    // Registrar en historial si el precio cambió
                     $precioAnterior = $registroActual?->precio_venta;
-                    if ($precioAnterior !== null && round((float) $precioAnterior, 2) !== $precioVenta) {
+                    $precioCambio   = $precioAnterior === null || round((float) $precioAnterior, 2) !== $precioVenta;
+
+                    if ($precioCambio) {
                         PrecioHistorial::create([
-                            'producto_id' => $productoId,
-                            'user_id'     => $this->userId,
-                            'almacen_id'  => $this->almacenId,
+                            'producto_id'     => $productoId,
+                            'user_id'         => $this->userId,
+                            'almacen_id'      => $this->almacenId,
                             'precio_anterior' => $precioAnterior,
                             'precio_nuevo'    => $precioVenta,
+                            'comision'        => $comision ?? (float) ($registroActual?->comision ?? 0),
                             'accion'          => 'Importación Excel - Almacén ID ' . $this->almacenId,
                         ]);
                     }
@@ -101,11 +97,7 @@ class PreciosVendedorImport implements ToCollection, WithStartRow
                 }
 
                 DB::table('producto_vendedors')->updateOrInsert(
-                    [
-                        'producto_id' => $productoId,
-                        'user_id'     => $saveUserId,
-                        'almacen_id'  => $this->almacenId,
-                    ],
+                    ['producto_id' => $productoId, 'almacen_id' => $this->almacenId],
                     $updateData
                 );
 
