@@ -1,6 +1,7 @@
 import HeadingSmall from '@/components/heading-small';
 import {
     AlertDialog,
+    AlertDialogAction,
     AlertDialogCancel,
     AlertDialogContent,
     AlertDialogDescription,
@@ -87,7 +88,8 @@ interface Producto {
     codigo_barras: string;
     codigos?: ProductoCodigoVenta[];
     barcode_image_url: string | null;
-    precio_base: number | null; // Precio del vendedor o admin
+    precio_base: number | null;
+    comision: number;
     es_precio_vendedor: boolean;
 }
 interface ItemCarrito {
@@ -97,7 +99,8 @@ interface ItemCarrito {
     codigo_barras_usado: string;
     cantidad: number;
     precio_venta: number;
-    precio_base: number; // Precio original antes de editar
+    precio_base: number;
+    comision: number;
     subtotal: number;
 }
 interface Moneda {
@@ -198,6 +201,9 @@ export default function PuntoVentaOficial({
     // ── Venta Especial ────────────────────────────────────────────────────────
     const [esVentaEspecial, setEsVentaEspecial] = useState<boolean>(false);
     const [motivoEspecial, setMotivoEspecial] = useState<string>('');
+    const [productoSinComisionPendiente, setProductoSinComisionPendiente] = useState<{ id: string; nuevoPrecio: number } | null>(null);
+    // Valores de texto del input de precio por item — se aplican solo al salir del campo
+    const [preciosInput, setPreciosInput] = useState<Record<string, string>>({});
 
     const [clientesFisicos, setClientesFisicos] = useState<Cliente[]>([]);
     const [cargandoClientesFisicos, setCargandoClientesFisicos] = useState<boolean>(false);
@@ -481,7 +487,7 @@ export default function PuntoVentaOficial({
             );
         } else {
             const precioVenta = producto.precio_venta ?? 0;
-            const precioBase = producto.precio_base ?? precioVenta;
+            const precioBase  = producto.precio_base ?? precioVenta;
             const nuevoItem: ItemCarrito = {
                 id: idItem,
                 producto: producto,
@@ -490,6 +496,7 @@ export default function PuntoVentaOficial({
                 cantidad: 1,
                 precio_venta: precioVenta,
                 precio_base: precioBase,
+                comision: producto.comision ?? 0,
                 subtotal: precioVenta,
             };
             setCarrito([...carrito, nuevoItem]);
@@ -524,17 +531,50 @@ export default function PuntoVentaOficial({
 
     const actualizarPrecio = (id: string, nuevoPrecio: number) => {
         if (nuevoPrecio < 0) return;
-        setCarrito(
-            carrito.map((item) =>
-                item.id === id
-                    ? {
-                        ...item,
-                        precio_venta: nuevoPrecio,
-                        subtotal: item.cantidad * nuevoPrecio,
-                    }
-                    : item,
+
+        const item = carrito.find((i) => i.id === id);
+        if (!item) return;
+
+        const precioMinimo = item.precio_base - item.comision;
+
+        if (!esVentaEspecial && nuevoPrecio < precioMinimo) {
+            if (item.comision === 0) {
+                // Sin comisión: mostrar AlertDialog antes de convertir en especial
+                setProductoSinComisionPendiente({ id, nuevoPrecio });
+                return;
+            } else {
+                // Por debajo del límite: activar venta especial automáticamente
+                setEsVentaEspecial(true);
+                toast.warning('Precio por debajo del límite permitido. Se activó Venta Especial automáticamente.');
+            }
+        }
+
+        setCarrito((prev) =>
+            prev.map((i) =>
+                i.id === id
+                    ? { ...i, precio_venta: nuevoPrecio, subtotal: i.cantidad * nuevoPrecio }
+                    : i,
             ),
         );
+    };
+
+    // Aplica el precio solo cuando el usuario sale del campo (onBlur / Enter)
+    const confirmarPrecio = (id: string) => {
+        const texto = preciosInput[id];
+
+        // Limpiar siempre el estado temporal
+        setPreciosInput((prev) => {
+            const next = { ...prev };
+            delete next[id];
+            return next;
+        });
+
+        if (texto === undefined) return;
+
+        const valor = parseFloat(texto);
+        if (isNaN(valor) || valor < 0) return; // valor inválido: el input vuelve al precio del carrito
+
+        actualizarPrecio(id, valor);
     };
 
     const quitarDelCarrito = (id: string) => {
@@ -1482,13 +1522,14 @@ export default function PuntoVentaOficial({
                                                         </div>
                                                         <div className="text-right">
                                                             <Input
-
-                                                                value={item.precio_venta}
-                                                                onChange={(e) => {
-                                                                    const value = parseFloat(e.target.value);
-                                                                    if (!isNaN(value)) {
-                                                                        actualizarPrecio(item.id, value);
-                                                                    }
+                                                                type="number"
+                                                                value={preciosInput[item.id] ?? item.precio_venta}
+                                                                onChange={(e) =>
+                                                                    setPreciosInput((prev) => ({ ...prev, [item.id]: e.target.value }))
+                                                                }
+                                                                onBlur={() => confirmarPrecio(item.id)}
+                                                                onKeyDown={(e) => {
+                                                                    if (e.key === 'Enter') e.currentTarget.blur();
                                                                 }}
                                                                 className="w-20 text-sm"
                                                                 min="0"
@@ -2108,6 +2149,54 @@ export default function PuntoVentaOficial({
                     })()}
                 </DialogContent>
             </Dialog>
+
+            {/* AlertDialog: producto sin comisión — requiere aprobación del admin */}
+            <AlertDialog
+                open={!!productoSinComisionPendiente}
+                onOpenChange={(open) => { if (!open) setProductoSinComisionPendiente(null); }}
+            >
+                <AlertDialogContent className="sm:max-w-md">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-amber-700">
+                            <AlertTriangle className="h-5 w-5" />
+                            Producto sin comisión configurada
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="space-y-2 text-sm">
+                            <span className="block">
+                                Este producto no tiene comisión asignada. No puedes aplicar un descuento sin autorización del administrador.
+                            </span>
+                            <span className="block font-medium text-amber-700">
+                                Si deseas continuar, la venta se convertirá en una Venta Especial que requiere aprobación del admin antes de completarse.
+                            </span>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setProductoSinComisionPendiente(null)}>
+                            Cancelar
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-amber-600 hover:bg-amber-700"
+                            onClick={() => {
+                                if (productoSinComisionPendiente) {
+                                    const { id, nuevoPrecio } = productoSinComisionPendiente;
+                                    setEsVentaEspecial(true);
+                                    setCarrito((prev) =>
+                                        prev.map((i) =>
+                                            i.id === id
+                                                ? { ...i, precio_venta: nuevoPrecio, subtotal: i.cantidad * nuevoPrecio }
+                                                : i,
+                                        ),
+                                    );
+                                    toast.warning('Venta Especial activada. Recuerda agregar el motivo.');
+                                }
+                                setProductoSinComisionPendiente(null);
+                            }}
+                        >
+                            Continuar como Venta Especial
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </AppLayout>
     );
 }

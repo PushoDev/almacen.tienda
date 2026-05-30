@@ -168,7 +168,8 @@ class VentaController extends Controller
                         'es_default'    => (bool) $c->es_default,
                     ]),
                     'barcode_image_url' => $producto->barcode_image_url,
-                    'precio_base'       => $precioRow ? (float) $precioRow->precio_venta : null,
+                    'precio_base'        => $precioRow ? (float) $precioRow->precio_venta : null,
+                    'comision'           => $precioRow ? (float) $precioRow->comision : 0,
                     'es_precio_vendedor' => false,
                 ];
             });
@@ -781,13 +782,37 @@ class VentaController extends Controller
             $esGestor   = $validatedData['es_venta_gestor'] ?? false;
             $esEspecial = (bool) ($validatedData['es_venta_especial'] ?? false);
 
+            // Pre-cargar precios del almacén para todos los productos del carrito
+            $productIds = collect($validatedData['items'])->pluck('producto_id')->unique()->toArray();
+            $preciosAlmacen = DB::table('producto_vendedors')
+                ->where('almacen_id', $validatedData['almacen_id'])
+                ->whereIn('producto_id', $productIds)
+                ->get()
+                ->keyBy('producto_id');
+
             // Validación y descuento inmediato de stock
             $historialStockIds = [];
             foreach ($validatedData['items'] as $item) {
                 $producto = Producto::find($item['producto_id']);
-                // Ventas especiales permiten precio por debajo del costo (descuento, regalo, rotura, etc.)
+
+                // Ventas especiales permiten precio por debajo del costo
                 if (!$esEspecial && $item['precio_venta'] < $producto->precio_compra_producto) {
-                    throw new \Exception("El precio de venta de {$producto->nombre_producto} no puede ser menor que su costo de compra.");
+                    throw new \Exception("El precio de venta de \"{$producto->nombre_producto}\" no puede ser menor que su costo de compra.");
+                }
+
+                // Validar que el precio no baje del límite permitido (precio_base - comisión)
+                if (!$esEspecial) {
+                    $precioRow = $preciosAlmacen->get($item['producto_id']);
+                    if ($precioRow) {
+                        $precioMinimo = round((float) $precioRow->precio_venta - (float) $precioRow->comision, 2);
+                        if ((float) $item['precio_venta'] < $precioMinimo) {
+                            throw new \Exception(
+                                "El precio de \"{$producto->nombre_producto}\" (\${$item['precio_venta']}) " .
+                                "está por debajo del mínimo permitido (\${$precioMinimo}). " .
+                                "Use Venta Especial para aplicar este descuento."
+                            );
+                        }
+                    }
                 }
 
                 $almacenProducto = AlmacenProducto::where('almacen_id', $validatedData['almacen_id'])
@@ -874,18 +899,23 @@ class VentaController extends Controller
                 $ganancia = ($item['precio_venta'] - $producto->precio_compra_producto) * $item['cantidad'];
                 $total_ganancia += $ganancia;
 
-                // Leer precio_base y comision desde la fila única del almacén
-                $productoVendedor = DB::table('producto_vendedors')
-                    ->where('producto_id', $item['producto_id'])
-                    ->where('almacen_id', $validatedData['almacen_id'])
-                    ->first();
+                // Usar datos precargados del almacén
+                $productoVendedor = $preciosAlmacen->get($item['producto_id']);
 
-                $precioBase = $productoVendedor ? (float) $productoVendedor->precio_venta : (float) $item['precio_venta'];
-                // Ventas especiales no generan comisión
+                $precioBase   = $productoVendedor ? (float) $productoVendedor->precio_venta : (float) $item['precio_venta'];
                 $baseComision = (!$esEspecial && $productoVendedor) ? (float) $productoVendedor->comision : 0;
 
-                $markup = $esEspecial ? 0 : max(0, (float) $item['precio_venta'] - $precioBase);
-                $comisionUnitaria = $baseComision + $markup;
+                // Calcular comisión según el precio aplicado
+                if ($esEspecial) {
+                    $comisionUnitaria = 0;
+                } elseif ((float) $item['precio_venta'] >= $precioBase) {
+                    // Igual o por encima del precio base: comisión base + markup extra
+                    $comisionUnitaria = $baseComision + ((float) $item['precio_venta'] - $precioBase);
+                } else {
+                    // Por debajo del precio base: el descuento lo absorbe la comisión del vendedor
+                    $descuento = $precioBase - (float) $item['precio_venta'];
+                    $comisionUnitaria = max(0.0, $baseComision - $descuento);
+                }
                 $total_comision += round($comisionUnitaria * $item['cantidad'], 2);
 
                 VentaDetalle::create([
