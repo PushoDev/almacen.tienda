@@ -126,7 +126,11 @@ class VentaController extends Controller
             return response()->json(['error' => 'Acceso denegado al almacén'], 403);
         }
 
-        $userId = $user->id;
+        // Precargar precios del almacén — una fila única por producto
+        $preciosAlmacen = DB::table('producto_vendedors')
+            ->where('almacen_id', $id)
+            ->get()
+            ->keyBy('producto_id');
 
         $productos = Producto::whereHas('almacenes', function ($q) use ($id) {
             $q->where('almacens.id', $id);
@@ -134,50 +138,38 @@ class VentaController extends Controller
             ->with([
                 'categoria',
                 'codigos',
-                'vendedores' => function ($q) use ($userId) {
-                    // Buscar precio del vendedor actual Y del admin (user_id = 1)
-                    $q->whereIn('user_id', [$userId, 1])
-                        ->select('users.id', 'producto_vendedors.precio_venta', 'producto_vendedors.venta_ganancia', 'producto_vendedors.user_id');
-                },
                 'almacenes' => function ($q) use ($id) {
                     $q->where('almacens.id', $id)
                         ->select('almacens.id', 'almacens.nombre_almacen', 'almacen_producto.cantidad');
                 }
             ])
             ->get()
-            ->map(function ($producto) use ($userId) {
-                // Prioridad: precio del vendedor actual > precio del admin
-                $vendedorActual = $producto->vendedores->firstWhere('pivot.user_id', $userId);
-                $precioAdmin = $producto->vendedores->firstWhere('pivot.user_id', 1);
-                
-                // Usar precio del vendedor actual si existe, si no el del admin
-                $vendedor = $vendedorActual ?? $precioAdmin;
-                $esPrecioVendedor = $vendedorActual !== null;
-                
-                $almacen = $producto->almacenes->first();
+            ->map(function ($producto) use ($preciosAlmacen) {
+                $precioRow = $preciosAlmacen->get($producto->id);
+                $almacen   = $producto->almacenes->first();
 
                 return [
-                    'id' => $producto->id,
-                    'nombre_producto' => $producto->nombre_producto,
-                    'marca_producto' => $producto->marca_producto,
-                    'modelo_producto' => $producto->modelo_producto,
-                    'capacidad_producto' => $producto->capacidad_producto,
-                    'categoria_nombre' => $producto->categoria?->nombre_categoria ?? 'Sin categoría',
+                    'id'                     => $producto->id,
+                    'nombre_producto'        => $producto->nombre_producto,
+                    'marca_producto'         => $producto->marca_producto,
+                    'modelo_producto'        => $producto->modelo_producto,
+                    'capacidad_producto'     => $producto->capacidad_producto,
+                    'categoria_nombre'       => $producto->categoria?->nombre_categoria ?? 'Sin categoría',
                     'precio_compra_producto' => $producto->precio_compra_producto,
-                    'stock_disponible' => $almacen?->pivot->cantidad ?? 0,
-                    'precio_venta' => $vendedor?->pivot->precio_venta ?? null,
-                    'tiene_precio' => ($vendedor?->pivot->precio_venta ?? 0) > 0,
-                    'imagen_url' => $producto->imagen_url,
-                    'codigo_barras' => $producto->codigo_producto,
-                    'codigos' => $producto->codigos->map(fn($c) => [
-                        'id' => $c->id,
+                    'stock_disponible'       => $almacen?->pivot->cantidad ?? 0,
+                    'precio_venta'           => $precioRow ? (float) $precioRow->precio_venta : null,
+                    'tiene_precio'           => ($precioRow?->precio_venta ?? 0) > 0,
+                    'imagen_url'             => $producto->imagen_url,
+                    'codigo_barras'          => $producto->codigo_producto,
+                    'codigos'                => $producto->codigos->map(fn($c) => [
+                        'id'            => $c->id,
                         'codigo_barras' => $c->codigo_barras,
-                        'cantidad' => $c->cantidad,
-                        'es_default' => (bool) $c->es_default,
+                        'cantidad'      => $c->cantidad,
+                        'es_default'    => (bool) $c->es_default,
                     ]),
                     'barcode_image_url' => $producto->barcode_image_url,
-                    'precio_base' => $vendedor?->pivot->precio_venta ?? null, // Precio base del vendedor o admin
-                    'es_precio_vendedor' => $esPrecioVendedor, // Indica si es precio personalizado del vendedor
+                    'precio_base'       => $precioRow ? (float) $precioRow->precio_venta : null,
+                    'es_precio_vendedor' => false,
                 ];
             });
 
@@ -788,7 +780,6 @@ class VentaController extends Controller
             $costo_total_productos = 0;
             $esGestor   = $validatedData['es_venta_gestor'] ?? false;
             $esEspecial = (bool) ($validatedData['es_venta_especial'] ?? false);
-            $saveUserId = in_array($user->role, ['admin', 'moderador']) ? 1 : $user->id;
 
             // Validación y descuento inmediato de stock
             $historialStockIds = [];
@@ -883,21 +874,11 @@ class VentaController extends Controller
                 $ganancia = ($item['precio_venta'] - $producto->precio_compra_producto) * $item['cantidad'];
                 $total_ganancia += $ganancia;
 
-                // Leer precio_base y comision desde producto_vendedors (siempre, incluso con gestor)
+                // Leer precio_base y comision desde la fila única del almacén
                 $productoVendedor = DB::table('producto_vendedors')
                     ->where('producto_id', $item['producto_id'])
                     ->where('almacen_id', $validatedData['almacen_id'])
-                    ->where('user_id', $saveUserId)
                     ->first();
-
-                // Fallback al registro del admin si el vendedor no tiene uno propio
-                if (!$productoVendedor && $saveUserId !== 1) {
-                    $productoVendedor = DB::table('producto_vendedors')
-                        ->where('producto_id', $item['producto_id'])
-                        ->where('almacen_id', $validatedData['almacen_id'])
-                        ->where('user_id', 1)
-                        ->first();
-                }
 
                 $precioBase = $productoVendedor ? (float) $productoVendedor->precio_venta : (float) $item['precio_venta'];
                 // Ventas especiales no generan comisión
