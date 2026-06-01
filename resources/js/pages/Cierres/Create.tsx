@@ -325,6 +325,7 @@ export default function Create({
 
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showTransaccionesDialog, setShowTransaccionesDialog] = useState(false);
+    const [showAnuladasDialog, setShowAnuladasDialog] = useState(false);
     const [selectedVentaDetails, setSelectedVentaDetails] = useState<{
         show: boolean;
         ventaId: number | null;
@@ -1471,8 +1472,16 @@ export default function Create({
                                     {calculos.ventas_anuladas_count} venta{(calculos.ventas_anuladas_count ?? 0) > 1 ? 's' : ''}
                                 </p>
                                 <p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">
-                                    Valor total: ${Number(calculos.ventas_anuladas_total_usd ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
+                                    Valor: ${Number(calculos.ventas_anuladas_total_usd ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
                                 </p>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="mt-2 h-7 border-red-300 text-xs text-red-700 hover:bg-red-100 dark:border-red-700 dark:text-red-300"
+                                    onClick={() => setShowAnuladasDialog(true)}
+                                >
+                                    Ver detalles
+                                </Button>
                             </div>
                         )}
 
@@ -1528,42 +1537,39 @@ export default function Create({
                         )}
 
 
-                        {/* Detalle de ventas anuladas del turno */}
+                        {/* Dialog detalle ventas anuladas */}
                         {(calculos.ventas_anuladas_count ?? 0) > 0 && (
-                            <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950">
-                                <p className="mb-3 text-sm font-bold text-red-800 dark:text-red-200">
-                                    Ventas Anuladas del Turno ({calculos.ventas_anuladas_count})
-                                </p>
-                                <div className="space-y-2">
-                                    {(calculos.ventas_anuladas_detalles ?? []).map((va) => (
-                                        <div key={va.venta_id} className="flex items-start justify-between rounded-md border border-red-200 bg-white px-3 py-2 text-xs dark:border-red-700 dark:bg-red-900/30">
-                                            <div className="flex-1 space-y-0.5">
-                                                <p className="font-semibold text-red-800 dark:text-red-200">
-                                                    Venta #{va.venta_id}
+                            <Dialog open={showAnuladasDialog} onOpenChange={setShowAnuladasDialog}>
+                                <DialogContent className="sm:max-w-lg">
+                                    <DialogHeader>
+                                        <DialogTitle className="text-red-700">
+                                            Ventas Anuladas del Turno ({calculos.ventas_anuladas_count})
+                                        </DialogTitle>
+                                        <DialogDescription>
+                                            Valor total anulado: <strong>${Number(calculos.ventas_anuladas_total_usd ?? 0).toFixed(2)} USD</strong>
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
+                                        {(calculos.ventas_anuladas_detalles ?? []).map((va) => (
+                                            <div key={va.venta_id} className="flex items-start justify-between rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs dark:border-red-700 dark:bg-red-900/30">
+                                                <div className="flex-1 space-y-0.5">
+                                                    <p className="font-semibold text-red-800 dark:text-red-200">Venta #{va.venta_id}</p>
+                                                    <p className="font-medium text-red-700 dark:text-red-300">
+                                                        {MOTIVO_LABELS[va.motivo] ?? va.motivo}
+                                                    </p>
+                                                    {va.detalle && (
+                                                        <p className="italic text-red-500 dark:text-red-400">{va.detalle}</p>
+                                                    )}
+                                                    <p className="text-red-400 dark:text-red-500">{va.fecha}</p>
+                                                </div>
+                                                <p className="ml-4 font-bold text-red-700 dark:text-red-300">
+                                                    ${va.total.toFixed(2)}
                                                 </p>
-                                                <p className="font-medium text-red-700 dark:text-red-300">
-                                                    {MOTIVO_LABELS[va.motivo] ?? va.motivo}
-                                                </p>
-                                                {va.detalle && (
-                                                    <p className="italic text-red-500 dark:text-red-400">{va.detalle}</p>
-                                                )}
-                                                <p className="text-red-400 dark:text-red-500">{va.fecha}</p>
                                             </div>
-                                            <div className="ml-4 text-right">
-                                                <p className="font-bold text-red-700 dark:text-red-300">
-                                                    ${va.total.toFixed(2)} USD
-                                                </p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                <div className="mt-3 border-t border-red-200 pt-2 dark:border-red-700">
-                                    <div className="flex justify-between text-xs font-bold text-red-800 dark:text-red-200">
-                                        <span>Valor total anulado:</span>
-                                        <span>${Number(calculos.ventas_anuladas_total_usd ?? 0).toFixed(2)} USD</span>
+                                        ))}
                                     </div>
-                                </div>
-                            </div>
+                                </DialogContent>
+                            </Dialog>
                         )}
 
                         <div className="space-y-1">
