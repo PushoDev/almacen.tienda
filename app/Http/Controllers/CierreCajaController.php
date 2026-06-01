@@ -197,8 +197,9 @@ class CierreCajaController extends Controller
             ];
         }
 
-        // Preparar respuesta para Inertia con detalles mejorados de transferencias y claridad en pagos
-        return Inertia::render('Cierres/Create', [
+        $puedeVerCostoImpactoEspeciales = in_array($user->role, ['admin', 'moderador'], true);
+
+        $calculosPayload = [
             'fecha_apertura' => $inicioTurno instanceof Carbon ? $inicioTurno->toDateTimeString() : $inicioTurno,
             'moneda_referencia' => $monedaRef ? $monedaRef->codigo_moneda : 'USD',
             'almacenes' => $almacenes,
@@ -224,15 +225,40 @@ class CierreCajaController extends Controller
                 'comisiones_gestor_total' => $calculos['comisiones_gestor_total'] ?? 0,
                 'comisiones_gestor_detalles' => $calculos['comisiones_gestor_detalles'] ?? [],
                 // Nuevos: comisiones y ganancia agencia
-                'comision_pv_total' => $calculos['comision_pv_total'] ?? 0,
+                'comision_pv_total'     => $calculos['comision_pv_total'] ?? 0,
                 'comision_gestor_total' => $calculos['comision_gestor_total'] ?? 0,
-                'ganancia_agencia_total' => $calculos['ganancia_agencia_total'] ?? 0,
+                'ganancia_agencia_total'=> $calculos['ganancia_agencia_total'] ?? 0,
+                // Ventas especiales
+                'ventas_especiales_count'       => $calculos['ventas_especiales_count'] ?? 0,
+                'ventas_especiales_total_usd'   => $calculos['ventas_especiales_total_usd'] ?? 0,
+                'ventas_especiales_costo_usd'   => $calculos['ventas_especiales_costo_usd'] ?? 0,
+                'ventas_especiales_impacto_usd' => $calculos['ventas_especiales_impacto_usd'] ?? 0,
+                'ventas_especiales_detalles'    => $calculos['ventas_especiales_detalles'] ?? [],
+                // Ventas anuladas
+                'ventas_anuladas_count'         => $calculos['ventas_anuladas_count'] ?? 0,
+                'ventas_anuladas_total_usd'     => $calculos['ventas_anuladas_total_usd'] ?? 0,
+                'ventas_anuladas_detalles'      => $calculos['ventas_anuladas_detalles'] ?? [],
             ],
             // NUEVO: Comparativa con cierre anterior
             'comparativa_cuentas' => $comparativaCuentas,
             'comparativa_clientes' => $comparativaClientes,
             'tiene_cierre_anterior' => $ultimoCierre !== null,
-        ]);
+        ];
+
+        if (! $puedeVerCostoImpactoEspeciales) {
+            unset(
+                $calculosPayload['calculos']['ventas_especiales_costo_usd'],
+                $calculosPayload['calculos']['ventas_especiales_impacto_usd']
+            );
+
+            $calculosPayload['calculos']['ventas_especiales_detalles'] = array_map(function ($detalle) {
+                unset($detalle['costo'], $detalle['impacto']);
+                return $detalle;
+            }, $calculosPayload['calculos']['ventas_especiales_detalles']);
+        }
+
+        // Preparar respuesta para Inertia con detalles mejorados de transferencias y claridad en pagos
+        return Inertia::render('Cierres/Create', $calculosPayload);
     }
 
     /**
@@ -410,14 +436,85 @@ class CierreCajaController extends Controller
             return ['id' => $a->id, 'nombre' => $a->nombre_almacen];
         })->toArray();
 
-        return Inertia::render('Cierres/Show', [
+        // Ventas especiales del turno del cierre
+        $ventasEspecialesCierre = \App\Models\Venta::where('user_id', $cierre->user_id)
+            ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
+            ->where('estado', 'completada')
+            ->where('es_venta_especial', true)
+            ->with(['detalles'])
+            ->get();
+
+        $veCount    = $ventasEspecialesCierre->count();
+        $veTotal    = 0;
+        $veCosto    = 0;
+        $veDetalles = [];
+
+        foreach ($ventasEspecialesCierre as $ve) {
+            $t = (float) $ve->total;
+            $c = $ve->detalles->sum(fn($d) => (float) $d->costo_unitario * (int) $d->cantidad);
+            $veTotal += $t;
+            $veCosto += $c;
+            $veDetalles[] = [
+                'venta_id' => $ve->id,
+                'motivo'   => $ve->nota_venta_especial ?? 'Sin motivo registrado',
+                'total'    => round($t, 2),
+                'costo'    => round($c, 2),
+                'impacto'  => round($t - $c, 2),
+                'es_regalo'=> $t == 0,
+                'fecha'    => $ve->created_at->format('Y-m-d H:i'),
+            ];
+        }
+
+        $puedeVerCostoImpactoEspeciales = in_array($currentUser->role, ['admin', 'moderador'], true);
+
+        // Ventas anuladas durante el período del cierre
+        $ventasAnuladasCierre = \App\Models\Venta::where('user_id', $cierre->user_id)
+            ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
+            ->where('estado', 'cancelada')
+            ->get();
+
+        $vaCount    = $ventasAnuladasCierre->count();
+        $vaTotalUSD = round($ventasAnuladasCierre->sum(fn($v) => (float) $v->total), 2);
+        $vaDetalles = $ventasAnuladasCierre->map(fn($v) => [
+            'venta_id' => $v->id,
+            'total'    => round((float) $v->total, 2),
+            'motivo'   => $v->motivo_anulacion ?? 'sin_motivo',
+            'detalle'  => $v->detalle_anulacion,
+            'fecha'    => $v->created_at->format('Y-m-d H:i'),
+        ])->values()->all();
+
+        $showPayload = [
             'cierre'                => $cierre,
             'userRole'              => $currentUser->role ?? 'vendedor',
             'comision_pv_total'     => round((float) $comisionPVTotal, 2),
             'comision_gestor_total' => round((float) $comisionGestorTotal, 2),
             'ganancia_agencia_total'=> round($gananciaAgenciaTotal, 2),
             'almacenes'             => $almacenes,
-        ]);
+            // Ventas especiales
+            'ventas_especiales_count'       => $veCount,
+            'ventas_especiales_total_usd'   => round($veTotal, 2),
+            'ventas_especiales_costo_usd'   => round($veCosto, 2),
+            'ventas_especiales_impacto_usd' => round($veTotal - $veCosto, 2),
+            'ventas_especiales_detalles'    => $veDetalles,
+            // Ventas anuladas
+            'ventas_anuladas_count'         => $vaCount,
+            'ventas_anuladas_total_usd'     => $vaTotalUSD,
+            'ventas_anuladas_detalles'      => $vaDetalles,
+        ];
+
+        if (! $puedeVerCostoImpactoEspeciales) {
+            unset(
+                $showPayload['ventas_especiales_costo_usd'],
+                $showPayload['ventas_especiales_impacto_usd']
+            );
+
+            $showPayload['ventas_especiales_detalles'] = array_map(function ($detalle) {
+                unset($detalle['costo'], $detalle['impacto']);
+                return $detalle;
+            }, $showPayload['ventas_especiales_detalles']);
+        }
+
+        return Inertia::render('Cierres/Show', $showPayload);
     }
 
     public function aprobar(Request $request, $id)
@@ -659,23 +756,12 @@ class CierreCajaController extends Controller
                     $prodId = $det->producto_id;
                     $precioVenta = (float) $det->precio_venta;
 
-                    // SIEMPRE obtener precio base desde producto_vendedors (precio configurado por admin/vendedor)
+                    // Obtener precio base desde la fila única del almacén
                     $precioBase = DB::table('producto_vendedors')
                         ->where('producto_id', $prodId)
                         ->where('almacen_id', $pago->venta->almacen_id)
-                        ->where('user_id', $pago->venta->user_id)
                         ->value('precio_venta');
 
-                    // Si no existe para ese usuario, buscar el del admin (user_id = 1)
-                    if (! $precioBase) {
-                        $precioBase = DB::table('producto_vendedors')
-                            ->where('producto_id', $prodId)
-                            ->where('almacen_id', $pago->venta->almacen_id)
-                            ->where('user_id', 1)
-                            ->value('precio_venta');
-                    }
-
-                    // Si no existe ningún precio, usar el precio de venta
                     $precioBase = $precioBase ? (float) $precioBase : $precioVenta;
 
                     $producto = $det->producto;
@@ -878,6 +964,39 @@ class CierreCajaController extends Controller
             $saldoEsperadoTotalUSD += ($saldoCalculado / $tasa);
         }
 
+        // --- VENTAS ESPECIALES COMPLETADAS EN EL TURNO ---
+        $ventasEspeciales = Venta::where('user_id', $user->id)
+            ->where('created_at', '>=', $inicioTurno)
+            ->where('estado', 'completada')
+            ->where('es_venta_especial', true)
+            ->with(['detalles'])
+            ->get();
+
+        $ventasEspecialesCount     = $ventasEspeciales->count();
+        $ventasEspecialesTotalUSD  = 0;
+        $ventasEspecialesCostoUSD  = 0;
+        $ventasEspecialesDetalles  = [];
+
+        foreach ($ventasEspeciales as $ventaE) {
+            $totalVenta  = (float) $ventaE->total;
+            $costoVenta  = $ventaE->detalles->sum(fn($d) => (float) $d->costo_unitario * (int) $d->cantidad);
+
+            $ventasEspecialesTotalUSD += $totalVenta;
+            $ventasEspecialesCostoUSD += $costoVenta;
+
+            $ventasEspecialesDetalles[] = [
+                'venta_id' => $ventaE->id,
+                'motivo'   => $ventaE->nota_venta_especial ?? 'Sin motivo registrado',
+                'total'    => round($totalVenta, 2),
+                'costo'    => round($costoVenta, 2),
+                'impacto'  => round($totalVenta - $costoVenta, 2),
+                'es_regalo'=> $totalVenta == 0,
+                'fecha'    => $ventaE->created_at->format('Y-m-d H:i'),
+            ];
+        }
+
+        $ventasEspecialesImpactoUSD = round($ventasEspecialesTotalUSD - $ventasEspecialesCostoUSD, 2);
+
         // --- COMISIÓN PUNTO DE VENTA (ventas sin gestor) ---
         $comisionPVTotal = Venta::where('user_id', $user->id)
             ->where('created_at', '>=', $inicioTurno)
@@ -902,6 +1021,22 @@ class CierreCajaController extends Controller
             (float) $v->total_ganancia - (float) $v->total_comision
         );
 
+        // --- VENTAS ANULADAS EN EL TURNO ---
+        $ventasAnuladas = Venta::where('user_id', $user->id)
+            ->where('created_at', '>=', $inicioTurno)
+            ->where('estado', 'cancelada')
+            ->get();
+
+        $ventasAnuladasCount    = $ventasAnuladas->count();
+        $ventasAnuladasTotalUSD = round($ventasAnuladas->sum(fn($v) => (float) $v->total), 2);
+        $ventasAnuladasDetalles = $ventasAnuladas->map(fn($v) => [
+            'venta_id' => $v->id,
+            'total'    => round((float) $v->total, 2),
+            'motivo'   => $v->motivo_anulacion ?? 'sin_motivo',
+            'detalle'  => $v->detalle_anulacion,
+            'fecha'    => $v->created_at->format('Y-m-d H:i'),
+        ])->values()->all();
+
         $result = [
             'detalles' => array_values($resumenPorMoneda),
             'ventas_efectivo' => round($ventasEfectivoTotalUSD, 2),
@@ -918,9 +1053,19 @@ class CierreCajaController extends Controller
             'comisiones_gestor_total' => round($comisionesGestorTotalUSD, 2),
             'comisiones_gestor_detalles' => $comisionesGestorDetalles,
             // Nuevos: comisiones y ganancia agencia
-            'comision_pv_total' => round((float) $comisionPVTotal, 2),
-            'comision_gestor_total' => round((float) $comisionGestorTotal, 2),
+            'comision_pv_total'    => round((float) $comisionPVTotal, 2),
+            'comision_gestor_total'=> round((float) $comisionGestorTotal, 2),
             'ganancia_agencia_total' => round($gananciaAgenciaTotal, 2),
+            // Ventas especiales
+            'ventas_especiales_count'      => $ventasEspecialesCount,
+            'ventas_especiales_total_usd'  => round($ventasEspecialesTotalUSD, 2),
+            'ventas_especiales_costo_usd'  => round($ventasEspecialesCostoUSD, 2),
+            'ventas_especiales_impacto_usd'=> $ventasEspecialesImpactoUSD,
+            'ventas_especiales_detalles'   => $ventasEspecialesDetalles,
+            // Ventas anuladas
+            'ventas_anuladas_count'        => $ventasAnuladasCount,
+            'ventas_anuladas_total_usd'    => $ventasAnuladasTotalUSD,
+            'ventas_anuladas_detalles'     => $ventasAnuladasDetalles,
         ];
 
         Log::info('CIERRE: Resultado', [

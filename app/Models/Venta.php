@@ -32,6 +32,13 @@ class Venta extends Model
         'gestor_cuenta_id',
         'gestor_comentario',
         'tasa_aplicada_gestor',
+        // CAMPOS VENTA ESPECIAL
+        'es_venta_especial',
+        'nota_venta_especial',
+        'decision_notificada',
+        // ANULACIÓN
+        'motivo_anulacion',
+        'detalle_anulacion',
     ];
 
     protected $casts = [
@@ -44,6 +51,8 @@ class Venta extends Model
         'tasa_aplicada_venta' => 'decimal:2',
         'monto_diferencia_cambiaria' => 'decimal:2',
         'tasa_aplicada_gestor' => 'decimal:2',
+        'es_venta_especial'   => 'boolean',
+        'decision_notificada' => 'boolean',
     ];
 
     public function usuario()
@@ -90,6 +99,16 @@ class Venta extends Model
     public function scopePendientes($query)
     {
         return $query->where('estado', 'pendiente');
+    }
+
+    public function scopeSolicitudesEspeciales($query)
+    {
+        return $query->where('estado', 'solicitud_especial');
+    }
+
+    public function scopeRechazadas($query)
+    {
+        return $query->where('estado', 'rechazada');
     }
 
     public function destinatario()

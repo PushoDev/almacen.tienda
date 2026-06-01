@@ -9,10 +9,11 @@ class PrecioHistorial extends Model
     protected $fillable = [
         'producto_id',
         'user_id',
-        'almacen_id', // 🚨 AGREGADO
+        'almacen_id',
         'precio_anterior',
         'precio_nuevo',
-        'accion'
+        'comision',
+        'accion',
     ];
 
     // Relación con producto

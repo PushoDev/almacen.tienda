@@ -2,6 +2,7 @@ import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import {
+    AlertTriangle,
     ArrowDownCircle,
     ArrowLeft,
     ArrowRight,
@@ -13,6 +14,7 @@ import {
     Lock,
     ShoppingCart,
     Truck,
+    XCircle,
 } from 'lucide-react';
 import React from 'react';
 
@@ -43,6 +45,12 @@ const getIcon = (iconName: string) => {
             return <ArrowLeft className="h-4 w-4" />;
         case 'arrow-right-left':
             return <ArrowRightLeft className="h-4 w-4" />;
+        case 'alert-triangle':
+            return <AlertTriangle className="h-4 w-4" />;
+        case 'check-circle':
+            return <CheckCircle className="h-4 w-4" />;
+        case 'x-circle':
+            return <XCircle className="h-4 w-4" />;
         default:
             return <Bell className="h-4 w-4" />;
     }
@@ -58,6 +66,8 @@ const getColorClass = (color: string) => {
             return 'text-red-500 bg-red-100 dark:bg-red-900/20';
         case 'purple':
             return 'text-purple-500 bg-purple-100 dark:bg-purple-900/20';
+        case 'amber':
+            return 'text-amber-500 bg-amber-100 dark:bg-amber-900/20';
         case 'orange':
             return 'text-orange-500 bg-orange-100 dark:bg-orange-900/20';
         default:

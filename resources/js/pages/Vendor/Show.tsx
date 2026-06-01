@@ -1,5 +1,7 @@
 import AppLogoIcon from '@/components/app-logo-icon';
 import HeadingSmall from '@/components/heading-small';
+import PaymentForm, { type Moneda as MonedaForm, type Payment as PaymentEdit } from '@/components/ventas/PaymentForm';
+import PaymentList from '@/components/ventas/PaymentList';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -11,6 +13,14 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,8 +36,10 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
 import {
+    AlertTriangle,
     Calendar,
     CheckCircle,
+    Clock,
     CreditCard,
     DollarSign,
     Edit,
@@ -73,6 +85,7 @@ interface Producto {
 }
 
 interface Item {
+    id?: number;
     producto: Producto;
     cantidad: number;
     precio_venta: number;
@@ -207,6 +220,11 @@ interface Venta {
             tasa_cambio: number;
         };
     } | null;
+    es_venta_especial: boolean;
+    nota_venta_especial: string | null;
+    decision_notificada: boolean;
+    motivo_anulacion?: string | null;
+    detalle_anulacion?: string | null;
 }
 
 interface Props {
@@ -214,6 +232,21 @@ interface Props {
     userRole: 'admin' | 'moderador' | 'vendedor';
     monedasSistema: MonedaParaReporte[];
 }
+
+// ─────────────────────────────────────────────
+// Motivos de anulación predefinidos
+// ─────────────────────────────────────────────
+const MOTIVOS_ANULACION = [
+    { value: 'error_precio',        label: 'Error en el precio' },
+    { value: 'solicitud_cliente',   label: 'Solicitud del cliente' },
+    { value: 'producto_defectuoso', label: 'Producto defectuoso' },
+    { value: 'duplicado_venta',     label: 'Duplicado de venta' },
+    { value: 'error_pedido',        label: 'Error en el pedido' },
+    { value: 'otros',               label: 'Otros' },
+];
+
+const motivoLabel = (value: string | null | undefined) =>
+    MOTIVOS_ANULACION.find((m) => m.value === value)?.label ?? value ?? '—';
 
 // ─────────────────────────────────────────────
 // Formulario vacío reutilizable
@@ -237,8 +270,24 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
     // ── Estados de carga ──────────────────────
     const [isCancelling, setIsCancelling] = useState(false);
+
+    // ── Modal anulación ───────────────────────
+    const [isAnularDialogOpen, setIsAnularDialogOpen] = useState(false);
+    const [motivoAnulacion, setMotivoAnulacion] = useState('');
+    const [detalleAnulacion, setDetalleAnulacion] = useState('');
+
+    // ── Modal editar pendiente ────────────────
+    const [isEditModalOpen, setIsEditModalOpen]     = useState(false);
+    const [editPayments, setEditPayments]           = useState<PaymentEdit[]>([]);
+    const [editPrecios, setEditPrecios]             = useState<Record<number, string>>({});
+    const [isSavingEdit, setIsSavingEdit]           = useState(false);
+    const [clientesFisicosEdit, setClientesFisicosEdit] = useState<{ id: number | string; nombre_cliente: string }[]>([]);
     const [isApproving, setIsApproving] = useState(false);
+    const [isRejecting, setIsRejecting] = useState(false);
     const [isSavingDestinatario, setIsSavingDestinatario] = useState(false);
+
+    // ── Venta Especial ────────────────────────
+    const [showDecisionAlert, setShowDecisionAlert] = useState(false);
 
     // ── Modal destinatario ────────────────────
     const [isDestinatarioDialogOpen, setIsDestinatarioDialogOpen] = useState(false);
@@ -271,6 +320,18 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
             .get(route('ventas.getCuentasParaGestor'))
             .then((r) => setCuentasGestor(r.data))
             .catch(() => {});
+    }, []);
+
+    // Auto-abrir AlertDialog si el vendedor aún no vio el veredicto del admin
+    useEffect(() => {
+        if (
+            currentVenta.es_venta_especial &&
+            !currentVenta.decision_notificada &&
+            (currentVenta.estado === 'pendiente' || currentVenta.estado === 'rechazada') &&
+            userRole === 'vendedor'
+        ) {
+            setShowDecisionAlert(true);
+        }
     }, []);
 
     // ─────────────────────────────────────────
@@ -385,9 +446,11 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     const codigoReporte = monedaReporte?.codigo || 'USD';
     const convertirMontoReporte = (monto: number) => monto * tasaReporte;
 
-    const isVentaPendiente = currentVenta.estado === 'pendiente';
-    const isVentaCompletada = currentVenta.estado === 'completada';
-    const isVentaCancelada = currentVenta.estado === 'cancelada';
+    const isVentaPendiente          = currentVenta.estado === 'pendiente';
+    const isVentaCompletada         = currentVenta.estado === 'completada';
+    const isVentaCancelada          = currentVenta.estado === 'cancelada';
+    const isVentaSolicitudEspecial  = currentVenta.estado === 'solicitud_especial';
+    const isVentaRechazada          = currentVenta.estado === 'rechazada';
 
     // Verifica si la cuenta del gestor tiene saldo insuficiente para cubrir la comisión
     const gestorSinSaldo =
@@ -408,6 +471,10 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                 return { color: 'bg-green-500', text: 'COMPLETADA', textColor: 'text-green-600' };
             case 'cancelada':
                 return { color: 'bg-red-500', text: 'ANULADA', textColor: 'text-red-600' };
+            case 'solicitud_especial':
+                return { color: 'bg-amber-500', text: 'SOLICITUD ESPECIAL', textColor: 'text-amber-600' };
+            case 'rechazada':
+                return { color: 'bg-red-800', text: 'RECHAZADA', textColor: 'text-red-800' };
             default:
                 return { color: 'bg-gray-500', text: 'DESCONOCIDO', textColor: 'text-gray-600' };
         }
@@ -526,14 +593,190 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
         }
     };
 
+    /** Admin aprueba la solicitud especial → pasa a pendiente */
+    const handleAprobarSolicitudEspecial = async () => {
+        setIsApproving(true);
+        try {
+            const { data } = await axios.post(route('ventas.especial.aprobar', currentVenta.id));
+            if (data.success) {
+                toast.success(data.message);
+                setCurrentVenta((prev) => ({ ...prev, estado: 'pendiente' }));
+            } else {
+                toast.error(data.message || 'Error al aprobar la solicitud');
+            }
+        } catch (error: unknown) {
+            if (axios.isAxiosError(error)) {
+                toast.error(error.response?.data?.message || 'Error al aprobar la solicitud');
+            }
+        } finally {
+            setIsApproving(false);
+        }
+    };
+
+    /** Admin rechaza la solicitud especial → revierte stock */
+    const handleRechazarSolicitudEspecial = async () => {
+        setIsRejecting(true);
+        try {
+            const { data } = await axios.post(route('ventas.especial.rechazar', currentVenta.id));
+            if (data.success) {
+                toast.success(data.message);
+                setCurrentVenta((prev) => ({ ...prev, estado: 'rechazada' }));
+            } else {
+                toast.error(data.message || 'Error al rechazar la solicitud');
+            }
+        } catch (error: unknown) {
+            if (axios.isAxiosError(error)) {
+                toast.error(error.response?.data?.message || 'Error al rechazar la solicitud');
+            }
+        } finally {
+            setIsRejecting(false);
+        }
+    };
+
+    /** Vendedor cierra el AlertDialog de decisión y marca como notificado */
+    const handleCerrarDecisionAlert = async () => {
+        setShowDecisionAlert(false);
+        try {
+            await axios.post(route('ventas.decision.notificada', currentVenta.id));
+            setCurrentVenta((prev) => ({ ...prev, decision_notificada: true }));
+        } catch { /* silencioso */ }
+    };
+
+    /** Abrir modal de edición cargando clientes físicos */
+    const handleAbrirEdicion = async () => {
+        // Pre-cargar pagos actuales como editables
+        const pagosActuales: PaymentEdit[] = currentVenta.pagos.map((p) => ({
+            id:          crypto.randomUUID(),
+            method:      p.metodo as 'transferencia' | 'efectivo',
+            moneda_id:   p.moneda?.id?.toString() ?? '',
+            amount:      p.monto,
+            via:         p.via ?? undefined,
+            exchangeRate: p.tasa_cambio,
+            amountInUsd: p.monto_equivalente,
+            cuenta_id:   p.cuenta?.id?.toString() ?? null,
+            cliente_id:  p.cliente_destino?.id?.toString() ?? null,
+            referencia:  undefined,
+            moneda_info: p.moneda ? { codigo: p.moneda.codigo, nombre: p.moneda.nombre, simbolo: '' } : undefined,
+        }));
+        setEditPayments(pagosActuales);
+
+        // Pre-cargar precios actuales usando el ID del detalle como clave
+        const precios: Record<number, string> = {};
+        currentVenta.items.forEach((item) => {
+            const key = item.id ?? item.producto.id;
+            precios[key] = item.precio_venta.toString();
+        });
+        setEditPrecios(precios);
+
+        // Cargar clientes físicos si aún no están cargados
+        if (clientesFisicosEdit.length === 0) {
+            try {
+                const { data } = await axios.get(route('ventas.getClientesFisicosParaPago'));
+                setClientesFisicosEdit(data);
+            } catch {
+                // Si falla, abre igual sin clientes físicos
+            }
+        }
+
+        setIsEditModalOpen(true);
+    };
+
+    /** Guardar cambios de la venta pendiente */
+    const handleGuardarEdicion = async () => {
+        if (editPayments.length === 0) {
+            toast.error('Debe agregar al menos un pago.');
+            return;
+        }
+
+        const totalEditado = currentVenta.items.reduce((sum, item) => {
+            const key    = item.id ?? item.producto.id;
+            const precio = parseFloat(editPrecios[key] ?? item.precio_venta.toString());
+            return sum + (isNaN(precio) ? item.precio_venta : precio) * item.cantidad;
+        }, 0);
+
+        const totalPagado = editPayments.reduce((sum, p) => sum + p.amountInUsd, 0);
+        if (totalPagado < totalEditado - 0.01) {
+            toast.error(`Los pagos no cubren el total. Restante: $${(totalEditado - totalPagado).toFixed(2)} USD`);
+            return;
+        }
+
+        setIsSavingEdit(true);
+        try {
+            const payload = {
+                pagos: editPayments.map((p) => ({
+                    metodo:            p.method,
+                    moneda_id:         p.moneda_id,
+                    monto:             p.amount,
+                    via:               p.via ?? null,
+                    tasa_cambio:       p.exchangeRate,
+                    monto_equivalente: p.amountInUsd,
+                    cuenta_id:         p.cuenta_id ?? null,
+                    cliente_id:        p.cliente_id ?? null,
+                    referencia:        p.referencia ?? null,
+                })),
+                items: currentVenta.items.map((item) => ({
+                    venta_detalle_id: item.id,
+                    precio_venta:     parseFloat(editPrecios[item.id ?? item.producto.id] ?? item.precio_venta.toString()),
+                })),
+            };
+
+            const { data } = await axios.post(route('ventas.editar.pendiente', currentVenta.id), payload);
+
+            if (data.success) {
+                toast.success(data.message || 'Venta actualizada correctamente.');
+                // Actualizar estado local con los nuevos datos
+                setCurrentVenta((prev) => ({
+                    ...prev,
+                    total:       data.total,
+                    pagos:       data.pagos,
+                    total_pagado: data.pagos.reduce((s: number, p: { monto_equivalente: number }) => s + p.monto_equivalente, 0),
+                    items: prev.items.map((item) => {
+                        const updated = data.items?.find((_: unknown, idx: number) => idx === prev.items.indexOf(item));
+                        return updated ? { ...item, ...updated } : item;
+                    }),
+                }));
+                setIsEditModalOpen(false);
+            } else {
+                toast.error(data.message || 'Error al actualizar la venta.');
+            }
+        } catch (error: unknown) {
+            if (axios.isAxiosError(error)) {
+                toast.error(error.response?.data?.message || 'Error al guardar los cambios.');
+            } else {
+                toast.error('Error de conexión.');
+            }
+        } finally {
+            setIsSavingEdit(false);
+        }
+    };
+
     /** Anular venta */
     const handleAnularVenta = async () => {
+        if (!motivoAnulacion) {
+            toast.error('Debe seleccionar un motivo de anulación');
+            return;
+        }
+        if (motivoAnulacion === 'otros' && !detalleAnulacion.trim()) {
+            toast.error('Debe describir el motivo en el campo "Otros"');
+            return;
+        }
         setIsCancelling(true);
         try {
-            const { data } = await axios.post(route('ventas.anular', currentVenta.id));
+            const { data } = await axios.post(route('ventas.anular', currentVenta.id), {
+                motivo_anulacion: motivoAnulacion,
+                detalle_anulacion: motivoAnulacion === 'otros' ? detalleAnulacion.trim() : null,
+            });
             if (data.success) {
                 toast.success(data.message || 'Venta anulada correctamente');
-                setCurrentVenta((prev) => ({ ...prev, estado: 'cancelada' }));
+                setCurrentVenta((prev) => ({
+                    ...prev,
+                    estado: 'cancelada',
+                    motivo_anulacion: motivoAnulacion,
+                    detalle_anulacion: motivoAnulacion === 'otros' ? detalleAnulacion.trim() : null,
+                }));
+                setIsAnularDialogOpen(false);
+                setMotivoAnulacion('');
+                setDetalleAnulacion('');
             } else {
                 toast.error(data.message || 'Error al anular la venta');
             }
@@ -571,9 +814,80 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
                 <Separator />
 
-                {/* ── Widgets vendedor: Total + Comisión ── */}
+                {/* ── AlertDialog de decisión para el vendedor ── */}
+                <AlertDialog open={showDecisionAlert} onOpenChange={(open) => { if (!open) handleCerrarDecisionAlert(); }}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className={currentVenta.estado === 'pendiente' ? 'text-green-600' : 'text-red-600'}>
+                                {currentVenta.estado === 'pendiente' ? '✅ Solicitud Aprobada' : '❌ Solicitud Rechazada'}
+                            </AlertDialogTitle>
+                            <AlertDialogDescription asChild>
+                                <div className="space-y-3">
+                                    {currentVenta.estado === 'pendiente' ? (
+                                        <div className="rounded-md bg-green-50 p-3 text-sm text-green-700 dark:bg-green-950 dark:text-green-300">
+                                            <p>El administrador aprobó tu solicitud de venta especial.</p>
+                                            <p className="mt-1 font-semibold">Ahora debes agregar el receptor para completar la venta.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+                                            <p>El administrador rechazó tu solicitud de venta especial.</p>
+                                            <p className="mt-1 font-semibold">El stock de los productos ha sido revertido automáticamente.</p>
+                                        </div>
+                                    )}
+                                    {currentVenta.nota_venta_especial && (
+                                        <p className="text-muted-foreground text-xs">Motivo registrado: <em>{currentVenta.nota_venta_especial}</em></p>
+                                    )}
+                                </div>
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogAction
+                                onClick={handleCerrarDecisionAlert}
+                                className={currentVenta.estado === 'pendiente' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}
+                            >
+                                Entendido
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+
+                {/* ── Banner venta especial ── */}
+                {currentVenta.es_venta_especial && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
+                        <div className="flex flex-wrap items-start gap-3">
+                            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                            <div className="flex-1">
+                                <p className="font-semibold text-amber-800 dark:text-amber-200">Venta Especial</p>
+                                {currentVenta.nota_venta_especial && (
+                                    <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+                                        <span className="font-medium">Motivo:</span> {currentVenta.nota_venta_especial}
+                                    </p>
+                                )}
+                                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                                    Precio libre · Sin comisión para el vendedor
+                                </p>
+                            </div>
+                            {/* Impacto financiero solo para admin/moderador */}
+                            {(userRole === 'admin' || userRole === 'moderador') && (() => {
+                                const costoTotal = currentVenta.items.reduce((acc, i) => acc + i.costo_unitario * i.cantidad, 0);
+                                const perdida = currentVenta.total - costoTotal;
+                                return (
+                                    <div className="rounded-lg border border-amber-300 bg-amber-100 px-4 py-2 text-xs dark:border-amber-700 dark:bg-amber-900">
+                                        <p className="text-amber-700 dark:text-amber-300">Costo total: <strong>{formatCurrency(costoTotal, simboloMonedaPrincipal)}</strong></p>
+                                        <p className="text-amber-700 dark:text-amber-300">Cobrado: <strong>{formatCurrency(currentVenta.total, simboloMonedaPrincipal)}</strong></p>
+                                        <p className={`font-bold ${perdida < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                            Impacto: {formatCurrency(perdida, simboloMonedaPrincipal)}
+                                        </p>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    </div>
+                )}
+
+                {/* ── Widgets vendedor: Total + Comisión PV + Comisión Gestor ── */}
                 {userRole === 'vendedor' && (
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className={`grid gap-4 ${currentVenta.gestor ? 'grid-cols-3' : 'grid-cols-2'}`}>
                         <div className="bg-card rounded-xl border p-4 text-center">
                             <ShoppingBag size={24} className="mx-auto mb-2 text-blue-500" />
                             <p className="text-muted-foreground mb-1 text-sm">Total de la Venta</p>
@@ -583,14 +897,27 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                         </div>
                         <div className="bg-card rounded-xl border p-4 text-center">
                             <Store size={24} className="mx-auto mb-2 text-orange-500" />
-                            <p className="text-muted-foreground mb-1 text-sm">Comisión Vendedor</p>
+                            <p className="text-muted-foreground mb-1 text-sm">Comisión P.V.</p>
                             <p className="text-2xl font-bold text-orange-600">
                                 {formatCurrency(currentVenta.total_comision, monedaPrincipal?.codigo || 'USD')}
                             </p>
-                            {currentVenta.gestor && (
-                                <p className="text-muted-foreground mt-1 text-xs italic">Absorbida por gestor</p>
-                            )}
+                            <p className="text-muted-foreground mt-1 text-xs">Punto de venta</p>
                         </div>
+                        {currentVenta.gestor && (
+                            <div className="bg-card rounded-xl border p-4 text-center">
+                                <DollarSign size={24} className="mx-auto mb-2 text-purple-500" />
+                                <p className="text-muted-foreground mb-1 text-sm">Comisión Gestor</p>
+                                <p className="text-2xl font-bold text-purple-600">
+                                    {Number(currentVenta.gestor.monto).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                                    {currentVenta.gestor.moneda?.codigo || ''}
+                                </p>
+                                {currentVenta.gestor.monto_usd !== undefined && (
+                                    <p className="text-muted-foreground mt-1 text-xs">
+                                        ≈ {formatCurrency(currentVenta.gestor.monto_usd, 'USD')}
+                                    </p>
+                                )}
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -665,6 +992,97 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                     >
                         Ver Todas las Ventas
                     </Link>
+
+                    {/* ── Acciones para Solicitud Especial ── */}
+                    {isVentaSolicitudEspecial && (userRole === 'admin' || userRole === 'moderador') && (
+                        <>
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button
+                                        variant="default"
+                                        className="flex cursor-pointer items-center gap-2 bg-green-600 text-white hover:bg-green-700"
+                                        disabled={isApproving}
+                                    >
+                                        <CheckCircle size={16} />
+                                        {isApproving ? 'Aprobando...' : 'Aprobar Solicitud'}
+                                    </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle className="text-green-600">Confirmar Aprobación</AlertDialogTitle>
+                                        <AlertDialogDescription asChild>
+                                            <div className="space-y-3">
+                                                <p>¿Aprobar la solicitud especial <strong>#{currentVenta.id}</strong>?</p>
+                                                {currentVenta.nota_venta_especial && (
+                                                    <div className="rounded-md bg-amber-50 p-3 text-sm dark:bg-amber-950">
+                                                        <p className="font-medium text-amber-700 dark:text-amber-300">Motivo del vendedor:</p>
+                                                        <p className="mt-1 italic text-amber-600 dark:text-amber-400">{currentVenta.nota_venta_especial}</p>
+                                                    </div>
+                                                )}
+                                                <div className="rounded-md bg-green-50 p-3 text-sm text-green-700 dark:bg-green-950 dark:text-green-300">
+                                                    Al aprobar, la venta pasará a estado <strong>Pendiente</strong> y el vendedor podrá agregar el receptor para completarla.
+                                                </div>
+                                            </div>
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel disabled={isApproving}>Cancelar</AlertDialogCancel>
+                                        <AlertDialogAction
+                                            onClick={handleAprobarSolicitudEspecial}
+                                            className="bg-green-600 hover:bg-green-700"
+                                            disabled={isApproving}
+                                        >
+                                            Sí, Aprobar
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button
+                                        variant="destructive"
+                                        className="flex cursor-pointer items-center gap-2"
+                                        disabled={isRejecting}
+                                    >
+                                        <XCircle size={16} />
+                                        {isRejecting ? 'Rechazando...' : 'Rechazar Solicitud'}
+                                    </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle className="text-red-600">Confirmar Rechazo</AlertDialogTitle>
+                                        <AlertDialogDescription asChild>
+                                            <div className="space-y-3">
+                                                <p>¿Rechazar la solicitud especial <strong>#{currentVenta.id}</strong>?</p>
+                                                <div className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+                                                    Al rechazar, el stock reservado se revertirá automáticamente y el vendedor será notificado.
+                                                </div>
+                                            </div>
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel disabled={isRejecting}>Cancelar</AlertDialogCancel>
+                                        <AlertDialogAction
+                                            onClick={handleRechazarSolicitudEspecial}
+                                            className="bg-red-600 hover:bg-red-700"
+                                            disabled={isRejecting}
+                                        >
+                                            Sí, Rechazar
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        </>
+                    )}
+
+                    {/* Indicador de espera para el vendedor en solicitud_especial */}
+                    {isVentaSolicitudEspecial && userRole === 'vendedor' && (
+                        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm dark:border-amber-800 dark:bg-amber-950">
+                            <Clock size={16} className="text-amber-500" />
+                            <span className="text-amber-700 dark:text-amber-300">Esperando aprobación del administrador</span>
+                        </div>
+                    )}
 
                     {/* Agregar receptor — solo si pendiente y sin destinatario */}
                     {isVentaPendiente && !currentVenta.destinatario && (
@@ -1281,51 +1699,124 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                         </AlertDialog>
                     )}
 
+                    {/* Editar pagos / precios */}
+                    {isVentaPendiente && (
+                        <Button
+                            variant="outline"
+                            className="flex cursor-pointer items-center gap-2"
+                            onClick={handleAbrirEdicion}
+                        >
+                            <Edit size={16} />
+                            Editar Pagos / Precios
+                        </Button>
+                    )}
+
                     {/* Anular venta */}
                     {isVentaPendiente && (
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <Button
-                                    variant="destructive"
-                                    className="flex cursor-pointer items-center gap-2"
-                                    disabled={isVentaCancelada || isCancelling}
-                                >
-                                    <XCircle size={16} />
-                                    {isVentaCancelada ? 'Anulada' : 'Anular Venta'}
-                                </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle className="text-red-600">Confirmar Anulación</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        Esta acción es <strong>irreversible</strong>. ¿Está seguro que desea anular la Venta{' '}
-                                        <strong>#{currentVenta.id}</strong>?<br />
-                                        <span className="font-semibold text-red-500">
-                                            {isVentaCompletada
-                                                ? 'Se revertirá el stock de los productos y se deducirán los montos de las cuentas bancarias asociadas.'
-                                                : 'Se revertirá el stock reservado. Las cuentas y deudas de clientes no serán afectadas ya que la venta no fue aprobada.'}
-                                        </span>
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel disabled={isCancelling}>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction
-                                        onClick={handleAnularVenta}
-                                        className="bg-red-600 hover:bg-red-700 disabled:opacity-50"
-                                        disabled={isCancelling}
-                                    >
-                                        {isCancelling ? (
-                                            <div className="flex items-center gap-2">
-                                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                                                Anulando...
+                        <>
+                            <Button
+                                variant="destructive"
+                                className="flex cursor-pointer items-center gap-2"
+                                disabled={isVentaCancelada || isCancelling}
+                                onClick={() => setIsAnularDialogOpen(true)}
+                            >
+                                <XCircle size={16} />
+                                {isVentaCancelada ? 'Anulada' : 'Anular Venta'}
+                            </Button>
+
+                            <Dialog
+                                open={isAnularDialogOpen}
+                                onOpenChange={(open) => {
+                                    if (!isCancelling) {
+                                        setIsAnularDialogOpen(open);
+                                        if (!open) {
+                                            setMotivoAnulacion('');
+                                            setDetalleAnulacion('');
+                                        }
+                                    }
+                                }}
+                            >
+                                <DialogContent className="sm:max-w-md">
+                                    <DialogHeader>
+                                        <DialogTitle className="text-red-600">Anular Venta #{currentVenta.id}</DialogTitle>
+                                        <DialogDescription>
+                                            Esta acción es <strong>irreversible</strong>. Se revertirá el stock reservado.
+                                            Las cuentas y deudas de clientes no serán afectadas ya que la venta no fue aprobada.
+                                        </DialogDescription>
+                                    </DialogHeader>
+
+                                    <div className="space-y-4 py-2">
+                                        <div className="space-y-1">
+                                            <Label htmlFor="motivo-anulacion">
+                                                Motivo de anulación <span className="text-red-500">*</span>
+                                            </Label>
+                                            <Select
+                                                value={motivoAnulacion}
+                                                onValueChange={setMotivoAnulacion}
+                                            >
+                                                <SelectTrigger id="motivo-anulacion">
+                                                    <SelectValue placeholder="Seleccione un motivo..." />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {MOTIVOS_ANULACION.map((m) => (
+                                                        <SelectItem key={m.value} value={m.value}>
+                                                            {m.label}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        {motivoAnulacion === 'otros' && (
+                                            <div className="space-y-1">
+                                                <Label htmlFor="detalle-anulacion">
+                                                    Describa el motivo <span className="text-red-500">*</span>
+                                                </Label>
+                                                <Textarea
+                                                    id="detalle-anulacion"
+                                                    placeholder="Ingrese el motivo específico..."
+                                                    value={detalleAnulacion}
+                                                    onChange={(e) => setDetalleAnulacion(e.target.value)}
+                                                    rows={3}
+                                                    maxLength={500}
+                                                />
+                                                <p className="text-muted-foreground text-right text-xs">
+                                                    {detalleAnulacion.length}/500
+                                                </p>
                                             </div>
-                                        ) : (
-                                            'Sí, Anular Venta'
                                         )}
-                                    </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
+                                    </div>
+
+                                    <DialogFooter className="gap-2">
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => {
+                                                setIsAnularDialogOpen(false);
+                                                setMotivoAnulacion('');
+                                                setDetalleAnulacion('');
+                                            }}
+                                            disabled={isCancelling}
+                                        >
+                                            Cancelar
+                                        </Button>
+                                        <Button
+                                            variant="destructive"
+                                            onClick={handleAnularVenta}
+                                            disabled={isCancelling || !motivoAnulacion}
+                                        >
+                                            {isCancelling ? (
+                                                <div className="flex items-center gap-2">
+                                                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                                    Anulando...
+                                                </div>
+                                            ) : (
+                                                'Confirmar Anulación'
+                                            )}
+                                        </Button>
+                                    </DialogFooter>
+                                </DialogContent>
+                            </Dialog>
+                        </>
                     )}
                 </div>
 
@@ -1568,7 +2059,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                     <th className="px-4 py-3 text-left font-semibold">Precio Unitario</th>
                                     {userRole !== 'vendedor' && <th className="px-4 py-3 text-left font-semibold">Costo Unitario</th>}
                                     {userRole !== 'vendedor' && <th className="px-4 py-3 text-left font-semibold">Ganancia Unitaria</th>}
-                                    {userRole !== 'vendedor' && <th className="px-4 py-3 text-left font-semibold">Comisión Unit.</th>}
+                                    <th className="px-4 py-3 text-left font-semibold">Comisión Unit.</th>
                                     <th className="px-4 py-3 text-left font-semibold">Subtotal</th>
                                 </tr>
                             </thead>
@@ -1602,18 +2093,16 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         {userRole !== 'vendedor' && (
                                             <td className="px-4 py-2 text-green-600">{formatCurrency(item.ganancia, simboloMonedaPrincipal)}</td>
                                         )}
-                                        {userRole !== 'vendedor' && (
-                                            <td className="px-4 py-2 text-orange-600">
-                                                {item.comision_unitaria > 0 ? formatCurrency(item.comision_unitaria, simboloMonedaPrincipal) : '—'}
-                                            </td>
-                                        )}
+                                        <td className="px-4 py-2 text-orange-600">
+                                            {item.comision_unitaria > 0 ? formatCurrency(item.comision_unitaria, simboloMonedaPrincipal) : '—'}
+                                        </td>
                                         <td className="px-4 py-2 font-medium">{formatCurrency(item.subtotal, simboloMonedaPrincipal)}</td>
                                     </tr>
                                 ))}
                             </tbody>
                             <tfoot className="bg-sidebar-accent">
                                 <tr>
-                                    <td colSpan={userRole === 'vendedor' ? 7 : 10} className="px-4 py-3 text-right font-semibold text-white">
+                                    <td colSpan={userRole === 'vendedor' ? 8 : 10} className="px-4 py-3 text-right font-semibold text-white">
                                         Total Venta:
                                     </td>
                                     <td className="px-4 py-3 text-center text-lg font-semibold text-white">
@@ -1632,7 +2121,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                 )}
                                 {currentVenta.total_comision > 0 && (
                                     <tr className="bg-orange-50 dark:bg-orange-900/20">
-                                        <td colSpan={userRole === 'vendedor' ? 7 : 10} className="px-4 py-3 text-right font-semibold text-orange-700 dark:text-orange-400">
+                                        <td colSpan={userRole === 'vendedor' ? 8 : 10} className="px-4 py-3 text-right font-semibold text-orange-700 dark:text-orange-400">
                                             Comisión Vendedor:
                                         </td>
                                         <td className="px-4 py-3 text-center text-lg font-semibold text-orange-700 dark:text-orange-400">
@@ -1657,7 +2146,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
                 {/* ── Pagos y resumen financiero ── */}
                 <div
-                    className={`animate__animated animate__flipInX grid auto-rows-min gap-6 ${userRole === 'vendedor' ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'}`}
+                    className="animate__animated animate__flipInX grid auto-rows-min gap-6 grid-cols-1 md:grid-cols-2"
                 >
                     {/* Detalles de pagos */}
                     <div className="bg-card rounded-lg p-6 shadow-sm">
@@ -1723,69 +2212,85 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                         )}
                     </div>
 
-                    {/* Resumen financiero (admin/moderador) */}
-                    {(userRole === 'admin' || userRole === 'moderador') && (
-                        <div className="bg-card rounded-lg p-6 shadow-sm">
-                            <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold">
-                                <DollarSign className="h-5 w-5" />
-                                Resumen Financiero
-                            </h3>
-                            <div className="space-y-3">
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Total de la Venta:</span>
-                                    <span className="font-semibold">{formatCurrency(currentVenta.total, simboloMonedaPrincipal)}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Total Pagado:</span>
-                                    <span className="font-semibold text-green-600">
-                                        {formatCurrency(currentVenta.total_pagado, simboloMonedaPrincipal)}
-                                    </span>
-                                </div>
-                                <Separator />
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Restante por Pagar:</span>
-                                    <span className={`font-semibold ${currentVenta.restante > 0 ? 'text-orange-500' : 'text-green-600'}`}>
-                                        {formatCurrency(currentVenta.restante, simboloMonedaPrincipal)}
-                                    </span>
-                                </div>
+                    {/* Resumen financiero — todos los roles, ganancia de agencia oculta para vendedor */}
+                    <div className="bg-card rounded-lg p-6 shadow-sm">
+                        <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold">
+                            <DollarSign className="h-5 w-5" />
+                            Resumen Financiero
+                        </h3>
+                        <div className="space-y-3">
+                            <div className="flex justify-between">
+                                <span className="text-muted-foreground">Total de la Venta:</span>
+                                <span className="font-semibold">{formatCurrency(currentVenta.total, simboloMonedaPrincipal)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-muted-foreground">Total Pagado:</span>
+                                <span className="font-semibold text-green-600">
+                                    {formatCurrency(currentVenta.total_pagado, simboloMonedaPrincipal)}
+                                </span>
+                            </div>
+                            <Separator />
+                            <div className="flex justify-between">
+                                <span className="text-muted-foreground">Restante por Pagar:</span>
+                                <span className={`font-semibold ${currentVenta.restante > 0 ? 'text-orange-500' : 'text-green-600'}`}>
+                                    {formatCurrency(currentVenta.restante, simboloMonedaPrincipal)}
+                                </span>
+                            </div>
+                            {/* Ganancia Operacional — solo admin/moderador */}
+                            {userRole !== 'vendedor' && (
                                 <div className="flex justify-between">
                                     <span className="text-muted-foreground">Ganancia Operacional:</span>
                                     <span className="font-semibold text-green-600">
                                         {formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}
                                     </span>
                                 </div>
-                                {currentVenta.total_comision > 0 && (
-                                    <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Comisión Vendedor:</span>
-                                        <span className="font-semibold text-orange-600">
-                                            {formatCurrency(currentVenta.total_comision, simboloMonedaPrincipal)}
-                                        </span>
-                                    </div>
-                                )}
+                            )}
+                            {currentVenta.total_comision > 0 && (
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Comisión P.V.:</span>
+                                    <span className="font-semibold text-orange-600">
+                                        {formatCurrency(currentVenta.total_comision, simboloMonedaPrincipal)}
+                                    </span>
+                                </div>
+                            )}
+                            {/* Comisión Gestor — visible para todos si existe */}
+                            {currentVenta.gestor && (
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Comisión Gestor:</span>
+                                    <span className="font-semibold text-purple-600">
+                                        {Number(currentVenta.gestor.monto).toLocaleString('es-ES', { minimumFractionDigits: 2 })}{' '}
+                                        {currentVenta.gestor.moneda?.codigo || ''}
+                                    </span>
+                                </div>
+                            )}
+                            {/* Ganancia Agencia — solo admin/moderador */}
+                            {userRole !== 'vendedor' && (
                                 <div className="flex justify-between">
                                     <span className="text-muted-foreground">Ganancia Agencia:</span>
                                     <span className="font-semibold text-indigo-600">
                                         {formatCurrency(currentVenta.ganancia_agencia, simboloMonedaPrincipal)}
                                     </span>
                                 </div>
-                                {isVentaCompletada && (
-                                    <>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Ganancia/Pérdida Cambiaria:</span>
-                                            <span
-                                                className={`font-semibold ${currentVenta.ganancia_perdida_cambiaria < 0 ? 'text-red-500' : 'text-green-600'}`}
-                                            >
-                                                {formatCurrency(currentVenta.ganancia_perdida_cambiaria, simboloMonedaPrincipal)}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Ganancia Real Total:</span>
-                                            <span className="font-semibold text-green-600">
-                                                {formatCurrency(currentVenta.ganancia_real_total, simboloMonedaPrincipal)}
-                                            </span>
-                                        </div>
-                                    </>
-                                )}
+                            )}
+                            {/* Ganancia/Pérdida Cambiaria y Real — solo admin/moderador */}
+                            {userRole !== 'vendedor' && isVentaCompletada && (
+                                <>
+                                    <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Ganancia/Pérdida Cambiaria:</span>
+                                        <span
+                                            className={`font-semibold ${currentVenta.ganancia_perdida_cambiaria < 0 ? 'text-red-500' : 'text-green-600'}`}
+                                        >
+                                            {formatCurrency(currentVenta.ganancia_perdida_cambiaria, simboloMonedaPrincipal)}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Ganancia Real Total:</span>
+                                        <span className="font-semibold text-green-600">
+                                            {formatCurrency(currentVenta.ganancia_real_total, simboloMonedaPrincipal)}
+                                        </span>
+                                    </div>
+                                </>
+                            )}
                                 <Separator />
                                 <div className="flex justify-between">
                                     <span className="text-muted-foreground">Estado:</span>
@@ -1851,15 +2356,23 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                             )}
 
                             {isVentaCancelada && (
-                                <div className="mt-4 rounded-md bg-red-50 p-3">
+                                <div className="mt-4 space-y-1 rounded-md bg-red-50 p-3">
                                     <p className="text-sm text-red-800">
-                                        <strong>Venta Anulada:</strong> Esta venta fue cancelada.
-                                        {isVentaCompletada && ' Stock y saldos de cuentas fueron revertidos.'}
+                                        <strong>Venta Anulada:</strong> Esta venta fue cancelada y el stock fue revertido.
                                     </p>
+                                    {currentVenta.motivo_anulacion && (
+                                        <p className="text-sm text-red-700">
+                                            <strong>Motivo:</strong> {motivoLabel(currentVenta.motivo_anulacion)}
+                                        </p>
+                                    )}
+                                    {currentVenta.detalle_anulacion && (
+                                        <p className="text-sm text-red-700">
+                                            <strong>Detalle:</strong> {currentVenta.detalle_anulacion}
+                                        </p>
+                                    )}
                                 </div>
                             )}
                         </div>
-                    )}
                 </div>
 
                 {/* ── Info del sistema (solo si el vendedor de la venta es admin) ── */}
@@ -1886,6 +2399,122 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                     </div>
                 )}
             </div>
+            {/* ── Modal Editar Venta Pendiente ── */}
+            <Dialog
+                open={isEditModalOpen}
+                onOpenChange={(open) => { if (!isSavingEdit) setIsEditModalOpen(open); }}
+            >
+                <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Edit className="h-5 w-5 text-blue-600" />
+                            Editar Venta Pendiente #{currentVenta.id}
+                        </DialogTitle>
+                        <DialogDescription>
+                            Ajusta los precios de los productos y/o los métodos de pago. Los pagos actuales serán reemplazados por los nuevos.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-6 py-2">
+                        {/* ── Precios ── */}
+                        <div className="space-y-3">
+                            <h4 className="flex items-center gap-2 font-medium">
+                                <Package className="h-4 w-4 text-gray-500" />
+                                Precios por Producto
+                            </h4>
+                            <div className="space-y-2">
+                                {currentVenta.items.map((item) => {
+                                    const key = item.id ?? item.producto.id;
+                                    return (
+                                        <div key={key} className="bg-secondary/30 flex items-center justify-between rounded-lg border p-3">
+                                            <div className="flex-1">
+                                                <p className="text-sm font-medium">{item.producto.nombre}</p>
+                                                <p className="text-muted-foreground text-xs">
+                                                    {item.producto.marca} · Cant: {item.cantidad}
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-muted-foreground text-xs">$</span>
+                                                <Input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    className="w-24 text-right text-sm"
+                                                    value={editPrecios[key] ?? item.precio_venta.toString()}
+                                                    onChange={(e) =>
+                                                        setEditPrecios((prev) => ({ ...prev, [key]: e.target.value }))
+                                                    }
+                                                />
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <Separator />
+
+                        {/* ── Pagos actuales ── */}
+                        <PaymentList
+                            payments={editPayments}
+                            total={currentVenta.items.reduce((sum, item) => {
+                                const key    = item.id ?? item.producto.id;
+                                const precio = parseFloat(editPrecios[key] ?? item.precio_venta.toString());
+                                return sum + (isNaN(precio) ? item.precio_venta : precio) * item.cantidad;
+                            }, 0)}
+                            onRemovePayment={(id) => setEditPayments((prev) => prev.filter((p) => p.id !== id))}
+                        />
+
+                        <Separator />
+
+                        {/* ── Formulario de nuevo pago ── */}
+                        <PaymentForm
+                            monedas={monedasSistema.map((m): MonedaForm => ({
+                                id:              m.id,
+                                codigo_moneda:   m.codigo,
+                                nombre_moneda:   m.nombre,
+                                simbolo_moneda:  m.simbolo ?? '',
+                                tasa_cambio:     m.tasa,
+                            }))}
+                            clientesFisicos={clientesFisicosEdit}
+                            remainingInUsd={Math.max(
+                                0,
+                                currentVenta.items.reduce((sum, item) => {
+                                    const key    = item.id ?? item.producto.id;
+                                    const precio = parseFloat(editPrecios[key] ?? item.precio_venta.toString());
+                                    return sum + (isNaN(precio) ? item.precio_venta : precio) * item.cantidad;
+                                }, 0) - editPayments.reduce((s, p) => s + p.amountInUsd, 0),
+                            )}
+                            onAddPayment={(payment) => setEditPayments((prev) => [...prev, payment])}
+                        />
+                    </div>
+
+                    <DialogFooter className="gap-2 pt-2">
+                        <Button
+                            variant="outline"
+                            onClick={() => setIsEditModalOpen(false)}
+                            disabled={isSavingEdit}
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            onClick={handleGuardarEdicion}
+                            disabled={isSavingEdit || editPayments.length === 0}
+                            className="bg-blue-600 hover:bg-blue-700"
+                        >
+                            {isSavingEdit ? (
+                                <div className="flex items-center gap-2">
+                                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                    Guardando...
+                                </div>
+                            ) : (
+                                'Guardar Cambios'
+                            )}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             <ScrollProgress />
         </AppLayout>
     );

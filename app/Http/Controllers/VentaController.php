@@ -22,6 +22,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Notification;
 use App\Notifications\VentaCreadaNotification;
+use App\Notifications\VentaEspecialSolicitudNotification;
+use App\Notifications\VentaEspecialDecisionNotification;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Log;
 
@@ -124,7 +126,11 @@ class VentaController extends Controller
             return response()->json(['error' => 'Acceso denegado al almacén'], 403);
         }
 
-        $userId = $user->id;
+        // Precargar precios del almacén — una fila única por producto
+        $preciosAlmacen = DB::table('producto_vendedors')
+            ->where('almacen_id', $id)
+            ->get()
+            ->keyBy('producto_id');
 
         $productos = Producto::whereHas('almacenes', function ($q) use ($id) {
             $q->where('almacens.id', $id);
@@ -132,50 +138,39 @@ class VentaController extends Controller
             ->with([
                 'categoria',
                 'codigos',
-                'vendedores' => function ($q) use ($userId) {
-                    // Buscar precio del vendedor actual Y del admin (user_id = 1)
-                    $q->whereIn('user_id', [$userId, 1])
-                        ->select('users.id', 'producto_vendedors.precio_venta', 'producto_vendedors.venta_ganancia', 'producto_vendedors.user_id');
-                },
                 'almacenes' => function ($q) use ($id) {
                     $q->where('almacens.id', $id)
                         ->select('almacens.id', 'almacens.nombre_almacen', 'almacen_producto.cantidad');
                 }
             ])
             ->get()
-            ->map(function ($producto) use ($userId) {
-                // Prioridad: precio del vendedor actual > precio del admin
-                $vendedorActual = $producto->vendedores->firstWhere('pivot.user_id', $userId);
-                $precioAdmin = $producto->vendedores->firstWhere('pivot.user_id', 1);
-                
-                // Usar precio del vendedor actual si existe, si no el del admin
-                $vendedor = $vendedorActual ?? $precioAdmin;
-                $esPrecioVendedor = $vendedorActual !== null;
-                
-                $almacen = $producto->almacenes->first();
+            ->map(function ($producto) use ($preciosAlmacen) {
+                $precioRow = $preciosAlmacen->get($producto->id);
+                $almacen   = $producto->almacenes->first();
 
                 return [
-                    'id' => $producto->id,
-                    'nombre_producto' => $producto->nombre_producto,
-                    'marca_producto' => $producto->marca_producto,
-                    'modelo_producto' => $producto->modelo_producto,
-                    'capacidad_producto' => $producto->capacidad_producto,
-                    'categoria_nombre' => $producto->categoria?->nombre_categoria ?? 'Sin categoría',
+                    'id'                     => $producto->id,
+                    'nombre_producto'        => $producto->nombre_producto,
+                    'marca_producto'         => $producto->marca_producto,
+                    'modelo_producto'        => $producto->modelo_producto,
+                    'capacidad_producto'     => $producto->capacidad_producto,
+                    'categoria_nombre'       => $producto->categoria?->nombre_categoria ?? 'Sin categoría',
                     'precio_compra_producto' => $producto->precio_compra_producto,
-                    'stock_disponible' => $almacen?->pivot->cantidad ?? 0,
-                    'precio_venta' => $vendedor?->pivot->precio_venta ?? null,
-                    'tiene_precio' => ($vendedor?->pivot->precio_venta ?? 0) > 0,
-                    'imagen_url' => $producto->imagen_url,
-                    'codigo_barras' => $producto->codigo_producto,
-                    'codigos' => $producto->codigos->map(fn($c) => [
-                        'id' => $c->id,
+                    'stock_disponible'       => $almacen?->pivot->cantidad ?? 0,
+                    'precio_venta'           => $precioRow ? (float) $precioRow->precio_venta : null,
+                    'tiene_precio'           => ($precioRow?->precio_venta ?? 0) > 0,
+                    'imagen_url'             => $producto->imagen_url,
+                    'codigo_barras'          => $producto->codigo_producto,
+                    'codigos'                => $producto->codigos->map(fn($c) => [
+                        'id'            => $c->id,
                         'codigo_barras' => $c->codigo_barras,
-                        'cantidad' => $c->cantidad,
-                        'es_default' => (bool) $c->es_default,
+                        'cantidad'      => $c->cantidad,
+                        'es_default'    => (bool) $c->es_default,
                     ]),
                     'barcode_image_url' => $producto->barcode_image_url,
-                    'precio_base' => $vendedor?->pivot->precio_venta ?? null, // Precio base del vendedor o admin
-                    'es_precio_vendedor' => $esPrecioVendedor, // Indica si es precio personalizado del vendedor
+                    'precio_base'        => $precioRow ? (float) $precioRow->precio_venta : null,
+                    'comision'           => $precioRow ? (float) $precioRow->comision : 0,
+                    'es_precio_vendedor' => false,
                 ];
             });
 
@@ -502,6 +497,7 @@ class VentaController extends Controller
             ] : null,
             'items' => $venta->detalles->map(function ($detalle) {
                 return [
+                    'id' => $detalle->id,
                     'producto' => [
                         'id' => $detalle->producto->id,
                         'nombre' => $detalle->producto->nombre_producto,
@@ -532,6 +528,8 @@ class VentaController extends Controller
             'ganancia_perdida_cambiaria' => $venta->ganancia_perdida_cambiaria,
             'ganancia_real_total' => $venta->ganancia_real_total,
             'estado' => $venta->estado,
+            'motivo_anulacion' => $venta->motivo_anulacion,
+            'detalle_anulacion' => $venta->detalle_anulacion,
             'fecha' => $venta->created_at->toISOString(),
             'usuario' => [
                 'id' => $venta->usuario->id,
@@ -596,6 +594,9 @@ class VentaController extends Controller
             ] : null,
             'monedas_para_reporte' => $this->buildMonedasParaReporte($venta),
             'monto_diferencia_cambiaria' => $venta->monto_diferencia_cambiaria,
+            'es_venta_especial'   => (bool) $venta->es_venta_especial,
+            'nota_venta_especial'     => $venta->nota_venta_especial,
+            'decision_notificada' => (bool) $venta->decision_notificada,
             'gestor' => $venta->es_venta_gestor && $venta->gestor_cuenta_id ? [
                 'monto' => (float) $venta->gestor_monto,
                 'monto_usd' => $venta->tasa_aplicada_gestor > 0
@@ -687,6 +688,11 @@ class VentaController extends Controller
      */
     public function procesarVenta(Request $request)
     {
+        // Pagos requeridos solo si no es venta especial con total 0
+        $esEspecial  = (bool) $request->input('es_venta_especial', false);
+        $totalCero   = ((float) $request->input('total', 0)) == 0;
+        $pagosRule   = ($esEspecial && $totalCero) ? 'nullable|array' : 'required|array|min:1';
+
         $validatedData = $request->validate([
             'almacen_id' => 'required|exists:almacens,id',
             'cliente_id' => 'nullable|exists:clientes,id',
@@ -697,14 +703,13 @@ class VentaController extends Controller
             'items.*.precio_venta' => 'required|numeric|min:0',
             'items.*.subtotal' => 'required|numeric|min:0',
             'total' => 'required|numeric|min:0',
-            'pagos' => 'required|array|min:1',
-            'pagos.*.metodo' => 'required|in:transferencia,efectivo',
-            'pagos.*.moneda_id' => 'required|exists:monedas,id',
-            'pagos.*.monto' => 'required|numeric|min:0',
-            'pagos.*.via' => 'nullable|string|required_if:pagos.*.metodo,transferencia',
-            'pagos.*.tasa_cambio' => 'required|numeric|min:0.0001',
-            'pagos.*.monto_equivalente' => 'required|numeric|min:0',
-            // ✅ CAMBIO 1: Hacer nullable cuenta_id y agregar cliente_id
+            'pagos' => $pagosRule,
+            'pagos.*.metodo' => 'nullable|in:transferencia,efectivo',
+            'pagos.*.moneda_id' => 'nullable|exists:monedas,id',
+            'pagos.*.monto' => 'nullable|numeric|min:0',
+            'pagos.*.via' => 'nullable|string',
+            'pagos.*.tasa_cambio' => 'nullable|numeric|min:0.0001',
+            'pagos.*.monto_equivalente' => 'nullable|numeric|min:0',
             'pagos.*.cuenta_id' => 'nullable|exists:cuentas,id',
             'pagos.*.cliente_id' => 'nullable|exists:clientes,id',
             'pagos.*.referencia' => 'nullable|string',
@@ -717,6 +722,9 @@ class VentaController extends Controller
             'gestor_cuenta_id' => 'nullable|exists:cuentas,id',
             'gestor_comentario' => 'nullable|string|max:500',
             'tasa_aplicada_gestor' => 'nullable|numeric|min:0.0001',
+            // VENTA ESPECIAL
+            'es_venta_especial'    => 'nullable|boolean',
+            'nota_venta_especial'  => 'nullable|string|max:500|required_if:es_venta_especial,true',
         ]);
 
         $user = Auth::user();
@@ -774,15 +782,40 @@ class VentaController extends Controller
             $total_ganancia = 0;
             $total_comision = 0;
             $costo_total_productos = 0;
-            $esGestor = $validatedData['es_venta_gestor'] ?? false;
-            $saveUserId = in_array($user->role, ['admin', 'moderador']) ? 1 : $user->id;
+            $esGestor   = $validatedData['es_venta_gestor'] ?? false;
+            $esEspecial = (bool) ($validatedData['es_venta_especial'] ?? false);
+
+            // Pre-cargar precios del almacén para todos los productos del carrito
+            $productIds = collect($validatedData['items'])->pluck('producto_id')->unique()->toArray();
+            $preciosAlmacen = DB::table('producto_vendedors')
+                ->where('almacen_id', $validatedData['almacen_id'])
+                ->whereIn('producto_id', $productIds)
+                ->get()
+                ->keyBy('producto_id');
 
             // Validación y descuento inmediato de stock
             $historialStockIds = [];
             foreach ($validatedData['items'] as $item) {
                 $producto = Producto::find($item['producto_id']);
-                if ($item['precio_venta'] < $producto->precio_compra_producto) {
-                    throw new \Exception("El precio de venta de {$producto->nombre_producto} no puede ser menor que su costo de compra.");
+
+                // Ventas especiales permiten precio por debajo del costo
+                if (!$esEspecial && $item['precio_venta'] < $producto->precio_compra_producto) {
+                    throw new \Exception("El precio de venta de \"{$producto->nombre_producto}\" no puede ser menor que su costo de compra.");
+                }
+
+                // Validar que el precio no baje del límite permitido (precio_base - comisión)
+                if (!$esEspecial) {
+                    $precioRow = $preciosAlmacen->get($item['producto_id']);
+                    if ($precioRow) {
+                        $precioMinimo = round((float) $precioRow->precio_venta - (float) $precioRow->comision, 2);
+                        if ((float) $item['precio_venta'] < $precioMinimo) {
+                            throw new \Exception(
+                                "El precio de \"{$producto->nombre_producto}\" (\${$item['precio_venta']}) " .
+                                "está por debajo del mínimo permitido (\${$precioMinimo}). " .
+                                "Use Venta Especial para aplicar este descuento."
+                            );
+                        }
+                    }
                 }
 
                 $almacenProducto = AlmacenProducto::where('almacen_id', $validatedData['almacen_id'])
@@ -843,17 +876,22 @@ class VentaController extends Controller
                 'total' => $validatedData['total'],
                 'total_ganancia' => 0,
                 'total_comision' => 0,
-                'estado' => 'pendiente',
+                // Ventas especiales inician en solicitud_especial, esperando aprobación del admin
+                'estado' => $esEspecial ? 'solicitud_especial' : 'pendiente',
                 'moneda_id' => $validatedData['moneda_principal_id'],
                 'tasa_cambio_principal' => $validatedData['tasa_cambio_principal'],
                 'tasa_aplicada_venta' => $validatedData['tasa_aplicada_venta'] ?? null,
                 'moneda_cobro_id' => $validatedData['moneda_cobro_id'] ?? null,
-                // CAMPOS GESTOR
-                'es_venta_gestor' => $validatedData['es_venta_gestor'] ?? false,
-                'gestor_monto' => $validatedData['gestor_monto'] ?? 0,
-                'gestor_cuenta_id' => $validatedData['gestor_cuenta_id'] ?? null,
-                'gestor_comentario' => $validatedData['gestor_comentario'] ?? null,
-                'tasa_aplicada_gestor' => $validatedData['tasa_aplicada_gestor'] ?? null,
+                // CAMPOS GESTOR (no aplica en ventas especiales)
+                'es_venta_gestor' => $esEspecial ? false : ($validatedData['es_venta_gestor'] ?? false),
+                'gestor_monto' => $esEspecial ? 0 : ($validatedData['gestor_monto'] ?? 0),
+                'gestor_cuenta_id' => $esEspecial ? null : ($validatedData['gestor_cuenta_id'] ?? null),
+                'gestor_comentario' => $esEspecial ? null : ($validatedData['gestor_comentario'] ?? null),
+                'tasa_aplicada_gestor' => $esEspecial ? null : ($validatedData['tasa_aplicada_gestor'] ?? null),
+                // CAMPOS VENTA ESPECIAL
+                'es_venta_especial' => $esEspecial,
+                'nota_venta_especial'   => $esEspecial ? ($validatedData['nota_venta_especial'] ?? null) : null,
+                'decision_notificada' => false,
             ]);
 
             HistorialStock::whereIn('id', $historialStockIds)->update(['venta_id' => $venta->id]);
@@ -864,19 +902,23 @@ class VentaController extends Controller
                 $ganancia = ($item['precio_venta'] - $producto->precio_compra_producto) * $item['cantidad'];
                 $total_ganancia += $ganancia;
 
-                // Leer precio_base y comision desde producto_vendedors (siempre, incluso con gestor)
-                $productoVendedor = DB::table('producto_vendedors')
-                    ->where('producto_id', $item['producto_id'])
-                    ->where('almacen_id', $validatedData['almacen_id'])
-                    ->where('user_id', $saveUserId)
-                    ->first();
+                // Usar datos precargados del almacén
+                $productoVendedor = $preciosAlmacen->get($item['producto_id']);
 
-                $precioBase = $productoVendedor ? (float) $productoVendedor->precio_venta : (float) $item['precio_venta'];
-                $baseComision = $productoVendedor ? (float) $productoVendedor->comision : 0;
+                $precioBase   = $productoVendedor ? (float) $productoVendedor->precio_venta : (float) $item['precio_venta'];
+                $baseComision = (!$esEspecial && $productoVendedor) ? (float) $productoVendedor->comision : 0;
 
-                // Comisión unitaria = base + markup del gestor (precio extra sobre el precio base)
-                $markup = max(0, (float) $item['precio_venta'] - $precioBase);
-                $comisionUnitaria = $baseComision + $markup;
+                // Calcular comisión según el precio aplicado
+                if ($esEspecial) {
+                    $comisionUnitaria = 0;
+                } elseif ((float) $item['precio_venta'] >= $precioBase) {
+                    // Igual o por encima del precio base: comisión base + markup extra
+                    $comisionUnitaria = $baseComision + ((float) $item['precio_venta'] - $precioBase);
+                } else {
+                    // Por debajo del precio base: el descuento lo absorbe la comisión del vendedor
+                    $descuento = $precioBase - (float) $item['precio_venta'];
+                    $comisionUnitaria = max(0.0, $baseComision - $descuento);
+                }
                 $total_comision += round($comisionUnitaria * $item['cantidad'], 2);
 
                 VentaDetalle::create([
@@ -920,21 +962,19 @@ class VentaController extends Controller
                 'monto_diferencia_cambiaria' => $monto_diferencia_cambiaria,
             ]);
 
-            // ✅ CAMBIO 4: Modificar creación de pagos para incluir cliente_id
-            foreach ($validatedData['pagos'] as $pago) {
+            // Crear pagos — para regalos (total=0) el array puede estar vacío
+            foreach ($validatedData['pagos'] ?? [] as $pago) {
                 PagoVenta::create([
-                    'venta_id' => $venta->id,
-                    'tipo_pago' => $pago['metodo'],
-                    'moneda_id' => $pago['moneda_id'],
-                    // ✅ Permite null si el destino es cliente
-                    'cuenta_id' => $pago['cuenta_id'] ?? null,
-                    // ✅ Nuevo campo para cliente destino
-                    'cliente_id' => $pago['cliente_id'] ?? null,
-                    'via_pago' => $pago['via'] ?? null,
-                    'monto' => $pago['monto'],
+                    'venta_id'             => $venta->id,
+                    'tipo_pago'            => $pago['metodo'],
+                    'moneda_id'            => $pago['moneda_id'],
+                    'cuenta_id'            => $pago['cuenta_id'] ?? null,
+                    'cliente_id'           => $pago['cliente_id'] ?? null,
+                    'via_pago'             => $pago['via'] ?? null,
+                    'monto'                => $pago['monto'],
                     'tasa_cambio_aplicada' => $pago['tasa_cambio'],
-                    'monto_equivalente' => $pago['monto_equivalente'],
-                    'referencia' => $pago['referencia'] ?? null,
+                    'monto_equivalente'    => $pago['monto_equivalente'],
+                    'referencia'           => $pago['referencia'] ?? null,
                 ]);
             }
 
@@ -943,7 +983,11 @@ class VentaController extends Controller
             // Notificar a Admins y Moderadores
             try {
                 $admins = User::whereIn('role', ['admin', 'moderador'])->get();
-                Notification::send($admins, new VentaCreadaNotification($venta));
+                if ($esEspecial) {
+                    Notification::send($admins, new VentaEspecialSolicitudNotification($venta));
+                } else {
+                    Notification::send($admins, new VentaCreadaNotification($venta));
+                }
             } catch (\Exception $e) {
                 \Log::error('Error enviando notificación de venta: ' . $e->getMessage());
             }
@@ -1275,6 +1319,8 @@ class VentaController extends Controller
                         'simbolo' => $venta->monedaCobro->simbolo_moneda,
                     ] : null,
                     'monto_diferencia_cambiaria' => $venta->monto_diferencia_cambiaria,
+                    'es_venta_especial'   => (bool) $venta->es_venta_especial,
+                    'nota_venta_especial'     => $venta->nota_venta_especial,
                     // GESTOR
                     'gestor' => $venta->es_venta_gestor && $venta->gestor_cuenta_id ? [
                         'monto' => (float) $venta->gestor_monto,
@@ -1304,26 +1350,210 @@ class VentaController extends Controller
             'filters' => $request->only(['estado', 'almacen_id', 'fecha_desde', 'fecha_hasta']),
             'almacenes' => $almacenes,
             'estados_venta' => [
-                ['value' => 'pendiente', 'label' => 'Pendiente'],
-                ['value' => 'completada', 'label' => 'Completada'],
-                ['value' => 'cancelada', 'label' => 'Cancelada'],
+                ['value' => 'pendiente',           'label' => 'Pendiente'],
+                ['value' => 'completada',          'label' => 'Completada'],
+                ['value' => 'cancelada',           'label' => 'Cancelada'],
+                ['value' => 'solicitud_especial',  'label' => 'Solicitud Especial'],
+                ['value' => 'rechazada',           'label' => 'Rechazada'],
             ]
+        ]);
+    }
+
+    /**
+     * Editar pagos y/o precios de una venta en estado pendiente.
+     */
+    public function editarVentaPendiente(Request $request, Venta $venta)
+    {
+        if ($venta->estado !== 'pendiente') {
+            return response()->json(['success' => false, 'message' => 'Solo se pueden editar ventas en estado pendiente.'], 400);
+        }
+
+        $validated = $request->validate([
+            'pagos'                       => 'required|array|min:1',
+            'pagos.*.metodo'              => 'required|in:transferencia,efectivo',
+            'pagos.*.moneda_id'           => 'required|exists:monedas,id',
+            'pagos.*.monto'               => 'required|numeric|min:0',
+            'pagos.*.via'                 => 'nullable|string',
+            'pagos.*.tasa_cambio'         => 'required|numeric|min:0.0001',
+            'pagos.*.monto_equivalente'   => 'required|numeric|min:0',
+            'pagos.*.cuenta_id'           => 'nullable|exists:cuentas,id',
+            'pagos.*.cliente_id'          => 'nullable|exists:clientes,id',
+            'pagos.*.referencia'          => 'nullable|string',
+            'items'                       => 'nullable|array',
+            'items.*.venta_detalle_id'    => 'required|exists:venta_detalles,id',
+            'items.*.precio_venta'        => 'required|numeric|min:0',
+        ]);
+
+        // Validar XOR en pagos
+        foreach ($validated['pagos'] as $pago) {
+            if (empty($pago['cuenta_id']) && empty($pago['cliente_id'])) {
+                return response()->json(['success' => false, 'message' => 'Cada pago debe tener una cuenta o un cliente como destino.'], 422);
+            }
+            if (!empty($pago['cuenta_id']) && !empty($pago['cliente_id'])) {
+                return response()->json(['success' => false, 'message' => 'Un pago no puede tener cuenta y cliente al mismo tiempo.'], 422);
+            }
+        }
+
+        $user = Auth::user();
+
+        try { DB::transaction(function () use ($venta, $validated, $user) {
+            // ── Actualizar precios si vienen ──────────────────────────────────
+            if (!empty($validated['items'])) {
+                $venta->load('detalles.producto');
+
+                // Precargar precios del almacén para validar mínimos
+                $productIds     = $venta->detalles->pluck('producto_id')->toArray();
+                $preciosAlmacen = DB::table('producto_vendedors')
+                    ->where('almacen_id', $venta->almacen_id)
+                    ->whereIn('producto_id', $productIds)
+                    ->get()
+                    ->keyBy('producto_id');
+
+                $nuevoTotal    = 0;
+                $nuevaGanancia = 0;
+                $nuevaComision = 0;
+
+                foreach ($validated['items'] as $itemData) {
+                    $detalle = $venta->detalles->firstWhere('id', $itemData['venta_detalle_id']);
+                    if (!$detalle) continue;
+
+                    $nuevoPrecio = (float) $itemData['precio_venta'];
+                    $costo       = (float) $detalle->costo_unitario;
+
+                    // Validar mínimo solo si no es venta especial
+                    if (!$venta->es_venta_especial) {
+                        $precioRow = $preciosAlmacen->get($detalle->producto_id);
+                        if ($precioRow) {
+                            $precioMinimo = round((float) $precioRow->precio_venta - (float) $precioRow->comision, 2);
+                            if ($nuevoPrecio < $precioMinimo) {
+                                throw new \Exception(
+                                    "El precio de \"{$detalle->producto->nombre_producto}\" (\${$nuevoPrecio}) " .
+                                    "está por debajo del mínimo permitido (\${$precioMinimo})."
+                                );
+                            }
+                        }
+                        if ($nuevoPrecio < $costo) {
+                            throw new \Exception(
+                                "El precio de \"{$detalle->producto->nombre_producto}\" no puede ser menor que su costo."
+                            );
+                        }
+                    }
+
+                    // Recalcular comisión
+                    $precioRow    = $preciosAlmacen->get($detalle->producto_id);
+                    $precioBase   = $precioRow ? (float) $precioRow->precio_venta : $nuevoPrecio;
+                    $baseComision = (!$venta->es_venta_especial && $precioRow) ? (float) $precioRow->comision : 0;
+
+                    if ($venta->es_venta_especial) {
+                        $comisionUnitaria = 0;
+                    } elseif ($nuevoPrecio >= $precioBase) {
+                        $comisionUnitaria = $baseComision + ($nuevoPrecio - $precioBase);
+                    } else {
+                        $descuento        = $precioBase - $nuevoPrecio;
+                        $comisionUnitaria = max(0.0, $baseComision - $descuento);
+                    }
+
+                    $ganancia = ($nuevoPrecio - $costo) * $detalle->cantidad;
+                    $subtotal = $nuevoPrecio * $detalle->cantidad;
+
+                    $detalle->update([
+                        'precio_venta'    => $nuevoPrecio,
+                        'subtotal'        => $subtotal,
+                        'ganancia'        => $ganancia,
+                        'comision_unitaria' => round($comisionUnitaria, 2),
+                    ]);
+
+                    $nuevoTotal    += $subtotal;
+                    $nuevaGanancia += $ganancia;
+                    $nuevaComision += round($comisionUnitaria * $detalle->cantidad, 2);
+                }
+
+                $venta->update([
+                    'total'          => $nuevoTotal,
+                    'total_ganancia' => $nuevaGanancia,
+                    'total_comision' => round($nuevaComision, 2),
+                ]);
+            }
+
+            // ── Reemplazar pagos ──────────────────────────────────────────────
+            $venta->pagos()->delete();
+
+            foreach ($validated['pagos'] as $pago) {
+                PagoVenta::create([
+                    'venta_id'             => $venta->id,
+                    'tipo_pago'            => $pago['metodo'],
+                    'moneda_id'            => $pago['moneda_id'],
+                    'cuenta_id'            => $pago['cuenta_id'] ?? null,
+                    'cliente_id'           => $pago['cliente_id'] ?? null,
+                    'via_pago'             => $pago['via'] ?? null,
+                    'monto'                => $pago['monto'],
+                    'tasa_cambio_aplicada' => $pago['tasa_cambio'],
+                    'monto_equivalente'    => $pago['monto_equivalente'],
+                    'referencia'           => $pago['referencia'] ?? null,
+                ]);
+            }
+        }); } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        // Devolver venta actualizada para refrescar el frontend sin recargar
+        $venta->refresh()->load(['detalles.producto', 'pagos.cuenta.moneda', 'pagos.moneda', 'pagos.cliente']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Venta actualizada correctamente.',
+            'total'   => (float) $venta->total,
+            'pagos'   => $venta->pagos->map(fn($p) => [
+                'metodo'            => $p->tipo_pago,
+                'monto'             => $p->monto,
+                'monto_equivalente' => $p->monto_equivalente,
+                'via'               => $p->via_pago,
+                'tasa_cambio'       => $p->tasa_cambio_aplicada,
+                'moneda'            => $p->moneda ? [
+                    'id'     => $p->moneda->id,
+                    'codigo' => $p->moneda->codigo_moneda,
+                    'nombre' => $p->moneda->nombre_moneda,
+                ] : null,
+                'cuenta'            => $p->cuenta ? [
+                    'id'     => $p->cuenta->id,
+                    'nombre' => $p->cuenta->nombre_cuenta,
+                ] : null,
+                'cliente_destino'   => $p->cliente ? [
+                    'id'     => $p->cliente->id,
+                    'nombre' => $p->cliente->nombre_cliente,
+                ] : null,
+                'destino_tipo'      => $p->cliente_id ? 'cliente' : 'cuenta',
+            ]),
+            'items' => $venta->detalles->map(fn($d) => [
+                'precio_venta'     => (float) $d->precio_venta,
+                'subtotal'         => (float) $d->subtotal,
+                'ganancia'         => (float) $d->ganancia,
+                'comision_unitaria'=> (float) $d->comision_unitaria,
+            ]),
         ]);
     }
 
     /**
      * Anular venta (pendiente o completada)
      */
-    public function anularVenta(Venta $venta)
+    public function anularVenta(Request $request, Venta $venta)
     {
         if ($venta->estado === 'cancelada') {
             return response()->json(['success' => false, 'message' => 'La venta ya está anulada'], 400);
         }
 
+        $validated = $request->validate([
+            'motivo_anulacion' => 'required|in:error_precio,solicitud_cliente,producto_defectuoso,duplicado_venta,error_pedido,otros',
+            'detalle_anulacion' => 'nullable|string|max:500|required_if:motivo_anulacion,otros',
+        ]);
+
         // Cargar relaciones necesarias para poder revertirlas
         $venta->load(['detalles', 'pagos.cliente', 'pagos.cuenta', 'gestorCuenta']);
 
-        DB::transaction(function () use ($venta) {
+        DB::transaction(function () use ($venta, $validated) {
             // ✅ SIEMPRE revertir stock (pendiente o completada)
             foreach ($venta->detalles as $detalle) {
                 $almacenProducto = AlmacenProducto::where('almacen_id', $venta->almacen_id)
@@ -1390,12 +1620,113 @@ class VentaController extends Controller
                 }
             }
 
-            $venta->update(['estado' => 'cancelada']);
+            $venta->update([
+                'estado'            => 'cancelada',
+                'motivo_anulacion'  => $validated['motivo_anulacion'],
+                'detalle_anulacion' => $validated['detalle_anulacion'] ?? null,
+            ]);
         });
 
         return response()->json([
             'success' => true,
             'message' => 'Venta anulada correctamente'
         ]);
+    }
+
+    // ========================================================================
+    // VENTAS ESPECIALES
+    // ========================================================================
+
+    /**
+     * Admin aprueba la solicitud especial → pasa a "pendiente" (flujo normal continúa).
+     */
+    public function aprobarSolicitudEspecial(Venta $venta)
+    {
+        if ($venta->estado !== 'solicitud_especial') {
+            return response()->json(['success' => false, 'message' => 'Esta venta no está pendiente de aprobación especial'], 400);
+        }
+
+        $venta->update([
+            'estado'              => 'pendiente',
+            'decision_notificada' => false,
+        ]);
+
+        try {
+            Notification::send(collect([$venta->usuario]), new VentaEspecialDecisionNotification($venta, 'aprobada'));
+        } catch (\Exception $e) {
+            \Log::error('Error enviando notificación de decisión especial: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Solicitud aprobada. La venta está ahora pendiente de receptor.'
+        ]);
+    }
+
+    /**
+     * Admin rechaza la solicitud especial → revierte stock y pasa a "rechazada".
+     */
+    public function rechazarSolicitudEspecial(Venta $venta)
+    {
+        if ($venta->estado !== 'solicitud_especial') {
+            return response()->json(['success' => false, 'message' => 'Esta venta no está pendiente de aprobación especial'], 400);
+        }
+
+        $venta->load(['detalles']);
+
+        DB::transaction(function () use ($venta) {
+            foreach ($venta->detalles as $detalle) {
+                $almacenProducto = AlmacenProducto::where('almacen_id', $venta->almacen_id)
+                    ->where('producto_id', $detalle->producto_id)->first();
+
+                if ($almacenProducto) {
+                    $almacenProducto->increment('cantidad', $detalle->cantidad);
+                }
+
+                if ($detalle->producto_codigo_id) {
+                    $codigo = ProductoCodigo::find($detalle->producto_codigo_id);
+                    if ($codigo) {
+                        $codigo->increment('cantidad', $detalle->cantidad);
+                    }
+                }
+
+                HistorialStock::create([
+                    'producto_id'      => $detalle->producto_id,
+                    'almacen_id'       => $venta->almacen_id,
+                    'venta_id'         => $venta->id,
+                    'cantidad_anterior'=> $almacenProducto?->cantidad ?? 0,
+                    'cantidad_nueva'   => ($almacenProducto?->cantidad ?? 0) + $detalle->cantidad,
+                    'diferencia'       => $detalle->cantidad,
+                    'tipo'             => 'venta_anulada',
+                    'observaciones'    => 'Stock revertido por rechazo de solicitud especial',
+                    'user_id'          => Auth::id(),
+                ]);
+            }
+
+            $venta->update([
+                'estado'              => 'rechazada',
+                'decision_notificada' => false,
+            ]);
+        });
+
+        try {
+            Notification::send(collect([$venta->usuario]), new VentaEspecialDecisionNotification($venta, 'rechazada'));
+        } catch (\Exception $e) {
+            \Log::error('Error enviando notificación de decisión especial: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Solicitud rechazada. El stock ha sido revertido.'
+        ]);
+    }
+
+    /**
+     * Marca que el vendedor ya vio el veredicto del admin.
+     */
+    public function marcarDecisionNotificada(Venta $venta)
+    {
+        $venta->update(['decision_notificada' => true]);
+        return response()->json(['success' => true]);
     }
 }

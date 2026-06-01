@@ -1,6 +1,9 @@
 import HeadingSmall from '@/components/heading-small';
+import PaymentForm from '@/components/ventas/PaymentForm';
+import PaymentList from '@/components/ventas/PaymentList';
 import {
     AlertDialog,
+    AlertDialogAction,
     AlertDialogCancel,
     AlertDialogContent,
     AlertDialogDescription,
@@ -25,10 +28,10 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
 import {
+    AlertTriangle,
     BarChartIcon,
     BoxesIcon,
     Building2,
-    DollarSign,
     Eye,
     Info,
     Minus,
@@ -86,7 +89,8 @@ interface Producto {
     codigo_barras: string;
     codigos?: ProductoCodigoVenta[];
     barcode_image_url: string | null;
-    precio_base: number | null; // Precio del vendedor o admin
+    precio_base: number | null;
+    comision: number;
     es_precio_vendedor: boolean;
 }
 interface ItemCarrito {
@@ -96,7 +100,8 @@ interface ItemCarrito {
     codigo_barras_usado: string;
     cantidad: number;
     precio_venta: number;
-    precio_base: number; // Precio original antes de editar
+    precio_base: number;
+    comision: number;
     subtotal: number;
 }
 interface Moneda {
@@ -125,28 +130,9 @@ interface Payment {
         simbolo: string;
     };
 }
-interface PaymentVia {
-    id: string;
-    name: string;
-    method: 'transferencia' | 'efectivo';
-}
-
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Productos', href: '/listado-productos' },
     { title: 'Punto de Ventas', href: '#' },
-];
-
-const paymentVias: PaymentVia[] = [
-    { id: 'zelle', name: 'Zelle', method: 'transferencia' },
-    { id: 'cashapp', name: 'CashApp', method: 'transferencia' },
-    { id: 'visa', name: 'Visa', method: 'transferencia' },
-    { id: 'mastercard', name: 'MasterCard', method: 'transferencia' },
-    { id: 'stripe', name: 'Stripe', method: 'transferencia' },
-    { id: 'paypal', name: 'Paypal', method: 'transferencia' },
-    { id: 'qvapay', name: 'QvaPay', method: 'transferencia' },
-    { id: 'enzona', name: 'EnZona', method: 'transferencia' },
-    { id: 'transfermovil', name: 'Transfermóvil', method: 'transferencia' },
-    { id: 'efectivo', name: 'Efectivo', method: 'efectivo' },
 ];
 
 export default function PuntoVentaOficial({
@@ -173,36 +159,15 @@ export default function PuntoVentaOficial({
     const [codigoSeleccionadoPorProducto, setCodigoSeleccionadoPorProducto] = useState<Record<string, number>>({});
     const [procesandoVenta, setProcesandoVenta] = useState<boolean>(false);
     const [payments, setPayments] = useState<Payment[]>([]);
-    const [currentPayment, setCurrentPayment] = useState<{
-        method: 'transferencia' | 'efectivo' | '';
-        moneda_id: string;
-        via: string;
-        amount: string;
-        exchangeRate: string;
-        cuenta_id: string;
-        cliente_id: string;
-        referencia: string;
-    }>({
-        method: '',
-        moneda_id: '',
-        via: '',
-        amount: '',
-        exchangeRate: '',
-        cuenta_id: '',
-        cliente_id: '',
-        referencia: '',
-    });
-    const [cuentasFiltradas, setCuentasFiltradas] = useState<Cuenta[]>([]);
+    // ── Venta Especial ────────────────────────────────────────────────────────
+    const [esVentaEspecial, setEsVentaEspecial] = useState<boolean>(false);
+    const [motivoEspecial, setMotivoEspecial] = useState<string>('');
+    const [productoSinComisionPendiente, setProductoSinComisionPendiente] = useState<{ id: string; nuevoPrecio: number } | null>(null);
+    // Valores de texto del input de precio por item — se aplican solo al salir del campo
+    const [preciosInput, setPreciosInput] = useState<Record<string, string>>({});
 
     const [clientesFisicos, setClientesFisicos] = useState<Cliente[]>([]);
     const [cargandoClientesFisicos, setCargandoClientesFisicos] = useState<boolean>(false);
-    const [cargandoCuentas, setCargandoCuentas] = useState<boolean>(false);
-    const [conversionCalculada, setConversionCalculada] = useState<{
-        montoOriginal: number;
-        montoUSD: number;
-        tasaCambio: number;
-        monedaSimbolo: string;
-    } | null>(null);
 
     const [isCrearClienteDialogOpen, setIsCrearClienteDialogOpen] = useState(false);
 
@@ -230,31 +195,6 @@ export default function PuntoVentaOficial({
             }
         }
     }, [meta.monedas]);
-
-    useEffect(() => {
-        if (
-            currentPayment.amount &&
-            currentPayment.moneda_id &&
-            parseFloat(currentPayment.amount) > 0 &&
-            currentPayment.exchangeRate &&
-            parseFloat(currentPayment.exchangeRate) > 0
-        ) {
-            const monto = parseFloat(currentPayment.amount);
-            const exchangeRate = parseFloat(currentPayment.exchangeRate);
-            const selectedCurrency = currencies.find((c) => c.id === currentPayment.moneda_id);
-            if (selectedCurrency) {
-                const montoUSD = monto / exchangeRate;
-                setConversionCalculada({
-                    montoOriginal: monto,
-                    montoUSD,
-                    tasaCambio: exchangeRate,
-                    monedaSimbolo: selectedCurrency.symbol,
-                });
-            }
-        } else {
-            setConversionCalculada(null);
-        }
-    }, [currentPayment.amount, currentPayment.moneda_id, currentPayment.exchangeRate, currencies]);
 
     const cargarAlmacenes = async () => {
         try {
@@ -287,29 +227,6 @@ export default function PuntoVentaOficial({
             setClientesFisicos([]);
         } finally {
             setCargandoClientesFisicos(false);
-        }
-    };
-
-    const cargarCuentasFiltradas = async (monedaId: string, metodoPago: string) => {
-        if (!monedaId) {
-            setCuentasFiltradas([]);
-            return;
-        }
-        setCargandoCuentas(true);
-        try {
-            const response = await axios.get(route('ventas.getCuentasFiltradas'), {
-                params: {
-                    moneda_id: monedaId,
-                    metodo_pago: metodoPago || undefined,
-                },
-            });
-            setCuentasFiltradas(response.data);
-        } catch (error: unknown) {
-            console.error('Error al cargar cuentas filtradas:', error);
-            toast.error('Error al cargar cuentas');
-            setCuentasFiltradas([]);
-        } finally {
-            setCargandoCuentas(false);
         }
     };
 
@@ -363,21 +280,6 @@ export default function PuntoVentaOficial({
     const handleClienteChange = (value: string) => {
         console.log('Cliente seleccionado:', value);
         setClienteSeleccionado(value);
-    };
-
-    const handleMonedaChange = (monedaId: string) => {
-        const selectedCurrency = currencies.find((c) => c.id === monedaId);
-        const automaticAmount = calculateAutomaticAmount(monedaId);
-
-        setCurrentPayment({
-            ...currentPayment,
-            moneda_id: monedaId,
-            exchangeRate: selectedCurrency ? selectedCurrency.exchangeRate.toString() : '',
-            amount: automaticAmount,
-            cuenta_id: '',
-            cliente_id: '',
-        });
-        cargarCuentasFiltradas(monedaId, currentPayment.method);
     };
 
     const productosFiltrados = useMemo(() => {
@@ -438,7 +340,7 @@ export default function PuntoVentaOficial({
     };
 
     const agregarAlCarrito = (producto: Producto, codigoForzadoId?: number) => {
-        if (!producto.tiene_precio || !producto.precio_venta || producto.precio_venta <= 0) {
+        if (!esVentaEspecial && (!producto.tiene_precio || !producto.precio_venta || producto.precio_venta <= 0)) {
             toast.error('Este producto no tiene un precio de venta configurado');
             return;
         }
@@ -475,8 +377,8 @@ export default function PuntoVentaOficial({
                 ),
             );
         } else {
-            const precioVenta = producto.precio_venta;
-            const precioBase = producto.precio_base ?? precioVenta;
+            const precioVenta = producto.precio_venta ?? 0;
+            const precioBase  = producto.precio_base ?? precioVenta;
             const nuevoItem: ItemCarrito = {
                 id: idItem,
                 producto: producto,
@@ -485,6 +387,7 @@ export default function PuntoVentaOficial({
                 cantidad: 1,
                 precio_venta: precioVenta,
                 precio_base: precioBase,
+                comision: producto.comision ?? 0,
                 subtotal: precioVenta,
             };
             setCarrito([...carrito, nuevoItem]);
@@ -519,17 +422,50 @@ export default function PuntoVentaOficial({
 
     const actualizarPrecio = (id: string, nuevoPrecio: number) => {
         if (nuevoPrecio < 0) return;
-        setCarrito(
-            carrito.map((item) =>
-                item.id === id
-                    ? {
-                        ...item,
-                        precio_venta: nuevoPrecio,
-                        subtotal: item.cantidad * nuevoPrecio,
-                    }
-                    : item,
+
+        const item = carrito.find((i) => i.id === id);
+        if (!item) return;
+
+        const precioMinimo = item.precio_base - item.comision;
+
+        if (!esVentaEspecial && nuevoPrecio < precioMinimo) {
+            if (item.comision === 0) {
+                // Sin comisión: mostrar AlertDialog antes de convertir en especial
+                setProductoSinComisionPendiente({ id, nuevoPrecio });
+                return;
+            } else {
+                // Por debajo del límite: activar venta especial automáticamente
+                setEsVentaEspecial(true);
+                toast.warning('Precio por debajo del límite permitido. Se activó Venta Especial automáticamente.');
+            }
+        }
+
+        setCarrito((prev) =>
+            prev.map((i) =>
+                i.id === id
+                    ? { ...i, precio_venta: nuevoPrecio, subtotal: i.cantidad * nuevoPrecio }
+                    : i,
             ),
         );
+    };
+
+    // Aplica el precio solo cuando el usuario sale del campo (onBlur / Enter)
+    const confirmarPrecio = (id: string) => {
+        const texto = preciosInput[id];
+
+        // Limpiar siempre el estado temporal
+        setPreciosInput((prev) => {
+            const next = { ...prev };
+            delete next[id];
+            return next;
+        });
+
+        if (texto === undefined) return;
+
+        const valor = parseFloat(texto);
+        if (isNaN(valor) || valor < 0) return; // valor inválido: el input vuelve al precio del carrito
+
+        actualizarPrecio(id, valor);
     };
 
     const quitarDelCarrito = (id: string) => {
@@ -566,140 +502,6 @@ export default function PuntoVentaOficial({
 
     const totalPaid = useMemo(() => payments.reduce((sum, payment) => sum + payment.amountInUsd, 0), [payments]);
     const remainingInUsd = calcularTotal - totalPaid;
-
-    // ✅ NUEVO: Recalcular monto automáticamente cuando el usuario cambia la tasa de cambio manualmente
-    useEffect(() => {
-        // Solo ejecutar cuando el usuario edita manualmente la tasa (no cuando se selecciona moneda o destino)
-        const monedaSeleccionada = currencies.find((c) => c.id === currentPayment.moneda_id);
-        const tasaOriginal = monedaSeleccionada?.exchangeRate || 0;
-        const tasaActual = parseFloat(currentPayment.exchangeRate) || 0;
-
-        // Solo ejecutar si la tasa fue editada manualmente (diferente de la tasa original de la moneda)
-        const tasaFueEditada = Math.abs(tasaActual - tasaOriginal) > 0.0001;
-
-        if (
-            currentPayment.moneda_id &&
-            currentPayment.exchangeRate &&
-            tasaFueEditada &&
-            parseFloat(currentPayment.exchangeRate) > 0 &&
-            remainingInUsd > 0 &&
-            currentPayment.amount &&
-            parseFloat(currentPayment.amount) > 0
-        ) {
-            const nuevaTasa = parseFloat(currentPayment.exchangeRate);
-            const montoCalculado = remainingInUsd * nuevaTasa;
-
-            const montoActual = parseFloat(currentPayment.amount) || 0;
-            if (Math.abs(montoActual - montoCalculado) > 0.01) {
-                setCurrentPayment((prev) => ({
-                    ...prev,
-                    amount: montoCalculado.toFixed(2),
-                }));
-            }
-        }
-    }, [currentPayment.exchangeRate, remainingInUsd, currentPayment.moneda_id]);
-
-    const convertToUsd = (amount: number, exchangeRate: number): number => {
-        if (!exchangeRate || exchangeRate <= 0) {
-            return 0;
-        }
-        return amount / exchangeRate;
-    };
-
-    const calculateAutomaticAmount = (monedaId: string): string => {
-        if (remainingInUsd <= 0) {
-            return '';
-        }
-
-        const selectedCurrency = currencies.find((c) => c.id === monedaId);
-        if (!selectedCurrency || !selectedCurrency.exchangeRate || selectedCurrency.exchangeRate <= 0) {
-            return '';
-        }
-
-        const automaticAmount = remainingInUsd * selectedCurrency.exchangeRate;
-        return automaticAmount.toFixed(2);
-    };
-
-    const handleAddPayment = () => {
-        console.log('Intentando agregar pago:', currentPayment);
-        console.log('Cuentas filtradas disponibles:', cuentasFiltradas);
-
-        if (
-            !currentPayment.method ||
-            !currentPayment.moneda_id ||
-            (currentPayment.method === 'transferencia' && !currentPayment.via) ||
-            !currentPayment.amount ||
-            parseFloat(currentPayment.amount) <= 0 ||
-            (!currentPayment.cuenta_id && !currentPayment.cliente_id) ||
-            !currentPayment.exchangeRate ||
-            parseFloat(currentPayment.exchangeRate) <= 0
-        ) {
-            console.log('Faltan campos requeridos:', {
-                method: currentPayment.method,
-                moneda_id: currentPayment.moneda_id,
-                via: currentPayment.via,
-                referencia: currentPayment.referencia,
-                amount: currentPayment.amount,
-                exchangeRate: currentPayment.exchangeRate,
-                cuenta_id: currentPayment.cuenta_id,
-                cliente_id: currentPayment.cliente_id,
-            });
-            toast.warning('Por favor, complete todos los campos del pago y asegure un monto y tasa de cambio válidos.');
-            return;
-        }
-
-        const selectedCurrency = currencies.find((c) => c.id === currentPayment.moneda_id);
-        console.log('Moneda seleccionada:', selectedCurrency);
-
-        if (!selectedCurrency) {
-            toast.error('Error en la selección de moneda');
-            return;
-        }
-
-        const amount = parseFloat(currentPayment.amount);
-        const exchangeRate = parseFloat(currentPayment.exchangeRate);
-        const amountInUsd = convertToUsd(amount, exchangeRate);
-        console.log(`Monto: ${amount}, Tasa: ${exchangeRate}, USD: ${amountInUsd}`);
-
-        if (amountInUsd === 0 || isNaN(amountInUsd)) {
-            toast.error('El monto en USD no puede ser cero o no es válido. Revise la tasa de cambio.');
-            return;
-        }
-
-        const newPayment: Payment = {
-            id: crypto.randomUUID(),
-            method: currentPayment.method,
-            moneda_id: currentPayment.moneda_id,
-            amount: amount,
-            via: currentPayment.method === 'transferencia' ? currentPayment.via : undefined,
-            exchangeRate: exchangeRate,
-            amountInUsd: amountInUsd,
-            cuenta_id: currentPayment.cuenta_id || null,
-            cliente_id: currentPayment.cliente_id || null,
-            referencia: currentPayment.method === 'transferencia' ? currentPayment.referencia : undefined,
-            moneda_info: {
-                codigo: selectedCurrency.code,
-                nombre: selectedCurrency.name,
-                simbolo: selectedCurrency.symbol,
-            },
-        };
-
-        console.log('Nuevo pago agregado:', newPayment);
-        setPayments([...payments, newPayment]);
-        setCurrentPayment({
-            method: '',
-            moneda_id: '',
-            via: '',
-            amount: '',
-            exchangeRate: '',
-            cuenta_id: '',
-            cliente_id: '',
-            referencia: '',
-        });
-        setCuentasFiltradas([]);
-        setConversionCalculada(null);
-        toast.success('Pago agregado correctamente');
-    };
 
     const handleRemovePayment = (id: string) => {
         setPayments(payments.filter((payment) => payment.id !== id));
@@ -763,16 +565,22 @@ export default function PuntoVentaOficial({
             }
         }
         for (const item of carrito) {
-            if (!item.precio_venta || item.precio_venta <= 0) {
+            // En ventas especiales el precio puede ser 0 (regalo)
+            if (!esVentaEspecial && (!item.precio_venta || item.precio_venta < 0)) {
                 toast.error(`Precio inválido para: ${item.producto.nombre_producto}`);
                 return;
             }
         }
-        if (remainingInUsd > 0.01) {
+        if (esVentaEspecial && !motivoEspecial.trim()) {
+            toast.error('Debe ingresar el motivo de la venta especial');
+            return;
+        }
+        const esRegalo = esVentaEspecial && calcularTotal === 0;
+        if (!esRegalo && remainingInUsd > 0.01) {
             toast.error(`El total a pagar no ha sido cubierto. Restante: $${remainingInUsd.toFixed(2)} USD`);
             return;
         }
-        if (payments.length === 0) {
+        if (!esRegalo && payments.length === 0) {
             toast.error('Debe agregar al menos un método de pago para completar la venta.');
             return;
         }
@@ -802,6 +610,8 @@ export default function PuntoVentaOficial({
             })),
             moneda_principal_id: monedaPrincipal?.id,
             tasa_cambio_principal: tasaCambioPrincipal,
+            es_venta_especial: esVentaEspecial,
+            nota_venta_especial: esVentaEspecial ? motivoEspecial.trim() : undefined,
         };
 
         console.log('Datos de venta a enviar:', datosVenta);
@@ -812,13 +622,18 @@ export default function PuntoVentaOficial({
             console.log('Respuesta del servidor:', response.data);
 
             if (response.data.success) {
-                toast.success('✅ Venta creada correctamente. Stock reservado pendiente de aprobación.');
+                const msgExito = esVentaEspecial
+                    ? '✅ Solicitud especial enviada. El admin revisará tu solicitud.'
+                    : '✅ Venta creada correctamente. Stock reservado pendiente de aprobación.';
+                toast.success(msgExito);
                 setCarrito([]);
                 setPayments([]);
                 setAlmacenSeleccionado('');
                 setClienteSeleccionado('');
                 setProductos([]);
                 setCodigoSeleccionadoPorProducto({});
+                setEsVentaEspecial(false);
+                setMotivoEspecial('');
                 if (response.data.redirect) {
                     setTimeout(() => {
                         window.location.href = response.data.redirect;
@@ -841,10 +656,6 @@ export default function PuntoVentaOficial({
         }
     };
 
-    const getCurrencyInfo = (currencyId: string) => {
-        return currencies.find((c) => c.id === currencyId);
-    };
-
     const getStockStatus = (stock: number) => {
         if (stock > 10) return { label: 'Disponible', variant: 'default' as const };
         if (stock > 5) return { label: 'Stock Medio', variant: 'secondary' as const };
@@ -852,7 +663,6 @@ export default function PuntoVentaOficial({
         return { label: 'Agotado', variant: 'destructive' as const };
     };
 
-    const selectedCurrencyInfo = currentPayment.moneda_id ? getCurrencyInfo(currentPayment.moneda_id) : null;
     const selectedAlmacen = almacenes.find((almacen) => almacen.id.toString() === almacenSeleccionado) || null;
     const selectedCliente = clientes.find((cliente) => cliente.id.toString() === clienteSeleccionado) || null;
 
@@ -1330,10 +1140,8 @@ export default function PuntoVentaOficial({
                                                                     <Button
                                                                         onClick={() => agregarAlCarrito(producto)}
                                                                         disabled={
-                                                                            !producto.tiene_precio ||
+                                                                            (!esVentaEspecial && (!producto.tiene_precio || !producto.precio_venta || producto.precio_venta <= 0)) ||
                                                                             producto.stock_disponible <= 0 ||
-                                                                            !producto.precio_venta ||
-                                                                            producto.precio_venta <= 0 ||
                                                                             codigosDisponibles.length === 0
                                                                         }
                                                                         size="sm"
@@ -1370,19 +1178,42 @@ export default function PuntoVentaOficial({
 
                         {/* Right column - Carrito Sticky */}
                         <div className="space-y-6 lg:sticky lg:top-4 lg:self-start">
-                            <Card className="overflow-hidden border-0 shadow-lg">
-                                <CardHeader className="from-primary/10 to-primary/5 bg-linear-to-r pb-4">
+                            <Card className={`overflow-hidden border-0 shadow-lg ${esVentaEspecial ? 'ring-2 ring-amber-400' : ''}`}>
+                                <CardHeader className={`pb-4 ${esVentaEspecial ? 'bg-amber-50 dark:bg-amber-950' : 'from-primary/10 to-primary/5 bg-linear-to-r'}`}>
                                     <div className="flex items-center justify-between">
                                         <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                                            <ShoppingCart className="text-primary h-5 w-5" />
-                                            Carrito de Compras
+                                            <ShoppingCart className={`h-5 w-5 ${esVentaEspecial ? 'text-amber-600' : 'text-primary'}`} />
+                                            {esVentaEspecial ? 'Venta Especial' : 'Carrito de Compras'}
                                         </CardTitle>
-                                        {carrito.length > 0 && (
-                                            <Badge variant="secondary" className="ml-2">
-                                                {carrito.length}
-                                            </Badge>
-                                        )}
+                                        <div className="flex items-center gap-2">
+                                            {carrito.length > 0 && (
+                                                <Badge variant={esVentaEspecial ? 'outline' : 'secondary'} className={esVentaEspecial ? 'border-amber-400 text-amber-700' : ''}>
+                                                    {carrito.length}
+                                                </Badge>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setEsVentaEspecial(!esVentaEspecial);
+                                                    if (esVentaEspecial) setMotivoEspecial('');
+                                                }}
+                                                className={`flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition-colors ${
+                                                    esVentaEspecial
+                                                        ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900 dark:text-amber-300'
+                                                        : 'bg-muted text-muted-foreground hover:bg-amber-50 hover:text-amber-600'
+                                                }`}
+                                                title="Activar modo Venta Especial"
+                                            >
+                                                <AlertTriangle className="h-3 w-3" />
+                                                Especial
+                                            </button>
+                                        </div>
                                     </div>
+                                    {esVentaEspecial && (
+                                        <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                                            Precio libre · Sin comisión · Requiere aprobación del admin
+                                        </p>
+                                    )}
                                 </CardHeader>
                                 <CardContent className="p-0">
                                     {carrito.length === 0 ? (
@@ -1443,13 +1274,14 @@ export default function PuntoVentaOficial({
                                                         </div>
                                                         <div className="text-right">
                                                             <Input
-
-                                                                value={item.precio_venta}
-                                                                onChange={(e) => {
-                                                                    const value = parseFloat(e.target.value);
-                                                                    if (!isNaN(value)) {
-                                                                        actualizarPrecio(item.id, value);
-                                                                    }
+                                                                type="number"
+                                                                value={preciosInput[item.id] ?? item.precio_venta}
+                                                                onChange={(e) =>
+                                                                    setPreciosInput((prev) => ({ ...prev, [item.id]: e.target.value }))
+                                                                }
+                                                                onBlur={() => confirmarPrecio(item.id)}
+                                                                onKeyDown={(e) => {
+                                                                    if (e.key === 'Enter') e.currentTarget.blur();
                                                                 }}
                                                                 className="w-20 text-sm"
                                                                 min="0"
@@ -1557,317 +1389,59 @@ export default function PuntoVentaOficial({
                                                         </AlertDialogHeader>
                                                         <div className="grid max-h-[calc(90vh-200px)] overflow-hidden md:grid-cols-2">
                                                             <div className="overflow-y-auto border-r p-6">
-                                                                <h4 className="mb-3 flex items-center gap-2 font-medium">
-                                                                    <DollarSign className="text-primary h-4 w-4" />
-                                                                    Agregar Pago
-                                                                </h4>
-                                                                <div className="space-y-4">
-                                                                    <div className="grid gap-4 md:grid-cols-2">
-                                                                        <div className="space-y-2">
-                                                                            <Label>Método de pago</Label>
-                                                                            <Select
-                                                                                value={currentPayment.method}
-                                                                                onValueChange={(value: 'transferencia' | 'efectivo' | '') => {
-                                                                                    const newPayment = {
-                                                                                        ...currentPayment,
-                                                                                        method: value,
-                                                                                        via: value === 'efectivo' ? 'efectivo' : '',
-                                                                                        referencia:
-                                                                                            value === 'efectivo' ? '' : currentPayment.referencia,
-                                                                                        cuenta_id: '',
-                                                                                    };
-                                                                                    console.log('Método de pago cambiado:', newPayment);
-                                                                                    setCurrentPayment(newPayment);
-
-                                                                                    if (currentPayment.moneda_id) {
-                                                                                        cargarCuentasFiltradas(currentPayment.moneda_id, value);
-                                                                                    }
-                                                                                }}
-                                                                            >
-                                                                                <SelectTrigger>
-                                                                                    <SelectValue placeholder="Seleccione método" />
-                                                                                </SelectTrigger>
-                                                                                <SelectContent>
-                                                                                    <SelectItem value="transferencia">Transferencia</SelectItem>
-                                                                                    <SelectItem value="efectivo">Efectivo</SelectItem>
-                                                                                </SelectContent>
-                                                                            </Select>
-                                                                        </div>
-                                                                        <div className="space-y-2">
-                                                                            <Label>Moneda</Label>
-                                                                            <Select
-                                                                                value={currentPayment.moneda_id}
-                                                                                onValueChange={handleMonedaChange}
-                                                                                disabled={!currentPayment.method}
-                                                                            >
-                                                                                <SelectTrigger>
-                                                                                    <SelectValue placeholder="Seleccione moneda" />
-                                                                                </SelectTrigger>
-                                                                                <SelectContent>
-                                                                                    {currencies.map((currency) => (
-                                                                                        <SelectItem key={currency.id} value={currency.id.toString()}>
-                                                                                            {currency.name} ({currency.symbol}) - Tasa:{' '}
-                                                                                            {currency.exchangeRate}
-                                                                                        </SelectItem>
-                                                                                    ))}
-                                                                                </SelectContent>
-                                                                            </Select>
-                                                                        </div>
-                                                                        <div className="space-y-2">
-                                                                            <Label>Tasa de Cambio</Label>
-                                                                            <Input
-                                                                                type="number"
-                                                                                value={currentPayment.exchangeRate}
-                                                                                onChange={(e) =>
-                                                                                    setCurrentPayment({
-                                                                                        ...currentPayment,
-                                                                                        exchangeRate: e.target.value,
-                                                                                    })
-                                                                                }
-                                                                                placeholder="Tasa de cambio"
-                                                                                disabled={!currentPayment.moneda_id}
-                                                                                min="0.0001"
-                                                                                step="0.0001"
-                                                                            />
-                                                                        </div>
-                                                                        <div className="space-y-2">
-                                                                            <Label>Destino del Pago</Label>
-
-                                                                            <Select
-                                                                                value={
-                                                                                    currentPayment.cuenta_id
-                                                                                        ? `cuenta_${currentPayment.cuenta_id}`
-                                                                                        : currentPayment.cliente_id
-                                                                                            ? `cliente_${currentPayment.cliente_id}`
-                                                                                            : ''
-                                                                                }
-                                                                                onValueChange={(value) => {
-                                                                                    let updatedPayment = { ...currentPayment };
-
-                                                                                    if (value.startsWith('cuenta_')) {
-                                                                                        updatedPayment = {
-                                                                                            ...updatedPayment,
-                                                                                            cuenta_id: value.replace('cuenta_', ''),
-                                                                                            cliente_id: '',
-                                                                                        };
-                                                                                    } else if (value.startsWith('cliente_')) {
-                                                                                        updatedPayment = {
-                                                                                            ...updatedPayment,
-                                                                                            cliente_id: value.replace('cliente_', ''),
-                                                                                            cuenta_id: '',
-                                                                                        };
-                                                                                    }
-
-                                                                                    setCurrentPayment(updatedPayment);
-                                                                                }}
-                                                                            >
-                                                                                <SelectTrigger>
-                                                                                    <SelectValue placeholder="Seleccione destino" />
-                                                                                </SelectTrigger>
-
-                                                                                <SelectContent>
-                                                                                    {cuentasFiltradas.length > 0 && (
-                                                                                        <>
-                                                                                            <div className="px-2 py-1.5 text-xs font-semibold text-gray-500">
-                                                                                                🏦 CUENTAS
-                                                                                            </div>
-                                                                                            {cargandoCuentas ? (
-                                                                                                <div className="px-2 py-3 text-center text-sm text-gray-500">
-                                                                                                    Cargando cuentas...
-                                                                                                </div>
-                                                                                            ) : (
-                                                                                                cuentasFiltradas.map((account) => (
-                                                                                                    <SelectItem
-                                                                                                        key={`cuenta_${account.id}`}
-                                                                                                        value={`cuenta_${account.id}`}
-                                                                                                    >
-                                                                                                        🏦 {account.nombre_cuenta}
-                                                                                                    </SelectItem>
-                                                                                                ))
-                                                                                            )}
-                                                                                        </>
-                                                                                    )}
-
-                                                                                    {selectedCurrencyInfo?.code === 'USD' && (
-                                                                                        <>
-                                                                                            {cuentasFiltradas.length > 0 && (
-                                                                                                <Separator className="my-1" />
-                                                                                            )}
-                                                                                            <div className="px-2 py-1.5 text-xs font-semibold text-gray-500">
-                                                                                                👤 CLIENTES FÍSICOS
-                                                                                            </div>
-
-                                                                                            {cargandoClientesFisicos ? (
-                                                                                                <div className="px-2 py-3 text-center text-sm text-gray-500">
-                                                                                                    Cargando clientes...
-                                                                                                </div>
-                                                                                            ) : clientesFisicos.length === 0 ? (
-                                                                                                <div className="px-2 py-3 text-center text-sm text-gray-500">
-                                                                                                    No hay clientes físicos
-                                                                                                </div>
-                                                                                            ) : (
-                                                                                                clientesFisicos.map((cliente) => (
-                                                                                                    <SelectItem
-                                                                                                        key={`cliente_${cliente.id}`}
-                                                                                                        value={`cliente_${cliente.id}`}
-                                                                                                    >
-                                                                                                        👤 {cliente.nombre_cliente}
-                                                                                                    </SelectItem>
-                                                                                                ))
-                                                                                            )}
-                                                                                        </>
-                                                                                    )}
-                                                                                </SelectContent>
-                                                                            </Select>
-                                                                        </div>
-                                                                        {currentPayment.method === 'transferencia' && (
-                                                                            <div className="space-y-2">
-                                                                                <Label>Vía de pago</Label>
-                                                                                <Select
-                                                                                    value={currentPayment.via}
-                                                                                    onValueChange={(value) => {
-                                                                                        console.log('Vía de pago seleccionada:', value);
-                                                                                        setCurrentPayment({ ...currentPayment, via: value });
-                                                                                    }}
-                                                                                >
-                                                                                    <SelectTrigger>
-                                                                                        <SelectValue placeholder="Seleccione vía" />
-                                                                                    </SelectTrigger>
-                                                                                    <SelectContent>
-                                                                                        {paymentVias
-                                                                                            .filter((via) => via.method === 'transferencia')
-                                                                                            .map((via) => (
-                                                                                                <SelectItem key={via.id} value={via.id}>
-                                                                                                    {via.name}
-                                                                                                </SelectItem>
-                                                                                            ))}
-                                                                                    </SelectContent>
-                                                                                </Select>
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-
-                                                                    <div className="space-y-2">
-                                                                        <Label>Monto a Pagar</Label>
-                                                                        <div className="grid gap-4 md:grid-cols-4">
-                                                                            <div className="space-y-2 md:col-span-3">
-                                                                                <Input
-                                                                                    type="number"
-                                                                                    min="0"
-                                                                                    step="0.01"
-                                                                                    value={currentPayment.amount}
-                                                                                    onChange={(e) => {
-                                                                                        console.log('Monto cambiado:', e.target.value);
-                                                                                        setCurrentPayment({
-                                                                                            ...currentPayment,
-                                                                                            amount: e.target.value,
-                                                                                        });
-                                                                                    }}
-                                                                                    placeholder="0.00"
-                                                                                    className="h-12 text-lg font-medium"
-                                                                                />
-                                                                                {conversionCalculada && (
-                                                                                    <div className="rounded-lg bg-green-50 p-2 text-center">
-                                                                                        <p className="text-sm font-medium text-green-700">
-                                                                                            {Number(conversionCalculada.montoOriginal).toLocaleString(
-                                                                                                'es-ES',
-                                                                                                {
-                                                                                                    minimumFractionDigits: 2,
-                                                                                                    maximumFractionDigits: 2,
-                                                                                                },
-                                                                                            )}{' '}
-                                                                                            {conversionCalculada.monedaSimbolo} ={' '}
-                                                                                            <span className="font-bold">
-                                                                                                {Number(conversionCalculada.montoUSD).toLocaleString(
-                                                                                                    'es-ES',
-                                                                                                    {
-                                                                                                        minimumFractionDigits: 2,
-                                                                                                        maximumFractionDigits: 2,
-                                                                                                    },
-                                                                                                )}{' '}
-                                                                                                USD
-                                                                                            </span>
-                                                                                        </p>
-                                                                                        <p className="mt-1 text-xs text-green-600">
-                                                                                            Tasa aplicada: {conversionCalculada.tasaCambio}
-                                                                                        </p>
-                                                                                    </div>
-                                                                                )}
-                                                                            </div>
-                                                                            <div className="flex items-end">
-                                                                                <Button
-                                                                                    onClick={handleAddPayment}
-                                                                                    disabled={
-                                                                                        !currentPayment.method ||
-                                                                                        !currentPayment.moneda_id ||
-                                                                                        (currentPayment.method === 'transferencia' &&
-                                                                                            !currentPayment.via) ||
-                                                                                        !currentPayment.amount ||
-                                                                                        parseFloat(currentPayment.amount) <= 0 ||
-                                                                                        (!currentPayment.cuenta_id && !currentPayment.cliente_id)
-                                                                                    }
-                                                                                    className="h-12 w-full"
-                                                                                >
-                                                                                    Agregar
-                                                                                </Button>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <div className="bg-secondary/30 overflow-y-auto p-6">
-                                                                {payments.length > 0 && (
-                                                                    <div className="mb-6 rounded-lg border p-4">
-                                                                        <h4 className="mb-3 font-medium">Pagos Agregados ({payments.length})</h4>
-                                                                        <div className="space-y-2">
-                                                                            {payments.map((payment) => (
-                                                                                <div
-                                                                                    key={payment.id}
-                                                                                    className="bg-card animate-scale-in flex items-center justify-between rounded border p-3 shadow-sm"
-                                                                                >
-                                                                                    <div className="flex-1">
-                                                                                        <p className="font-medium">
-                                                                                            {payment.method === 'transferencia'
-                                                                                                ? `Transferencia (${payment.via})`
-                                                                                                : 'Efectivo'}
-                                                                                        </p>
-                                                                                        <p className="text-sm text-gray-500">
-                                                                                            {Number(payment.amount).toLocaleString('es-ES', {
-                                                                                                minimumFractionDigits: 2,
-                                                                                                maximumFractionDigits: 2,
-                                                                                            })}{' '}
-                                                                                            {payment.moneda_info?.simbolo}
-                                                                                            {payment.referencia && ` - Ref: ${payment.referencia}`}
-                                                                                        </p>
-                                                                                        <p className="text-sm text-green-600">
-                                                                                            = $
-                                                                                            {Number(payment.amountInUsd).toLocaleString('es-ES', {
-                                                                                                minimumFractionDigits: 2,
-                                                                                                maximumFractionDigits: 2,
-                                                                                            })}{' '}
-                                                                                            USD
-                                                                                        </p>
-                                                                                    </div>
-                                                                                    <Button
-                                                                                        variant="ghost"
-                                                                                        size="sm"
-                                                                                        onClick={() => handleRemovePayment(payment.id)}
-                                                                                        className="text-red-500 hover:text-red-700"
-                                                                                    >
-                                                                                        <X className="h-4 w-4" />
-                                                                                    </Button>
-                                                                                </div>
-                                                                            ))}
-                                                                        </div>
+                                                                {/* Motivo venta especial */}
+                                                                {esVentaEspecial && (
+                                                                    <div className="mb-4 space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
+                                                                        <Label className="flex items-center gap-2 font-semibold text-amber-700 dark:text-amber-300">
+                                                                            <AlertTriangle className="h-4 w-4" />
+                                                                            Motivo de la Venta Especial *
+                                                                        </Label>
+                                                                        <textarea
+                                                                            value={motivoEspecial}
+                                                                            onChange={(e) => setMotivoEspecial(e.target.value)}
+                                                                            placeholder="Ej: Rotura de equipo, regalo al cliente..."
+                                                                            rows={2}
+                                                                            className="border-input ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex w-full rounded-md border bg-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                                                                        />
                                                                     </div>
                                                                 )}
+
+                                                                {/* Regalo: sin pagos */}
+                                                                {esVentaEspecial && calcularTotal === 0 ? (
+                                                                    <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-amber-300 bg-amber-50 p-8 text-center dark:border-amber-700 dark:bg-amber-950">
+                                                                        <ShoppingBag className="h-10 w-10 text-amber-400" />
+                                                                        <p className="font-semibold text-amber-700 dark:text-amber-300">Este producto será entregado como regalo</p>
+                                                                        <p className="text-sm text-amber-600 dark:text-amber-400">
+                                                                            Precio $0.00 — No se requiere ningún pago.
+                                                                        </p>
+                                                                    </div>
+                                                                ) : (
+                                                                    <PaymentForm
+                                                                        monedas={monedas}
+                                                                        clientesFisicos={clientesFisicos}
+                                                                        remainingInUsd={remainingInUsd}
+                                                                        onAddPayment={(payment) => setPayments((prev) => [...prev, payment])}
+                                                                    />
+                                                                )}
+                                                            </div>
+                                                            <div className="bg-secondary/30 overflow-y-auto p-6">
+                                                                <PaymentList
+                                                                    payments={payments}
+                                                                    total={calcularTotal}
+                                                                    onRemovePayment={handleRemovePayment}
+                                                                />
                                                             </div>
                                                         </div>
                                                         <AlertDialogFooter className="border-t p-6">
                                                             <Button
                                                                 onClick={handleCompleteSale}
-                                                                disabled={remainingInUsd > 0.01 || payments.length === 0 || procesandoVenta}
-                                                                className="w-full"
+                                                                disabled={
+                                                                    procesandoVenta ||
+                                                                    (esVentaEspecial && calcularTotal === 0
+                                                                        ? false
+                                                                        : remainingInUsd > 0.01 || payments.length === 0)
+                                                                }
+                                                                className={`w-full ${esVentaEspecial ? 'bg-amber-600 hover:bg-amber-700' : ''}`}
                                                                 size="lg"
                                                             >
                                                                 {procesandoVenta ? (
@@ -1875,8 +1449,13 @@ export default function PuntoVentaOficial({
                                                                         <div className="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-white"></div>
                                                                         Procesando...
                                                                     </>
+                                                                ) : esVentaEspecial ? (
+                                                                    <>
+                                                                        <AlertTriangle className="mr-2 h-4 w-4" />
+                                                                        Enviar Solicitud Especial
+                                                                    </>
                                                                 ) : (
-                                                                        'Procesar Venta'
+                                                                    'Procesar Venta'
                                                                 )}
                                                             </Button>
                                                             <AlertDialogCancel className="cursor-pointer">Cancelar</AlertDialogCancel>
@@ -2025,6 +1604,54 @@ export default function PuntoVentaOficial({
                     })()}
                 </DialogContent>
             </Dialog>
+
+            {/* AlertDialog: producto sin comisión — requiere aprobación del admin */}
+            <AlertDialog
+                open={!!productoSinComisionPendiente}
+                onOpenChange={(open) => { if (!open) setProductoSinComisionPendiente(null); }}
+            >
+                <AlertDialogContent className="sm:max-w-md">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-amber-700">
+                            <AlertTriangle className="h-5 w-5" />
+                            Producto sin comisión configurada
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="space-y-2 text-sm">
+                            <span className="block">
+                                Este producto no tiene comisión asignada. No puedes aplicar un descuento sin autorización del administrador.
+                            </span>
+                            <span className="block font-medium text-amber-700">
+                                Si deseas continuar, la venta se convertirá en una Venta Especial que requiere aprobación del admin antes de completarse.
+                            </span>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setProductoSinComisionPendiente(null)}>
+                            Cancelar
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-amber-600 hover:bg-amber-700"
+                            onClick={() => {
+                                if (productoSinComisionPendiente) {
+                                    const { id, nuevoPrecio } = productoSinComisionPendiente;
+                                    setEsVentaEspecial(true);
+                                    setCarrito((prev) =>
+                                        prev.map((i) =>
+                                            i.id === id
+                                                ? { ...i, precio_venta: nuevoPrecio, subtotal: i.cantidad * nuevoPrecio }
+                                                : i,
+                                        ),
+                                    );
+                                    toast.warning('Venta Especial activada. Recuerda agregar el motivo.');
+                                }
+                                setProductoSinComisionPendiente(null);
+                            }}
+                        >
+                            Continuar como Venta Especial
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </AppLayout>
     );
 }

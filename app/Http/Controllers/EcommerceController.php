@@ -92,10 +92,9 @@ class EcommerceController extends Controller
                 ->join('categorias', 'productos.categoria_id', '=', 'categorias.id')
                 ->where('almacen_producto.almacen_id', (int)$almacenId)
                 ->where('productos.activo', true)
-                ->leftJoin('producto_vendedors', function ($join) use ($almacenId, $vendedorId) {
+                ->leftJoin('producto_vendedors', function ($join) use ($almacenId) {
                     $join->on('productos.id', '=', 'producto_vendedors.producto_id')
-                        ->where('producto_vendedors.almacen_id', '=', (int)$almacenId)
-                        ->where('producto_vendedors.user_id', '=', (int)$vendedorId);
+                        ->where('producto_vendedors.almacen_id', '=', (int)$almacenId);
                 })
                 ->select(
                     'productos.id',

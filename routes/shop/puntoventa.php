@@ -58,6 +58,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('/ventas/{venta}/aprobar', [VentaController::class, 'aprobarVenta'])->name('ventas.aprobar');
     Route::post('/ventas/{venta}/anular', [VentaController::class, 'anularVenta'])->name('ventas.anular');
+    Route::post('/ventas/{venta}/editar-pendiente', [VentaController::class, 'editarVentaPendiente'])->name('ventas.editar.pendiente');
+
+    // ========================================================================
+    // VENTAS ESPECIALES
+    // ========================================================================
+    Route::post('/ventas/{venta}/especial/aprobar', [VentaController::class, 'aprobarSolicitudEspecial'])->name('ventas.especial.aprobar');
+    Route::post('/ventas/{venta}/especial/rechazar', [VentaController::class, 'rechazarSolicitudEspecial'])->name('ventas.especial.rechazar');
+    Route::post('/ventas/{venta}/decision-notificada', [VentaController::class, 'marcarDecisionNotificada'])->name('ventas.decision.notificada');
 
     // Rutas para Compras (nuevas)
     Route::get('/compras/almacenes', [CompraController::class, 'getAlmacen'])->name('compras.almacenes');

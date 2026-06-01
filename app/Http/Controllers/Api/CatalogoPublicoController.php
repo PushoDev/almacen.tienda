@@ -231,9 +231,7 @@ class CatalogoPublicoController extends Controller
                 ->join('categorias', 'productos.categoria_id', '=', 'categorias.id')
                 ->leftJoin('producto_vendedors', function ($join) use ($almacenId) {
                     $join->on('productos.id', '=', 'producto_vendedors.producto_id')
-                        ->where('producto_vendedors.almacen_id', $almacenId)
-                        // Por defecto se usa el precio del admin (user_id = 1) si existe.
-                        ->where('producto_vendedors.user_id', 1);
+                        ->where('producto_vendedors.almacen_id', $almacenId);
                 })
                 ->where('almacen_producto.almacen_id', $almacenId)
                 ->where('productos.activo', true)
@@ -342,10 +340,10 @@ class CatalogoPublicoController extends Controller
                     DB::raw('COALESCE(SUM(almacen_producto.cantidad), 0) as stock_total'),
                 ])
                 ->leftJoin('almacen_producto', 'productos.id', '=', 'almacen_producto.producto_id')
-                ->leftJoin('producto_vendedors', function ($join) {
-                    $join->on('productos.id', '=', 'producto_vendedors.producto_id')
-                        ->where('producto_vendedors.user_id', 1); // admin
-                })
+                ->leftJoin(
+                    DB::raw('(SELECT producto_id, MIN(precio_venta) as precio_venta FROM producto_vendedors WHERE precio_venta > 0 GROUP BY producto_id) as producto_vendedors'),
+                    'productos.id', '=', 'producto_vendedors.producto_id'
+                )
                 ->join('categorias', 'productos.categoria_id', '=', 'categorias.id')
                 ->where('productos.id', $id)
                 ->where('productos.activo', true)

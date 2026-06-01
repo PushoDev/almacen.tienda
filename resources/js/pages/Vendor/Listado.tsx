@@ -76,6 +76,7 @@ interface Venta {
     fecha_iso: string;
     moneda_principal?: { id: number; codigo: string; nombre: string };
     destinatario: Destinatario | null;
+    es_venta_especial?: boolean;
 }
 
 interface Filters {
@@ -165,6 +166,16 @@ export default function ListadoVentas() {
                 bg: 'bg-red-100 text-red-800 border-red-200',
                 icon: XCircle,
                 label: 'Cancelada',
+            },
+            solicitud_especial: {
+                bg: 'bg-amber-100 text-amber-800 border-amber-200',
+                icon: Filter,
+                label: 'Solicitud Especial',
+            },
+            rechazada: {
+                bg: 'bg-red-200 text-red-900 border-red-300',
+                icon: XCircle,
+                label: 'Rechazada',
             },
         }[estado] || {
             bg: 'bg-gray-100 text-gray-800 border-gray-200',
@@ -295,7 +306,16 @@ export default function ListadoVentas() {
                                                 <div className="font-semibold text-green-600" title="Ganancia Operacional">{formatMonto(venta.total_ganancia)}</div>
                                                 <div className="text-sm text-blue-600" title="Ganancia Real">{formatMonto(venta.ganancia_real_total)}</div>
                                             </TableCell>
-                                            <TableCell>{getEstadoBadge(venta.estado)}</TableCell>
+                                            <TableCell>
+                                                <div className="flex flex-col gap-1">
+                                                    {getEstadoBadge(venta.estado)}
+                                                    {venta.es_venta_especial && (
+                                                        <Badge variant="outline" className="w-fit border-amber-300 bg-amber-50 text-xs text-amber-700">
+                                                            Especial
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                            </TableCell>
                                             <TableCell className="text-right">
                                                 <Link href={route('ventas.show', venta.id)}>
                                                     <Button variant="outline" size="sm">

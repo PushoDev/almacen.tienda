@@ -30,10 +30,9 @@ import {
     PaginationNext,
     PaginationPrevious,
 } from '@/components/ui/pagination';
-import { BadgeDollarSign, CheckCircle2, Eye, FileText, Package, Sheet, Upload, Warehouse, XCircle } from 'lucide-react';
+import { BadgeDollarSign, CheckCircle2, FileText, History, Sheet, Upload, Warehouse, XCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
-// Interfaces
 interface Producto {
     id: number;
     nombre_producto: string;
@@ -49,6 +48,7 @@ interface Producto {
     imagen_producto?: string;
     tiene_precio: boolean;
     almacen_id: number;
+    puesto_por_nombre?: string | null;
 }
 
 interface AlmacenData {
@@ -61,6 +61,33 @@ interface PageProps {
     almacenes: AlmacenData[];
     meta: { total_almacenes: number; role_usuario: string };
     canViewSensitiveData?: boolean;
+}
+
+interface HistorialItem {
+    id: number;
+    usuario: string;
+    precio_anterior: number | null;
+    precio_nuevo: number;
+    comision: number | null;
+    accion: string;
+    fecha: string;
+}
+
+interface PrecioActual {
+    precio_venta: number;
+    ganancia: number;
+    comision: number;
+    puesto_por_nombre: string;
+    ultima_actualizacion: string;
+}
+
+interface HistorialData {
+    success: boolean;
+    producto: { id: number; nombre: string; marca: string; modelo?: string; capacidad?: string; precio_compra: number };
+    almacen: { id: number; nombre: string };
+    precio_actual: PrecioActual | null;
+    historial: HistorialItem[];
+    total_cambios: number;
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -83,10 +110,10 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
     const [searchTerm, setSearchTerm] = useState('');
     const itemsPerPage = 10;
 
-    // Estados para el modal de precios de vendedores
-    const [isPreciosDialogOpen, setIsPreciosDialogOpen] = useState(false);
-    const [preciosVendedores, setPreciosVendedores] = useState<any>(null);
-    const [loadingPrecios, setLoadingPrecios] = useState(false);
+    // Estados para el modal de historial
+    const [isHistorialDialogOpen, setIsHistorialDialogOpen] = useState(false);
+    const [historialData, setHistorialData] = useState<HistorialData | null>(null);
+    const [loadingHistorial, setLoadingHistorial] = useState(false);
 
     // Estados para importar
     const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
@@ -94,17 +121,13 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
     const [isImporting, setIsImporting] = useState(false);
     const [importResult, setImportResult] = useState<{ actualizados: number; omitidos: number; errores: string[] } | null>(null);
 
-    // Obtener el almacén seleccionado
     const selectedAlmacen = almacenes.find((a) => a.almacen_id === selectedAlmacenId);
-
-    // Obtener productos del almacén seleccionado para búsqueda/paginación
     const productsInAlmacen = selectedAlmacen?.productos || [];
 
-    // Obtener la lista de almacenes con información completa para el selector
     const availableAlmacenes = initialAlmacenes.map((a) => {
-        const totalProductos = a.productos.length;
-        const totalStock = a.productos.reduce((sum, p) => sum + p.stock_almacen, 0);
-        const valorTotal = a.productos.reduce((sum, p) => sum + (p.precio_venta || p.precio_compra) * p.stock_almacen, 0);
+        const totalProductos     = a.productos.length;
+        const totalStock         = a.productos.reduce((sum, p) => sum + p.stock_almacen, 0);
+        const valorTotal         = a.productos.reduce((sum, p) => sum + (p.precio_venta || p.precio_compra) * p.stock_almacen, 0);
         const productosConPrecio = a.productos.filter((p) => p.precio_venta !== null).length;
 
         return {
@@ -175,13 +198,9 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                 throw new Error(responseData.message || responseData.error || 'Error al actualizar el precio');
             }
 
-            // Actualizar el estado local
             setAlmacenes((prevAlmacenes) =>
                 prevAlmacenes.map((almacen) => {
-                    if (almacen.almacen_id !== selectedProduct.almacen_id) {
-                        return almacen;
-                    }
-
+                    if (almacen.almacen_id !== selectedProduct.almacen_id) return almacen;
                     return {
                         ...almacen,
                         productos: almacen.productos.map((p) =>
@@ -190,9 +209,11 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                       ...p,
                                       precio_venta: parsedPrice,
                                       ganancia: parsedPrice - p.precio_compra,
-                                      comision: responseData.new_comision !== undefined && responseData.new_comision !== null
-                                          ? responseData.new_comision
-                                          : p.comision,
+                                      comision:
+                                          responseData.new_comision !== undefined && responseData.new_comision !== null
+                                              ? responseData.new_comision
+                                              : p.comision,
+                                      puesto_por_nombre: responseData.puesto_por_nombre ?? p.puesto_por_nombre,
                                   }
                                 : p,
                         ),
@@ -209,15 +230,12 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
         }
     };
 
-    // 🆕 NUEVA FUNCIÓN: Obtener precios de todos los vendedores
-    const verPreciosVendedores = async (producto: Producto) => {
-        if (meta.role_usuario !== 'admin' && meta.role_usuario !== 'moderador') {
-            return;
-        }
+    const verHistorial = async (producto: Producto) => {
+        if (meta.role_usuario !== 'admin' && meta.role_usuario !== 'moderador') return;
 
-        setLoadingPrecios(true);
-        setIsPreciosDialogOpen(true);
-        setPreciosVendedores(null);
+        setLoadingHistorial(true);
+        setIsHistorialDialogOpen(true);
+        setHistorialData(null);
 
         try {
             const response = await fetch(`/disponibles/${producto.id}/precios-vendedores/${producto.almacen_id}`, {
@@ -230,21 +248,22 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
             const data = await response.json();
 
             if (response.ok && data.success) {
-                setPreciosVendedores(data);
+                setHistorialData(data);
             } else {
-                setError(data.error || 'Error al cargar los precios');
+                setError(data.error || 'Error al cargar el historial');
                 setTimeout(() => setError(null), 3000);
+                setIsHistorialDialogOpen(false);
             }
         } catch (err) {
-            console.error('Error al obtener precios:', err);
-            setError('Error al cargar los precios de vendedores');
+            console.error('Error al obtener historial:', err);
+            setError('Error al cargar el historial de precios');
             setTimeout(() => setError(null), 3000);
+            setIsHistorialDialogOpen(false);
         } finally {
-            setLoadingPrecios(false);
+            setLoadingHistorial(false);
         }
     };
 
-    // Filtrar y paginar productos del almacén seleccionado
     const filteredProducts = productsInAlmacen.filter(
         (producto) =>
             (producto.nombre_producto || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -254,7 +273,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
             (producto.capacidad_producto || '').toLowerCase().includes(searchTerm.toLowerCase()),
     );
 
-    const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+    const totalPages      = Math.ceil(filteredProducts.length / itemsPerPage);
     const currentProducts = filteredProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
     const handleExport = () => {
@@ -290,7 +309,6 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                     setTimeout(() => window.location.reload(), 2000);
                 }
             } else {
-                // Laravel validation errors come as data.errors (object) or data.error (string)
                 let errorMsg = data.error ?? data.message ?? 'Error desconocido';
                 if (data.errors) {
                     const firstField = Object.values(data.errors as Record<string, string[]>)[0];
@@ -314,10 +332,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
 
     const handleAlmacenChange = (almacenId: string) => {
         if (selectedProduct) {
-            setSelectedProduct({
-                ...selectedProduct,
-                almacen_id: parseInt(almacenId),
-            });
+            setSelectedProduct({ ...selectedProduct, almacen_id: parseInt(almacenId) });
         }
     };
 
@@ -341,19 +356,11 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                         type="text"
                         placeholder="Buscar producto o almacén..."
                         value={searchTerm}
-                        onChange={(e) => {
-                            setSearchTerm(e.target.value);
-                            setCurrentPage(1);
-                        }}
+                        onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                         className="max-w-md"
                     />
                     <div className="flex gap-2">
-                        <Button
-                            variant="outline"
-                            className="gap-2"
-                            onClick={handleExport}
-                            disabled={!selectedAlmacenId}
-                        >
+                        <Button variant="outline" className="gap-2" onClick={handleExport} disabled={!selectedAlmacenId}>
                             <Sheet size={16} />
                             Exportar Excel
                         </Button>
@@ -394,11 +401,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                             </Label>
                             <Select
                                 value={selectedAlmacenId?.toString()}
-                                onValueChange={(value) => {
-                                    setSelectedAlmacenId(parseInt(value));
-                                    setCurrentPage(1);
-                                    setSearchTerm('');
-                                }}
+                                onValueChange={(value) => { setSelectedAlmacenId(parseInt(value)); setCurrentPage(1); setSearchTerm(''); }}
                             >
                                 <SelectTrigger id="almacen-selector" className="bg-background hover:bg-accent/50 h-11 transition-colors">
                                     <div className="flex items-center gap-2">
@@ -457,9 +460,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                 <h3 className="flex items-center gap-2 text-lg font-semibold">
                                     <Warehouse size={20} className="text-primary" />
                                     {selectedAlmacen.nombre_almacen}
-                                    <Badge variant="secondary" className="ml-2">
-                                        {filteredProducts.length} productos
-                                    </Badge>
+                                    <Badge variant="secondary" className="ml-2">{filteredProducts.length} productos</Badge>
                                 </h3>
                             </div>
                             <Table>
@@ -503,30 +504,24 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                                                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                                                                     <span className="text-muted-foreground">Marca:</span>
                                                                     <span className="font-medium">{producto.marca_producto}</span>
-
                                                                     {producto.modelo_producto && (
                                                                         <>
                                                                             <span className="text-muted-foreground">Modelo:</span>
                                                                             <span className="font-medium">{producto.modelo_producto}</span>
                                                                         </>
                                                                     )}
-
                                                                     {producto.capacidad_producto && (
                                                                         <>
                                                                             <span className="text-muted-foreground">Capacidad:</span>
                                                                             <span className="font-medium">{producto.capacidad_producto}</span>
                                                                         </>
                                                                     )}
-
                                                                     <span className="text-muted-foreground">Categoría:</span>
                                                                     <span className="font-medium">{producto.categoria}</span>
-
                                                                     {canViewSensitiveData && (
                                                                         <>
                                                                             <span className="text-muted-foreground">P. Compra:</span>
-                                                                            <span className="text-sidebar font-medium">
-                                                                                {formatCurrency(producto.precio_compra)}
-                                                                            </span>
+                                                                            <span className="text-sidebar font-medium">{formatCurrency(producto.precio_compra)}</span>
                                                                         </>
                                                                     )}
                                                                 </div>
@@ -546,7 +541,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                             <TableCell className="font-medium text-indigo-600">
                                                 {producto.comision && producto.comision > 0
                                                     ? formatCurrency(producto.comision)
-                                                    : <span className="text-gray-400 italic text-xs">Sin comisión</span>}
+                                                    : <span className="text-xs italic text-gray-400">Sin comisión</span>}
                                             </TableCell>
                                             {canViewSensitiveData && (
                                                 <TableCell
@@ -562,10 +557,8 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                                     {formatCurrency(producto.ganancia)}
                                                 </TableCell>
                                             )}
-                                            {/* 🆕 COLUMNA DE ACCIONES ACTUALIZADA */}
                                             <TableCell className="text-center">
                                                 <div className="flex items-center justify-center gap-1">
-                                                    {/* Botón para editar precio */}
                                                     <TooltipProvider>
                                                         <Tooltip>
                                                             <TooltipTrigger asChild>
@@ -588,7 +581,6 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                                         </Tooltip>
                                                     </TooltipProvider>
 
-                                                    {/* 🆕 Botón para ver precios de otros vendedores (solo admin/moderador) */}
                                                     {(meta.role_usuario === 'admin' || meta.role_usuario === 'moderador') && (
                                                         <TooltipProvider>
                                                             <Tooltip>
@@ -597,13 +589,13 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                                                         variant="ghost"
                                                                         size="sm"
                                                                         className="text-blue-600 hover:bg-blue-100 hover:text-blue-800"
-                                                                        onClick={() => verPreciosVendedores(producto)}
+                                                                        onClick={() => verHistorial(producto)}
                                                                     >
-                                                                        <Eye size={16} />
+                                                                        <History size={16} />
                                                                     </Button>
                                                                 </TooltipTrigger>
                                                                 <TooltipContent>
-                                                                    <p>Ver precios de vendedores</p>
+                                                                    <p>Ver historial de precios</p>
                                                                 </TooltipContent>
                                                             </Tooltip>
                                                         </TooltipProvider>
@@ -686,9 +678,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                             <p className="text-muted-foreground text-xs font-medium tracking-wider uppercase">Producto</p>
                                             <p className="text-foreground mt-0.5 text-base font-semibold">{selectedProduct.nombre_producto}</p>
                                         </div>
-                                        <Badge variant="outline" className="bg-background">
-                                            {selectedProduct.marca_producto}
-                                        </Badge>
+                                        <Badge variant="outline" className="bg-background">{selectedProduct.marca_producto}</Badge>
                                     </div>
                                     <div className="border-border/50 flex gap-4 border-t pt-2">
                                         {canViewSensitiveData && (
@@ -699,12 +689,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                                 </div>
                                                 <div>
                                                     <p className="text-muted-foreground text-xs">Ganancia Actual</p>
-                                                    <p
-                                                        className={cn(
-                                                            'font-medium',
-                                                            (selectedProduct.ganancia || 0) >= 0 ? 'text-success' : 'text-destructive',
-                                                        )}
-                                                    >
+                                                    <p className={cn('font-medium', (selectedProduct.ganancia || 0) >= 0 ? 'text-success' : 'text-destructive')}>
                                                         {formatCurrency(selectedProduct.ganancia)}
                                                     </p>
                                                 </div>
@@ -715,9 +700,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
 
                                 <div className="space-y-4">
                                     <div className="space-y-2">
-                                        <Label htmlFor="almacen-select" className="text-sm font-medium">
-                                            Almacén Destino
-                                        </Label>
+                                        <Label htmlFor="almacen-select" className="text-sm font-medium">Almacén Destino</Label>
                                         <Select
                                             onValueChange={handleAlmacenChange}
                                             defaultValue={selectedProduct.almacen_id.toString()}
@@ -746,9 +729,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                     </div>
 
                                     <div className="grid gap-2">
-                                        <Label htmlFor="new-price" className="text-sm font-medium">
-                                            Precio de Venta (USD)
-                                        </Label>
+                                        <Label htmlFor="new-price" className="text-sm font-medium">Precio de Venta (USD)</Label>
                                         <div className="relative">
                                             <span className="text-muted-foreground absolute top-1/2 left-3 -translate-y-1/2 font-semibold">$</span>
                                             <Input
@@ -769,14 +750,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                                 </p>
                                             )}
                                             {canViewSensitiveData && newPrice && !isNaN(parseFloat(newPrice)) && (
-                                                <p
-                                                    className={cn(
-                                                        'text-xs font-medium',
-                                                        parseFloat(newPrice) - selectedProduct.precio_compra >= 0
-                                                            ? 'text-success'
-                                                            : 'text-destructive',
-                                                    )}
-                                                >
+                                                <p className={cn('text-xs font-medium', parseFloat(newPrice) - selectedProduct.precio_compra >= 0 ? 'text-success' : 'text-destructive')}>
                                                     Ganancia: {formatCurrency(parseFloat(newPrice) - selectedProduct.precio_compra)}
                                                 </p>
                                             )}
@@ -784,7 +758,6 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                         {error && <p className="text-destructive animate-in slide-in-from-top-1 px-1 text-xs font-medium">{error}</p>}
                                     </div>
 
-                                    {/* Campo de comisión — visible para todos */}
                                     <div className="grid gap-2">
                                         <Label htmlFor="new-comision" className="text-sm font-medium">
                                             {meta.role_usuario === 'vendedor' ? 'Mi Comisión (USD)' : 'Comisión del Vendedor (USD)'}
@@ -834,53 +807,39 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                     </AlertDialog>
                 )}
 
-                {/* 🆕 NUEVO: Modal de Precios de Vendedores */}
-                <AlertDialog open={isPreciosDialogOpen} onOpenChange={setIsPreciosDialogOpen}>
-                    <AlertDialogContent className="flex max-h-[90vh] flex-col overflow-hidden p-0 sm:max-w-5xl">
+                {/* Modal de Historial de Precios */}
+                <AlertDialog open={isHistorialDialogOpen} onOpenChange={setIsHistorialDialogOpen}>
+                    <AlertDialogContent className="flex max-h-[90vh] flex-col overflow-hidden p-0 sm:max-w-4xl">
                         <div className="border-b border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-6 dark:from-blue-950 dark:to-indigo-950">
                             <AlertDialogHeader>
                                 <AlertDialogTitle className="flex items-center gap-3 text-xl text-blue-700 dark:text-blue-300">
                                     <div className="rounded-lg bg-blue-100 p-2 dark:bg-blue-900">
-                                        <Eye className="h-5 w-5" />
+                                        <History className="h-5 w-5" />
                                     </div>
-                                    Precios Asignados por Vendedores
+                                    Historial de Precios
                                 </AlertDialogTitle>
-                                {preciosVendedores && (
+                                {historialData && (
                                     <div className="mt-3 space-y-1">
-                                        <p className="text-foreground text-base font-semibold">{preciosVendedores.producto.nombre}</p>
+                                        <p className="text-foreground text-base font-semibold">{historialData.producto.nombre}</p>
                                         <div className="text-muted-foreground flex flex-wrap items-center gap-3 text-sm">
-                                            <span className="flex items-center gap-1">
-                                                <Badge variant="outline">{preciosVendedores.producto.marca}</Badge>
-                                            </span>
-                                            {preciosVendedores.producto.modelo && <span>Modelo: {preciosVendedores.producto.modelo}</span>}
-                                            {preciosVendedores.producto.capacidad && <span>• {preciosVendedores.producto.capacidad}</span>}
+                                            <Badge variant="outline">{historialData.producto.marca}</Badge>
+                                            {historialData.producto.modelo && <span>Modelo: {historialData.producto.modelo}</span>}
+                                            {historialData.producto.capacidad && <span>• {historialData.producto.capacidad}</span>}
                                         </div>
                                         <div className="flex flex-wrap items-center gap-4 pt-2">
                                             <span className="flex items-center gap-2 text-sm">
                                                 <Warehouse className="h-4 w-4 text-blue-600" />
-                                                <span className="font-medium">{preciosVendedores.almacen.nombre}</span>
+                                                <span className="font-medium">{historialData.almacen.nombre}</span>
                                             </span>
-                                            <Separator orientation="vertical" className="h-4" />
-                                            <span className="text-sm">
-                                                <span className="text-muted-foreground">Precio Compra:</span>{' '}
-                                                <span className="font-semibold text-amber-700">
-                                                    {formatCurrency(preciosVendedores.producto.precio_compra)}
-                                                </span>
-                                            </span>
-                                            <Separator orientation="vertical" className="h-4" />
-                                            <span className="text-sm">
-                                                <span className="text-muted-foreground">Precio Admin:</span>{' '}
-                                                <span className="font-semibold text-blue-700">
-                                                    {preciosVendedores.precio_admin !== null ? formatCurrency(preciosVendedores.precio_admin) : 'Sin precio'}
-                                                </span>
-                                            </span>
-                                            <Separator orientation="vertical" className="h-4" />
-                                            <span className="text-sm">
-                                                <span className="text-muted-foreground">Comisión Fija:</span>{' '}
-                                                <span className="font-semibold text-indigo-600">
-                                                    {Number(preciosVendedores.comision_fija ?? 0).toFixed(2)} USD
-                                                </span>
-                                            </span>
+                                            {canViewSensitiveData && (
+                                                <>
+                                                    <Separator orientation="vertical" className="h-4" />
+                                                    <span className="text-sm">
+                                                        <span className="text-muted-foreground">Precio Compra:</span>{' '}
+                                                        <span className="font-semibold text-amber-700">{formatCurrency(historialData.producto.precio_compra)}</span>
+                                                    </span>
+                                                </>
+                                            )}
                                         </div>
                                     </div>
                                 )}
@@ -888,153 +847,127 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                         </div>
 
                         <div className="max-h-[550px] overflow-y-auto p-6">
-                            {loadingPrecios ? (
+                            {loadingHistorial ? (
                                 <div className="flex items-center justify-center py-16">
                                     <div className="flex flex-col items-center gap-4">
                                         <div className="relative">
                                             <span className="absolute h-12 w-12 animate-ping rounded-full bg-blue-400 opacity-75" />
                                             <span className="relative flex h-12 w-12 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600" />
                                         </div>
-                                        <p className="text-muted-foreground text-sm font-medium">Cargando precios de vendedores...</p>
+                                        <p className="text-muted-foreground text-sm font-medium">Cargando historial...</p>
                                     </div>
                                 </div>
-                            ) : preciosVendedores && preciosVendedores.precios.length > 0 ? (
+                            ) : historialData ? (
                                 <div className="space-y-5">
-                                    {/* Estadísticas */}
-                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-                                        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:bg-blue-950">
-                                            <p className="text-xs font-medium text-blue-600 dark:text-blue-400">Total Vendedores</p>
-                                            <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
-                                                {preciosVendedores.total_vendedores}
+                                    {/* Precio actual */}
+                                    {historialData.precio_actual ? (
+                                        <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:bg-green-950/30">
+                                            <p className="mb-2 text-xs font-semibold tracking-wider text-green-700 uppercase dark:text-green-400">
+                                                Precio Vigente
                                             </p>
-                                        </div>
-                                        <div className="rounded-lg border border-green-200 bg-green-50 p-3 dark:bg-green-950">
-                                            <p className="text-xs font-medium text-green-600 dark:text-green-400">Precio Máximo</p>
-                                            <p className="text-lg font-bold text-green-900 dark:text-green-100">
-                                                {formatCurrency(Math.max(...preciosVendedores.precios.map((p: any) => p.precio_venta)))}
-                                            </p>
-                                        </div>
-                                        <div className="rounded-lg border border-purple-200 bg-purple-50 p-3 dark:bg-purple-950">
-                                            <p className="text-xs font-medium text-purple-600 dark:text-purple-400">Precio Promedio</p>
-                                            <p className="text-lg font-bold text-purple-900 dark:text-purple-100">
-                                                {formatCurrency(
-                                                    preciosVendedores.precios.reduce((sum: number, p: any) => sum + p.precio_venta, 0) /
-                                                        preciosVendedores.precios.length,
+                                            <div className="flex flex-wrap items-center gap-6">
+                                                <div>
+                                                    <p className="text-xs text-green-600">Precio Venta</p>
+                                                    <p className="text-xl font-bold text-green-800 dark:text-green-200">
+                                                        {formatCurrency(historialData.precio_actual.precio_venta)}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs text-indigo-600">Comisión</p>
+                                                    <p className="text-xl font-bold text-indigo-700 dark:text-indigo-300">
+                                                        {formatCurrency(historialData.precio_actual.comision)}
+                                                    </p>
+                                                </div>
+                                                {canViewSensitiveData && (
+                                                    <div>
+                                                        <p className="text-xs text-gray-500">Ganancia</p>
+                                                        <p className={cn(
+                                                            'text-xl font-bold',
+                                                            historialData.precio_actual.ganancia >= 0 ? 'text-green-700' : 'text-red-600'
+                                                        )}>
+                                                            {formatCurrency(historialData.precio_actual.ganancia)}
+                                                        </p>
+                                                    </div>
                                                 )}
-                                            </p>
+                                                <div className="ml-auto text-right">
+                                                    <p className="text-xs text-gray-500">Puesto por</p>
+                                                    <p className="font-semibold text-gray-800 dark:text-gray-200">
+                                                        {historialData.precio_actual.puesto_por_nombre}
+                                                    </p>
+                                                    <p className="text-xs text-gray-400">{historialData.precio_actual.ultima_actualizacion}</p>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:bg-amber-950">
-                                            <p className="text-xs font-medium text-amber-600 dark:text-amber-400">Precio Mínimo</p>
-                                            <p className="text-lg font-bold text-amber-900 dark:text-amber-100">
-                                                {formatCurrency(Math.min(...preciosVendedores.precios.map((p: any) => p.precio_venta)))}
-                                            </p>
+                                    ) : (
+                                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+                                            Este producto no tiene precio asignado en este almacén.
                                         </div>
-                                    </div>
+                                    )}
 
-                                    {/* Tabla de Precios */}
-                                    <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow className="bg-gray-100 hover:bg-gray-100 dark:bg-gray-900 dark:hover:bg-gray-900">
-                                                    <TableHead className="font-semibold">Vendedor</TableHead>
-                                                    <TableHead className="font-semibold">Email</TableHead>
-                                                    <TableHead className="text-right font-semibold">Precio Venta</TableHead>
-                                                    <TableHead className="text-right font-semibold">Ganancia</TableHead>
-                                                    <TableHead className="text-right font-semibold">Comisión Real</TableHead>
-                                                    <TableHead className="text-right font-semibold">Margen Neto</TableHead>
-                                                    <TableHead className="text-right font-semibold">Última Actualización</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {preciosVendedores.precios.map((precio: any, index: number) => {
-                                                    const comisionReal = precio.comision_real;
-                                                    const margenNeto = comisionReal !== null
-                                                        ? (precio.ganancia - comisionReal).toFixed(2)
-                                                        : null;
-                                                    return (
-                                                        <TableRow
-                                                            key={precio.user_id}
-                                                            className={cn(
-                                                                precio.es_admin ? 'bg-blue-50 dark:bg-blue-950/30' : index % 2 === 0 ? 'bg-background' : 'bg-muted/30',
-                                                                'hover:bg-accent/50 transition-colors',
-                                                            )}
-                                                        >
-                                                            <TableCell className="font-medium">
-                                                                <div className="flex items-center gap-2">
-                                                                    <div className={cn(
-                                                                        'flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold',
-                                                                        precio.es_admin
-                                                                            ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
-                                                                            : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
-                                                                    )}>
-                                                                        {precio.vendedor.charAt(0).toUpperCase()}
-                                                                    </div>
-                                                                    <div className="flex flex-col">
-                                                                        <span>{precio.vendedor}</span>
-                                                                        {precio.es_admin && (
-                                                                            <span className="text-xs font-semibold text-red-600 dark:text-red-400">Admin</span>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                            </TableCell>
-                                                            <TableCell className="text-muted-foreground text-sm">{precio.email}</TableCell>
-                                                            <TableCell className="text-right">
-                                                                <span className="font-semibold text-blue-600 dark:text-blue-400">
-                                                                    {formatCurrency(precio.precio_venta)}
-                                                                </span>
-                                                            </TableCell>
-                                                            <TableCell className="text-right">
-                                                                <span className={cn('font-semibold', precio.ganancia >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400')}>
-                                                                    {formatCurrency(precio.ganancia)}
-                                                                </span>
-                                                            </TableCell>
-                                                            <TableCell className="text-right">
-                                                                {comisionReal !== null ? (
-                                                                    <span className="font-mono font-semibold text-indigo-600 dark:text-indigo-400">
-                                                                        {comisionReal.toFixed(2)}
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="text-xs italic text-gray-400">N/A</span>
-                                                                )}
-                                                            </TableCell>
-                                                            <TableCell className="text-right">
-                                                                {margenNeto !== null ? (
-                                                                    <span className={cn('font-mono font-semibold', parseFloat(margenNeto) >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-600 dark:text-red-400')}>
-                                                                        {parseFloat(margenNeto) >= 0 ? '+' : ''}{margenNeto}
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="text-xs italic text-gray-400">N/A</span>
-                                                                )}
-                                                            </TableCell>
-                                                            <TableCell className="text-muted-foreground text-right text-xs">
-                                                                {precio.ultima_actualizacion}
-                                                            </TableCell>
+                                    {/* Tabla de historial */}
+                                    {historialData.historial.length > 0 ? (
+                                        <div>
+                                            <p className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                                Historial de cambios ({historialData.total_cambios})
+                                            </p>
+                                            <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+                                                <Table>
+                                                    <TableHeader>
+                                                        <TableRow className="bg-gray-100 hover:bg-gray-100 dark:bg-gray-900 dark:hover:bg-gray-900">
+                                                            <TableHead className="font-semibold">Fecha</TableHead>
+                                                            <TableHead className="font-semibold">Usuario</TableHead>
+                                                            <TableHead className="text-right font-semibold">Precio Anterior</TableHead>
+                                                            <TableHead className="text-right font-semibold">Precio Nuevo</TableHead>
+                                                            <TableHead className="text-right font-semibold">Comisión</TableHead>
+                                                            <TableHead className="font-semibold">Acción</TableHead>
                                                         </TableRow>
-                                                    );
-                                                })}
-                                            </TableBody>
-                                        </Table>
-                                    </div>
+                                                    </TableHeader>
+                                                    <TableBody>
+                                                        {historialData.historial.map((item, index) => (
+                                                            <TableRow
+                                                                key={item.id}
+                                                                className={cn(
+                                                                    index === 0 ? 'bg-blue-50/50 dark:bg-blue-950/20' : index % 2 === 0 ? 'bg-background' : 'bg-muted/30',
+                                                                    'hover:bg-accent/50 transition-colors',
+                                                                )}
+                                                            >
+                                                                <TableCell className="text-xs text-gray-500">{item.fecha}</TableCell>
+                                                                <TableCell className="font-medium">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                                                                            {item.usuario.charAt(0).toUpperCase()}
+                                                                        </div>
+                                                                        {item.usuario}
+                                                                    </div>
+                                                                </TableCell>
+                                                                <TableCell className="text-right text-gray-400">
+                                                                    {item.precio_anterior !== null ? formatCurrency(item.precio_anterior) : <span className="italic text-xs">—</span>}
+                                                                </TableCell>
+                                                                <TableCell className="text-right font-semibold text-blue-600 dark:text-blue-400">
+                                                                    {formatCurrency(item.precio_nuevo)}
+                                                                </TableCell>
+                                                                <TableCell className="text-right text-indigo-600 dark:text-indigo-400">
+                                                                    {item.comision !== null ? formatCurrency(item.comision) : <span className="text-xs italic text-gray-400">—</span>}
+                                                                </TableCell>
+                                                                <TableCell className="text-xs text-gray-500">{item.accion}</TableCell>
+                                                            </TableRow>
+                                                        ))}
+                                                    </TableBody>
+                                                </Table>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="py-8 text-center text-sm text-gray-500">
+                                            No hay cambios registrados en el historial.
+                                        </div>
+                                    )}
                                 </div>
-                            ) : (
-                                <div className="py-16 text-center">
-                                    <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
-                                        <BadgeDollarSign className="h-10 w-10 text-gray-400" />
-                                    </div>
-                                    <h3 className="mb-2 text-lg font-semibold">No hay precios registrados</h3>
-                                    <p className="text-muted-foreground text-sm">
-                                        Ningún vendedor ha asignado precio a este producto en este almacén.
-                                    </p>
-                                </div>
-                            )}
+                            ) : null}
                         </div>
 
                         <div className="flex justify-end border-t bg-gray-50 p-4 dark:bg-gray-900">
                             <AlertDialogCancel
-                                onClick={() => {
-                                    setIsPreciosDialogOpen(false);
-                                    setPreciosVendedores(null);
-                                }}
+                                onClick={() => { setIsHistorialDialogOpen(false); setHistorialData(null); }}
                                 className="h-10"
                             >
                                 Cerrar
@@ -1064,7 +997,6 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                         </div>
 
                         <div className="space-y-4 p-6">
-                            {/* Resultado de la importación */}
                             {importResult && (
                                 <div className={cn(
                                     'rounded-lg border p-4 text-sm',
@@ -1079,9 +1011,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                         }
                                         <span>Resultado de la importación</span>
                                     </div>
-                                    <p className="text-green-700 dark:text-green-400">
-                                        ✓ {importResult.actualizados} producto(s) actualizados
-                                    </p>
+                                    <p className="text-green-700 dark:text-green-400">✓ {importResult.actualizados} producto(s) actualizados</p>
                                     {importResult.omitidos > 0 && (
                                         <p className="text-gray-500">— {importResult.omitidos} fila(s) sin cambios (celdas vacías)</p>
                                     )}
@@ -1093,12 +1023,11 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                         </ul>
                                     )}
                                     {importResult.actualizados > 0 && (
-                                        <p className="mt-2 text-xs text-gray-500 italic">Recargando página en unos segundos...</p>
+                                        <p className="mt-2 text-xs italic text-gray-500">Recargando página en unos segundos...</p>
                                     )}
                                 </div>
                             )}
 
-                            {/* Zona de carga del archivo */}
                             {!importResult && (
                                 <div>
                                     <label
@@ -1114,9 +1043,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                         {importFile ? (
                                             <>
                                                 <p className="font-semibold text-emerald-700 dark:text-emerald-300">{importFile.name}</p>
-                                                <p className="mt-1 text-xs text-gray-500">
-                                                    {(importFile.size / 1024).toFixed(1)} KB — Click para cambiar
-                                                </p>
+                                                <p className="mt-1 text-xs text-gray-500">{(importFile.size / 1024).toFixed(1)} KB — Click para cambiar</p>
                                             </>
                                         ) : (
                                             <>
