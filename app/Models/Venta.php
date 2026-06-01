@@ -36,6 +36,9 @@ class Venta extends Model
         'es_venta_especial',
         'nota_venta_especial',
         'decision_notificada',
+        // ANULACIÓN
+        'motivo_anulacion',
+        'detalle_anulacion',
     ];
 
     protected $casts = [

@@ -527,6 +527,8 @@ class VentaController extends Controller
             'ganancia_perdida_cambiaria' => $venta->ganancia_perdida_cambiaria,
             'ganancia_real_total' => $venta->ganancia_real_total,
             'estado' => $venta->estado,
+            'motivo_anulacion' => $venta->motivo_anulacion,
+            'detalle_anulacion' => $venta->detalle_anulacion,
             'fecha' => $venta->created_at->toISOString(),
             'usuario' => [
                 'id' => $venta->usuario->id,
@@ -1359,16 +1361,21 @@ class VentaController extends Controller
     /**
      * Anular venta (pendiente o completada)
      */
-    public function anularVenta(Venta $venta)
+    public function anularVenta(Request $request, Venta $venta)
     {
         if ($venta->estado === 'cancelada') {
             return response()->json(['success' => false, 'message' => 'La venta ya está anulada'], 400);
         }
 
+        $validated = $request->validate([
+            'motivo_anulacion' => 'required|in:error_precio,solicitud_cliente,producto_defectuoso,duplicado_venta,error_pedido,otros',
+            'detalle_anulacion' => 'nullable|string|max:500|required_if:motivo_anulacion,otros',
+        ]);
+
         // Cargar relaciones necesarias para poder revertirlas
         $venta->load(['detalles', 'pagos.cliente', 'pagos.cuenta', 'gestorCuenta']);
 
-        DB::transaction(function () use ($venta) {
+        DB::transaction(function () use ($venta, $validated) {
             // ✅ SIEMPRE revertir stock (pendiente o completada)
             foreach ($venta->detalles as $detalle) {
                 $almacenProducto = AlmacenProducto::where('almacen_id', $venta->almacen_id)
@@ -1435,7 +1442,11 @@ class VentaController extends Controller
                 }
             }
 
-            $venta->update(['estado' => 'cancelada']);
+            $venta->update([
+                'estado'            => 'cancelada',
+                'motivo_anulacion'  => $validated['motivo_anulacion'],
+                'detalle_anulacion' => $validated['detalle_anulacion'] ?? null,
+            ]);
         });
 
         return response()->json([

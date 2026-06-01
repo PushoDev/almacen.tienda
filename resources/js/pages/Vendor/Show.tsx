@@ -11,6 +11,14 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -212,6 +220,8 @@ interface Venta {
     es_venta_especial: boolean;
     nota_venta_especial: string | null;
     decision_notificada: boolean;
+    motivo_anulacion?: string | null;
+    detalle_anulacion?: string | null;
 }
 
 interface Props {
@@ -219,6 +229,21 @@ interface Props {
     userRole: 'admin' | 'moderador' | 'vendedor';
     monedasSistema: MonedaParaReporte[];
 }
+
+// ─────────────────────────────────────────────
+// Motivos de anulación predefinidos
+// ─────────────────────────────────────────────
+const MOTIVOS_ANULACION = [
+    { value: 'error_precio',        label: 'Error en el precio' },
+    { value: 'solicitud_cliente',   label: 'Solicitud del cliente' },
+    { value: 'producto_defectuoso', label: 'Producto defectuoso' },
+    { value: 'duplicado_venta',     label: 'Duplicado de venta' },
+    { value: 'error_pedido',        label: 'Error en el pedido' },
+    { value: 'otros',               label: 'Otros' },
+];
+
+const motivoLabel = (value: string | null | undefined) =>
+    MOTIVOS_ANULACION.find((m) => m.value === value)?.label ?? value ?? '—';
 
 // ─────────────────────────────────────────────
 // Formulario vacío reutilizable
@@ -242,6 +267,11 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
     // ── Estados de carga ──────────────────────
     const [isCancelling, setIsCancelling] = useState(false);
+
+    // ── Modal anulación ───────────────────────
+    const [isAnularDialogOpen, setIsAnularDialogOpen] = useState(false);
+    const [motivoAnulacion, setMotivoAnulacion] = useState('');
+    const [detalleAnulacion, setDetalleAnulacion] = useState('');
     const [isApproving, setIsApproving] = useState(false);
     const [isRejecting, setIsRejecting] = useState(false);
     const [isSavingDestinatario, setIsSavingDestinatario] = useState(false);
@@ -604,12 +634,31 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
     /** Anular venta */
     const handleAnularVenta = async () => {
+        if (!motivoAnulacion) {
+            toast.error('Debe seleccionar un motivo de anulación');
+            return;
+        }
+        if (motivoAnulacion === 'otros' && !detalleAnulacion.trim()) {
+            toast.error('Debe describir el motivo en el campo "Otros"');
+            return;
+        }
         setIsCancelling(true);
         try {
-            const { data } = await axios.post(route('ventas.anular', currentVenta.id));
+            const { data } = await axios.post(route('ventas.anular', currentVenta.id), {
+                motivo_anulacion: motivoAnulacion,
+                detalle_anulacion: motivoAnulacion === 'otros' ? detalleAnulacion.trim() : null,
+            });
             if (data.success) {
                 toast.success(data.message || 'Venta anulada correctamente');
-                setCurrentVenta((prev) => ({ ...prev, estado: 'cancelada' }));
+                setCurrentVenta((prev) => ({
+                    ...prev,
+                    estado: 'cancelada',
+                    motivo_anulacion: motivoAnulacion,
+                    detalle_anulacion: motivoAnulacion === 'otros' ? detalleAnulacion.trim() : null,
+                }));
+                setIsAnularDialogOpen(false);
+                setMotivoAnulacion('');
+                setDetalleAnulacion('');
             } else {
                 toast.error(data.message || 'Error al anular la venta');
             }
@@ -1534,49 +1583,110 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
                     {/* Anular venta */}
                     {isVentaPendiente && (
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <Button
-                                    variant="destructive"
-                                    className="flex cursor-pointer items-center gap-2"
-                                    disabled={isVentaCancelada || isCancelling}
-                                >
-                                    <XCircle size={16} />
-                                    {isVentaCancelada ? 'Anulada' : 'Anular Venta'}
-                                </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle className="text-red-600">Confirmar Anulación</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        Esta acción es <strong>irreversible</strong>. ¿Está seguro que desea anular la Venta{' '}
-                                        <strong>#{currentVenta.id}</strong>?<br />
-                                        <span className="font-semibold text-red-500">
-                                            {isVentaCompletada
-                                                ? 'Se revertirá el stock de los productos y se deducirán los montos de las cuentas bancarias asociadas.'
-                                                : 'Se revertirá el stock reservado. Las cuentas y deudas de clientes no serán afectadas ya que la venta no fue aprobada.'}
-                                        </span>
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel disabled={isCancelling}>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction
-                                        onClick={handleAnularVenta}
-                                        className="bg-red-600 hover:bg-red-700 disabled:opacity-50"
-                                        disabled={isCancelling}
-                                    >
-                                        {isCancelling ? (
-                                            <div className="flex items-center gap-2">
-                                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                                                Anulando...
+                        <>
+                            <Button
+                                variant="destructive"
+                                className="flex cursor-pointer items-center gap-2"
+                                disabled={isVentaCancelada || isCancelling}
+                                onClick={() => setIsAnularDialogOpen(true)}
+                            >
+                                <XCircle size={16} />
+                                {isVentaCancelada ? 'Anulada' : 'Anular Venta'}
+                            </Button>
+
+                            <Dialog
+                                open={isAnularDialogOpen}
+                                onOpenChange={(open) => {
+                                    if (!isCancelling) {
+                                        setIsAnularDialogOpen(open);
+                                        if (!open) {
+                                            setMotivoAnulacion('');
+                                            setDetalleAnulacion('');
+                                        }
+                                    }
+                                }}
+                            >
+                                <DialogContent className="sm:max-w-md">
+                                    <DialogHeader>
+                                        <DialogTitle className="text-red-600">Anular Venta #{currentVenta.id}</DialogTitle>
+                                        <DialogDescription>
+                                            Esta acción es <strong>irreversible</strong>. Se revertirá el stock reservado.
+                                            Las cuentas y deudas de clientes no serán afectadas ya que la venta no fue aprobada.
+                                        </DialogDescription>
+                                    </DialogHeader>
+
+                                    <div className="space-y-4 py-2">
+                                        <div className="space-y-1">
+                                            <Label htmlFor="motivo-anulacion">
+                                                Motivo de anulación <span className="text-red-500">*</span>
+                                            </Label>
+                                            <Select
+                                                value={motivoAnulacion}
+                                                onValueChange={setMotivoAnulacion}
+                                            >
+                                                <SelectTrigger id="motivo-anulacion">
+                                                    <SelectValue placeholder="Seleccione un motivo..." />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {MOTIVOS_ANULACION.map((m) => (
+                                                        <SelectItem key={m.value} value={m.value}>
+                                                            {m.label}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        {motivoAnulacion === 'otros' && (
+                                            <div className="space-y-1">
+                                                <Label htmlFor="detalle-anulacion">
+                                                    Describa el motivo <span className="text-red-500">*</span>
+                                                </Label>
+                                                <Textarea
+                                                    id="detalle-anulacion"
+                                                    placeholder="Ingrese el motivo específico..."
+                                                    value={detalleAnulacion}
+                                                    onChange={(e) => setDetalleAnulacion(e.target.value)}
+                                                    rows={3}
+                                                    maxLength={500}
+                                                />
+                                                <p className="text-muted-foreground text-right text-xs">
+                                                    {detalleAnulacion.length}/500
+                                                </p>
                                             </div>
-                                        ) : (
-                                            'Sí, Anular Venta'
                                         )}
-                                    </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
+                                    </div>
+
+                                    <DialogFooter className="gap-2">
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => {
+                                                setIsAnularDialogOpen(false);
+                                                setMotivoAnulacion('');
+                                                setDetalleAnulacion('');
+                                            }}
+                                            disabled={isCancelling}
+                                        >
+                                            Cancelar
+                                        </Button>
+                                        <Button
+                                            variant="destructive"
+                                            onClick={handleAnularVenta}
+                                            disabled={isCancelling || !motivoAnulacion}
+                                        >
+                                            {isCancelling ? (
+                                                <div className="flex items-center gap-2">
+                                                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                                    Anulando...
+                                                </div>
+                                            ) : (
+                                                'Confirmar Anulación'
+                                            )}
+                                        </Button>
+                                    </DialogFooter>
+                                </DialogContent>
+                            </Dialog>
+                        </>
                     )}
                 </div>
 
@@ -2116,11 +2226,20 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                             )}
 
                             {isVentaCancelada && (
-                                <div className="mt-4 rounded-md bg-red-50 p-3">
+                                <div className="mt-4 space-y-1 rounded-md bg-red-50 p-3">
                                     <p className="text-sm text-red-800">
-                                        <strong>Venta Anulada:</strong> Esta venta fue cancelada.
-                                        {isVentaCompletada && ' Stock y saldos de cuentas fueron revertidos.'}
+                                        <strong>Venta Anulada:</strong> Esta venta fue cancelada y el stock fue revertido.
                                     </p>
+                                    {currentVenta.motivo_anulacion && (
+                                        <p className="text-sm text-red-700">
+                                            <strong>Motivo:</strong> {motivoLabel(currentVenta.motivo_anulacion)}
+                                        </p>
+                                    )}
+                                    {currentVenta.detalle_anulacion && (
+                                        <p className="text-sm text-red-700">
+                                            <strong>Detalle:</strong> {currentVenta.detalle_anulacion}
+                                        </p>
+                                    )}
                                 </div>
                             )}
                         </div>
