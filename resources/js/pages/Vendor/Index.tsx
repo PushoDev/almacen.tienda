@@ -32,7 +32,6 @@ import {
     BarChartIcon,
     BoxesIcon,
     Building2,
-    DollarSign,
     Eye,
     Info,
     Minus,
@@ -131,28 +130,9 @@ interface Payment {
         simbolo: string;
     };
 }
-interface PaymentVia {
-    id: string;
-    name: string;
-    method: 'transferencia' | 'efectivo';
-}
-
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Productos', href: '/listado-productos' },
     { title: 'Punto de Ventas', href: '#' },
-];
-
-const paymentVias: PaymentVia[] = [
-    { id: 'zelle', name: 'Zelle', method: 'transferencia' },
-    { id: 'cashapp', name: 'CashApp', method: 'transferencia' },
-    { id: 'visa', name: 'Visa', method: 'transferencia' },
-    { id: 'mastercard', name: 'MasterCard', method: 'transferencia' },
-    { id: 'stripe', name: 'Stripe', method: 'transferencia' },
-    { id: 'paypal', name: 'Paypal', method: 'transferencia' },
-    { id: 'qvapay', name: 'QvaPay', method: 'transferencia' },
-    { id: 'enzona', name: 'EnZona', method: 'transferencia' },
-    { id: 'transfermovil', name: 'Transfermóvil', method: 'transferencia' },
-    { id: 'efectivo', name: 'Efectivo', method: 'efectivo' },
 ];
 
 export default function PuntoVentaOficial({
@@ -179,25 +159,6 @@ export default function PuntoVentaOficial({
     const [codigoSeleccionadoPorProducto, setCodigoSeleccionadoPorProducto] = useState<Record<string, number>>({});
     const [procesandoVenta, setProcesandoVenta] = useState<boolean>(false);
     const [payments, setPayments] = useState<Payment[]>([]);
-    const [currentPayment, setCurrentPayment] = useState<{
-        method: 'transferencia' | 'efectivo' | '';
-        moneda_id: string;
-        via: string;
-        amount: string;
-        exchangeRate: string;
-        cuenta_id: string;
-        cliente_id: string;
-        referencia: string;
-    }>({
-        method: '',
-        moneda_id: '',
-        via: '',
-        amount: '',
-        exchangeRate: '',
-        cuenta_id: '',
-        cliente_id: '',
-        referencia: '',
-    });
     // ── Venta Especial ────────────────────────────────────────────────────────
     const [esVentaEspecial, setEsVentaEspecial] = useState<boolean>(false);
     const [motivoEspecial, setMotivoEspecial] = useState<string>('');
@@ -207,12 +168,6 @@ export default function PuntoVentaOficial({
 
     const [clientesFisicos, setClientesFisicos] = useState<Cliente[]>([]);
     const [cargandoClientesFisicos, setCargandoClientesFisicos] = useState<boolean>(false);
-    const [conversionCalculada, setConversionCalculada] = useState<{
-        montoOriginal: number;
-        montoUSD: number;
-        tasaCambio: number;
-        monedaSimbolo: string;
-    } | null>(null);
 
     const [isCrearClienteDialogOpen, setIsCrearClienteDialogOpen] = useState(false);
 
@@ -240,31 +195,6 @@ export default function PuntoVentaOficial({
             }
         }
     }, [meta.monedas]);
-
-    useEffect(() => {
-        if (
-            currentPayment.amount &&
-            currentPayment.moneda_id &&
-            parseFloat(currentPayment.amount) > 0 &&
-            currentPayment.exchangeRate &&
-            parseFloat(currentPayment.exchangeRate) > 0
-        ) {
-            const monto = parseFloat(currentPayment.amount);
-            const exchangeRate = parseFloat(currentPayment.exchangeRate);
-            const selectedCurrency = currencies.find((c) => c.id === currentPayment.moneda_id);
-            if (selectedCurrency) {
-                const montoUSD = monto / exchangeRate;
-                setConversionCalculada({
-                    montoOriginal: monto,
-                    montoUSD,
-                    tasaCambio: exchangeRate,
-                    monedaSimbolo: selectedCurrency.symbol,
-                });
-            }
-        } else {
-            setConversionCalculada(null);
-        }
-    }, [currentPayment.amount, currentPayment.moneda_id, currentPayment.exchangeRate, currencies]);
 
     const cargarAlmacenes = async () => {
         try {
@@ -573,27 +503,6 @@ export default function PuntoVentaOficial({
     const totalPaid = useMemo(() => payments.reduce((sum, payment) => sum + payment.amountInUsd, 0), [payments]);
     const remainingInUsd = calcularTotal - totalPaid;
 
-    const convertToUsd = (amount: number, exchangeRate: number): number => {
-        if (!exchangeRate || exchangeRate <= 0) {
-            return 0;
-        }
-        return amount / exchangeRate;
-    };
-
-    const calculateAutomaticAmount = (monedaId: string): string => {
-        if (remainingInUsd <= 0) {
-            return '';
-        }
-
-        const selectedCurrency = currencies.find((c) => c.id === monedaId);
-        if (!selectedCurrency || !selectedCurrency.exchangeRate || selectedCurrency.exchangeRate <= 0) {
-            return '';
-        }
-
-        const automaticAmount = remainingInUsd * selectedCurrency.exchangeRate;
-        return automaticAmount.toFixed(2);
-    };
-
     const handleRemovePayment = (id: string) => {
         setPayments(payments.filter((payment) => payment.id !== id));
         toast.info('Pago removido');
@@ -745,10 +654,6 @@ export default function PuntoVentaOficial({
         } finally {
             setProcesandoVenta(false);
         }
-    };
-
-    const getCurrencyInfo = (currencyId: string) => {
-        return currencies.find((c) => c.id === currencyId);
     };
 
     const getStockStatus = (stock: number) => {
