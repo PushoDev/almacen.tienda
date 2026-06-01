@@ -233,6 +233,25 @@ interface VentaEspecialItemShow {
     fecha: string;
 }
 
+interface VentaAnuladaItemShow {
+    venta_id: number;
+    total: number;
+    motivo: string;
+    detalle: string | null;
+    fecha: string;
+    tenia_impacto_financiero: boolean;
+}
+
+const MOTIVO_LABELS: Record<string, string> = {
+    error_precio:        'Error en el precio',
+    solicitud_cliente:   'Solicitud del cliente',
+    producto_defectuoso: 'Producto defectuoso',
+    duplicado_venta:     'Duplicado de venta',
+    error_pedido:        'Error en el pedido',
+    otros:               'Otros',
+    sin_motivo:          'Sin motivo registrado',
+};
+
 interface Props extends PageProps {
     cierre: Cierre;
     almacenes?: Array<{ id: number; nombre: string }>;
@@ -245,6 +264,9 @@ interface Props extends PageProps {
     ventas_especiales_costo_usd?: number;
     ventas_especiales_impacto_usd?: number;
     ventas_especiales_detalles?: VentaEspecialItemShow[];
+    ventas_anuladas_count?: number;
+    ventas_anuladas_total_usd?: number;
+    ventas_anuladas_detalles?: VentaAnuladaItemShow[];
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -264,6 +286,9 @@ export default function Show({
     ventas_especiales_costo_usd = 0,
     ventas_especiales_impacto_usd = 0,
     ventas_especiales_detalles = [],
+    ventas_anuladas_count = 0,
+    ventas_anuladas_total_usd = 0,
+    ventas_anuladas_detalles = [],
 }: Props) {
     const canViewEspecialesCostImpact = userRole === 'admin' || userRole === 'moderador';
 
@@ -1305,6 +1330,19 @@ export default function Show({
                                     )}
                                 </div>
                             )}
+
+                            {/* Ventas Anuladas — si hubo en el turno */}
+                            {ventas_anuladas_count > 0 && (
+                                <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950">
+                                    <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Ventas Anuladas</p>
+                                    <p className="text-xl font-black text-red-700 dark:text-red-300">
+                                        {ventas_anuladas_count} venta{ventas_anuladas_count > 1 ? 's' : ''}
+                                    </p>
+                                    <p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">
+                                        Valor: ${Number(ventas_anuladas_total_usd).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         {/* Detalle de ventas especiales del turno */}
@@ -1359,6 +1397,49 @@ export default function Show({
                                             </div>
                                         </>
                                     )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Detalle de ventas anuladas del turno */}
+                        {ventas_anuladas_count > 0 && (
+                            <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950">
+                                <p className="mb-3 text-sm font-bold text-red-800 dark:text-red-200">
+                                    Ventas Anuladas del Turno ({ventas_anuladas_count})
+                                </p>
+                                <div className="space-y-2">
+                                    {ventas_anuladas_detalles.map((va) => (
+                                        <div key={va.venta_id} className="flex items-start justify-between rounded-md border border-red-200 bg-white px-3 py-2 text-xs dark:border-red-700 dark:bg-red-900/30">
+                                            <div className="flex-1 space-y-0.5">
+                                                <p className="font-semibold text-red-800 dark:text-red-200">
+                                                    Venta #{va.venta_id}
+                                                    {va.tenia_impacto_financiero && (
+                                                        <span className="ml-2 rounded-full bg-red-200 px-1.5 py-0.5 text-red-700 dark:bg-red-800 dark:text-red-300">
+                                                            Afectó saldos
+                                                        </span>
+                                                    )}
+                                                </p>
+                                                <p className="font-medium text-red-700 dark:text-red-300">
+                                                    {MOTIVO_LABELS[va.motivo] ?? va.motivo}
+                                                </p>
+                                                {va.detalle && (
+                                                    <p className="italic text-red-500 dark:text-red-400">{va.detalle}</p>
+                                                )}
+                                                <p className="text-red-400 dark:text-red-500">{va.fecha}</p>
+                                            </div>
+                                            <div className="ml-4 text-right">
+                                                <p className="font-bold text-red-700 dark:text-red-300">
+                                                    ${va.total.toFixed(2)} USD
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="mt-3 border-t border-red-200 pt-2 dark:border-red-700">
+                                    <div className="flex justify-between text-xs font-bold text-red-800 dark:text-red-200">
+                                        <span>Valor total anulado:</span>
+                                        <span>${Number(ventas_anuladas_total_usd).toFixed(2)} USD</span>
+                                    </div>
                                 </div>
                             </div>
                         )}

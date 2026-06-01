@@ -234,6 +234,10 @@ class CierreCajaController extends Controller
                 'ventas_especiales_costo_usd'   => $calculos['ventas_especiales_costo_usd'] ?? 0,
                 'ventas_especiales_impacto_usd' => $calculos['ventas_especiales_impacto_usd'] ?? 0,
                 'ventas_especiales_detalles'    => $calculos['ventas_especiales_detalles'] ?? [],
+                // Ventas anuladas
+                'ventas_anuladas_count'         => $calculos['ventas_anuladas_count'] ?? 0,
+                'ventas_anuladas_total_usd'     => $calculos['ventas_anuladas_total_usd'] ?? 0,
+                'ventas_anuladas_detalles'      => $calculos['ventas_anuladas_detalles'] ?? [],
             ],
             // NUEVO: Comparativa con cierre anterior
             'comparativa_cuentas' => $comparativaCuentas,
@@ -463,6 +467,23 @@ class CierreCajaController extends Controller
 
         $puedeVerCostoImpactoEspeciales = in_array($currentUser->role, ['admin', 'moderador'], true);
 
+        // Ventas anuladas durante el período del cierre
+        $ventasAnuladasCierre = \App\Models\Venta::where('user_id', $cierre->user_id)
+            ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
+            ->where('estado', 'cancelada')
+            ->get();
+
+        $vaCount    = $ventasAnuladasCierre->count();
+        $vaTotalUSD = round($ventasAnuladasCierre->sum(fn($v) => (float) $v->total), 2);
+        $vaDetalles = $ventasAnuladasCierre->map(fn($v) => [
+            'venta_id'               => $v->id,
+            'total'                  => round((float) $v->total, 2),
+            'motivo'                 => $v->motivo_anulacion ?? 'sin_motivo',
+            'detalle'                => $v->detalle_anulacion,
+            'fecha'                  => $v->created_at->format('Y-m-d H:i'),
+            'tenia_impacto_financiero' => $v->ganancia_real_total !== null,
+        ])->values()->all();
+
         $showPayload = [
             'cierre'                => $cierre,
             'userRole'              => $currentUser->role ?? 'vendedor',
@@ -476,6 +497,10 @@ class CierreCajaController extends Controller
             'ventas_especiales_costo_usd'   => round($veCosto, 2),
             'ventas_especiales_impacto_usd' => round($veTotal - $veCosto, 2),
             'ventas_especiales_detalles'    => $veDetalles,
+            // Ventas anuladas
+            'ventas_anuladas_count'         => $vaCount,
+            'ventas_anuladas_total_usd'     => $vaTotalUSD,
+            'ventas_anuladas_detalles'      => $vaDetalles,
         ];
 
         if (! $puedeVerCostoImpactoEspeciales) {
@@ -997,6 +1022,23 @@ class CierreCajaController extends Controller
             (float) $v->total_ganancia - (float) $v->total_comision
         );
 
+        // --- VENTAS ANULADAS EN EL TURNO ---
+        $ventasAnuladas = Venta::where('user_id', $user->id)
+            ->where('created_at', '>=', $inicioTurno)
+            ->where('estado', 'cancelada')
+            ->get();
+
+        $ventasAnuladasCount    = $ventasAnuladas->count();
+        $ventasAnuladasTotalUSD = round($ventasAnuladas->sum(fn($v) => (float) $v->total), 2);
+        $ventasAnuladasDetalles = $ventasAnuladas->map(fn($v) => [
+            'venta_id'               => $v->id,
+            'total'                  => round((float) $v->total, 2),
+            'motivo'                 => $v->motivo_anulacion ?? 'sin_motivo',
+            'detalle'                => $v->detalle_anulacion,
+            'fecha'                  => $v->created_at->format('Y-m-d H:i'),
+            'tenia_impacto_financiero' => $v->ganancia_real_total !== null,
+        ])->values()->all();
+
         $result = [
             'detalles' => array_values($resumenPorMoneda),
             'ventas_efectivo' => round($ventasEfectivoTotalUSD, 2),
@@ -1022,6 +1064,10 @@ class CierreCajaController extends Controller
             'ventas_especiales_costo_usd'  => round($ventasEspecialesCostoUSD, 2),
             'ventas_especiales_impacto_usd'=> $ventasEspecialesImpactoUSD,
             'ventas_especiales_detalles'   => $ventasEspecialesDetalles,
+            // Ventas anuladas
+            'ventas_anuladas_count'        => $ventasAnuladasCount,
+            'ventas_anuladas_total_usd'    => $ventasAnuladasTotalUSD,
+            'ventas_anuladas_detalles'     => $ventasAnuladasDetalles,
         ];
 
         Log::info('CIERRE: Resultado', [
