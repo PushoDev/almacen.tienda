@@ -1396,7 +1396,7 @@ class VentaController extends Controller
 
         $user = Auth::user();
 
-        DB::transaction(function () use ($venta, $validated, $user) {
+        try { DB::transaction(function () use ($venta, $validated, $user) {
             // ── Actualizar precios si vienen ──────────────────────────────────
             if (!empty($validated['items'])) {
                 $venta->load('detalles.producto');
@@ -1492,7 +1492,12 @@ class VentaController extends Controller
                     'referencia'           => $pago['referencia'] ?? null,
                 ]);
             }
-        });
+        }); } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
 
         // Devolver venta actualizada para refrescar el frontend sin recargar
         $venta->refresh()->load(['detalles.producto', 'pagos.cuenta.moneda', 'pagos.moneda', 'pagos.cliente']);
