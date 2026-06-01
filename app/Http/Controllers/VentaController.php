@@ -497,6 +497,7 @@ class VentaController extends Controller
             ] : null,
             'items' => $venta->detalles->map(function ($detalle) {
                 return [
+                    'id' => $detalle->id,
                     'producto' => [
                         'id' => $detalle->producto->id,
                         'nombre' => $detalle->producto->nombre_producto,
@@ -1355,6 +1356,178 @@ class VentaController extends Controller
                 ['value' => 'solicitud_especial',  'label' => 'Solicitud Especial'],
                 ['value' => 'rechazada',           'label' => 'Rechazada'],
             ]
+        ]);
+    }
+
+    /**
+     * Editar pagos y/o precios de una venta en estado pendiente.
+     */
+    public function editarVentaPendiente(Request $request, Venta $venta)
+    {
+        if ($venta->estado !== 'pendiente') {
+            return response()->json(['success' => false, 'message' => 'Solo se pueden editar ventas en estado pendiente.'], 400);
+        }
+
+        $validated = $request->validate([
+            'pagos'                       => 'required|array|min:1',
+            'pagos.*.metodo'              => 'required|in:transferencia,efectivo',
+            'pagos.*.moneda_id'           => 'required|exists:monedas,id',
+            'pagos.*.monto'               => 'required|numeric|min:0',
+            'pagos.*.via'                 => 'nullable|string',
+            'pagos.*.tasa_cambio'         => 'required|numeric|min:0.0001',
+            'pagos.*.monto_equivalente'   => 'required|numeric|min:0',
+            'pagos.*.cuenta_id'           => 'nullable|exists:cuentas,id',
+            'pagos.*.cliente_id'          => 'nullable|exists:clientes,id',
+            'pagos.*.referencia'          => 'nullable|string',
+            'items'                       => 'nullable|array',
+            'items.*.venta_detalle_id'    => 'required|exists:venta_detalles,id',
+            'items.*.precio_venta'        => 'required|numeric|min:0',
+        ]);
+
+        // Validar XOR en pagos
+        foreach ($validated['pagos'] as $pago) {
+            if (empty($pago['cuenta_id']) && empty($pago['cliente_id'])) {
+                return response()->json(['success' => false, 'message' => 'Cada pago debe tener una cuenta o un cliente como destino.'], 422);
+            }
+            if (!empty($pago['cuenta_id']) && !empty($pago['cliente_id'])) {
+                return response()->json(['success' => false, 'message' => 'Un pago no puede tener cuenta y cliente al mismo tiempo.'], 422);
+            }
+        }
+
+        $user = Auth::user();
+
+        DB::transaction(function () use ($venta, $validated, $user) {
+            // ── Actualizar precios si vienen ──────────────────────────────────
+            if (!empty($validated['items'])) {
+                $venta->load('detalles.producto');
+
+                // Precargar precios del almacén para validar mínimos
+                $productIds     = $venta->detalles->pluck('producto_id')->toArray();
+                $preciosAlmacen = DB::table('producto_vendedors')
+                    ->where('almacen_id', $venta->almacen_id)
+                    ->whereIn('producto_id', $productIds)
+                    ->get()
+                    ->keyBy('producto_id');
+
+                $nuevoTotal    = 0;
+                $nuevaGanancia = 0;
+                $nuevaComision = 0;
+
+                foreach ($validated['items'] as $itemData) {
+                    $detalle = $venta->detalles->firstWhere('id', $itemData['venta_detalle_id']);
+                    if (!$detalle) continue;
+
+                    $nuevoPrecio = (float) $itemData['precio_venta'];
+                    $costo       = (float) $detalle->costo_unitario;
+
+                    // Validar mínimo solo si no es venta especial
+                    if (!$venta->es_venta_especial) {
+                        $precioRow = $preciosAlmacen->get($detalle->producto_id);
+                        if ($precioRow) {
+                            $precioMinimo = round((float) $precioRow->precio_venta - (float) $precioRow->comision, 2);
+                            if ($nuevoPrecio < $precioMinimo) {
+                                throw new \Exception(
+                                    "El precio de \"{$detalle->producto->nombre_producto}\" (\${$nuevoPrecio}) " .
+                                    "está por debajo del mínimo permitido (\${$precioMinimo})."
+                                );
+                            }
+                        }
+                        if ($nuevoPrecio < $costo) {
+                            throw new \Exception(
+                                "El precio de \"{$detalle->producto->nombre_producto}\" no puede ser menor que su costo."
+                            );
+                        }
+                    }
+
+                    // Recalcular comisión
+                    $precioRow    = $preciosAlmacen->get($detalle->producto_id);
+                    $precioBase   = $precioRow ? (float) $precioRow->precio_venta : $nuevoPrecio;
+                    $baseComision = (!$venta->es_venta_especial && $precioRow) ? (float) $precioRow->comision : 0;
+
+                    if ($venta->es_venta_especial) {
+                        $comisionUnitaria = 0;
+                    } elseif ($nuevoPrecio >= $precioBase) {
+                        $comisionUnitaria = $baseComision + ($nuevoPrecio - $precioBase);
+                    } else {
+                        $descuento        = $precioBase - $nuevoPrecio;
+                        $comisionUnitaria = max(0.0, $baseComision - $descuento);
+                    }
+
+                    $ganancia = ($nuevoPrecio - $costo) * $detalle->cantidad;
+                    $subtotal = $nuevoPrecio * $detalle->cantidad;
+
+                    $detalle->update([
+                        'precio_venta'    => $nuevoPrecio,
+                        'subtotal'        => $subtotal,
+                        'ganancia'        => $ganancia,
+                        'comision_unitaria' => round($comisionUnitaria, 2),
+                    ]);
+
+                    $nuevoTotal    += $subtotal;
+                    $nuevaGanancia += $ganancia;
+                    $nuevaComision += round($comisionUnitaria * $detalle->cantidad, 2);
+                }
+
+                $venta->update([
+                    'total'          => $nuevoTotal,
+                    'total_ganancia' => $nuevaGanancia,
+                    'total_comision' => round($nuevaComision, 2),
+                ]);
+            }
+
+            // ── Reemplazar pagos ──────────────────────────────────────────────
+            $venta->pagos()->delete();
+
+            foreach ($validated['pagos'] as $pago) {
+                PagoVenta::create([
+                    'venta_id'             => $venta->id,
+                    'tipo_pago'            => $pago['metodo'],
+                    'moneda_id'            => $pago['moneda_id'],
+                    'cuenta_id'            => $pago['cuenta_id'] ?? null,
+                    'cliente_id'           => $pago['cliente_id'] ?? null,
+                    'via_pago'             => $pago['via'] ?? null,
+                    'monto'                => $pago['monto'],
+                    'tasa_cambio_aplicada' => $pago['tasa_cambio'],
+                    'monto_equivalente'    => $pago['monto_equivalente'],
+                    'referencia'           => $pago['referencia'] ?? null,
+                ]);
+            }
+        });
+
+        // Devolver venta actualizada para refrescar el frontend sin recargar
+        $venta->refresh()->load(['detalles.producto', 'pagos.cuenta.moneda', 'pagos.moneda', 'pagos.cliente']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Venta actualizada correctamente.',
+            'total'   => (float) $venta->total,
+            'pagos'   => $venta->pagos->map(fn($p) => [
+                'metodo'            => $p->tipo_pago,
+                'monto'             => $p->monto,
+                'monto_equivalente' => $p->monto_equivalente,
+                'via'               => $p->via_pago,
+                'tasa_cambio'       => $p->tasa_cambio_aplicada,
+                'moneda'            => $p->moneda ? [
+                    'id'     => $p->moneda->id,
+                    'codigo' => $p->moneda->codigo_moneda,
+                    'nombre' => $p->moneda->nombre_moneda,
+                ] : null,
+                'cuenta'            => $p->cuenta ? [
+                    'id'     => $p->cuenta->id,
+                    'nombre' => $p->cuenta->nombre_cuenta,
+                ] : null,
+                'cliente_destino'   => $p->cliente ? [
+                    'id'     => $p->cliente->id,
+                    'nombre' => $p->cliente->nombre_cliente,
+                ] : null,
+                'destino_tipo'      => $p->cliente_id ? 'cliente' : 'cuenta',
+            ]),
+            'items' => $venta->detalles->map(fn($d) => [
+                'precio_venta'     => (float) $d->precio_venta,
+                'subtotal'         => (float) $d->subtotal,
+                'ganancia'         => (float) $d->ganancia,
+                'comision_unitaria'=> (float) $d->comision_unitaria,
+            ]),
         ]);
     }
 

@@ -1,4 +1,6 @@
 import HeadingSmall from '@/components/heading-small';
+import PaymentForm from '@/components/ventas/PaymentForm';
+import PaymentList from '@/components/ventas/PaymentList';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -196,8 +198,6 @@ export default function PuntoVentaOficial({
         cliente_id: '',
         referencia: '',
     });
-    const [cuentasFiltradas, setCuentasFiltradas] = useState<Cuenta[]>([]);
-
     // ── Venta Especial ────────────────────────────────────────────────────────
     const [esVentaEspecial, setEsVentaEspecial] = useState<boolean>(false);
     const [motivoEspecial, setMotivoEspecial] = useState<string>('');
@@ -207,7 +207,6 @@ export default function PuntoVentaOficial({
 
     const [clientesFisicos, setClientesFisicos] = useState<Cliente[]>([]);
     const [cargandoClientesFisicos, setCargandoClientesFisicos] = useState<boolean>(false);
-    const [cargandoCuentas, setCargandoCuentas] = useState<boolean>(false);
     const [conversionCalculada, setConversionCalculada] = useState<{
         montoOriginal: number;
         montoUSD: number;
@@ -301,29 +300,6 @@ export default function PuntoVentaOficial({
         }
     };
 
-    const cargarCuentasFiltradas = async (monedaId: string, metodoPago: string) => {
-        if (!monedaId) {
-            setCuentasFiltradas([]);
-            return;
-        }
-        setCargandoCuentas(true);
-        try {
-            const response = await axios.get(route('ventas.getCuentasFiltradas'), {
-                params: {
-                    moneda_id: monedaId,
-                    metodo_pago: metodoPago || undefined,
-                },
-            });
-            setCuentasFiltradas(response.data);
-        } catch (error: unknown) {
-            console.error('Error al cargar cuentas filtradas:', error);
-            toast.error('Error al cargar cuentas');
-            setCuentasFiltradas([]);
-        } finally {
-            setCargandoCuentas(false);
-        }
-    };
-
     const cargarProductos = async (almacenId: string) => {
         if (!almacenId) {
             setProductos([]);
@@ -374,21 +350,6 @@ export default function PuntoVentaOficial({
     const handleClienteChange = (value: string) => {
         console.log('Cliente seleccionado:', value);
         setClienteSeleccionado(value);
-    };
-
-    const handleMonedaChange = (monedaId: string) => {
-        const selectedCurrency = currencies.find((c) => c.id === monedaId);
-        const automaticAmount = calculateAutomaticAmount(monedaId);
-
-        setCurrentPayment({
-            ...currentPayment,
-            moneda_id: monedaId,
-            exchangeRate: selectedCurrency ? selectedCurrency.exchangeRate.toString() : '',
-            amount: automaticAmount,
-            cuenta_id: '',
-            cliente_id: '',
-        });
-        cargarCuentasFiltradas(monedaId, currentPayment.method);
     };
 
     const productosFiltrados = useMemo(() => {
@@ -612,38 +573,6 @@ export default function PuntoVentaOficial({
     const totalPaid = useMemo(() => payments.reduce((sum, payment) => sum + payment.amountInUsd, 0), [payments]);
     const remainingInUsd = calcularTotal - totalPaid;
 
-    // ✅ NUEVO: Recalcular monto automáticamente cuando el usuario cambia la tasa de cambio manualmente
-    useEffect(() => {
-        // Solo ejecutar cuando el usuario edita manualmente la tasa (no cuando se selecciona moneda o destino)
-        const monedaSeleccionada = currencies.find((c) => c.id === currentPayment.moneda_id);
-        const tasaOriginal = monedaSeleccionada?.exchangeRate || 0;
-        const tasaActual = parseFloat(currentPayment.exchangeRate) || 0;
-
-        // Solo ejecutar si la tasa fue editada manualmente (diferente de la tasa original de la moneda)
-        const tasaFueEditada = Math.abs(tasaActual - tasaOriginal) > 0.0001;
-
-        if (
-            currentPayment.moneda_id &&
-            currentPayment.exchangeRate &&
-            tasaFueEditada &&
-            parseFloat(currentPayment.exchangeRate) > 0 &&
-            remainingInUsd > 0 &&
-            currentPayment.amount &&
-            parseFloat(currentPayment.amount) > 0
-        ) {
-            const nuevaTasa = parseFloat(currentPayment.exchangeRate);
-            const montoCalculado = remainingInUsd * nuevaTasa;
-
-            const montoActual = parseFloat(currentPayment.amount) || 0;
-            if (Math.abs(montoActual - montoCalculado) > 0.01) {
-                setCurrentPayment((prev) => ({
-                    ...prev,
-                    amount: montoCalculado.toFixed(2),
-                }));
-            }
-        }
-    }, [currentPayment.exchangeRate, remainingInUsd, currentPayment.moneda_id]);
-
     const convertToUsd = (amount: number, exchangeRate: number): number => {
         if (!exchangeRate || exchangeRate <= 0) {
             return 0;
@@ -663,87 +592,6 @@ export default function PuntoVentaOficial({
 
         const automaticAmount = remainingInUsd * selectedCurrency.exchangeRate;
         return automaticAmount.toFixed(2);
-    };
-
-    const handleAddPayment = () => {
-        console.log('Intentando agregar pago:', currentPayment);
-        console.log('Cuentas filtradas disponibles:', cuentasFiltradas);
-
-        if (
-            !currentPayment.method ||
-            !currentPayment.moneda_id ||
-            (currentPayment.method === 'transferencia' && !currentPayment.via) ||
-            !currentPayment.amount ||
-            parseFloat(currentPayment.amount) <= 0 ||
-            (!currentPayment.cuenta_id && !currentPayment.cliente_id) ||
-            !currentPayment.exchangeRate ||
-            parseFloat(currentPayment.exchangeRate) <= 0
-        ) {
-            console.log('Faltan campos requeridos:', {
-                method: currentPayment.method,
-                moneda_id: currentPayment.moneda_id,
-                via: currentPayment.via,
-                referencia: currentPayment.referencia,
-                amount: currentPayment.amount,
-                exchangeRate: currentPayment.exchangeRate,
-                cuenta_id: currentPayment.cuenta_id,
-                cliente_id: currentPayment.cliente_id,
-            });
-            toast.warning('Por favor, complete todos los campos del pago y asegure un monto y tasa de cambio válidos.');
-            return;
-        }
-
-        const selectedCurrency = currencies.find((c) => c.id === currentPayment.moneda_id);
-        console.log('Moneda seleccionada:', selectedCurrency);
-
-        if (!selectedCurrency) {
-            toast.error('Error en la selección de moneda');
-            return;
-        }
-
-        const amount = parseFloat(currentPayment.amount);
-        const exchangeRate = parseFloat(currentPayment.exchangeRate);
-        const amountInUsd = convertToUsd(amount, exchangeRate);
-        console.log(`Monto: ${amount}, Tasa: ${exchangeRate}, USD: ${amountInUsd}`);
-
-        if (amountInUsd === 0 || isNaN(amountInUsd)) {
-            toast.error('El monto en USD no puede ser cero o no es válido. Revise la tasa de cambio.');
-            return;
-        }
-
-        const newPayment: Payment = {
-            id: crypto.randomUUID(),
-            method: currentPayment.method,
-            moneda_id: currentPayment.moneda_id,
-            amount: amount,
-            via: currentPayment.method === 'transferencia' ? currentPayment.via : undefined,
-            exchangeRate: exchangeRate,
-            amountInUsd: amountInUsd,
-            cuenta_id: currentPayment.cuenta_id || null,
-            cliente_id: currentPayment.cliente_id || null,
-            referencia: currentPayment.method === 'transferencia' ? currentPayment.referencia : undefined,
-            moneda_info: {
-                codigo: selectedCurrency.code,
-                nombre: selectedCurrency.name,
-                simbolo: selectedCurrency.symbol,
-            },
-        };
-
-        console.log('Nuevo pago agregado:', newPayment);
-        setPayments([...payments, newPayment]);
-        setCurrentPayment({
-            method: '',
-            moneda_id: '',
-            via: '',
-            amount: '',
-            exchangeRate: '',
-            cuenta_id: '',
-            cliente_id: '',
-            referencia: '',
-        });
-        setCuentasFiltradas([]);
-        setConversionCalculada(null);
-        toast.success('Pago agregado correctamente');
     };
 
     const handleRemovePayment = (id: string) => {
@@ -910,7 +758,6 @@ export default function PuntoVentaOficial({
         return { label: 'Agotado', variant: 'destructive' as const };
     };
 
-    const selectedCurrencyInfo = currentPayment.moneda_id ? getCurrencyInfo(currentPayment.moneda_id) : null;
     const selectedAlmacen = almacenes.find((almacen) => almacen.id.toString() === almacenSeleccionado) || null;
     const selectedCliente = clientes.find((cliente) => cliente.id.toString() === clienteSeleccionado) || null;
 
@@ -1637,344 +1484,47 @@ export default function PuntoVentaOficial({
                                                         </AlertDialogHeader>
                                                         <div className="grid max-h-[calc(90vh-200px)] overflow-hidden md:grid-cols-2">
                                                             <div className="overflow-y-auto border-r p-6">
-                                                                <h4 className="mb-3 flex items-center gap-2 font-medium">
-                                                                    <DollarSign className="text-primary h-4 w-4" />
-                                                                    Agregar Pago
-                                                                </h4>
-                                                                <div className="space-y-4">
-                                                                    {/* Motivo obligatorio en ventas especiales */}
-                                                                    {esVentaEspecial && (
-                                                                        <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
-                                                                            <Label className="flex items-center gap-2 font-semibold text-amber-700 dark:text-amber-300">
-                                                                                <AlertTriangle className="h-4 w-4" />
-                                                                                Motivo de la Venta Especial *
-                                                                            </Label>
-                                                                            <textarea
-                                                                                value={motivoEspecial}
-                                                                                onChange={(e) => setMotivoEspecial(e.target.value)}
-                                                                                placeholder="Ej: Rotura de equipo, regalo al cliente, rifa interna, descuento especial autorizado..."
-                                                                                rows={2}
-                                                                                className="border-input ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex w-full rounded-md border bg-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-                                                                            />
-                                                                            <p className="text-xs text-amber-600 dark:text-amber-400">
-                                                                                Esta información será visible para el administrador al revisar la solicitud.
-                                                                            </p>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {/* Mensaje de regalo cuando total = 0 */}
-                                                                    {esVentaEspecial && calcularTotal === 0 && (
-                                                                        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-amber-300 bg-amber-50 p-8 text-center dark:border-amber-700 dark:bg-amber-950">
-                                                                            <ShoppingBag className="h-10 w-10 text-amber-400" />
-                                                                            <p className="font-semibold text-amber-700 dark:text-amber-300">Este producto será entregado como regalo</p>
-                                                                            <p className="text-sm text-amber-600 dark:text-amber-400">
-                                                                                Precio $0.00 — No se requiere ningún pago. La solicitud será enviada al administrador para su aprobación.
-                                                                            </p>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {/* Sección de pagos — oculta solo cuando es regalo */}
-                                                                    {!(esVentaEspecial && calcularTotal === 0) && (<>
-                                                                    <div className="grid gap-4 md:grid-cols-2">
-                                                                        <div className="space-y-2">
-                                                                            <Label>Método de pago</Label>
-                                                                            <Select
-                                                                                value={currentPayment.method}
-                                                                                onValueChange={(value: 'transferencia' | 'efectivo' | '') => {
-                                                                                    const newPayment = {
-                                                                                        ...currentPayment,
-                                                                                        method: value,
-                                                                                        via: value === 'efectivo' ? 'efectivo' : '',
-                                                                                        referencia:
-                                                                                            value === 'efectivo' ? '' : currentPayment.referencia,
-                                                                                        cuenta_id: '',
-                                                                                    };
-                                                                                    console.log('Método de pago cambiado:', newPayment);
-                                                                                    setCurrentPayment(newPayment);
-
-                                                                                    if (currentPayment.moneda_id) {
-                                                                                        cargarCuentasFiltradas(currentPayment.moneda_id, value);
-                                                                                    }
-                                                                                }}
-                                                                            >
-                                                                                <SelectTrigger>
-                                                                                    <SelectValue placeholder="Seleccione método" />
-                                                                                </SelectTrigger>
-                                                                                <SelectContent>
-                                                                                    <SelectItem value="transferencia">Transferencia</SelectItem>
-                                                                                    <SelectItem value="efectivo">Efectivo</SelectItem>
-                                                                                </SelectContent>
-                                                                            </Select>
-                                                                        </div>
-                                                                        <div className="space-y-2">
-                                                                            <Label>Moneda</Label>
-                                                                            <Select
-                                                                                value={currentPayment.moneda_id}
-                                                                                onValueChange={handleMonedaChange}
-                                                                                disabled={!currentPayment.method}
-                                                                            >
-                                                                                <SelectTrigger>
-                                                                                    <SelectValue placeholder="Seleccione moneda" />
-                                                                                </SelectTrigger>
-                                                                                <SelectContent>
-                                                                                    {currencies.map((currency) => (
-                                                                                        <SelectItem key={currency.id} value={currency.id.toString()}>
-                                                                                            {currency.name} ({currency.symbol}) - Tasa:{' '}
-                                                                                            {currency.exchangeRate}
-                                                                                        </SelectItem>
-                                                                                    ))}
-                                                                                </SelectContent>
-                                                                            </Select>
-                                                                        </div>
-                                                                        <div className="space-y-2">
-                                                                            <Label>Tasa de Cambio</Label>
-                                                                            <Input
-                                                                                type="number"
-                                                                                value={currentPayment.exchangeRate}
-                                                                                onChange={(e) =>
-                                                                                    setCurrentPayment({
-                                                                                        ...currentPayment,
-                                                                                        exchangeRate: e.target.value,
-                                                                                    })
-                                                                                }
-                                                                                placeholder="Tasa de cambio"
-                                                                                disabled={!currentPayment.moneda_id}
-                                                                                min="0.0001"
-                                                                                step="0.0001"
-                                                                            />
-                                                                        </div>
-                                                                        <div className="space-y-2">
-                                                                            <Label>Destino del Pago</Label>
-
-                                                                            <Select
-                                                                                value={
-                                                                                    currentPayment.cuenta_id
-                                                                                        ? `cuenta_${currentPayment.cuenta_id}`
-                                                                                        : currentPayment.cliente_id
-                                                                                            ? `cliente_${currentPayment.cliente_id}`
-                                                                                            : ''
-                                                                                }
-                                                                                onValueChange={(value) => {
-                                                                                    let updatedPayment = { ...currentPayment };
-
-                                                                                    if (value.startsWith('cuenta_')) {
-                                                                                        updatedPayment = {
-                                                                                            ...updatedPayment,
-                                                                                            cuenta_id: value.replace('cuenta_', ''),
-                                                                                            cliente_id: '',
-                                                                                        };
-                                                                                    } else if (value.startsWith('cliente_')) {
-                                                                                        updatedPayment = {
-                                                                                            ...updatedPayment,
-                                                                                            cliente_id: value.replace('cliente_', ''),
-                                                                                            cuenta_id: '',
-                                                                                        };
-                                                                                    }
-
-                                                                                    setCurrentPayment(updatedPayment);
-                                                                                }}
-                                                                            >
-                                                                                <SelectTrigger>
-                                                                                    <SelectValue placeholder="Seleccione destino" />
-                                                                                </SelectTrigger>
-
-                                                                                <SelectContent>
-                                                                                    {cuentasFiltradas.length > 0 && (
-                                                                                        <>
-                                                                                            <div className="px-2 py-1.5 text-xs font-semibold text-gray-500">
-                                                                                                🏦 CUENTAS
-                                                                                            </div>
-                                                                                            {cargandoCuentas ? (
-                                                                                                <div className="px-2 py-3 text-center text-sm text-gray-500">
-                                                                                                    Cargando cuentas...
-                                                                                                </div>
-                                                                                            ) : (
-                                                                                                cuentasFiltradas.map((account) => (
-                                                                                                    <SelectItem
-                                                                                                        key={`cuenta_${account.id}`}
-                                                                                                        value={`cuenta_${account.id}`}
-                                                                                                    >
-                                                                                                        🏦 {account.nombre_cuenta}
-                                                                                                    </SelectItem>
-                                                                                                ))
-                                                                                            )}
-                                                                                        </>
-                                                                                    )}
-
-                                                                                    {selectedCurrencyInfo?.code === 'USD' && (
-                                                                                        <>
-                                                                                            {cuentasFiltradas.length > 0 && (
-                                                                                                <Separator className="my-1" />
-                                                                                            )}
-                                                                                            <div className="px-2 py-1.5 text-xs font-semibold text-gray-500">
-                                                                                                👤 CLIENTES FÍSICOS
-                                                                                            </div>
-
-                                                                                            {cargandoClientesFisicos ? (
-                                                                                                <div className="px-2 py-3 text-center text-sm text-gray-500">
-                                                                                                    Cargando clientes...
-                                                                                                </div>
-                                                                                            ) : clientesFisicos.length === 0 ? (
-                                                                                                <div className="px-2 py-3 text-center text-sm text-gray-500">
-                                                                                                    No hay clientes físicos
-                                                                                                </div>
-                                                                                            ) : (
-                                                                                                clientesFisicos.map((cliente) => (
-                                                                                                    <SelectItem
-                                                                                                        key={`cliente_${cliente.id}`}
-                                                                                                        value={`cliente_${cliente.id}`}
-                                                                                                    >
-                                                                                                        👤 {cliente.nombre_cliente}
-                                                                                                    </SelectItem>
-                                                                                                ))
-                                                                                            )}
-                                                                                        </>
-                                                                                    )}
-                                                                                </SelectContent>
-                                                                            </Select>
-                                                                        </div>
-                                                                        {currentPayment.method === 'transferencia' && (
-                                                                            <div className="space-y-2">
-                                                                                <Label>Vía de pago</Label>
-                                                                                <Select
-                                                                                    value={currentPayment.via}
-                                                                                    onValueChange={(value) => {
-                                                                                        console.log('Vía de pago seleccionada:', value);
-                                                                                        setCurrentPayment({ ...currentPayment, via: value });
-                                                                                    }}
-                                                                                >
-                                                                                    <SelectTrigger>
-                                                                                        <SelectValue placeholder="Seleccione vía" />
-                                                                                    </SelectTrigger>
-                                                                                    <SelectContent>
-                                                                                        {paymentVias
-                                                                                            .filter((via) => via.method === 'transferencia')
-                                                                                            .map((via) => (
-                                                                                                <SelectItem key={via.id} value={via.id}>
-                                                                                                    {via.name}
-                                                                                                </SelectItem>
-                                                                                            ))}
-                                                                                    </SelectContent>
-                                                                                </Select>
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-
-                                                                    <div className="space-y-2">
-                                                                        <Label>Monto a Pagar</Label>
-                                                                        <div className="grid gap-4 md:grid-cols-4">
-                                                                            <div className="space-y-2 md:col-span-3">
-                                                                                <Input
-                                                                                    type="number"
-                                                                                    min="0"
-                                                                                    step="0.01"
-                                                                                    value={currentPayment.amount}
-                                                                                    onChange={(e) => {
-                                                                                        console.log('Monto cambiado:', e.target.value);
-                                                                                        setCurrentPayment({
-                                                                                            ...currentPayment,
-                                                                                            amount: e.target.value,
-                                                                                        });
-                                                                                    }}
-                                                                                    placeholder="0.00"
-                                                                                    className="h-12 text-lg font-medium"
-                                                                                />
-                                                                                {conversionCalculada && (
-                                                                                    <div className="rounded-lg bg-green-50 p-2 text-center">
-                                                                                        <p className="text-sm font-medium text-green-700">
-                                                                                            {Number(conversionCalculada.montoOriginal).toLocaleString(
-                                                                                                'es-ES',
-                                                                                                {
-                                                                                                    minimumFractionDigits: 2,
-                                                                                                    maximumFractionDigits: 2,
-                                                                                                },
-                                                                                            )}{' '}
-                                                                                            {conversionCalculada.monedaSimbolo} ={' '}
-                                                                                            <span className="font-bold">
-                                                                                                {Number(conversionCalculada.montoUSD).toLocaleString(
-                                                                                                    'es-ES',
-                                                                                                    {
-                                                                                                        minimumFractionDigits: 2,
-                                                                                                        maximumFractionDigits: 2,
-                                                                                                    },
-                                                                                                )}{' '}
-                                                                                                USD
-                                                                                            </span>
-                                                                                        </p>
-                                                                                        <p className="mt-1 text-xs text-green-600">
-                                                                                            Tasa aplicada: {conversionCalculada.tasaCambio}
-                                                                                        </p>
-                                                                                    </div>
-                                                                                )}
-                                                                            </div>
-                                                                            <div className="flex items-end">
-                                                                                <Button
-                                                                                    onClick={handleAddPayment}
-                                                                                    disabled={
-                                                                                        !currentPayment.method ||
-                                                                                        !currentPayment.moneda_id ||
-                                                                                        (currentPayment.method === 'transferencia' &&
-                                                                                            !currentPayment.via) ||
-                                                                                        !currentPayment.amount ||
-                                                                                        parseFloat(currentPayment.amount) <= 0 ||
-                                                                                        (!currentPayment.cuenta_id && !currentPayment.cliente_id)
-                                                                                    }
-                                                                                    className="h-12 w-full"
-                                                                                >
-                                                                                    Agregar
-                                                                                </Button>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                    </>)}
-                                                                </div>
-                                                            </div>
-                                                            <div className="bg-secondary/30 overflow-y-auto p-6">
-                                                                {payments.length > 0 && (
-                                                                    <div className="mb-6 rounded-lg border p-4">
-                                                                        <h4 className="mb-3 font-medium">Pagos Agregados ({payments.length})</h4>
-                                                                        <div className="space-y-2">
-                                                                            {payments.map((payment) => (
-                                                                                <div
-                                                                                    key={payment.id}
-                                                                                    className="bg-card animate-scale-in flex items-center justify-between rounded border p-3 shadow-sm"
-                                                                                >
-                                                                                    <div className="flex-1">
-                                                                                        <p className="font-medium">
-                                                                                            {payment.method === 'transferencia'
-                                                                                                ? `Transferencia (${payment.via})`
-                                                                                                : 'Efectivo'}
-                                                                                        </p>
-                                                                                        <p className="text-sm text-gray-500">
-                                                                                            {Number(payment.amount).toLocaleString('es-ES', {
-                                                                                                minimumFractionDigits: 2,
-                                                                                                maximumFractionDigits: 2,
-                                                                                            })}{' '}
-                                                                                            {payment.moneda_info?.simbolo}
-                                                                                            {payment.referencia && ` - Ref: ${payment.referencia}`}
-                                                                                        </p>
-                                                                                        <p className="text-sm text-green-600">
-                                                                                            = $
-                                                                                            {Number(payment.amountInUsd).toLocaleString('es-ES', {
-                                                                                                minimumFractionDigits: 2,
-                                                                                                maximumFractionDigits: 2,
-                                                                                            })}{' '}
-                                                                                            USD
-                                                                                        </p>
-                                                                                    </div>
-                                                                                    <Button
-                                                                                        variant="ghost"
-                                                                                        size="sm"
-                                                                                        onClick={() => handleRemovePayment(payment.id)}
-                                                                                        className="text-red-500 hover:text-red-700"
-                                                                                    >
-                                                                                        <X className="h-4 w-4" />
-                                                                                    </Button>
-                                                                                </div>
-                                                                            ))}
-                                                                        </div>
+                                                                {/* Motivo venta especial */}
+                                                                {esVentaEspecial && (
+                                                                    <div className="mb-4 space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
+                                                                        <Label className="flex items-center gap-2 font-semibold text-amber-700 dark:text-amber-300">
+                                                                            <AlertTriangle className="h-4 w-4" />
+                                                                            Motivo de la Venta Especial *
+                                                                        </Label>
+                                                                        <textarea
+                                                                            value={motivoEspecial}
+                                                                            onChange={(e) => setMotivoEspecial(e.target.value)}
+                                                                            placeholder="Ej: Rotura de equipo, regalo al cliente..."
+                                                                            rows={2}
+                                                                            className="border-input ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex w-full rounded-md border bg-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                                                                        />
                                                                     </div>
                                                                 )}
+
+                                                                {/* Regalo: sin pagos */}
+                                                                {esVentaEspecial && calcularTotal === 0 ? (
+                                                                    <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-amber-300 bg-amber-50 p-8 text-center dark:border-amber-700 dark:bg-amber-950">
+                                                                        <ShoppingBag className="h-10 w-10 text-amber-400" />
+                                                                        <p className="font-semibold text-amber-700 dark:text-amber-300">Este producto será entregado como regalo</p>
+                                                                        <p className="text-sm text-amber-600 dark:text-amber-400">
+                                                                            Precio $0.00 — No se requiere ningún pago.
+                                                                        </p>
+                                                                    </div>
+                                                                ) : (
+                                                                    <PaymentForm
+                                                                        monedas={monedas}
+                                                                        clientesFisicos={clientesFisicos}
+                                                                        remainingInUsd={remainingInUsd}
+                                                                        onAddPayment={(payment) => setPayments((prev) => [...prev, payment])}
+                                                                    />
+                                                                )}
+                                                            </div>
+                                                            <div className="bg-secondary/30 overflow-y-auto p-6">
+                                                                <PaymentList
+                                                                    payments={payments}
+                                                                    total={calcularTotal}
+                                                                    onRemovePayment={handleRemovePayment}
+                                                                />
                                                             </div>
                                                         </div>
                                                         <AlertDialogFooter className="border-t p-6">

@@ -58,6 +58,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('/ventas/{venta}/aprobar', [VentaController::class, 'aprobarVenta'])->name('ventas.aprobar');
     Route::post('/ventas/{venta}/anular', [VentaController::class, 'anularVenta'])->name('ventas.anular');
+    Route::post('/ventas/{venta}/editar-pendiente', [VentaController::class, 'editarVentaPendiente'])->name('ventas.editar.pendiente');
 
     // ========================================================================
     // VENTAS ESPECIALES

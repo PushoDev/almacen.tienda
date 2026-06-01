@@ -1,5 +1,7 @@
 import AppLogoIcon from '@/components/app-logo-icon';
 import HeadingSmall from '@/components/heading-small';
+import PaymentForm, { type Moneda as MonedaForm, type Payment as PaymentEdit } from '@/components/ventas/PaymentForm';
+import PaymentList from '@/components/ventas/PaymentList';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -83,6 +85,7 @@ interface Producto {
 }
 
 interface Item {
+    id?: number;
     producto: Producto;
     cantidad: number;
     precio_venta: number;
@@ -272,6 +275,13 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     const [isAnularDialogOpen, setIsAnularDialogOpen] = useState(false);
     const [motivoAnulacion, setMotivoAnulacion] = useState('');
     const [detalleAnulacion, setDetalleAnulacion] = useState('');
+
+    // ── Modal editar pendiente ────────────────
+    const [isEditModalOpen, setIsEditModalOpen]     = useState(false);
+    const [editPayments, setEditPayments]           = useState<PaymentEdit[]>([]);
+    const [editPrecios, setEditPrecios]             = useState<Record<number, string>>({});
+    const [isSavingEdit, setIsSavingEdit]           = useState(false);
+    const [clientesFisicosEdit, setClientesFisicosEdit] = useState<{ id: number | string; nombre_cliente: string }[]>([]);
     const [isApproving, setIsApproving] = useState(false);
     const [isRejecting, setIsRejecting] = useState(false);
     const [isSavingDestinatario, setIsSavingDestinatario] = useState(false);
@@ -630,6 +640,114 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
             await axios.post(route('ventas.decision.notificada', currentVenta.id));
             setCurrentVenta((prev) => ({ ...prev, decision_notificada: true }));
         } catch { /* silencioso */ }
+    };
+
+    /** Abrir modal de edición cargando clientes físicos */
+    const handleAbrirEdicion = async () => {
+        // Pre-cargar pagos actuales como editables
+        const pagosActuales: PaymentEdit[] = currentVenta.pagos.map((p) => ({
+            id:          crypto.randomUUID(),
+            method:      p.metodo as 'transferencia' | 'efectivo',
+            moneda_id:   p.moneda?.id?.toString() ?? '',
+            amount:      p.monto,
+            via:         p.via ?? undefined,
+            exchangeRate: p.tasa_cambio,
+            amountInUsd: p.monto_equivalente,
+            cuenta_id:   p.cuenta?.id?.toString() ?? null,
+            cliente_id:  p.cliente_destino?.id?.toString() ?? null,
+            referencia:  undefined,
+            moneda_info: p.moneda ? { codigo: p.moneda.codigo, nombre: p.moneda.nombre, simbolo: '' } : undefined,
+        }));
+        setEditPayments(pagosActuales);
+
+        // Pre-cargar precios actuales usando el ID del detalle como clave
+        const precios: Record<number, string> = {};
+        currentVenta.items.forEach((item) => {
+            const key = item.id ?? item.producto.id;
+            precios[key] = item.precio_venta.toString();
+        });
+        setEditPrecios(precios);
+
+        // Cargar clientes físicos si aún no están cargados
+        if (clientesFisicosEdit.length === 0) {
+            try {
+                const { data } = await axios.get(route('ventas.getClientesFisicosParaPago'));
+                setClientesFisicosEdit(data);
+            } catch {
+                // Si falla, abre igual sin clientes físicos
+            }
+        }
+
+        setIsEditModalOpen(true);
+    };
+
+    /** Guardar cambios de la venta pendiente */
+    const handleGuardarEdicion = async () => {
+        if (editPayments.length === 0) {
+            toast.error('Debe agregar al menos un pago.');
+            return;
+        }
+
+        const totalEditado = currentVenta.items.reduce((sum, item) => {
+            const key    = item.id ?? item.producto.id;
+            const precio = parseFloat(editPrecios[key] ?? item.precio_venta.toString());
+            return sum + (isNaN(precio) ? item.precio_venta : precio) * item.cantidad;
+        }, 0);
+
+        const totalPagado = editPayments.reduce((sum, p) => sum + p.amountInUsd, 0);
+        if (totalPagado < totalEditado - 0.01) {
+            toast.error(`Los pagos no cubren el total. Restante: $${(totalEditado - totalPagado).toFixed(2)} USD`);
+            return;
+        }
+
+        setIsSavingEdit(true);
+        try {
+            const payload = {
+                pagos: editPayments.map((p) => ({
+                    metodo:            p.method,
+                    moneda_id:         p.moneda_id,
+                    monto:             p.amount,
+                    via:               p.via ?? null,
+                    tasa_cambio:       p.exchangeRate,
+                    monto_equivalente: p.amountInUsd,
+                    cuenta_id:         p.cuenta_id ?? null,
+                    cliente_id:        p.cliente_id ?? null,
+                    referencia:        p.referencia ?? null,
+                })),
+                items: currentVenta.items.map((item) => ({
+                    venta_detalle_id: item.id,
+                    precio_venta:     parseFloat(editPrecios[item.id ?? item.producto.id] ?? item.precio_venta.toString()),
+                })),
+            };
+
+            const { data } = await axios.post(route('ventas.editar.pendiente', currentVenta.id), payload);
+
+            if (data.success) {
+                toast.success(data.message || 'Venta actualizada correctamente.');
+                // Actualizar estado local con los nuevos datos
+                setCurrentVenta((prev) => ({
+                    ...prev,
+                    total:       data.total,
+                    pagos:       data.pagos,
+                    total_pagado: data.pagos.reduce((s: number, p: { monto_equivalente: number }) => s + p.monto_equivalente, 0),
+                    items: prev.items.map((item) => {
+                        const updated = data.items?.find((_: unknown, idx: number) => idx === prev.items.indexOf(item));
+                        return updated ? { ...item, ...updated } : item;
+                    }),
+                }));
+                setIsEditModalOpen(false);
+            } else {
+                toast.error(data.message || 'Error al actualizar la venta.');
+            }
+        } catch (error: unknown) {
+            if (axios.isAxiosError(error)) {
+                toast.error(error.response?.data?.message || 'Error al guardar los cambios.');
+            } else {
+                toast.error('Error de conexión.');
+            }
+        } finally {
+            setIsSavingEdit(false);
+        }
     };
 
     /** Anular venta */
@@ -1581,6 +1699,18 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                         </AlertDialog>
                     )}
 
+                    {/* Editar pagos / precios */}
+                    {isVentaPendiente && (
+                        <Button
+                            variant="outline"
+                            className="flex cursor-pointer items-center gap-2"
+                            onClick={handleAbrirEdicion}
+                        >
+                            <Edit size={16} />
+                            Editar Pagos / Precios
+                        </Button>
+                    )}
+
                     {/* Anular venta */}
                     {isVentaPendiente && (
                         <>
@@ -2269,6 +2399,122 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                     </div>
                 )}
             </div>
+            {/* ── Modal Editar Venta Pendiente ── */}
+            <Dialog
+                open={isEditModalOpen}
+                onOpenChange={(open) => { if (!isSavingEdit) setIsEditModalOpen(open); }}
+            >
+                <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Edit className="h-5 w-5 text-blue-600" />
+                            Editar Venta Pendiente #{currentVenta.id}
+                        </DialogTitle>
+                        <DialogDescription>
+                            Ajusta los precios de los productos y/o los métodos de pago. Los pagos actuales serán reemplazados por los nuevos.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-6 py-2">
+                        {/* ── Precios ── */}
+                        <div className="space-y-3">
+                            <h4 className="flex items-center gap-2 font-medium">
+                                <Package className="h-4 w-4 text-gray-500" />
+                                Precios por Producto
+                            </h4>
+                            <div className="space-y-2">
+                                {currentVenta.items.map((item) => {
+                                    const key = item.id ?? item.producto.id;
+                                    return (
+                                        <div key={key} className="bg-secondary/30 flex items-center justify-between rounded-lg border p-3">
+                                            <div className="flex-1">
+                                                <p className="text-sm font-medium">{item.producto.nombre}</p>
+                                                <p className="text-muted-foreground text-xs">
+                                                    {item.producto.marca} · Cant: {item.cantidad}
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-muted-foreground text-xs">$</span>
+                                                <Input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    className="w-24 text-right text-sm"
+                                                    value={editPrecios[key] ?? item.precio_venta.toString()}
+                                                    onChange={(e) =>
+                                                        setEditPrecios((prev) => ({ ...prev, [key]: e.target.value }))
+                                                    }
+                                                />
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <Separator />
+
+                        {/* ── Pagos actuales ── */}
+                        <PaymentList
+                            payments={editPayments}
+                            total={currentVenta.items.reduce((sum, item) => {
+                                const key    = item.id ?? item.producto.id;
+                                const precio = parseFloat(editPrecios[key] ?? item.precio_venta.toString());
+                                return sum + (isNaN(precio) ? item.precio_venta : precio) * item.cantidad;
+                            }, 0)}
+                            onRemovePayment={(id) => setEditPayments((prev) => prev.filter((p) => p.id !== id))}
+                        />
+
+                        <Separator />
+
+                        {/* ── Formulario de nuevo pago ── */}
+                        <PaymentForm
+                            monedas={monedasSistema.map((m): MonedaForm => ({
+                                id:              m.id,
+                                codigo_moneda:   m.codigo,
+                                nombre_moneda:   m.nombre,
+                                simbolo_moneda:  m.simbolo ?? '',
+                                tasa_cambio:     m.tasa,
+                            }))}
+                            clientesFisicos={clientesFisicosEdit}
+                            remainingInUsd={Math.max(
+                                0,
+                                currentVenta.items.reduce((sum, item) => {
+                                    const key    = item.id ?? item.producto.id;
+                                    const precio = parseFloat(editPrecios[key] ?? item.precio_venta.toString());
+                                    return sum + (isNaN(precio) ? item.precio_venta : precio) * item.cantidad;
+                                }, 0) - editPayments.reduce((s, p) => s + p.amountInUsd, 0),
+                            )}
+                            onAddPayment={(payment) => setEditPayments((prev) => [...prev, payment])}
+                        />
+                    </div>
+
+                    <DialogFooter className="gap-2 pt-2">
+                        <Button
+                            variant="outline"
+                            onClick={() => setIsEditModalOpen(false)}
+                            disabled={isSavingEdit}
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            onClick={handleGuardarEdicion}
+                            disabled={isSavingEdit || editPayments.length === 0}
+                            className="bg-blue-600 hover:bg-blue-700"
+                        >
+                            {isSavingEdit ? (
+                                <div className="flex items-center gap-2">
+                                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                    Guardando...
+                                </div>
+                            ) : (
+                                'Guardar Cambios'
+                            )}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             <ScrollProgress />
         </AppLayout>
     );
