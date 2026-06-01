@@ -476,12 +476,11 @@ class CierreCajaController extends Controller
         $vaCount    = $ventasAnuladasCierre->count();
         $vaTotalUSD = round($ventasAnuladasCierre->sum(fn($v) => (float) $v->total), 2);
         $vaDetalles = $ventasAnuladasCierre->map(fn($v) => [
-            'venta_id'               => $v->id,
-            'total'                  => round((float) $v->total, 2),
-            'motivo'                 => $v->motivo_anulacion ?? 'sin_motivo',
-            'detalle'                => $v->detalle_anulacion,
-            'fecha'                  => $v->created_at->format('Y-m-d H:i'),
-            'tenia_impacto_financiero' => $v->ganancia_real_total !== null,
+            'venta_id' => $v->id,
+            'total'    => round((float) $v->total, 2),
+            'motivo'   => $v->motivo_anulacion ?? 'sin_motivo',
+            'detalle'  => $v->detalle_anulacion,
+            'fecha'    => $v->created_at->format('Y-m-d H:i'),
         ])->values()->all();
 
         $showPayload = [
@@ -1031,12 +1030,11 @@ class CierreCajaController extends Controller
         $ventasAnuladasCount    = $ventasAnuladas->count();
         $ventasAnuladasTotalUSD = round($ventasAnuladas->sum(fn($v) => (float) $v->total), 2);
         $ventasAnuladasDetalles = $ventasAnuladas->map(fn($v) => [
-            'venta_id'               => $v->id,
-            'total'                  => round((float) $v->total, 2),
-            'motivo'                 => $v->motivo_anulacion ?? 'sin_motivo',
-            'detalle'                => $v->detalle_anulacion,
-            'fecha'                  => $v->created_at->format('Y-m-d H:i'),
-            'tenia_impacto_financiero' => $v->ganancia_real_total !== null,
+            'venta_id' => $v->id,
+            'total'    => round((float) $v->total, 2),
+            'motivo'   => $v->motivo_anulacion ?? 'sin_motivo',
+            'detalle'  => $v->detalle_anulacion,
+            'fecha'    => $v->created_at->format('Y-m-d H:i'),
         ])->values()->all();
 
         $result = [

@@ -239,7 +239,6 @@ interface VentaAnuladaItemShow {
     motivo: string;
     detalle: string | null;
     fecha: string;
-    tenia_impacto_financiero: boolean;
 }
 
 const MOTIVO_LABELS: Record<string, string> = {
@@ -1413,11 +1412,6 @@ export default function Show({
                                             <div className="flex-1 space-y-0.5">
                                                 <p className="font-semibold text-red-800 dark:text-red-200">
                                                     Venta #{va.venta_id}
-                                                    {va.tenia_impacto_financiero && (
-                                                        <span className="ml-2 rounded-full bg-red-200 px-1.5 py-0.5 text-red-700 dark:bg-red-800 dark:text-red-300">
-                                                            Afectó saldos
-                                                        </span>
-                                                    )}
                                                 </p>
                                                 <p className="font-medium text-red-700 dark:text-red-300">
                                                     {MOTIVO_LABELS[va.motivo] ?? va.motivo}
