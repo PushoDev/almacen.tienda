@@ -23,7 +23,11 @@ class User extends Authenticatable
         'password',
         'avatar',
         'role',
+        'telegram_chat_id',
+        'telegram_link_token',
     ];
+
+    protected $appends = ['avatar_url'];
 
     /**
      * The attributes that should be hidden for serialization.
@@ -80,6 +84,19 @@ class User extends Authenticatable
     public function cuentas()
     {
         return $this->belongsToMany(Cuenta::class, 'user_cuentas');
+    }
+
+    public function getAvatarUrlAttribute(): ?string
+    {
+        if (!$this->avatar) {
+            return null;
+        }
+        return asset($this->avatar);
+    }
+
+    public function routeNotificationForTelegram(): ?string
+    {
+        return $this->telegram_chat_id;
     }
 
     public function isAdmin(): bool

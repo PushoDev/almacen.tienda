@@ -31,7 +31,32 @@ class CierreCajaNotification extends Notification
      */
     public function via(object $notifiable): array
     {
-        return ['database'];
+        $channels = ['database'];
+        if ($notifiable->role === 'admin' && $notifiable->telegram_chat_id) {
+            $channels[] = \App\Channels\TelegramChannel::class;
+        }
+        return $channels;
+    }
+
+    public function toTelegram(object $notifiable): array
+    {
+        $esDescuadre = abs($this->cierre->diferencia) > 0.01;
+        $icon        = $esDescuadre ? '⚠️' : '✅';
+        $diferencia  = number_format(abs($this->cierre->diferencia), 2);
+
+        $texto  = "{$icon} <b>Cierre de Caja #{$this->cierre->id}</b>\n";
+        $texto .= "👤 Vendedor: {$this->cierre->usuario->name}\n";
+        $texto .= "💰 Saldo esperado: $ {$this->cierre->saldo_esperado}\n";
+        $texto .= "💵 Saldo contado: $ {$this->cierre->saldo_contado}\n";
+        $texto .= $esDescuadre
+            ? "❌ Descuadre: $ {$diferencia}\n"
+            : "✅ Sin descuadre\n";
+        $texto .= "🕐 " . now()->format('d/m/Y H:i');
+
+        return [
+            'text'       => $texto,
+            'parse_mode' => 'HTML',
+        ];
     }
 
     /**

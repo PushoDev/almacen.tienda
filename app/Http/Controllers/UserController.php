@@ -53,6 +53,7 @@ class UserController extends Controller
             'role' => 'required|in:admin,moderador,vendedor',
             'almacenes' => 'array|exists:almacens,id',
             'cuentas' => 'array|exists:cuentas,id',
+            'telegram_chat_id' => 'nullable|string|max:50',
         ]);
 
         // Creación del usuario
@@ -61,6 +62,7 @@ class UserController extends Controller
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
             'role' => $validated['role'],
+            'telegram_chat_id' => $validated['telegram_chat_id'] ?? null,
         ]);
 
         // Asignar almacenes (solo si no es admin/moderador)
@@ -119,6 +121,7 @@ class UserController extends Controller
             'role' => 'required|in:admin,moderador,vendedor',
             'almacenes' => 'array|exists:almacens,id',
             'cuentas' => 'array|exists:cuentas,id',
+            'telegram_chat_id' => 'nullable|string|max:50',
         ]);
 
         // Actualización del usuario
@@ -127,6 +130,7 @@ class UserController extends Controller
             'email' => $validated['email'],
             'role' => $validated['role'],
             'password' => $validated['password'] ? Hash::make($validated['password']) : $user->password,
+            'telegram_chat_id' => $validated['telegram_chat_id'] ?? null,
         ]);
 
         // Actualizar almacenes (solo si no es admin/moderador)

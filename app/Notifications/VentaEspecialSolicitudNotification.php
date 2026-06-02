@@ -18,7 +18,32 @@ class VentaEspecialSolicitudNotification extends Notification
 
     public function via(object $notifiable): array
     {
-        return ['database'];
+        $channels = ['database'];
+        if ($notifiable->role === 'admin' && $notifiable->telegram_chat_id) {
+            $channels[] = \App\Channels\TelegramChannel::class;
+        }
+        return $channels;
+    }
+
+    public function toTelegram(object $notifiable): array
+    {
+        $texto  = "🔔 <b>Solicitud de Venta Especial</b>\n\n";
+        $texto .= "📋 Venta #: {$this->venta->id}\n";
+        $texto .= "👤 Vendedor: {$this->venta->usuario->name}\n";
+        $texto .= "📝 Motivo: {$this->venta->nota_venta_especial}\n";
+        $texto .= "💵 Total: $ {$this->venta->total}\n";
+        $texto .= "🕐 " . now()->format('d/m/Y H:i');
+
+        return [
+            'text'         => $texto,
+            'parse_mode'   => 'HTML',
+            'reply_markup' => json_encode([
+                'inline_keyboard' => [[
+                    ['text' => '✅ Aprobar',  'callback_data' => "aprobar_venta:{$this->venta->id}"],
+                    ['text' => '❌ Rechazar', 'callback_data' => "rechazar_venta:{$this->venta->id}"],
+                ]],
+            ]),
+        ];
     }
 
     public function toArray(object $notifiable): array
