@@ -23,6 +23,7 @@ class User extends Authenticatable
         'password',
         'avatar',
         'role',
+        'telegram_chat_id',
     ];
 
     /**
@@ -80,6 +81,11 @@ class User extends Authenticatable
     public function cuentas()
     {
         return $this->belongsToMany(Cuenta::class, 'user_cuentas');
+    }
+
+    public function routeNotificationForTelegram(): ?string
+    {
+        return $this->telegram_chat_id;
     }
 
     public function isAdmin(): bool
