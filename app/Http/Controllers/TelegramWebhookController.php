@@ -90,9 +90,12 @@ class TelegramWebhookController extends Controller
         ]);
 
         $this->sendMessage($chatId,
-            "✅ <b>Cuenta vinculada correctamente</b>\n\n" .
-            "Hola <b>{$user->name}</b>, a partir de ahora recibirás notificaciones aquí.\n\n" .
-            "Escribe /ayuda para ver los comandos disponibles."
+            "✅ <b>Cuenta vinculada correctamente, {$user->name}.</b>\n\n" .
+            "👋 ¡Bienvenido(a)!\n" .
+            "Soy <b>GloriBot</b>, tu asistente virtual para ayudarte a gestionar y consultar información de forma rápida y sencilla. 🚀\n\n" .
+            "Para comenzar, escribe / y selecciona la opción que necesites. Te guiaré paso a paso para acceder a las herramientas y funciones disponibles.\n\n" .
+            "✨ <i>Desarrollado por PushoDev, impulsando soluciones tecnológicas para hacer tu trabajo más eficiente.</i>\n\n" .
+            "¡Comencemos! 🎯"
         );
 
         return response()->json(['ok' => true]);
@@ -101,9 +104,9 @@ class TelegramWebhookController extends Controller
     private function cmdStart(int|string $chatId, User $admin): void
     {
         $this->sendMessage($chatId,
-            "👋 Hola <b>{$admin->name}</b>!\n\n" .
-            "Soy el bot de <b>La Glorieta Tienda</b>.\n\n" .
-            "Escribe /ayuda para ver qué puedo hacer."
+            "👋 ¡Hola de nuevo, <b>{$admin->name}</b>!\n\n" .
+            "Soy <b>GloriBot</b>, tu asistente virtual de La Glorieta Tienda. 🚀\n\n" .
+            "Escribe /ayuda para ver los comandos disponibles."
         );
     }
 
