@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AlmacenProducto;
 use App\Models\Almacen;
+use App\Models\CierreCaja;
 use App\Models\HistorialStock;
 use App\Models\ProductoCodigo;
 use App\Models\User;
@@ -45,7 +46,6 @@ class TelegramWebhookController extends Controller
         $chatId = $message['chat']['id'];
         $text   = trim($message['text'] ?? '');
 
-        // Comando /vincular — disponible antes de verificar admin
         if (str_starts_with($text, '/vincular')) {
             return $this->cmdVincular($chatId, $text);
         }
@@ -59,6 +59,7 @@ class TelegramWebhookController extends Controller
         match (true) {
             str_starts_with($text, '/start')   => $this->cmdStart($chatId, $admin),
             str_starts_with($text, '/reporte') => $this->cmdReporte($chatId),
+            str_starts_with($text, '/cierres') => $this->cmdCierres($chatId),
             str_starts_with($text, '/ayuda')   => $this->cmdAyuda($chatId),
             default => $this->sendMessage($chatId, "Comando no reconocido. Escribe /ayuda."),
         };
@@ -111,13 +112,14 @@ class TelegramWebhookController extends Controller
         $this->sendMessage($chatId,
             "📋 <b>Comandos disponibles:</b>\n\n" .
             "/reporte — Ventas del día por almacén\n" .
+            "/cierres — Ver cierres de caja por usuario\n" .
             "/ayuda — Ver esta ayuda"
         );
     }
 
     private function cmdReporte(int|string $chatId): void
     {
-        $hoy      = Carbon::today();
+        $hoy       = Carbon::today();
         $almacenes = Almacen::all();
 
         if ($almacenes->isEmpty()) {
@@ -128,26 +130,60 @@ class TelegramWebhookController extends Controller
         $texto = "📊 <b>Reporte del día " . $hoy->format('d/m/Y') . "</b>\n\n";
 
         foreach ($almacenes as $almacen) {
-            $ventas   = Venta::where('almacen_id', $almacen->id)
+            $ventas = Venta::where('almacen_id', $almacen->id)
                 ->whereDate('created_at', $hoy)
                 ->where('estado', 'completada')
                 ->get();
 
-            $count    = $ventas->count();
-            $total    = round($ventas->sum('total'), 2);
-
             $texto .= "🏪 <b>{$almacen->nombre_almacen}</b>\n";
-            $texto .= "   Ventas: {$count}  |  Total: $ {$total}\n\n";
+            $texto .= "   Ventas: {$ventas->count()}  |  Total: $ " . round($ventas->sum('total'), 2) . "\n\n";
         }
 
-        $totalGlobal = round(Venta::whereDate('created_at', $hoy)->where('estado', 'completada')->sum('total'), 2);
         $countGlobal = Venta::whereDate('created_at', $hoy)->where('estado', 'completada')->count();
+        $totalGlobal = round(Venta::whereDate('created_at', $hoy)->where('estado', 'completada')->sum('total'), 2);
 
         $texto .= "━━━━━━━━━━━━━━\n";
         $texto .= "📦 Total global: {$countGlobal} ventas\n";
         $texto .= "💰 $ {$totalGlobal}";
 
         $this->sendMessage($chatId, $texto);
+    }
+
+    private function cmdCierres(int|string $chatId): void
+    {
+        $userIds  = CierreCaja::distinct()->pluck('user_id');
+        $usuarios = User::whereIn('id', $userIds)->orderBy('name')->get();
+
+        if ($usuarios->isEmpty()) {
+            $this->sendMessage($chatId, '🔒 No hay cierres de caja registrados.');
+            return;
+        }
+
+        $keyboard = [];
+        $row      = [];
+
+        foreach ($usuarios as $usuario) {
+            $row[] = ['text' => "👤 {$usuario->name}", 'callback_data' => "cu:{$usuario->id}"];
+            if (count($row) === 2) {
+                $keyboard[] = $row;
+                $row        = [];
+            }
+        }
+
+        if (! empty($row)) {
+            $keyboard[] = $row;
+        }
+
+        try {
+            Telegram::sendMessage([
+                'chat_id'      => $chatId,
+                'text'         => "🔒 <b>Cierres de Caja</b>\n\nSelecciona un usuario para ver sus cierres:",
+                'parse_mode'   => 'HTML',
+                'reply_markup' => json_encode(['inline_keyboard' => $keyboard]),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Telegram cmdCierres error: ' . $e->getMessage());
+        }
     }
 
     // ─── Botones (callback_query) ─────────────────────────────────────────────
@@ -165,6 +201,19 @@ class TelegramWebhookController extends Controller
             return response()->json(['ok' => true]);
         }
 
+        // Cierres — paso 1: usuario seleccionado
+        if (str_starts_with($data, 'cu:')) {
+            $this->handleCierresUsuario($data, $chatId, $messageId, $callbackId);
+            return response()->json(['ok' => true]);
+        }
+
+        // Cierres — paso 2: filtro seleccionado
+        if (str_starts_with($data, 'cf:')) {
+            $this->handleCierresFiltro($data, $chatId, $messageId, $callbackId);
+            return response()->json(['ok' => true]);
+        }
+
+        // Ventas especiales — aprobar / rechazar
         [$accion, $ventaId] = explode(':', $data) + [null, null];
 
         if (! $ventaId || ! in_array($accion, ['aprobar_venta', 'rechazar_venta'])) {
@@ -194,6 +243,148 @@ class TelegramWebhookController extends Controller
 
         return response()->json(['ok' => true]);
     }
+
+    private function handleCierresUsuario(string $data, int|string $chatId, int $messageId, string $callbackId): void
+    {
+        $userId  = (int) substr($data, 3); // quitar "cu:"
+        $usuario = User::find($userId);
+
+        if (! $usuario) {
+            Telegram::answerCallbackQuery(['callback_query_id' => $callbackId, 'text' => 'Usuario no encontrado']);
+            return;
+        }
+
+        $keyboard = [
+            [
+                ['text' => '📅 Hoy',      'callback_data' => "cf:{$userId}:hoy"],
+                ['text' => '📅 3 días',   'callback_data' => "cf:{$userId}:3d"],
+            ],
+            [
+                ['text' => '📅 5 días',   'callback_data' => "cf:{$userId}:5d"],
+                ['text' => '📅 Este mes', 'callback_data' => "cf:{$userId}:mes"],
+            ],
+            [
+                ['text' => '📋 Todos',    'callback_data' => "cf:{$userId}:todo"],
+            ],
+        ];
+
+        try {
+            Telegram::editMessageText([
+                'chat_id'      => $chatId,
+                'message_id'   => $messageId,
+                'text'         => "🔒 <b>Cierres de {$usuario->name}</b>\n\nSelecciona el período:",
+                'parse_mode'   => 'HTML',
+                'reply_markup' => json_encode(['inline_keyboard' => $keyboard]),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Telegram handleCierresUsuario error: ' . $e->getMessage());
+        }
+
+        Telegram::answerCallbackQuery(['callback_query_id' => $callbackId]);
+    }
+
+    private function handleCierresFiltro(string $data, int|string $chatId, int $messageId, string $callbackId): void
+    {
+        // data = "cf:{userId}:{filtro}"
+        $parts   = explode(':', $data);
+        $userId  = (int) ($parts[1] ?? 0);
+        $filtro  = $parts[2] ?? 'hoy';
+
+        $usuario = User::find($userId);
+
+        if (! $usuario) {
+            Telegram::answerCallbackQuery(['callback_query_id' => $callbackId, 'text' => 'Usuario no encontrado']);
+            return;
+        }
+
+        $labels = [
+            'hoy'  => 'Hoy',
+            '3d'   => 'Últimos 3 días',
+            '5d'   => 'Últimos 5 días',
+            'mes'  => 'Este mes',
+            'todo' => 'Todos',
+        ];
+
+        $query = CierreCaja::where('user_id', $userId)->orderBy('fecha_cierre', 'desc');
+
+        match ($filtro) {
+            'hoy'  => $query->whereDate('fecha_cierre', Carbon::today()),
+            '3d'   => $query->where('fecha_cierre', '>=', Carbon::now()->subDays(3)->startOfDay()),
+            '5d'   => $query->where('fecha_cierre', '>=', Carbon::now()->subDays(5)->startOfDay()),
+            'mes'  => $query->whereMonth('fecha_cierre', Carbon::now()->month)
+                            ->whereYear('fecha_cierre', Carbon::now()->year),
+            default => null,
+        };
+
+        $cierres = $query->limit(10)->get();
+        $label   = $labels[$filtro] ?? $filtro;
+
+        if ($cierres->isEmpty()) {
+            try {
+                Telegram::editMessageText([
+                    'chat_id'    => $chatId,
+                    'message_id' => $messageId,
+                    'text'       => "🔒 <b>Cierres de {$usuario->name}</b> — {$label}\n\nNo hay cierres en este período.",
+                    'parse_mode' => 'HTML',
+                ]);
+            } catch (\Exception $e) {
+                Log::error('Telegram handleCierresFiltro (vacío) error: ' . $e->getMessage());
+            }
+            Telegram::answerCallbackQuery(['callback_query_id' => $callbackId]);
+            return;
+        }
+
+        $texto = "🔒 <b>Cierres de {$usuario->name}</b> — {$label}\n\n";
+
+        foreach ($cierres as $cierre) {
+            $esDescuadre = $cierre->tieneDiferencia();
+            $icon        = $esDescuadre ? '⚠️' : '✅';
+            $apertura    = $cierre->fecha_apertura?->format('d/m/Y H:i') ?? '—';
+            $fechaCierre = $cierre->fecha_cierre?->format('d/m/Y H:i') ?? '—';
+
+            $texto .= "{$icon} <b>Cierre #{$cierre->id}</b>\n";
+            $texto .= "📅 Apertura: {$apertura}\n";
+            $texto .= "🔒 Cierre: {$fechaCierre}\n";
+            $texto .= "💰 Efectivo: $ " . number_format($cierre->ventas_efectivo, 2) . "\n";
+            $texto .= "💳 Otros: $ " . number_format($cierre->ventas_otros, 2) . "\n";
+            $texto .= "📊 Esperado: $ " . number_format($cierre->saldo_esperado, 2) . " | Contado: $ " . number_format($cierre->saldo_contado, 2) . "\n";
+
+            if ($esDescuadre) {
+                $texto .= "❌ Descuadre: $ " . number_format(abs($cierre->diferencia), 2) . "\n";
+            } else {
+                $texto .= "✅ Sin descuadre\n";
+            }
+
+            if (! empty($cierre->observaciones)) {
+                $texto .= "📝 {$cierre->observaciones}\n";
+            }
+
+            $texto .= "━━━━━━━━━━━━━━\n";
+        }
+
+        $count  = $cierres->count();
+        $sufijo = $count >= 10
+            ? "\n<i>Mostrando los últimos 10 cierres.</i>"
+            : "\n<i>Total: {$count} cierre(s)</i>";
+
+        $texto .= $sufijo;
+
+        try {
+            Telegram::editMessageText([
+                'chat_id'    => $chatId,
+                'message_id' => $messageId,
+                'text'       => $texto,
+                'parse_mode' => 'HTML',
+            ]);
+        } catch (\Exception $e) {
+            // Si el mensaje es demasiado largo, enviarlo como nuevo
+            $this->sendMessage($chatId, $texto);
+        }
+
+        Telegram::answerCallbackQuery(['callback_query_id' => $callbackId]);
+    }
+
+    // ─── Ventas especiales ────────────────────────────────────────────────────
 
     private function aprobarVenta(Venta $venta, User $admin, int|string $chatId, int $messageId, string $callbackId): void
     {
