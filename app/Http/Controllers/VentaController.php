@@ -148,6 +148,8 @@ class VentaController extends Controller
                 $precioRow = $preciosAlmacen->get($producto->id);
                 $almacen   = $producto->almacenes->first();
 
+                $user = Auth::user();
+
                 return [
                     'id'                     => $producto->id,
                     'nombre_producto'        => $producto->nombre_producto,
@@ -155,7 +157,7 @@ class VentaController extends Controller
                     'modelo_producto'        => $producto->modelo_producto,
                     'capacidad_producto'     => $producto->capacidad_producto,
                     'categoria_nombre'       => $producto->categoria?->nombre_categoria ?? 'Sin categoría',
-                    'precio_compra_producto' => $producto->precio_compra_producto,
+                    'precio_compra_producto' => in_array($user->role, ['admin', 'moderador']) ? $producto->precio_compra_producto : null,
                     'stock_disponible'       => $almacen?->pivot->cantidad ?? 0,
                     'precio_venta'           => $precioRow ? (float) $precioRow->precio_venta : null,
                     'tiene_precio'           => ($precioRow?->precio_venta ?? 0) > 0,
@@ -174,7 +176,22 @@ class VentaController extends Controller
                 ];
             });
 
-        return response()->json($productos->filter(fn($p) => $p['tiene_precio'])->values());
+        $sinPrecio = $productos->filter(fn($p) => !$p['tiene_precio']);
+
+        if ($sinPrecio->isNotEmpty()) {
+            return response()->json([
+                'error'               => 'almacen_incompleto',
+                'message'             => 'Este almacén tiene productos sin precio de venta. Deben asignarse precios a todos los productos antes de poder vender.',
+                'productos_sin_precio' => $sinPrecio->map(fn($p) => [
+                    'id'     => $p['id'],
+                    'nombre' => $p['nombre_producto'],
+                    'marca'  => $p['marca_producto'],
+                    'modelo' => $p['modelo_producto'],
+                ])->values(),
+            ], 422);
+        }
+
+        return response()->json($productos->values());
     }
 
     /**
@@ -496,6 +513,7 @@ class VentaController extends Controller
                 'observaciones' => $venta->destinatario->observaciones,
             ] : null,
             'items' => $venta->detalles->map(function ($detalle) {
+                $user = Auth::user();
                 return [
                     'id' => $detalle->id,
                     'producto' => [
@@ -513,7 +531,7 @@ class VentaController extends Controller
                     'precio_venta' => $detalle->precio_venta,
                     'precio_base' => $detalle->precio_base,
                     'subtotal' => $detalle->subtotal,
-                    'costo_unitario' => $detalle->costo_unitario,
+                    'costo_unitario' => in_array($user->role, ['admin', 'moderador']) ? $detalle->costo_unitario : null,
                     'ganancia' => $detalle->ganancia,
                     'comision_unitaria' => (float) $detalle->comision_unitaria,
                 ];
