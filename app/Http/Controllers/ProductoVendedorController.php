@@ -52,8 +52,10 @@ class ProductoVendedorController extends Controller
             }
         ])->get();
 
-        $almacenesTransformados = $almacenes->map(function ($almacen) {
-            $productos = $almacen->productos->map(function ($producto) use ($almacen) {
+        $user = Auth::user();
+
+        $almacenesTransformados = $almacenes->map(function ($almacen) use ($user) {
+            $productos = $almacen->productos->map(function ($producto) use ($almacen, $user) {
                 $precioVenta = $producto->precio_venta;
 
                 return [
@@ -64,11 +66,11 @@ class ProductoVendedorController extends Controller
                     'capacidad_producto'   => $producto->capacidad_producto,
                     'categoria'            => $producto->categoria->nombre_categoria ?? 'Sin categoría',
                     'imagen_producto'      => $producto->imagen_producto,
-                    'precio_compra'        => $producto->precio_compra_producto,
+                    'precio_compra'        => in_array($user->role, ['admin', 'moderador']) ? $producto->precio_compra_producto : null,
                     'stock_almacen'        => $producto->pivot->cantidad,
                     'precio_venta'         => $precioVenta,
                     'ganancia'             => $producto->venta_ganancia,
-                    'comision'             => $producto->comision,
+                    'comision'             => round((float) ($producto->comision ?? 0), 2),
                     'tiene_precio'         => ($precioVenta ?? 0) > 0,
                     'almacen_id'           => $almacen->id,
                     'puesto_por_nombre'    => $producto->puesto_por_nombre,

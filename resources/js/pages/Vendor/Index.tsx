@@ -1,6 +1,4 @@
 import HeadingSmall from '@/components/heading-small';
-import PaymentForm from '@/components/ventas/PaymentForm';
-import PaymentList from '@/components/ventas/PaymentList';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -23,6 +21,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from '@/components/ui/sonner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import PaymentForm from '@/components/ventas/PaymentForm';
+import PaymentList from '@/components/ventas/PaymentList';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
@@ -253,7 +253,10 @@ export default function PuntoVentaOficial({
             setProductos(productosProcesados);
         } catch (error: unknown) {
             console.error('Error al cargar productos:', error);
-            if (axios.isAxiosError(error) && error.response?.status === 403) {
+            if (axios.isAxiosError(error) && error.response?.status === 422 && error.response?.data?.error === 'almacen_incompleto') {
+                const sinPrecio: { id: number }[] = error.response.data.productos_sin_precio || [];
+                toast.warning(`${sinPrecio.length} producto(s) sin precio — asigna precios a todos para poder vender.`);
+            } else if (axios.isAxiosError(error) && error.response?.status === 403) {
                 toast.error('No tienes acceso a este almacén');
             } else {
                 toast.error('Error al cargar productos');
@@ -286,12 +289,12 @@ export default function PuntoVentaOficial({
         if (!busqueda.trim()) return productos;
         const termino = busqueda.toLowerCase().trim();
         return productos.filter(
-                (producto) =>
-                    (producto.nombre_producto?.toLowerCase().includes(termino) ||
-                        producto.marca_producto?.toLowerCase().includes(termino) ||
-                        producto.codigo_barras?.toLowerCase().includes(termino) ||
-                        producto.codigos?.some((codigo) => codigo.codigo_barras.toLowerCase().includes(termino)) ||
-                        producto.categoria_nombre?.toLowerCase().includes(termino)) ??
+            (producto) =>
+                (producto.nombre_producto?.toLowerCase().includes(termino) ||
+                    producto.marca_producto?.toLowerCase().includes(termino) ||
+                    producto.codigo_barras?.toLowerCase().includes(termino) ||
+                    producto.codigos?.some((codigo) => codigo.codigo_barras.toLowerCase().includes(termino)) ||
+                    producto.categoria_nombre?.toLowerCase().includes(termino)) ??
                 false,
         );
     }, [productos, busqueda]);
@@ -369,16 +372,16 @@ export default function PuntoVentaOficial({
                 carrito.map((item) =>
                     item.id === idItem
                         ? {
-                            ...item,
-                            cantidad: nuevaCantidad,
-                            subtotal: nuevaCantidad * item.precio_venta,
-                        }
+                              ...item,
+                              cantidad: nuevaCantidad,
+                              subtotal: nuevaCantidad * item.precio_venta,
+                          }
                         : item,
                 ),
             );
         } else {
             const precioVenta = producto.precio_venta ?? 0;
-            const precioBase  = producto.precio_base ?? precioVenta;
+            const precioBase = producto.precio_base ?? precioVenta;
             const nuevoItem: ItemCarrito = {
                 id: idItem,
                 producto: producto,
@@ -411,10 +414,10 @@ export default function PuntoVentaOficial({
             carrito.map((itemCarrito) =>
                 itemCarrito.id === id
                     ? {
-                        ...itemCarrito,
-                        cantidad: nuevaCantidad,
-                        subtotal: nuevaCantidad * itemCarrito.precio_venta,
-                    }
+                          ...itemCarrito,
+                          cantidad: nuevaCantidad,
+                          subtotal: nuevaCantidad * itemCarrito.precio_venta,
+                      }
                     : itemCarrito,
             ),
         );
@@ -440,13 +443,7 @@ export default function PuntoVentaOficial({
             }
         }
 
-        setCarrito((prev) =>
-            prev.map((i) =>
-                i.id === id
-                    ? { ...i, precio_venta: nuevoPrecio, subtotal: i.cantidad * nuevoPrecio }
-                    : i,
-            ),
-        );
+        setCarrito((prev) => prev.map((i) => (i.id === id ? { ...i, precio_venta: nuevoPrecio, subtotal: i.cantidad * nuevoPrecio } : i)));
     };
 
     // Aplica el precio solo cuando el usuario sale del campo (onBlur / Enter)
@@ -471,6 +468,12 @@ export default function PuntoVentaOficial({
     const quitarDelCarrito = (id: string) => {
         setCarrito(carrito.filter((item) => item.id !== id));
         toast.info('Producto removido del carrito');
+    };
+
+    const calcularComisionEfectiva = (item: ItemCarrito): number => {
+        const base = item.comision;
+        if (item.precio_venta >= item.precio_base) return base;
+        return Math.max(0, base - (item.precio_base - item.precio_venta));
     };
 
     const calcularTotal = useMemo(() => {
@@ -1010,7 +1013,8 @@ export default function PuntoVentaOficial({
                                                 {productosFiltrados.map((producto, index) => {
                                                     const stockStatus = getStockStatus(producto.stock_disponible);
                                                     const codigosDisponibles = (producto.codigos || []).filter((codigo) => codigo.cantidad > 0);
-                                                    const codigoSeleccionadoActual = codigoSeleccionadoPorProducto[String(producto.id)]?.toString() || '';
+                                                    const codigoSeleccionadoActual =
+                                                        codigoSeleccionadoPorProducto[String(producto.id)]?.toString() || '';
                                                     return (
                                                         <div
                                                             key={producto.id}
@@ -1085,7 +1089,7 @@ export default function PuntoVentaOficial({
                                                                             {producto.marca_producto || 'N/A'}
                                                                         </span>
                                                                     </div>
-                                                                {producto.modelo_producto && (
+                                                                    {producto.modelo_producto && (
                                                                         <div className="text-muted-foreground flex gap-1">
                                                                             <span className="font-semibold">Modelo:</span>
                                                                             <span className="text-foreground truncate">
@@ -1107,7 +1111,9 @@ export default function PuntoVentaOficial({
                                                                         <Label className="text-xs">Codebar para esta venta</Label>
                                                                         <Select
                                                                             value={codigoSeleccionadoActual}
-                                                                            onValueChange={(value) => handleSeleccionCodigoProducto(producto.id, value)}
+                                                                            onValueChange={(value) =>
+                                                                                handleSeleccionCodigoProducto(producto.id, value)
+                                                                            }
                                                                         >
                                                                             <SelectTrigger className="h-8 text-xs">
                                                                                 <SelectValue placeholder="Seleccionar código" />
@@ -1140,7 +1146,10 @@ export default function PuntoVentaOficial({
                                                                     <Button
                                                                         onClick={() => agregarAlCarrito(producto)}
                                                                         disabled={
-                                                                            (!esVentaEspecial && (!producto.tiene_precio || !producto.precio_venta || producto.precio_venta <= 0)) ||
+                                                                            (!esVentaEspecial &&
+                                                                                (!producto.tiene_precio ||
+                                                                                    !producto.precio_venta ||
+                                                                                    producto.precio_venta <= 0)) ||
                                                                             producto.stock_disponible <= 0 ||
                                                                             codigosDisponibles.length === 0
                                                                         }
@@ -1179,7 +1188,9 @@ export default function PuntoVentaOficial({
                         {/* Right column - Carrito Sticky */}
                         <div className="space-y-6 lg:sticky lg:top-4 lg:self-start">
                             <Card className={`overflow-hidden border-0 shadow-lg ${esVentaEspecial ? 'ring-2 ring-amber-400' : ''}`}>
-                                <CardHeader className={`pb-4 ${esVentaEspecial ? 'bg-amber-50 dark:bg-amber-950' : 'from-primary/10 to-primary/5 bg-linear-to-r'}`}>
+                                <CardHeader
+                                    className={`pb-4 ${esVentaEspecial ? 'bg-amber-50 dark:bg-amber-950' : 'from-primary/10 to-primary/5 bg-linear-to-r'}`}
+                                >
                                     <div className="flex items-center justify-between">
                                         <CardTitle className="flex items-center gap-2 text-base font-semibold">
                                             <ShoppingCart className={`h-5 w-5 ${esVentaEspecial ? 'text-amber-600' : 'text-primary'}`} />
@@ -1187,7 +1198,10 @@ export default function PuntoVentaOficial({
                                         </CardTitle>
                                         <div className="flex items-center gap-2">
                                             {carrito.length > 0 && (
-                                                <Badge variant={esVentaEspecial ? 'outline' : 'secondary'} className={esVentaEspecial ? 'border-amber-400 text-amber-700' : ''}>
+                                                <Badge
+                                                    variant={esVentaEspecial ? 'outline' : 'secondary'}
+                                                    className={esVentaEspecial ? 'border-amber-400 text-amber-700' : ''}
+                                                >
                                                     {carrito.length}
                                                 </Badge>
                                             )}
@@ -1264,7 +1278,8 @@ export default function PuntoVentaOficial({
                                                                     item.cantidad >=
                                                                     Math.min(
                                                                         item.producto.stock_disponible,
-                                                                        item.producto.codigos?.find((c) => c.id === item.producto_codigo_id)?.cantidad || 0,
+                                                                        item.producto.codigos?.find((c) => c.id === item.producto_codigo_id)
+                                                                            ?.cantidad || 0,
                                                                     )
                                                                 }
                                                                 className="h-8 w-8 p-0"
@@ -1276,9 +1291,7 @@ export default function PuntoVentaOficial({
                                                             <Input
                                                                 type="number"
                                                                 value={preciosInput[item.id] ?? item.precio_venta}
-                                                                onChange={(e) =>
-                                                                    setPreciosInput((prev) => ({ ...prev, [item.id]: e.target.value }))
-                                                                }
+                                                                onChange={(e) => setPreciosInput((prev) => ({ ...prev, [item.id]: e.target.value }))}
                                                                 onBlur={() => confirmarPrecio(item.id)}
                                                                 onKeyDown={(e) => {
                                                                     if (e.key === 'Enter') e.currentTarget.blur();
@@ -1295,6 +1308,16 @@ export default function PuntoVentaOficial({
                                                                 })}
                                                             </p>
                                                         </div>
+                                                    </div>
+                                                    <div className="text-muted-foreground flex items-center justify-between border-t pt-1.5 text-xs">
+                                                        <span>Comisión por unidad:</span>
+                                                        <span className="font-medium text-amber-600">
+                                                            $
+                                                            {Number(calcularComisionEfectiva(item)).toLocaleString('es-ES', {
+                                                                minimumFractionDigits: 2,
+                                                                maximumFractionDigits: 2,
+                                                            })}
+                                                        </span>
                                                     </div>
                                                 </div>
                                             ))}
@@ -1322,6 +1345,18 @@ export default function PuntoVentaOficial({
                                                     <span className="text-xl font-bold text-emerald-600">
                                                         $
                                                         {Number(calcularTotal).toLocaleString('es-ES', {
+                                                            minimumFractionDigits: 2,
+                                                            maximumFractionDigits: 2,
+                                                        })}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center justify-between border-t pt-2 text-sm">
+                                                    <span className="text-muted-foreground">Comisión total estimada:</span>
+                                                    <span className="font-semibold text-amber-600">
+                                                        $
+                                                        {Number(
+                                                            carrito.reduce((sum, item) => sum + calcularComisionEfectiva(item) * item.cantidad, 0),
+                                                        ).toLocaleString('es-ES', {
                                                             minimumFractionDigits: 2,
                                                             maximumFractionDigits: 2,
                                                         })}
@@ -1410,7 +1445,9 @@ export default function PuntoVentaOficial({
                                                                 {esVentaEspecial && calcularTotal === 0 ? (
                                                                     <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-amber-300 bg-amber-50 p-8 text-center dark:border-amber-700 dark:bg-amber-950">
                                                                         <ShoppingBag className="h-10 w-10 text-amber-400" />
-                                                                        <p className="font-semibold text-amber-700 dark:text-amber-300">Este producto será entregado como regalo</p>
+                                                                        <p className="font-semibold text-amber-700 dark:text-amber-300">
+                                                                            Este producto será entregado como regalo
+                                                                        </p>
                                                                         <p className="text-sm text-amber-600 dark:text-amber-400">
                                                                             Precio $0.00 — No se requiere ningún pago.
                                                                         </p>
@@ -1483,132 +1520,137 @@ export default function PuntoVentaOficial({
                         <DialogDescription>Información detallada del producto seleccionado.</DialogDescription>
                     </DialogHeader>
 
-                    {productoVistaRapida && (() => {
-                        const codigosDisponiblesModal = (productoVistaRapida.codigos || []).filter((c) => c.cantidad > 0);
-                        const codigoSeleccionadoModal = codigoSeleccionadoPorProducto[String(productoVistaRapida.id)]?.toString() || '';
-                        return (
-                        <div className="grid grid-cols-1 gap-6 py-4 md:grid-cols-2">
-                            {/* Columna de Imagen */}
-                            <div className="space-y-4">
-                                <div className="bg-muted relative flex aspect-square items-center justify-center overflow-hidden rounded-lg border">
-                                    <img
-                                        src={productoVistaRapida.imagen_url}
-                                        alt={productoVistaRapida.nombre_producto}
-                                        className="h-full w-full object-contain"
-                                    />
-                                </div>
-                                {productoVistaRapida.barcode_image_url && (
-                                    <div className="flex flex-col items-center justify-center gap-1 rounded-lg border bg-white p-2">
-                                        <img
-                                            src={productoVistaRapida.barcode_image_url}
-                                            alt="Código de Barras"
-                                            className="h-16 max-w-full object-contain"
-                                        />
-                                        <span className="text-muted-foreground font-mono text-xs">{productoVistaRapida.codigo_barras}</span>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Columna de Detalles */}
-                            <div className="space-y-4">
-                                <div>
-                                    <h3 className="text-lg leading-tight font-bold">{productoVistaRapida.nombre_producto}</h3>
-                                    <p className="text-muted-foreground mt-1 text-sm">
-                                        {productoVistaRapida.marca_producto} {productoVistaRapida.modelo_producto}
-                                    </p>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-3 text-sm">
-                                    <div className="space-y-1">
-                                        <p className="text-muted-foreground text-xs tracking-wider uppercase">Categoría</p>
-                                        <p className="font-medium">{productoVistaRapida.categoria_nombre}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-muted-foreground text-xs tracking-wider uppercase">Capacidad</p>
-                                        <p className="font-medium">{productoVistaRapida.capacidad_producto || 'N/A'}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-muted-foreground text-xs tracking-wider uppercase">Stock</p>
-                                        <Badge variant={getStockStatus(productoVistaRapida.stock_disponible).variant}>
-                                            {productoVistaRapida.stock_disponible} Unidades
-                                        </Badge>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-muted-foreground text-xs tracking-wider uppercase">Código</p>
-                                        {codigosDisponiblesModal.length > 1 ? (
-                                            <Select
-                                                value={codigoSeleccionadoModal}
-                                                onValueChange={(value) => handleSeleccionCodigoProducto(productoVistaRapida.id, value)}
-                                            >
-                                                <SelectTrigger className="h-8 text-xs">
-                                                    <SelectValue placeholder="Seleccionar código" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {codigosDisponiblesModal.map((codigo) => (
-                                                        <SelectItem key={codigo.id} value={codigo.id.toString()}>
-                                                            {codigo.codigo_barras} ({codigo.cantidad})
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        ) : (
-                                            <p className="font-mono">{codigosDisponiblesModal[0]?.codigo_barras ?? productoVistaRapida.codigo_barras}</p>
+                    {productoVistaRapida &&
+                        (() => {
+                            const codigosDisponiblesModal = (productoVistaRapida.codigos || []).filter((c) => c.cantidad > 0);
+                            const codigoSeleccionadoModal = codigoSeleccionadoPorProducto[String(productoVistaRapida.id)]?.toString() || '';
+                            return (
+                                <div className="grid grid-cols-1 gap-6 py-4 md:grid-cols-2">
+                                    {/* Columna de Imagen */}
+                                    <div className="space-y-4">
+                                        <div className="bg-muted relative flex aspect-square items-center justify-center overflow-hidden rounded-lg border">
+                                            <img
+                                                src={productoVistaRapida.imagen_url}
+                                                alt={productoVistaRapida.nombre_producto}
+                                                className="h-full w-full object-contain"
+                                            />
+                                        </div>
+                                        {productoVistaRapida.barcode_image_url && (
+                                            <div className="flex flex-col items-center justify-center gap-1 rounded-lg border bg-white p-2">
+                                                <img
+                                                    src={productoVistaRapida.barcode_image_url}
+                                                    alt="Código de Barras"
+                                                    className="h-16 max-w-full object-contain"
+                                                />
+                                                <span className="text-muted-foreground font-mono text-xs">{productoVistaRapida.codigo_barras}</span>
+                                            </div>
                                         )}
                                     </div>
-                                </div>
 
-                                <Separator />
+                                    {/* Columna de Detalles */}
+                                    <div className="space-y-4">
+                                        <div>
+                                            <h3 className="text-lg leading-tight font-bold">{productoVistaRapida.nombre_producto}</h3>
+                                            <p className="text-muted-foreground mt-1 text-sm">
+                                                {productoVistaRapida.marca_producto} {productoVistaRapida.modelo_producto}
+                                            </p>
+                                        </div>
 
-                                <div className="space-y-3">
-                                    <div className="bg-muted/50 flex items-center justify-between rounded-lg p-3">
-                                        <span className="font-medium">Precio de Venta</span>
-                                        <div className="text-right">
-                                            {productoVistaRapida.tiene_precio ? (
-                                                <span className="text-primary text-xl font-bold">
-                                                    ${Number(productoVistaRapida.precio_venta).toFixed(2)}
-                                                </span>
-                                            ) : (
-                                                <span className="text-destructive text-sm font-medium">No definido</span>
+                                        <div className="grid grid-cols-2 gap-3 text-sm">
+                                            <div className="space-y-1">
+                                                <p className="text-muted-foreground text-xs tracking-wider uppercase">Categoría</p>
+                                                <p className="font-medium">{productoVistaRapida.categoria_nombre}</p>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-muted-foreground text-xs tracking-wider uppercase">Capacidad</p>
+                                                <p className="font-medium">{productoVistaRapida.capacidad_producto || 'N/A'}</p>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-muted-foreground text-xs tracking-wider uppercase">Stock</p>
+                                                <Badge variant={getStockStatus(productoVistaRapida.stock_disponible).variant}>
+                                                    {productoVistaRapida.stock_disponible} Unidades
+                                                </Badge>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-muted-foreground text-xs tracking-wider uppercase">Código</p>
+                                                {codigosDisponiblesModal.length > 1 ? (
+                                                    <Select
+                                                        value={codigoSeleccionadoModal}
+                                                        onValueChange={(value) => handleSeleccionCodigoProducto(productoVistaRapida.id, value)}
+                                                    >
+                                                        <SelectTrigger className="h-8 text-xs">
+                                                            <SelectValue placeholder="Seleccionar código" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {codigosDisponiblesModal.map((codigo) => (
+                                                                <SelectItem key={codigo.id} value={codigo.id.toString()}>
+                                                                    {codigo.codigo_barras} ({codigo.cantidad})
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                ) : (
+                                                    <p className="font-mono">
+                                                        {codigosDisponiblesModal[0]?.codigo_barras ?? productoVistaRapida.codigo_barras}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <Separator />
+
+                                        <div className="space-y-3">
+                                            <div className="bg-muted/50 flex items-center justify-between rounded-lg p-3">
+                                                <span className="font-medium">Precio de Venta</span>
+                                                <div className="text-right">
+                                                    {productoVistaRapida.tiene_precio ? (
+                                                        <span className="text-primary text-xl font-bold">
+                                                            ${Number(productoVistaRapida.precio_venta).toFixed(2)}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-destructive text-sm font-medium">No definido</span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {(meta.role_usuario === 'admin' || meta.role_usuario === 'moderador') && (
+                                                <div className="text-muted-foreground flex items-center justify-between px-2 text-xs">
+                                                    <span>Costo unitario:</span>
+                                                    <span>${Number(productoVistaRapida.precio_compra_producto).toFixed(2)}</span>
+                                                </div>
                                             )}
                                         </div>
-                                    </div>
 
-                                    {(meta.role_usuario === 'admin' || meta.role_usuario === 'moderador') && (
-                                        <div className="text-muted-foreground flex items-center justify-between px-2 text-xs">
-                                            <span>Costo unitario:</span>
-                                            <span>${Number(productoVistaRapida.precio_compra_producto).toFixed(2)}</span>
+                                        <div className="flex gap-2 pt-4">
+                                            <Button
+                                                className="w-full"
+                                                onClick={() => {
+                                                    agregarAlCarrito(productoVistaRapida);
+                                                    setIsVistaRapidaOpen(false);
+                                                }}
+                                                disabled={
+                                                    !productoVistaRapida.tiene_precio ||
+                                                    productoVistaRapida.stock_disponible <= 0 ||
+                                                    codigosDisponiblesModal.length === 0
+                                                }
+                                            >
+                                                <ShoppingCart className="mr-2 h-4 w-4" />
+                                                Agregar a la Venta
+                                            </Button>
                                         </div>
-                                    )}
+                                    </div>
                                 </div>
-
-                                <div className="flex gap-2 pt-4">
-                                    <Button
-                                        className="w-full"
-                                        onClick={() => {
-                                            agregarAlCarrito(productoVistaRapida);
-                                            setIsVistaRapidaOpen(false);
-                                        }}
-                                        disabled={
-                                            !productoVistaRapida.tiene_precio ||
-                                            productoVistaRapida.stock_disponible <= 0 ||
-                                            codigosDisponiblesModal.length === 0
-                                        }
-                                    >
-                                        <ShoppingCart className="mr-2 h-4 w-4" />
-                                        Agregar a la Venta
-                                    </Button>
-                                </div>
-                            </div>
-                        </div>
-                        );
-                    })()}
+                            );
+                        })()}
                 </DialogContent>
             </Dialog>
 
             {/* AlertDialog: producto sin comisión — requiere aprobación del admin */}
             <AlertDialog
                 open={!!productoSinComisionPendiente}
-                onOpenChange={(open) => { if (!open) setProductoSinComisionPendiente(null); }}
+                onOpenChange={(open) => {
+                    if (!open) setProductoSinComisionPendiente(null);
+                }}
             >
                 <AlertDialogContent className="sm:max-w-md">
                     <AlertDialogHeader>
@@ -1621,14 +1663,13 @@ export default function PuntoVentaOficial({
                                 Este producto no tiene comisión asignada. No puedes aplicar un descuento sin autorización del administrador.
                             </span>
                             <span className="block font-medium text-amber-700">
-                                Si deseas continuar, la venta se convertirá en una Venta Especial que requiere aprobación del admin antes de completarse.
+                                Si deseas continuar, la venta se convertirá en una Venta Especial que requiere aprobación del admin antes de
+                                completarse.
                             </span>
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setProductoSinComisionPendiente(null)}>
-                            Cancelar
-                        </AlertDialogCancel>
+                        <AlertDialogCancel onClick={() => setProductoSinComisionPendiente(null)}>Cancelar</AlertDialogCancel>
                         <AlertDialogAction
                             className="bg-amber-600 hover:bg-amber-700"
                             onClick={() => {
@@ -1636,11 +1677,7 @@ export default function PuntoVentaOficial({
                                     const { id, nuevoPrecio } = productoSinComisionPendiente;
                                     setEsVentaEspecial(true);
                                     setCarrito((prev) =>
-                                        prev.map((i) =>
-                                            i.id === id
-                                                ? { ...i, precio_venta: nuevoPrecio, subtotal: i.cantidad * nuevoPrecio }
-                                                : i,
-                                        ),
+                                        prev.map((i) => (i.id === id ? { ...i, precio_venta: nuevoPrecio, subtotal: i.cantidad * nuevoPrecio } : i)),
                                     );
                                     toast.warning('Venta Especial activada. Recuerda agregar el motivo.');
                                 }
