@@ -169,12 +169,12 @@ class VentaController extends Controller
                     ]),
                     'barcode_image_url' => $producto->barcode_image_url,
                     'precio_base'        => $precioRow ? (float) $precioRow->precio_venta : null,
-                    'comision'           => $precioRow ? (float) $precioRow->comision : 0,
+                    'comision'           => $precioRow ? (float) ($precioRow->comision ?? 0) : 0,
                     'es_precio_vendedor' => false,
                 ];
             });
 
-        return response()->json($productos);
+        return response()->json($productos->filter(fn($p) => $p['tiene_precio'])->values());
     }
 
     /**

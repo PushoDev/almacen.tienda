@@ -68,7 +68,7 @@ class ProductoVendedorController extends Controller
                     'stock_almacen'        => $producto->pivot->cantidad,
                     'precio_venta'         => $precioVenta,
                     'ganancia'             => $producto->venta_ganancia,
-                    'comision'             => $producto->comision,
+                    'comision'             => round((float) ($producto->comision ?? 0), 2),
                     'tiene_precio'         => ($precioVenta ?? 0) > 0,
                     'almacen_id'           => $almacen->id,
                     'puesto_por_nombre'    => $producto->puesto_por_nombre,
