@@ -24,7 +24,8 @@ class Almacen extends Model
         'nombre_responsable',
         'apellido_responsable',
         'carnet_responsable',
-        'telefono_responsable'
+        'telefono_responsable',
+        'mensajero_cuenta_id',
     ];
 
     /**
@@ -49,6 +50,11 @@ class Almacen extends Model
     public static function getDefault()
     {
         return self::where('nombre_almacen', 'Almacén de Conservas')->firstOrFail();
+    }
+
+    public function mensajeroCuenta()
+    {
+        return $this->belongsTo(Cuenta::class, 'mensajero_cuenta_id');
     }
 
     // Relación: Compras

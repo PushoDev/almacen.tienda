@@ -40,7 +40,9 @@ import {
     Search,
     ShoppingBag,
     ShoppingCart,
+    Store,
     Trash2,
+    Truck,
     Users,
     X,
 } from 'lucide-react';
@@ -50,6 +52,8 @@ import { toast } from 'sonner';
 interface Almacen {
     id: number | string;
     nombre_almacen: string;
+    mensajero_cuenta_id?: number | null;
+    mensajero_cuenta?: { id: number; nombre: string } | null;
 }
 interface Cliente {
     id: number | string;
@@ -144,6 +148,7 @@ export default function PuntoVentaOficial({
         monedas: Moneda[];
         tasa_usd: number;
         tasa_mlc: number;
+        cuentas_usuario?: { id: string; nombre: string; saldo: number; moneda: { id: string; codigo: string } | null }[];
     };
 }) {
     const [almacenes, setAlmacenes] = useState<Almacen[]>([]);
@@ -159,6 +164,16 @@ export default function PuntoVentaOficial({
     const [codigoSeleccionadoPorProducto, setCodigoSeleccionadoPorProducto] = useState<Record<string, number>>({});
     const [procesandoVenta, setProcesandoVenta] = useState<boolean>(false);
     const [payments, setPayments] = useState<Payment[]>([]);
+    // ── Mensajero ─────────────────────────────────────────────────────────────
+    const [esMensajero, setEsMensajero] = useState<boolean>(false);
+    const [mensajeroMonto, setMensajeroMonto] = useState<string>('');
+    const [mensajeroTipo, setMensajeroTipo] = useState<'propio' | 'externo' | ''>('');
+    const [mensajeroTasa, setMensajeroTasa] = useState<string>('');
+    const [mensajeroCuentaExternaId, setMensajeroCuentaExternaId] = useState<string>('');
+    // ── Comisión Vendedor ─────────────────────────────────────────────────────
+    const [comisionCuentaId, setComisionCuentaId] = useState<string>('');
+    const [comisionTasa, setComisionTasa] = useState<string>('');
+
     // ── Venta Especial ────────────────────────────────────────────────────────
     const [esVentaEspecial, setEsVentaEspecial] = useState<boolean>(false);
     const [motivoEspecial, setMotivoEspecial] = useState<string>('');
@@ -270,6 +285,19 @@ export default function PuntoVentaOficial({
         cargarClientes();
         cargarClientesFisicos();
     }, []);
+
+    // Tasa CUP del sistema (de la moneda con código "CUP")
+    const tasaCUPSistema = useMemo(() => {
+        const cup = monedas.find((m) => m.codigo_moneda === 'CUP');
+        return cup?.tasa_cambio ?? 0;
+    }, [monedas]);
+
+    // Auto-rellenar tasa de comisión con la tasa CUP del sistema
+    useEffect(() => {
+        if (tasaCUPSistema > 0 && comisionTasa === '') {
+            setComisionTasa(String(tasaCUPSistema));
+        }
+    }, [tasaCUPSistema]);
 
     const handleAlmacenChange = (value: string) => {
         console.log('Almacén seleccionado:', value);
@@ -476,12 +504,36 @@ export default function PuntoVentaOficial({
         return Math.max(0, base - (item.precio_base - item.precio_venta));
     };
 
+    const almacenActual = useMemo(
+        () => almacenes.find((a) => String(a.id) === String(almacenSeleccionado)) ?? null,
+        [almacenes, almacenSeleccionado],
+    );
+
+    const mensajeroMontoNum = useMemo(() => {
+        if (!esMensajero) return 0;
+        const v = parseFloat(mensajeroMonto);
+        return isNaN(v) || v < 0 ? 0 : v;
+    }, [esMensajero, mensajeroMonto]);
+
+    // Cuentas CUP disponibles para pagar la comisión
+    const cuentasCUP = useMemo(
+        () => (meta.cuentas_usuario ?? []).filter((c) => c.moneda?.codigo === 'CUP'),
+        [meta.cuentas_usuario],
+    );
+
+    const comisionTotalNum = useMemo(
+        () => carrito.reduce((sum, item) => sum + calcularComisionEfectiva(item) * item.cantidad, 0),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [carrito],
+    );
+
     const calcularTotal = useMemo(() => {
-        return carrito.reduce((total, item) => {
+        const subtotalProductos = carrito.reduce((total, item) => {
             const subtotal = item.cantidad * item.precio_venta;
             return total + (isNaN(subtotal) ? 0 : subtotal);
         }, 0);
-    }, [carrito]);
+        return subtotalProductos + mensajeroMontoNum;
+    }, [carrito, mensajeroMontoNum]);
 
     const incrementarCantidad = (id: string) => {
         const item = carrito.find((item) => item.id === id);
@@ -615,6 +667,27 @@ export default function PuntoVentaOficial({
             tasa_cambio_principal: tasaCambioPrincipal,
             es_venta_especial: esVentaEspecial,
             nota_venta_especial: esVentaEspecial ? motivoEspecial.trim() : undefined,
+            // MENSAJERO
+            ...(esMensajero && mensajeroMontoNum > 0 && mensajeroTipo
+                ? {
+                      mensajero_monto: mensajeroMontoNum,
+                      mensajero_tipo: mensajeroTipo,
+                      mensajero_cuenta_id:
+                          mensajeroTipo === 'propio'
+                              ? almacenActual?.mensajero_cuenta_id ?? null
+                              : mensajeroCuentaExternaId
+                                ? Number(mensajeroCuentaExternaId)
+                                : null,
+                      mensajero_tasa: mensajeroTipo === 'externo' && mensajeroTasa ? parseFloat(mensajeroTasa) : null,
+                  }
+                : {}),
+            // COMISIÓN VENDEDOR
+            ...(comisionTotalNum > 0 && comisionCuentaId
+                ? {
+                      comision_cuenta_id: Number(comisionCuentaId),
+                      comision_tasa: comisionTasa ? parseFloat(comisionTasa) : null,
+                  }
+                : {}),
         };
 
         console.log('Datos de venta a enviar:', datosVenta);
@@ -637,6 +710,13 @@ export default function PuntoVentaOficial({
                 setCodigoSeleccionadoPorProducto({});
                 setEsVentaEspecial(false);
                 setMotivoEspecial('');
+                setEsMensajero(false);
+                setMensajeroMonto('');
+                setMensajeroTipo('');
+                setMensajeroTasa('');
+                setMensajeroCuentaExternaId('');
+                setComisionCuentaId('');
+                setComisionTasa(tasaCUPSistema > 0 ? String(tasaCUPSistema) : '');
                 if (response.data.redirect) {
                     setTimeout(() => {
                         window.location.href = response.data.redirect;
@@ -1339,6 +1419,159 @@ export default function PuntoVentaOficial({
                                                     </div>
                                                 </div>
                                             </div>
+                                            {/* ── Mensajero ── */}
+                                            <div className="mb-3 rounded-lg border border-sky-200 bg-sky-50 p-3 dark:border-sky-800 dark:bg-sky-950">
+                                                <div className="flex items-center justify-between">
+                                                    <Label className="flex cursor-pointer items-center gap-2 font-semibold text-sky-700 dark:text-sky-300">
+                                                        <Truck className="h-4 w-4" />
+                                                        Servicio de mensajería
+                                                    </Label>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={esMensajero}
+                                                        onChange={(e) => {
+                                                            setEsMensajero(e.target.checked);
+                                                            if (!e.target.checked) {
+                                                                setMensajeroMonto('');
+                                                                setMensajeroTipo('');
+                                                                setMensajeroTasa('');
+                                                                setMensajeroCuentaExternaId('');
+                                                            }
+                                                        }}
+                                                        className="h-4 w-4 cursor-pointer accent-sky-600"
+                                                    />
+                                                </div>
+
+                                                {esMensajero && (
+                                                    <div className="mt-3 space-y-3">
+                                                        <div className="flex gap-2">
+                                                            <div className="flex-1 space-y-1">
+                                                                <Label className="text-xs text-sky-600">Monto mensajería (USD)</Label>
+                                                                <Input
+                                                                    type="number"
+                                                                    min="0.01"
+                                                                    step="0.01"
+                                                                    placeholder="0.00"
+                                                                    value={mensajeroMonto}
+                                                                    onChange={(e) => setMensajeroMonto(e.target.value)}
+                                                                    className="h-8 text-sm"
+                                                                />
+                                                            </div>
+                                                            <div className="flex-1 space-y-1">
+                                                                <Label className="text-xs text-sky-600">¿Vehículo propio?</Label>
+                                                                <Select
+                                                                    value={mensajeroTipo}
+                                                                    onValueChange={(v) => {
+                                                                        setMensajeroTipo(v as 'propio' | 'externo');
+                                                                        setMensajeroTasa('');
+                                                                        setMensajeroCuentaExternaId('');
+                                                                    }}
+                                                                >
+                                                                    <SelectTrigger className="h-8 text-xs">
+                                                                        <SelectValue placeholder="Seleccionar" />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="propio">Sí — vehículo propio</SelectItem>
+                                                                        <SelectItem value="externo">No — mensajero externo</SelectItem>
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            </div>
+                                                        </div>
+
+                                                        {mensajeroTipo === 'propio' && (
+                                                            <p className="text-xs text-sky-600">
+                                                                {almacenActual?.mensajero_cuenta
+                                                                    ? `Fondos irán a: ${almacenActual.mensajero_cuenta.nombre}`
+                                                                    : '⚠️ Este almacén no tiene cuenta de mensajería configurada. Contacta al admin.'}
+                                                            </p>
+                                                        )}
+
+                                                        {mensajeroTipo === 'externo' && (
+                                                            <div className="space-y-1">
+                                                                <Label className="text-xs text-sky-600">Tasa de cambio (CUP)</Label>
+                                                                <Input
+                                                                    type="number"
+                                                                    min="0.01"
+                                                                    step="0.01"
+                                                                    placeholder="Ej: 365"
+                                                                    value={mensajeroTasa}
+                                                                    onChange={(e) => setMensajeroTasa(e.target.value)}
+                                                                    className="h-8 text-sm"
+                                                                />
+                                                                {mensajeroMontoNum > 0 && mensajeroTasa && (
+                                                                    <p className="text-xs text-sky-600">
+                                                                        Se debitarán{' '}
+                                                                        <strong>
+                                                                            {(mensajeroMontoNum * parseFloat(mensajeroTasa)).toFixed(2)} CUP
+                                                                        </strong>{' '}
+                                                                        al aprobar la venta.
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* ── Comisión P.V. ── */}
+                                            {!esVentaEspecial && comisionTotalNum > 0 && (
+                                                <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
+                                                    <Label className="flex items-center gap-2 font-semibold text-amber-700 dark:text-amber-300">
+                                                        <Store className="h-4 w-4" />
+                                                        Comisión del Punto de Venta
+                                                    </Label>
+                                                    <div className="mt-3 space-y-3">
+                                                        <div className="flex items-center justify-between text-sm">
+                                                            <span className="text-amber-600">Comisión total:</span>
+                                                            <span className="font-bold text-amber-700">
+                                                                ${comisionTotalNum.toFixed(2)} USD
+                                                                {comisionTasa && parseFloat(comisionTasa) > 0
+                                                                    ? ` = ${(comisionTotalNum * parseFloat(comisionTasa)).toFixed(2)} CUP`
+                                                                    : ''}
+                                                            </span>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <div className="space-y-1">
+                                                                <Label className="text-xs text-amber-600">Cuenta CUP (opcional)</Label>
+                                                                <Select value={comisionCuentaId} onValueChange={setComisionCuentaId}>
+                                                                    <SelectTrigger className="h-8 text-xs">
+                                                                        <SelectValue placeholder="Sin cuenta" />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        {cuentasCUP.map((c) => (
+                                                                            <SelectItem key={c.id} value={String(c.id)}>
+                                                                                {c.nombre} · {c.saldo.toFixed(2)} CUP
+                                                                            </SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <Label className="text-xs text-amber-600">Tasa (CUP/USD)</Label>
+                                                                <Input
+                                                                    type="number"
+                                                                    min="0.01"
+                                                                    step="0.01"
+                                                                    placeholder={String(tasaCUPSistema || '365')}
+                                                                    value={comisionTasa}
+                                                                    onChange={(e) => setComisionTasa(e.target.value)}
+                                                                    className="h-8 text-sm"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        {comisionCuentaId && comisionTasa && parseFloat(comisionTasa) > 0 && (
+                                                            <p className="text-xs text-amber-600">
+                                                                Se debitarán{' '}
+                                                                <strong>
+                                                                    {(comisionTotalNum * parseFloat(comisionTasa)).toFixed(2)} CUP
+                                                                </strong>{' '}
+                                                                de la cuenta seleccionada al aprobar la venta.
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+
                                             <div className="space-y-3">
                                                 <div className="flex items-center justify-between">
                                                     <span className="font-medium">Total:</span>

@@ -105,10 +105,18 @@ class VentaController extends Controller
         }
 
         $almacenes = in_array($user->role, ['admin', 'moderador'])
-            ? Almacen::select('id', 'nombre_almacen')->get()
-            : ($user ? $user->almacenes()->select('id', 'nombre_almacen')->get() : collect());
+            ? Almacen::with('mensajeroCuenta')->select('id', 'nombre_almacen', 'mensajero_cuenta_id')->get()
+            : ($user ? $user->almacenes()->with('mensajeroCuenta')->select('id', 'nombre_almacen', 'mensajero_cuenta_id')->get() : collect());
 
-        return response()->json($almacenes);
+        return response()->json($almacenes->map(fn($a) => [
+            'id'                   => $a->id,
+            'nombre_almacen'       => $a->nombre_almacen,
+            'mensajero_cuenta_id'  => $a->mensajero_cuenta_id,
+            'mensajero_cuenta'     => $a->mensajeroCuenta ? [
+                'id'     => $a->mensajeroCuenta->id,
+                'nombre' => $a->mensajeroCuenta->nombre_cuenta,
+            ] : null,
+        ]));
     }
 
     /**
@@ -482,7 +490,7 @@ class VentaController extends Controller
             'detalles.producto.categoria',
             'detalles.productoCodigo',
             'pagos.cuenta.moneda',
-            'pagos.cliente', // ✅ AGREGAR: relación con cliente para pagos
+            'pagos.cliente',
             'pagos.moneda',
             'cliente',
             'almacen',
@@ -490,6 +498,8 @@ class VentaController extends Controller
             'moneda',
             'monedaCobro',
             'gestorCuenta.moneda',
+            'mensajeroCuenta.moneda',
+            'comisionCuenta.moneda',
         ])->findOrFail($id);
 
         $ventaData = [
@@ -613,8 +623,33 @@ class VentaController extends Controller
             'monedas_para_reporte' => $this->buildMonedasParaReporte($venta),
             'monto_diferencia_cambiaria' => $venta->monto_diferencia_cambiaria,
             'es_venta_especial'   => (bool) $venta->es_venta_especial,
-            'nota_venta_especial'     => $venta->nota_venta_especial,
+            'nota_venta_especial' => $venta->nota_venta_especial,
             'decision_notificada' => (bool) $venta->decision_notificada,
+            'mensajero' => $venta->mensajero_monto > 0 ? [
+                'monto'      => (float) $venta->mensajero_monto,
+                'tipo'       => $venta->mensajero_tipo,
+                'tasa'       => $venta->mensajero_tasa ? (float) $venta->mensajero_tasa : null,
+                'monto_cup'  => ($venta->mensajero_tipo === 'externo' && $venta->mensajero_tasa > 0)
+                    ? round((float) $venta->mensajero_monto * (float) $venta->mensajero_tasa, 2)
+                    : null,
+                'cuenta' => $venta->mensajeroCuenta ? [
+                    'id'     => $venta->mensajeroCuenta->id,
+                    'nombre' => $venta->mensajeroCuenta->nombre_cuenta,
+                    'moneda' => $venta->mensajeroCuenta->moneda?->codigo_moneda,
+                ] : null,
+            ] : null,
+            'comision_pago' => $venta->comision_cuenta_id ? [
+                'tasa'      => $venta->comision_tasa ? (float) $venta->comision_tasa : null,
+                'monto_cup' => ($venta->comision_tasa > 0)
+                    ? round((float) $venta->total_comision * (float) $venta->comision_tasa, 2)
+                    : null,
+                'cuenta'    => $venta->comisionCuenta ? [
+                    'id'               => $venta->comisionCuenta->id,
+                    'nombre'           => $venta->comisionCuenta->nombre_cuenta,
+                    'moneda'           => $venta->comisionCuenta->moneda?->codigo_moneda,
+                    'saldo_disponible' => (float) $venta->comisionCuenta->saldo_cuenta,
+                ] : null,
+            ] : null,
             'gestor' => $venta->es_venta_gestor && $venta->gestor_cuenta_id ? [
                 'monto' => (float) $venta->gestor_monto,
                 'monto_usd' => $venta->tasa_aplicada_gestor > 0
@@ -743,6 +778,14 @@ class VentaController extends Controller
             // VENTA ESPECIAL
             'es_venta_especial'    => 'nullable|boolean',
             'nota_venta_especial'  => 'nullable|string|max:500|required_if:es_venta_especial,true',
+            // MENSAJERO
+            'mensajero_monto'      => 'nullable|numeric|min:0.01',
+            'mensajero_tipo'       => 'nullable|in:propio,externo|required_with:mensajero_monto',
+            'mensajero_cuenta_id'  => 'nullable|exists:cuentas,id',
+            'mensajero_tasa'       => 'nullable|numeric|min:0.0001',
+            // COMISIÓN VENDEDOR
+            'comision_cuenta_id'   => 'nullable|exists:cuentas,id',
+            'comision_tasa'        => 'nullable|numeric|min:0.0001',
         ]);
 
         $user = Auth::user();
@@ -907,9 +950,17 @@ class VentaController extends Controller
                 'gestor_comentario' => $esEspecial ? null : ($validatedData['gestor_comentario'] ?? null),
                 'tasa_aplicada_gestor' => $esEspecial ? null : ($validatedData['tasa_aplicada_gestor'] ?? null),
                 // CAMPOS VENTA ESPECIAL
-                'es_venta_especial' => $esEspecial,
-                'nota_venta_especial'   => $esEspecial ? ($validatedData['nota_venta_especial'] ?? null) : null,
+                'es_venta_especial'   => $esEspecial,
+                'nota_venta_especial' => $esEspecial ? ($validatedData['nota_venta_especial'] ?? null) : null,
                 'decision_notificada' => false,
+                // MENSAJERO
+                'mensajero_monto'     => $validatedData['mensajero_monto'] ?? null,
+                'mensajero_tipo'      => $validatedData['mensajero_tipo'] ?? null,
+                'mensajero_cuenta_id' => $validatedData['mensajero_cuenta_id'] ?? null,
+                'mensajero_tasa'      => $validatedData['mensajero_tasa'] ?? null,
+                // COMISIÓN VENDEDOR
+                'comision_cuenta_id'  => $validatedData['comision_cuenta_id'] ?? null,
+                'comision_tasa'       => $validatedData['comision_tasa'] ?? null,
             ]);
 
             HistorialStock::whereIn('id', $historialStockIds)->update(['venta_id' => $venta->id]);
@@ -1227,20 +1278,49 @@ class VentaController extends Controller
                 'ganancia_real_total'        => $venta->total_ganancia + $gananciaExtraUSD,
             ]);
 
-            // ✅ DESCUENTO GESTOR
+            // DESCUENTO GESTOR
             if ($venta->es_venta_gestor && $venta->gestor_cuenta_id && $venta->gestor_monto > 0) {
                 $cuentaGestor = $venta->gestorCuenta;
 
                 if ($cuentaGestor) {
-                    // ✅ NUEVO: Validar saldo suficiente antes de descontar
                     if ($cuentaGestor->saldo_cuenta < $venta->gestor_monto) {
                         throw new \Exception('La cuenta del gestor no tiene saldo suficiente para cubrir la comisión');
                     }
 
                     $cuentaGestor->decrement('saldo_cuenta', $venta->gestor_monto);
+                }
+            }
 
-                    // Opcional: Registrar en historial de cuenta
-                    // HistorialCuenta::create([...]);
+            // MENSAJERO
+            if ($venta->mensajero_monto > 0 && $venta->mensajero_cuenta_id) {
+                $cuentaMensajero = $venta->mensajeroCuenta;
+
+                if ($cuentaMensajero) {
+                    if ($venta->mensajero_tipo === 'propio') {
+                        // El monto va a la cuenta de mensajería del almacén
+                        $cuentaMensajero->increment('saldo_cuenta', $venta->mensajero_monto);
+                    } elseif ($venta->mensajero_tipo === 'externo' && $venta->mensajero_tasa > 0) {
+                        // Se debita el equivalente en CUP para pagar al mensajero externo
+                        $montoCUP = round($venta->mensajero_monto * $venta->mensajero_tasa, 2);
+                        $cuentaMensajero->decrement('saldo_cuenta', $montoCUP);
+                    }
+                }
+            }
+
+            // COMISIÓN VENDEDOR
+            if ($venta->total_comision > 0 && $venta->comision_cuenta_id && $venta->comision_tasa > 0) {
+                $cuentaComision = $venta->comisionCuenta;
+
+                if ($cuentaComision) {
+                    $montoCUP = round((float) $venta->total_comision * (float) $venta->comision_tasa, 2);
+
+                    if ($cuentaComision->saldo_cuenta < $montoCUP) {
+                        throw new \Exception(
+                            "La cuenta de comisión no tiene saldo suficiente. Necesita {$montoCUP} CUP, disponible: {$cuentaComision->saldo_cuenta} CUP."
+                        );
+                    }
+
+                    $cuentaComision->decrement('saldo_cuenta', $montoCUP);
                 }
             }
         });
@@ -1262,7 +1342,7 @@ class VentaController extends Controller
         }
 
         // Construir query base
-        $query = Venta::with(['cliente', 'almacen', 'usuario', 'pagos', 'moneda', 'destinatario', 'monedaCobro', 'gestorCuenta'])
+        $query = Venta::with(['cliente', 'almacen', 'usuario', 'pagos', 'moneda', 'destinatario', 'monedaCobro', 'gestorCuenta', 'mensajeroCuenta'])
             ->withCount('detalles');
 
         // Filtrar por usuario (excepto admin y moderador)
@@ -1338,7 +1418,12 @@ class VentaController extends Controller
                     ] : null,
                     'monto_diferencia_cambiaria' => $venta->monto_diferencia_cambiaria,
                     'es_venta_especial'   => (bool) $venta->es_venta_especial,
-                    'nota_venta_especial'     => $venta->nota_venta_especial,
+                    'nota_venta_especial' => $venta->nota_venta_especial,
+                    // MENSAJERO
+                    'mensajero' => $venta->mensajero_monto > 0 ? [
+                        'monto' => (float) $venta->mensajero_monto,
+                        'tipo'  => $venta->mensajero_tipo,
+                    ] : null,
                     // GESTOR
                     'gestor' => $venta->es_venta_gestor && $venta->gestor_cuenta_id ? [
                         'monto' => (float) $venta->gestor_monto,
@@ -1569,7 +1654,7 @@ class VentaController extends Controller
         ]);
 
         // Cargar relaciones necesarias para poder revertirlas
-        $venta->load(['detalles', 'pagos.cliente', 'pagos.cuenta', 'gestorCuenta']);
+        $venta->load(['detalles', 'pagos.cliente', 'pagos.cuenta', 'gestorCuenta', 'comisionCuenta']);
 
         DB::transaction(function () use ($venta, $validated) {
             // ✅ SIEMPRE revertir stock (pendiente o completada)
@@ -1634,6 +1719,28 @@ class VentaController extends Controller
                     $cuentaGestor = $venta->gestorCuenta;
                     if ($cuentaGestor) {
                         $cuentaGestor->increment('saldo_cuenta', $venta->gestor_monto);
+                    }
+                }
+
+                // Revertir mensajero
+                if ($venta->mensajero_monto > 0 && $venta->mensajero_cuenta_id) {
+                    $cuentaMensajero = $venta->mensajeroCuenta;
+                    if ($cuentaMensajero) {
+                        if ($venta->mensajero_tipo === 'propio') {
+                            $cuentaMensajero->decrement('saldo_cuenta', $venta->mensajero_monto);
+                        } elseif ($venta->mensajero_tipo === 'externo' && $venta->mensajero_tasa > 0) {
+                            $montoCUP = round($venta->mensajero_monto * $venta->mensajero_tasa, 2);
+                            $cuentaMensajero->increment('saldo_cuenta', $montoCUP);
+                        }
+                    }
+                }
+
+                // Revertir comisión vendedor
+                if ($venta->total_comision > 0 && $venta->comision_cuenta_id && $venta->comision_tasa > 0) {
+                    $cuentaComision = $venta->comisionCuenta;
+                    if ($cuentaComision) {
+                        $montoCUP = round((float) $venta->total_comision * (float) $venta->comision_tasa, 2);
+                        $cuentaComision->increment('saldo_cuenta', $montoCUP);
                     }
                 }
             }

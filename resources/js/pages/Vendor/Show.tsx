@@ -53,6 +53,7 @@ import {
     ShoppingBag,
     Store,
     TrendingUp,
+    Truck,
     User,
     UserCheck,
     Users,
@@ -225,6 +226,23 @@ interface Venta {
     decision_notificada: boolean;
     motivo_anulacion?: string | null;
     detalle_anulacion?: string | null;
+    mensajero: {
+        monto: number;
+        tipo: 'propio' | 'externo';
+        tasa?: number | null;
+        monto_cup?: number | null;
+        cuenta?: { id: number; nombre: string; moneda?: string } | null;
+    } | null;
+    comision_pago: {
+        tasa: number | null;
+        monto_cup: number | null;
+        cuenta: {
+            id: number;
+            nombre: string;
+            moneda?: string;
+            saldo_disponible: number;
+        } | null;
+    } | null;
 }
 
 interface Props {
@@ -458,7 +476,14 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
         currentVenta.gestor.saldo_disponible !== undefined &&
         currentVenta.gestor.saldo_disponible < currentVenta.gestor.monto;
 
-    const puedeAprobar = isVentaPendiente && currentVenta.destinatario !== null && !gestorSinSaldo;
+    const comisionSinSaldo =
+        currentVenta.comision_pago !== null &&
+        currentVenta.comision_pago?.cuenta !== null &&
+        currentVenta.comision_pago?.monto_cup !== null &&
+        (currentVenta.comision_pago?.cuenta?.saldo_disponible ?? Infinity) <
+            (currentVenta.comision_pago?.monto_cup ?? 0);
+
+    const puedeAprobar = isVentaPendiente && currentVenta.destinatario !== null && !gestorSinSaldo && !comisionSinSaldo;
 
     const monedaPrincipal = currentVenta.moneda_principal;
     const simboloMonedaPrincipal = getCurrencySymbol(monedaPrincipal);
@@ -887,7 +912,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
                 {/* ── Widgets vendedor: Total + Comisión PV + Comisión Gestor ── */}
                 {userRole === 'vendedor' && (
-                    <div className={`grid gap-4 ${currentVenta.gestor ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                    <div className={`grid gap-4 ${[currentVenta.gestor, currentVenta.mensajero].filter(Boolean).length === 2 ? 'grid-cols-4' : [currentVenta.gestor, currentVenta.mensajero].filter(Boolean).length === 1 ? 'grid-cols-3' : 'grid-cols-2'}`}>
                         <div className="bg-card rounded-xl border p-4 text-center">
                             <ShoppingBag size={24} className="mx-auto mb-2 text-blue-500" />
                             <p className="text-muted-foreground mb-1 text-sm">Total de la Venta</p>
@@ -901,7 +926,13 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                             <p className="text-2xl font-bold text-orange-600">
                                 {formatCurrency(currentVenta.total_comision, monedaPrincipal?.codigo || 'USD')}
                             </p>
-                            <p className="text-muted-foreground mt-1 text-xs">Punto de venta</p>
+                            {currentVenta.comision_pago?.monto_cup ? (
+                                <p className="mt-1 text-xs font-semibold text-orange-500">
+                                    = {Number(currentVenta.comision_pago.monto_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                </p>
+                            ) : (
+                                <p className="text-muted-foreground mt-1 text-xs">Punto de venta</p>
+                            )}
                         </div>
                         {currentVenta.gestor && (
                             <div className="bg-card rounded-xl border p-4 text-center">
@@ -916,6 +947,18 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         ≈ {formatCurrency(currentVenta.gestor.monto_usd, 'USD')}
                                     </p>
                                 )}
+                            </div>
+                        )}
+                        {currentVenta.mensajero && (
+                            <div className="bg-card rounded-xl border p-4 text-center">
+                                <Truck size={24} className="mx-auto mb-2 text-sky-500" />
+                                <p className="text-muted-foreground mb-1 text-sm">Mensajería</p>
+                                <p className="text-2xl font-bold text-sky-600">
+                                    {formatCurrency(currentVenta.mensajero.monto, 'USD')}
+                                </p>
+                                <p className="text-muted-foreground mt-1 text-xs capitalize">
+                                    {currentVenta.mensajero.tipo === 'propio' ? 'Vehículo propio' : 'Mensajero externo'}
+                                </p>
                             </div>
                         )}
                     </div>
@@ -937,9 +980,13 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                             <p className="text-2xl font-bold text-orange-600">
                                 {formatCurrency(currentVenta.total_comision, monedaPrincipal?.codigo || 'USD')}
                             </p>
-                            {currentVenta.gestor && (
+                            {currentVenta.comision_pago?.monto_cup ? (
+                                <p className="mt-1 text-xs font-semibold text-orange-500">
+                                    = {Number(currentVenta.comision_pago.monto_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                </p>
+                            ) : currentVenta.gestor ? (
                                 <p className="text-muted-foreground mt-1 text-xs italic">Absorbida por gestor</p>
-                            )}
+                            ) : null}
                         </div>
                         <div className="bg-card rounded-xl border p-4 text-center">
                             <DollarSign
@@ -1618,7 +1665,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                           ? 'Falta Receptor'
                                           : gestorSinSaldo
                                             ? 'Sin Fondos Gestor'
-                                            : 'Aprobar Venta'}
+                                            : comisionSinSaldo
+                                              ? 'Sin Fondos Comisión'
+                                              : 'Aprobar Venta'}
                                 </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
@@ -1643,6 +1692,15 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                                 {currentVenta.gestor.moneda?.codigo || ''}
                                                             </strong>{' '}
                                                             de la cuenta <strong>{currentVenta.gestor.cuenta_nombre}</strong>
+                                                        </li>
+                                                    )}
+                                                    {currentVenta.comision_pago?.monto_cup && currentVenta.comision_pago.cuenta && (
+                                                        <li>
+                                                            Debitará{' '}
+                                                            <strong>
+                                                                {Number(currentVenta.comision_pago.monto_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                            </strong>{' '}
+                                                            de <strong>{currentVenta.comision_pago.cuenta.nombre}</strong> (comisión vendedor)
                                                         </li>
                                                     )}
                                                 </ul>
@@ -1820,8 +1878,8 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                     )}
                 </div>
 
-                {/* ── Cards: Destinatario y Gestor ── */}
-                {(currentVenta.destinatario || currentVenta.gestor) && (
+                {/* ── Cards: Destinatario, Comisión PV, Gestor y Mensajero ── */}
+                {(currentVenta.destinatario || currentVenta.gestor || currentVenta.mensajero || currentVenta.comision_pago) && (
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                         {/* Card Destinatario */}
                         {currentVenta.destinatario && (
@@ -1899,6 +1957,64 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                 <p className="text-muted-foreground text-xs font-medium">Observaciones:</p>
                                                 <p className="text-sm">{currentVenta.destinatario.observaciones}</p>
                                             </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Card Comisión Vendedor */}
+                        {currentVenta.comision_pago && (
+                            <div className="bg-card border-sidebar-accent rounded-lg border p-6 shadow-sm">
+                                <div className="mb-4 flex items-center gap-2">
+                                    <Store className="h-5 w-5 text-orange-600" />
+                                    <h3 className="text-foreground text-base font-semibold">💰 Comisión Punto de Venta</h3>
+                                </div>
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-muted-foreground text-xs font-medium">Monto en USD:</span>
+                                        <Badge variant="outline" className="font-bold text-orange-600">
+                                            {formatCurrency(currentVenta.total_comision, 'USD')}
+                                        </Badge>
+                                    </div>
+                                    {currentVenta.comision_pago.tasa && (
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-muted-foreground text-xs font-medium">Tasa aplicada:</span>
+                                            <span className="text-sm font-medium">
+                                                1 USD = {currentVenta.comision_pago.tasa} CUP
+                                            </span>
+                                        </div>
+                                    )}
+                                    {currentVenta.comision_pago.monto_cup && (
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-muted-foreground text-xs font-medium">Monto en CUP:</span>
+                                            <Badge variant="secondary" className="font-bold text-orange-700">
+                                                {Number(currentVenta.comision_pago.monto_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                            </Badge>
+                                        </div>
+                                    )}
+                                    {currentVenta.comision_pago.cuenta && (
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-muted-foreground text-xs font-medium">
+                                                {currentVenta.estado === 'completada' ? 'Cuenta debitada:' : 'Cuenta a debitar:'}
+                                            </span>
+                                            <span className="text-sm font-medium">{currentVenta.comision_pago.cuenta.nombre}</span>
+                                        </div>
+                                    )}
+                                    {isVentaPendiente && currentVenta.comision_pago.cuenta?.saldo_disponible !== undefined && currentVenta.comision_pago.monto_cup && (
+                                        <div className={`flex items-center justify-between rounded-md border px-3 py-2 ${
+                                            currentVenta.comision_pago.cuenta.saldo_disponible >= currentVenta.comision_pago.monto_cup
+                                                ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950'
+                                                : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950'
+                                        }`}>
+                                            <span className="text-xs font-medium">Saldo disponible:</span>
+                                            <span className={`text-sm font-bold ${
+                                                currentVenta.comision_pago.cuenta.saldo_disponible >= currentVenta.comision_pago.monto_cup
+                                                    ? 'text-green-700 dark:text-green-300'
+                                                    : 'text-red-700 dark:text-red-300'
+                                            }`}>
+                                                {currentVenta.comision_pago.cuenta.saldo_disponible.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                            </span>
                                         </div>
                                     )}
                                 </div>
@@ -1998,6 +2114,48 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                     <p className="text-sm italic">{currentVenta.gestor.comentario}</p>
                                                 </div>
                                             </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Card Mensajero */}
+                        {currentVenta.mensajero && (
+                            <div className="bg-card border-sidebar-accent rounded-lg border p-6 shadow-sm">
+                                <div className="mb-4 flex items-center gap-2">
+                                    <Truck className="h-5 w-5 text-sky-600" />
+                                    <h3 className="text-foreground text-base font-semibold">
+                                        {currentVenta.mensajero.tipo === 'propio' ? '🚗 Mensajería — Vehículo Propio' : '🛵 Mensajería — Externo'}
+                                    </h3>
+                                </div>
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-muted-foreground text-xs font-medium">Monto cobrado al cliente:</span>
+                                        <Badge variant="outline" className="font-bold text-sky-600">
+                                            {formatCurrency(currentVenta.mensajero.monto, 'USD')}
+                                        </Badge>
+                                    </div>
+                                    {currentVenta.mensajero.tipo === 'externo' && currentVenta.mensajero.tasa && (
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-muted-foreground text-xs font-medium">Tasa aplicada:</span>
+                                            <span className="text-sm font-medium">1 USD = {currentVenta.mensajero.tasa} CUP</span>
+                                        </div>
+                                    )}
+                                    {currentVenta.mensajero.tipo === 'externo' && currentVenta.mensajero.monto_cup && (
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-muted-foreground text-xs font-medium">Pagado al mensajero:</span>
+                                            <Badge variant="secondary" className="font-bold">
+                                                {Number(currentVenta.mensajero.monto_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                            </Badge>
+                                        </div>
+                                    )}
+                                    {currentVenta.mensajero.cuenta && (
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-muted-foreground text-xs font-medium">
+                                                {currentVenta.mensajero.tipo === 'propio' ? 'Cuenta acreditada:' : 'Cuenta debitada:'}
+                                            </span>
+                                            <span className="text-sm font-medium">{currentVenta.mensajero.cuenta.nombre}</span>
                                         </div>
                                     )}
                                 </div>
@@ -2250,6 +2408,14 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                     <span className="text-muted-foreground">Comisión P.V.:</span>
                                     <span className="font-semibold text-orange-600">
                                         {formatCurrency(currentVenta.total_comision, simboloMonedaPrincipal)}
+                                    </span>
+                                </div>
+                            )}
+                            {currentVenta.comision_pago?.monto_cup && (
+                                <div className="flex justify-between pl-4 text-sm">
+                                    <span className="text-muted-foreground">→ Pago vendedor (CUP):</span>
+                                    <span className="font-semibold text-orange-500">
+                                        {Number(currentVenta.comision_pago.monto_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
                                     </span>
                                 </div>
                             )}

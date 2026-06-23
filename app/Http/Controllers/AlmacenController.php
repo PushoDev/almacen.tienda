@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Almacen;
+use App\Models\Cuenta;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
@@ -113,8 +114,18 @@ class AlmacenController extends Controller
      */
     public function edit(Almacen $almacen)
     {
+        $cuentas = Cuenta::with('moneda')
+            ->select('id', 'nombre_cuenta', 'tipo_moneda', 'moneda_id', 'saldo_cuenta')
+            ->get()
+            ->map(fn($c) => [
+                'id'     => $c->id,
+                'nombre' => $c->nombre_cuenta,
+                'moneda' => $c->moneda?->codigo_moneda ?? $c->tipo_moneda,
+            ]);
+
         return Inertia::render('Almacenes/Edit', [
             'almacen' => $almacen,
+            'cuentas' => $cuentas,
         ]);
     }
 
@@ -141,14 +152,13 @@ class AlmacenController extends Controller
             'provincia_almacen' => ['nullable', 'string'],
             'ciudad_almacen' => ['nullable', 'string'],
             'notas_almacen' => ['nullable', 'string'],
-            // Nuevos campos del responsable
             'nombre_responsable' => ['nullable', 'string', 'max:255'],
             'apellido_responsable' => ['nullable', 'string', 'max:255'],
             'carnet_responsable' => ['nullable', 'string', 'max:50'],
             'telefono_responsable' => ['nullable', 'string', 'max:20'],
+            'mensajero_cuenta_id' => ['nullable', 'exists:cuentas,id'],
         ]);
 
-        // Actualizar el almacén en la base de datos
         $almacen->update([
             'nombre_almacen' => $request->nombre_almacen,
             'tipo_almacen' => $request->tipo_almacen,
@@ -157,11 +167,11 @@ class AlmacenController extends Controller
             'provincia_almacen' => $request->provincia_almacen,
             'ciudad_almacen' => $request->ciudad_almacen,
             'notas_almacen' => $request->notas_almacen,
-            // Nuevos campos del responsable
             'nombre_responsable' => $request->nombre_responsable,
             'apellido_responsable' => $request->apellido_responsable,
             'carnet_responsable' => $request->carnet_responsable,
             'telefono_responsable' => $request->telefono_responsable,
+            'mensajero_cuenta_id' => $request->mensajero_cuenta_id ?: null,
         ]);
 
         // Redirigimos al usuario a la lista de almacenes
