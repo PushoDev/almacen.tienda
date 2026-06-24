@@ -1,85 +1,62 @@
-# Pendiente: Correcciones al Flujo de Mensajero
+# Pendiente: Ajustes al Flujo de Mensajero
 
-**Fecha:** 2026-06-22  
-**Estado:** Implementación base lista — requiere correcciones
-
----
-
-## Contexto
-
-El sistema tiene implementado el flujo base de mensajero (migración, modelo, controller, UI). Sin embargo, durante el test se identificaron varios problemas de diseño que deben corregirse antes de considerar la feature completa.
+**Última actualización:** 2026-06-23  
+**Estado:** Implementación base lista + selector de moneda implementado — quedan 2 ajustes pendientes para mañana
 
 ---
 
-## Problemas a corregir
+## Lo que YA está implementado (no tocar)
+
+- Migraciones aplicadas: `mensajero_monto`, `mensajero_tipo`, `mensajero_cuenta_id`, `mensajero_tasa` en `ventas`; `mensajero_cuenta_id` en `almacens`
+- Relaciones en modelos `Venta` y `Almacen` (`mensajeroCuenta()`)
+- Lógica financiera unificada en `aprobarVenta()` y `anularVenta()`:
+  - Si `mensajero_tasa > 0` → convierte `monto × tasa` (el vendedor ingresó en USD)
+  - Si `mensajero_tasa = null` → usa el monto directo (el vendedor ingresó en CUP)
+  - `propio` acredita la cuenta CUP del almacén
+  - `externo` debita la cuenta CUP
+  - Reversal correcto en anulación para ambos tipos y ambas monedas
+- `show()` expone campo `moneda` (`'USD'`/`'CUP'`) y calcula `monto_cup` para ambos tipos
+- `listadoVentas()` incluye datos del mensajero
+- UI del Punto de Venta (`Vendor/Index.tsx`):
+  - Selector integrado USD/CUP junto al campo de monto
+  - Preview automático `X USD = Y CUP (tasa Z)` usando la tasa del sistema
+  - Elimina campo de tasa manual — la tasa viene del sistema automáticamente
+  - Al elegir USD: envía `mensajero_tasa = tasaCUPSistema`; al elegir CUP: `mensajero_tasa = null`
+- `Vendor/Show.tsx` muestra monto en la moneda correcta, tasa y equivalente CUP para ambos tipos
+
+---
+
+## Pendiente para mañana
 
 ### 1. Cuenta de mensajero debe ser solo CUP
-- **Problema actual:** `AlmacenController@edit` carga todas las cuentas (USD, EUR, CUP mezcladas) en el selector de mensajería.
-- **Corrección:** Filtrar solo cuentas de tipo CUP al cargar las opciones del selector.
+- **Problema:** `AlmacenController@edit` carga todas las cuentas (USD, EUR, CUP mezcladas) en el selector de mensajería
+- **Corrección:** Filtrar solo cuentas de tipo CUP al cargar las opciones
 - **Archivo:** `app/Http/Controllers/AlmacenController.php` → método `edit()`
 
-### 2. Configuración de la cuenta en lugar equivocado
-- **Problema actual:** La cuenta de mensajero se configura en `Almacenes → Edit`. El admin debe hacer un viaje separado ahí, cuando ya está en `Empleados → Edit` asignando almacenes al vendedor.
-- **Corrección:** Mover la configuración de `mensajero_cuenta_id` a `Empleados/Edit.tsx`. Cuando el admin asigna un almacén a un vendedor, debe poder configurar ahí mismo la cuenta CUP de mensajería para ese almacén.
-- **Archivos afectados:**
+### 2. Mover configuración de cuenta mensajero a Empleados/Edit
+- **Problema:** La cuenta de mensajero se configura en `Almacenes → Edit`. Debería estar en `Empleados → Edit` donde el admin ya asigna almacenes al vendedor
+- **Corrección:** Cuando el admin asigna un almacén a un vendedor, puede configurar ahí mismo la cuenta CUP de mensajería para ese almacén
+- **Archivos:**
   - `app/Http/Controllers/UserController.php` → `update()` debe guardar `mensajero_cuenta_id` en el almacén
   - `resources/js/pages/Empleados/Edit.tsx` → agregar selector de cuenta CUP por almacén asignado
-  - `app/Http/Controllers/AlmacenController.php` → quitar o dejar solo como lectura la sección de mensajería en Edit
-
-### 3. UI del Punto de Venta — mostrar conversión USD→CUP
-- **Problema actual:** El vendedor ingresa el monto del mensajero pero no ve cuánto CUP recibirá el mensajero. El campo de tasa es manual.
-- **Corrección:**
-  - El vendedor ingresa el monto en USD
-  - El sistema muestra automáticamente: `$10 USD = 2,500 CUP` usando la tasa del sistema (Gestión de Monedas)
-  - Si el pago del cliente es en CUP, el monto del mensajero también se expresa directamente en CUP
-  - Eliminar el campo de tasa manual — usar la tasa del sistema automáticamente
-- **Archivos afectados:**
-  - `resources/js/pages/Vendor/Index.tsx` → leer tasa del sistema, mostrar preview CUP
-  - `app/Http/Controllers/VentaController.php` → `getAlmacenes()` debe traer también la tasa CUP actual; `procesarVenta()` debe tomar la tasa del sistema, no la enviada por el cliente
-
-### 4. La tasa debe venir del sistema, no ingresarse manualmente
-- **Problema actual:** En el tipo "externo" el vendedor ingresa la tasa a mano, lo cual es inseguro y propenso a errores.
-- **Corrección:** La tasa se obtiene automáticamente del módulo de Gestión de Monedas (tabla `monedas` o la tabla de tasas del sistema). El campo `mensajero_tasa` en la venta se guarda con la tasa vigente al momento de la venta, no una entrada manual.
+  - `app/Http/Controllers/AlmacenController.php` → quitar o dejar solo lectura la sección de mensajería en Edit
+  - `resources/js/pages/almacenes/Edit.tsx` → limpiar UI de mensajero
 
 ---
 
-## Flujo correcto (objetivo)
+## Flujo objetivo (cuando esté completo)
 
 ```
 Admin → Empleados → Edit vendedor
   └─ Almacenes asignados: [TIENDA X]
        └─ Cuenta mensajería CUP: [selector solo CUP] ← configurar aquí
 
-Vendedor → Punto de Venta → selecciona almacén
-  └─ Activa "Servicio de Mensajería"
-       └─ Ingresa monto: $10.00 USD
-            └─ Preview automático: "Mensajero recibirá: 2,500 CUP" (tasa sistema)
+Vendedor → Punto de Venta → selecciona almacén → activa Mensajería
+  └─ Ingresa monto: 10.00  [USD] [CUP]  ← elige moneda
+       └─ Si USD: Preview "10.00 USD = 2,500.00 CUP (tasa 250)"
   └─ Total de venta: $610.00 USD
 
 Admin → Aprobar venta
-  └─ Si propio: cuenta CUP del almacén +2,500 CUP
-  └─ Si externo: cuenta CUP del almacén -2,500 CUP
+  └─ Si propio: cuenta CUP del almacén + monto CUP
+  └─ Si externo: cuenta CUP del almacén - monto CUP
 ```
-
----
-
-## Lo que YA está bien (no tocar)
-
-- Migraciones aplicadas: `mensajero_monto`, `mensajero_tipo`, `mensajero_cuenta_id`, `mensajero_tasa` en `ventas`; `mensajero_cuenta_id` en `almacens`
-- Relaciones en modelos `Venta` y `Almacen` (`mensajeroCuenta()`)
-- Lógica financiera en `aprobarVenta()` y reversal en `anularVenta()`
-- `show()` y `listadoVentas()` ya incluyen datos del mensajero
-- `Vendor/Show.tsx` ya muestra widget y card del mensajero
-- El monto del mensajero se suma al total de la venta pero NO afecta la comisión del vendedor ni del gestor
-- `getAlmacenes()` ya carga `mensajeroCuenta` con la relación
-
----
-
-## Orden sugerido de implementación
-
-1. `UserController@update` + `Empleados/Edit.tsx` — mover config de mensajero_cuenta (CUP only) a Empleados
-2. `AlmacenController@edit` — quitar sección mensajero o dejarla read-only
-3. `AlmacenController@edit.tsx` — limpiar UI de mensajero
-4. `VentaController@getAlmacenes` — incluir tasa CUP vigente en la respuesta
-5. `Vendor/Index.tsx` — monto USD + preview CUP automático, eliminar tasa manual
-6. `VentaController@procesarVenta` — tomar tasa del sistema, no del request manual

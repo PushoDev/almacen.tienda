@@ -493,7 +493,7 @@ class VentaController extends Controller
             'pagos.cliente',
             'pagos.moneda',
             'cliente',
-            'almacen',
+            'almacen.mensajeroCuenta',
             'usuario',
             'moneda',
             'monedaCobro',
@@ -505,8 +505,13 @@ class VentaController extends Controller
         $ventaData = [
             'id' => $venta->id,
             'almacen' => [
-                'id' => $venta->almacen->id,
-                'nombre' => $venta->almacen->nombre_almacen,
+                'id'                  => $venta->almacen->id,
+                'nombre'              => $venta->almacen->nombre_almacen,
+                'mensajero_cuenta_id' => $venta->almacen->mensajero_cuenta_id,
+                'mensajero_cuenta'    => $venta->almacen->mensajeroCuenta ? [
+                    'id'     => $venta->almacen->mensajeroCuenta->id,
+                    'nombre' => $venta->almacen->mensajeroCuenta->nombre_cuenta,
+                ] : null,
             ],
             'cliente' => $venta->cliente ? [
                 'id' => $venta->cliente->id,
@@ -626,10 +631,11 @@ class VentaController extends Controller
             'nota_venta_especial' => $venta->nota_venta_especial,
             'decision_notificada' => (bool) $venta->decision_notificada,
             'mensajero' => $venta->mensajero_monto > 0 ? [
-                'monto'      => (float) $venta->mensajero_monto,
-                'tipo'       => $venta->mensajero_tipo,
-                'tasa'       => $venta->mensajero_tasa ? (float) $venta->mensajero_tasa : null,
-                'monto_cup'  => ($venta->mensajero_tipo === 'externo' && $venta->mensajero_tasa > 0)
+                'monto'    => (float) $venta->mensajero_monto,
+                'tipo'     => $venta->mensajero_tipo,
+                'moneda'   => $venta->mensajero_tasa > 0 ? 'USD' : 'CUP',
+                'tasa'     => $venta->mensajero_tasa ? (float) $venta->mensajero_tasa : null,
+                'monto_cup' => $venta->mensajero_tasa > 0
                     ? round((float) $venta->mensajero_monto * (float) $venta->mensajero_tasa, 2)
                     : null,
                 'cuenta' => $venta->mensajeroCuenta ? [
@@ -1008,19 +1014,32 @@ class VentaController extends Controller
             $usd_objetivo = $costo_total_productos + $total_ganancia;
 
             // CÁLCULO DE DIFERENCIA CAMBIARIA (POSITIVA O NEGATIVA)
+            // El mensajero es pass-through y se excluye del cálculo — no es ingreso de la agencia
             $monto_diferencia_cambiaria = 0;
             if ($venta->moneda_cobro_id) {
                 $monedaCobro = Moneda::find($venta->moneda_cobro_id);
                 if ($monedaCobro) {
                     $tasa_oficial = $monedaCobro->tasa_cambio;
-
                     $monto_esperado_oficial = $usd_objetivo * $tasa_oficial;
 
                     $monto_real_cobrado = collect($validatedData['pagos'])
                         ->where('moneda_id', $venta->moneda_cobro_id)
                         ->sum('monto');
 
-                    $monto_diferencia_cambiaria = $monto_real_cobrado - $monto_esperado_oficial;
+                    // Excluir el mensajero (solo si la moneda de cobro coincide con la del mensajero)
+                    $mensajero_en_moneda_cobro = 0;
+                    if ($venta->mensajero_monto > 0) {
+                        if ($venta->mensajero_tasa > 0) {
+                            // Mensajero era USD → su equivalente en moneda cobro
+                            $mensajero_en_moneda_cobro = (float) $venta->mensajero_monto * (float) $venta->mensajero_tasa;
+                        } else {
+                            // Mensajero ya era en la moneda de cobro directamente
+                            $mensajero_en_moneda_cobro = (float) $venta->mensajero_monto;
+                        }
+                    }
+
+                    $monto_real_cobrado_productos = $monto_real_cobrado - $mensajero_en_moneda_cobro;
+                    $monto_diferencia_cambiaria = round($monto_real_cobrado_productos - $monto_esperado_oficial, 2);
                 }
             }
 
@@ -1230,15 +1249,24 @@ class VentaController extends Controller
                 ->where('codigo_moneda', 'CUP')
                 ->value('tasa_cambio') ?? 365;
 
+            // El mensajero es pass-through — excluirlo del cálculo de ganancia cambiaria
+            $mensajero_cup = 0;
+            if ($venta->mensajero_monto > 0) {
+                $mensajero_cup = $venta->mensajero_tasa > 0
+                    ? round((float) $venta->mensajero_monto * (float) $venta->mensajero_tasa, 2)
+                    : (float) $venta->mensajero_monto;
+            }
+
+            $totalCupPagado     = 0;
+            $totalCupContadoUSD = 0;
+
             $gananciaExtraUSD = 0;
 
             foreach ($venta->pagos as $pago) {
-                // Cálculo de ganancia/perdida cambiaria solo para pagos en CUP
+                // Acumular CUP separado del loop de cuentas para calcular cambiaria limpia
                 if ($pago->moneda && $pago->moneda->codigo_moneda === 'CUP') {
-                    $montoCUP = $pago->monto;
-                    $valorRealUSD = $montoCUP / $tasaOficialCUP;
-                    $valorContadoUSD = $pago->monto_equivalente;
-                    $gananciaExtraUSD += ($valorRealUSD - $valorContadoUSD);
+                    $totalCupPagado     += $pago->monto;
+                    $totalCupContadoUSD += $pago->monto_equivalente;
                 }
 
                 // ✅ CAMBIO: Manejar destino del dinero (cuenta O cliente)
@@ -1271,7 +1299,13 @@ class VentaController extends Controller
                 // Si no coinciden, por seguridad no acumulamos
             }
 
-            $gananciaExtraUSD = round($gananciaExtraUSD, 2);
+            // Calcular ganancia cambiaria solo sobre los CUP de productos (sin mensajero)
+            $cupProductos = max(0.0, $totalCupPagado - $mensajero_cup);
+            if ($totalCupPagado > 0 && $cupProductos > 0) {
+                $proporcion             = $cupProductos / $totalCupPagado;
+                $cupContadoUSD_productos = $totalCupContadoUSD * $proporcion;
+                $gananciaExtraUSD       = round(($cupProductos / $tasaOficialCUP) - $cupContadoUSD_productos, 2);
+            }
 
             $venta->update([
                 'ganancia_perdida_cambiaria' => $gananciaExtraUSD,
@@ -1296,13 +1330,15 @@ class VentaController extends Controller
                 $cuentaMensajero = $venta->mensajeroCuenta;
 
                 if ($cuentaMensajero) {
+                    // Si hay tasa, el monto original era USD y se convierte a CUP; si no, ya era CUP directo
+                    $montoFinal = $venta->mensajero_tasa > 0
+                        ? round((float) $venta->mensajero_monto * (float) $venta->mensajero_tasa, 2)
+                        : (float) $venta->mensajero_monto;
+
                     if ($venta->mensajero_tipo === 'propio') {
-                        // El monto va a la cuenta de mensajería del almacén
-                        $cuentaMensajero->increment('saldo_cuenta', $venta->mensajero_monto);
-                    } elseif ($venta->mensajero_tipo === 'externo' && $venta->mensajero_tasa > 0) {
-                        // Se debita el equivalente en CUP para pagar al mensajero externo
-                        $montoCUP = round($venta->mensajero_monto * $venta->mensajero_tasa, 2);
-                        $cuentaMensajero->decrement('saldo_cuenta', $montoCUP);
+                        $cuentaMensajero->increment('saldo_cuenta', $montoFinal);
+                    } elseif ($venta->mensajero_tipo === 'externo') {
+                        $cuentaMensajero->decrement('saldo_cuenta', $montoFinal);
                     }
                 }
             }
@@ -1571,8 +1607,13 @@ class VentaController extends Controller
                     $nuevaComision += round($comisionUnitaria * $detalle->cantidad, 2);
                 }
 
+                // Sumar mensajero en USD al total (si era USD; si era CUP directo no se suma al total USD)
+                $mensajeroEnUSD = ($venta->mensajero_monto > 0 && $venta->mensajero_tasa > 0)
+                    ? (float) $venta->mensajero_monto
+                    : 0;
+
                 $venta->update([
-                    'total'          => $nuevoTotal,
+                    'total'          => $nuevoTotal + $mensajeroEnUSD,
                     'total_ganancia' => $nuevaGanancia,
                     'total_comision' => round($nuevaComision, 2),
                 ]);
@@ -1636,6 +1677,88 @@ class VentaController extends Controller
                 'ganancia'         => (float) $d->ganancia,
                 'comision_unitaria'=> (float) $d->comision_unitaria,
             ]),
+        ]);
+    }
+
+    /**
+     * Guardar distribución de la venta: mensajero y comisión vendedor
+     */
+    public function guardarDistribucion(Request $request, Venta $venta)
+    {
+        if ($venta->estado !== 'pendiente') {
+            return response()->json(['success' => false, 'message' => 'Solo se puede modificar una venta pendiente.'], 422);
+        }
+
+        $validated = $request->validate([
+            'mensajero_monto'     => 'nullable|numeric|min:0.01',
+            'mensajero_tipo'      => 'nullable|in:propio,externo|required_with:mensajero_monto',
+            'mensajero_cuenta_id' => 'nullable|exists:cuentas,id',
+            'mensajero_tasa'      => 'nullable|numeric|min:0.0001',
+            'limpiar_mensajero'   => 'nullable|boolean',
+            'comision_cuenta_id'  => 'nullable|exists:cuentas,id',
+            'comision_tasa'       => 'nullable|numeric|min:0.0001',
+            'limpiar_comision'    => 'nullable|boolean',
+        ]);
+
+        $totalProductos = (float) $venta->detalles->sum('subtotal');
+
+        $limpiarMensajero = $validated['limpiar_mensajero'] ?? false;
+        $limpiarComision  = $validated['limpiar_comision'] ?? false;
+
+        $nuevoMensajeroMonto = $limpiarMensajero ? null : ($validated['mensajero_monto'] ?? $venta->mensajero_monto);
+        $nuevoMensajeroTasa  = $limpiarMensajero ? null : ($validated['mensajero_tasa'] ?? (isset($validated['mensajero_monto']) ? null : $venta->mensajero_tasa));
+
+        $mensajeroEnUSD = ($nuevoMensajeroMonto > 0 && $nuevoMensajeroTasa > 0)
+            ? (float) $nuevoMensajeroMonto
+            : 0;
+
+        $updates = ['total' => $totalProductos + $mensajeroEnUSD];
+
+        if (array_key_exists('mensajero_monto', $validated) || $limpiarMensajero) {
+            $updates['mensajero_monto']     = $limpiarMensajero ? null : ($validated['mensajero_monto'] ?? null);
+            $updates['mensajero_tipo']      = $limpiarMensajero ? null : ($validated['mensajero_tipo'] ?? null);
+            $updates['mensajero_cuenta_id'] = $limpiarMensajero ? null : ($validated['mensajero_cuenta_id'] ?? null);
+            $updates['mensajero_tasa']      = $limpiarMensajero ? null : ($validated['mensajero_tasa'] ?? null);
+        }
+
+        if (array_key_exists('comision_cuenta_id', $validated) || $limpiarComision) {
+            $updates['comision_cuenta_id'] = $limpiarComision ? null : ($validated['comision_cuenta_id'] ?? null);
+            $updates['comision_tasa']      = $limpiarComision ? null : ($validated['comision_tasa'] ?? null);
+        }
+
+        $venta->update($updates);
+        $venta->refresh()->load(['mensajeroCuenta.moneda', 'comisionCuenta.moneda']);
+
+        return response()->json([
+            'success'  => true,
+            'message'  => 'Distribución guardada correctamente.',
+            'total'    => (float) $venta->total,
+            'mensajero' => $venta->mensajero_monto > 0 ? [
+                'monto'    => (float) $venta->mensajero_monto,
+                'tipo'     => $venta->mensajero_tipo,
+                'moneda'   => $venta->mensajero_tasa > 0 ? 'USD' : 'CUP',
+                'tasa'     => $venta->mensajero_tasa ? (float) $venta->mensajero_tasa : null,
+                'monto_cup' => $venta->mensajero_tasa > 0
+                    ? round((float) $venta->mensajero_monto * (float) $venta->mensajero_tasa, 2)
+                    : null,
+                'cuenta' => $venta->mensajeroCuenta ? [
+                    'id'     => $venta->mensajeroCuenta->id,
+                    'nombre' => $venta->mensajeroCuenta->nombre_cuenta,
+                    'moneda' => $venta->mensajeroCuenta->moneda?->codigo_moneda,
+                ] : null,
+            ] : null,
+            'comision_pago' => $venta->comision_cuenta_id ? [
+                'tasa'      => $venta->comision_tasa ? (float) $venta->comision_tasa : null,
+                'monto_cup' => $venta->comision_tasa > 0
+                    ? round((float) $venta->total_comision * (float) $venta->comision_tasa, 2)
+                    : null,
+                'cuenta' => $venta->comisionCuenta ? [
+                    'id'               => $venta->comisionCuenta->id,
+                    'nombre'           => $venta->comisionCuenta->nombre_cuenta,
+                    'moneda'           => $venta->comisionCuenta->moneda?->codigo_moneda,
+                    'saldo_disponible' => (float) ($venta->comisionCuenta->saldo_actual ?? 0),
+                ] : null,
+            ] : null,
         ]);
     }
 
@@ -1726,11 +1849,14 @@ class VentaController extends Controller
                 if ($venta->mensajero_monto > 0 && $venta->mensajero_cuenta_id) {
                     $cuentaMensajero = $venta->mensajeroCuenta;
                     if ($cuentaMensajero) {
+                        $montoFinal = $venta->mensajero_tasa > 0
+                            ? round((float) $venta->mensajero_monto * (float) $venta->mensajero_tasa, 2)
+                            : (float) $venta->mensajero_monto;
+
                         if ($venta->mensajero_tipo === 'propio') {
-                            $cuentaMensajero->decrement('saldo_cuenta', $venta->mensajero_monto);
-                        } elseif ($venta->mensajero_tipo === 'externo' && $venta->mensajero_tasa > 0) {
-                            $montoCUP = round($venta->mensajero_monto * $venta->mensajero_tasa, 2);
-                            $cuentaMensajero->increment('saldo_cuenta', $montoCUP);
+                            $cuentaMensajero->decrement('saldo_cuenta', $montoFinal);
+                        } elseif ($venta->mensajero_tipo === 'externo') {
+                            $cuentaMensajero->increment('saldo_cuenta', $montoFinal);
                         }
                     }
                 }
