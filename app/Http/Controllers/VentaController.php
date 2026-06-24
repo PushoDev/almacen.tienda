@@ -786,7 +786,7 @@ class VentaController extends Controller
             'nota_venta_especial'  => 'nullable|string|max:500|required_if:es_venta_especial,true',
             // MENSAJERO
             'mensajero_monto'      => 'nullable|numeric|min:0.01',
-            'mensajero_tipo'       => 'nullable|in:propio,externo|required_with:mensajero_monto',
+            'mensajero_tipo'       => 'nullable|in:propio,externo',
             'mensajero_cuenta_id'  => 'nullable|exists:cuentas,id',
             'mensajero_tasa'       => 'nullable|numeric|min:0.0001',
             // COMISIÓN VENDEDOR

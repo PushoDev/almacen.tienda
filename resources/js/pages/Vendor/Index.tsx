@@ -42,6 +42,7 @@ import {
     ShoppingCart,
     Store,
     Trash2,
+    Truck,
     Users,
     X,
 } from 'lucide-react';
@@ -164,6 +165,10 @@ export default function PuntoVentaOficial({
     const [procesandoVenta, setProcesandoVenta] = useState<boolean>(false);
     const [payments, setPayments] = useState<Payment[]>([]);
 
+    // ── Mensajero (monto a cobrar al cliente) ────────────────────────────────
+    const [tieneMensajero, setTieneMensajero] = useState<boolean>(false);
+    const [mensajeroMonto, setMensajeroMonto] = useState<string>('');
+
     // ── Venta Especial ────────────────────────────────────────────────────────
     const [esVentaEspecial, setEsVentaEspecial] = useState<boolean>(false);
     const [motivoEspecial, setMotivoEspecial] = useState<string>('');
@@ -284,12 +289,13 @@ export default function PuntoVentaOficial({
 
 
     const handleAlmacenChange = (value: string) => {
-        console.log('Almacén seleccionado:', value);
         setAlmacenSeleccionado(value);
         cargarProductos(value);
         setBusqueda('');
         setCarrito([]);
         setCodigoSeleccionadoPorProducto({});
+        setTieneMensajero(false);
+        setMensajeroMonto('');
     };
 
     const handleClienteChange = (value: string) => {
@@ -509,7 +515,8 @@ export default function PuntoVentaOficial({
         [carrito],
     );
 
-    const calcularTotal = subtotalProductos;
+    const mensajeroMontoNum = tieneMensajero ? (parseFloat(mensajeroMonto) || 0) : 0;
+    const calcularTotal = subtotalProductos + mensajeroMontoNum;
 
     const incrementarCantidad = (id: string) => {
         const item = carrito.find((item) => item.id === id);
@@ -628,6 +635,7 @@ export default function PuntoVentaOficial({
                 subtotal: item.subtotal,
             })),
             total: calcularTotal,
+            mensajero_monto: mensajeroMontoNum > 0 ? mensajeroMontoNum : undefined,
             pagos: payments.map((p) => ({
                 metodo: p.method,
                 moneda_id: p.moneda_id,
@@ -665,6 +673,8 @@ export default function PuntoVentaOficial({
                 setCodigoSeleccionadoPorProducto({});
                 setEsVentaEspecial(false);
                 setMotivoEspecial('');
+                setTieneMensajero(false);
+                setMensajeroMonto('');
                 if (response.data.redirect) {
                     setTimeout(() => {
                         window.location.href = response.data.redirect;
@@ -1368,8 +1378,53 @@ export default function PuntoVentaOficial({
                                                 </div>
                                             </div>
                                             <div className="space-y-2 rounded-lg border bg-white p-3 dark:bg-zinc-900">
+                                                {/* ── Mensajero toggle ── */}
+                                                <div className="flex items-center justify-between">
+                                                    <label className="flex items-center gap-2 cursor-pointer text-sm font-medium">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={tieneMensajero}
+                                                            onChange={e => {
+                                                                setTieneMensajero(e.target.checked);
+                                                                if (!e.target.checked) setMensajeroMonto('');
+                                                            }}
+                                                            className="h-4 w-4 rounded"
+                                                        />
+                                                        <Truck className="h-4 w-4 text-sky-600" />
+                                                        Mensajería
+                                                    </label>
+                                                    {tieneMensajero && (
+                                                        <div className="flex items-center gap-1">
+                                                            <span className="text-muted-foreground text-xs">$</span>
+                                                            <Input
+                                                                type="number"
+                                                                min="0.01"
+                                                                step="0.01"
+                                                                placeholder="0.00"
+                                                                value={mensajeroMonto}
+                                                                onChange={e => setMensajeroMonto(e.target.value)}
+                                                                className="h-7 w-24 text-right text-sm"
+                                                            />
+                                                            <span className="text-muted-foreground text-xs">USD</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* ── Desglose ── */}
+                                                {tieneMensajero && mensajeroMontoNum > 0 && (
+                                                    <div className="flex items-center justify-between text-sm text-sky-600">
+                                                        <span>Productos:</span>
+                                                        <span>${subtotalProductos.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                    </div>
+                                                )}
+                                                {tieneMensajero && mensajeroMontoNum > 0 && (
+                                                    <div className="flex items-center justify-between text-sm text-sky-600">
+                                                        <span>+ Mensajería:</span>
+                                                        <span>${mensajeroMontoNum.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                                    </div>
+                                                )}
                                                 <div className="flex items-center justify-between border-t pt-2">
-                                                    <span className="font-semibold">Total productos:</span>
+                                                    <span className="font-semibold">Total a cobrar:</span>
                                                     <span className="text-xl font-bold text-emerald-600">
                                                         ${Number(calcularTotal).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                     </span>
@@ -1382,7 +1437,7 @@ export default function PuntoVentaOficial({
                                                         </span>
                                                     </div>
                                                 )}
-                                                <p className="text-muted-foreground text-xs">Mensajería y distribución se configuran en el detalle de la venta.</p>
+                                                <p className="text-muted-foreground text-xs">Distribución del mensajero se configura en el detalle de la venta.</p>
 
                                                 <AlertDialog>
                                                     <AlertDialogTrigger asChild>
