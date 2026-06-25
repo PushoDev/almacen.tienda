@@ -807,7 +807,7 @@ class VentaController extends Controller
         }
 
         // ✅ CAMBIO 2: Agregar validación lógica después del validate
-        foreach ($validatedData['pagos'] as $pago) {
+        foreach ($validatedData['pagos'] ?? [] as $pago) {
             // Cada pago debe tener cuenta_id O cliente_id
             if (empty($pago['cuenta_id']) && empty($pago['cliente_id'])) {
                 throw new \Exception('Cada pago debe tener una cuenta o un cliente como destino.');
@@ -1362,8 +1362,8 @@ class VentaController extends Controller
                 }
             }
 
-            // COMISIÓN VENDEDOR
-            if ($venta->total_comision > 0 && $venta->comision_cuenta_id && $venta->comision_tasa > 0) {
+            // COMISIÓN VENDEDOR — solo si no es venta con gestor (XOR)
+            if (!$venta->es_venta_gestor && $venta->total_comision > 0 && $venta->comision_cuenta_id && $venta->comision_tasa > 0) {
                 $cuentaComision = $venta->comisionCuenta;
 
                 if ($cuentaComision) {
@@ -1710,10 +1710,11 @@ class VentaController extends Controller
 
         $validated = $request->validate([
             'mensajero_monto'     => 'nullable|numeric|min:0.01',
-            'mensajero_tipo'      => 'nullable|in:propio,externo|required_with:mensajero_monto',
+            'mensajero_tipo'      => 'nullable|in:propio,externo',
             'mensajero_cuenta_id' => 'nullable|exists:cuentas,id',
             'mensajero_tasa'      => 'nullable|numeric|min:0.0001',
             'limpiar_mensajero'   => 'nullable|boolean',
+            'limpiar_gestor'      => 'nullable|boolean',
             'comision_cuenta_id'  => 'nullable|exists:cuentas,id',
             'comision_tasa'       => 'nullable|numeric|min:0.0001',
             'limpiar_comision'    => 'nullable|boolean',
@@ -1723,19 +1724,28 @@ class VentaController extends Controller
 
         $limpiarMensajero = $validated['limpiar_mensajero'] ?? false;
         $limpiarComision  = $validated['limpiar_comision'] ?? false;
+        $limpiarGestor    = $validated['limpiar_gestor'] ?? false;
 
+        // El monto USD del mensajero viene del POS y no cambia desde Show.
+        // Solo se actualiza si el payload incluye explícitamente mensajero_monto (caso raro).
         $nuevoMensajeroMonto = $limpiarMensajero ? null : ($validated['mensajero_monto'] ?? $venta->mensajero_monto);
-        $nuevoMensajeroTasa  = $limpiarMensajero ? null : ($validated['mensajero_tasa'] ?? (isset($validated['mensajero_monto']) ? null : $venta->mensajero_tasa));
-
-        // mensajero_monto siempre es el equivalente en USD (calculado en el POS)
-        // no depende de mensajero_tasa (que es la tasa de la cuenta CUP en Show)
         $mensajeroEnUSD = $nuevoMensajeroMonto > 0 ? (float) $nuevoMensajeroMonto : 0;
 
         $updates = ['total' => $totalProductos + $mensajeroEnUSD];
 
+        // Actualizar monto solo si viene explícito
         if (array_key_exists('mensajero_monto', $validated) || $limpiarMensajero) {
-            $updates['mensajero_monto']     = $limpiarMensajero ? null : ($validated['mensajero_monto'] ?? null);
-            $updates['mensajero_tipo']      = $limpiarMensajero ? null : ($validated['mensajero_tipo'] ?? null);
+            $updates['mensajero_monto'] = $limpiarMensajero ? null : ($validated['mensajero_monto'] ?? null);
+        }
+
+        // Tipo, cuenta y tasa se pueden actualizar sin enviar monto (Show.tsx solo configura distribución)
+        $hayConfigMensajero = $limpiarMensajero
+            || array_key_exists('mensajero_tipo', $request->all())
+            || array_key_exists('mensajero_cuenta_id', $request->all())
+            || array_key_exists('mensajero_tasa', $request->all());
+
+        if ($hayConfigMensajero) {
+            $updates['mensajero_tipo']      = $limpiarMensajero ? null : ($validated['mensajero_tipo'] ?? $venta->mensajero_tipo);
             $updates['mensajero_cuenta_id'] = $limpiarMensajero ? null : ($validated['mensajero_cuenta_id'] ?? null);
             $updates['mensajero_tasa']      = $limpiarMensajero ? null : ($validated['mensajero_tasa'] ?? null);
         }
@@ -1745,19 +1755,32 @@ class VentaController extends Controller
             $updates['comision_tasa']      = $limpiarComision ? null : ($validated['comision_tasa'] ?? null);
         }
 
+        // Limpiar gestor: la comisión pasa al punto de venta
+        if ($limpiarGestor) {
+            $updates['es_venta_gestor']      = false;
+            $updates['gestor_cuenta_id']     = null;
+            $updates['gestor_monto']         = null;
+            $updates['gestor_comentario']    = null;
+            $updates['tasa_aplicada_gestor'] = null;
+        }
+
         $venta->update($updates);
-        $venta->refresh()->load(['mensajeroCuenta.moneda', 'comisionCuenta.moneda']);
+        $venta->refresh()->load(['mensajeroCuenta.moneda', 'comisionCuenta.moneda', 'mensajeroMoneda']);
 
         return response()->json([
             'success'  => true,
             'message'  => 'Distribución guardada correctamente.',
             'total'    => (float) $venta->total,
+            'gestor'   => $limpiarGestor ? null : 'unchanged',
             'mensajero' => $venta->mensajero_monto > 0 ? [
-                'monto'    => (float) $venta->mensajero_monto,
-                'tipo'     => $venta->mensajero_tipo,
-                'moneda'   => $venta->mensajero_tasa > 0 ? 'USD' : 'CUP',
-                'tasa'     => $venta->mensajero_tasa ? (float) $venta->mensajero_tasa : null,
-                'monto_cup' => $venta->mensajero_tasa > 0
+                'monto'          => (float) $venta->mensajero_monto,
+                'tipo'           => $venta->mensajero_tipo,
+                'moneda'         => $venta->mensajeroMoneda?->codigo_moneda ?? ($venta->mensajero_tasa > 0 ? 'USD' : 'CUP'),
+                'moneda_id'      => $venta->mensajero_moneda_id,
+                'monto_original' => $venta->mensajero_monto_original ? (float) $venta->mensajero_monto_original : null,
+                'tasa_entrada'   => $venta->mensajero_tasa_entrada ? (float) $venta->mensajero_tasa_entrada : null,
+                'tasa'           => $venta->mensajero_tasa ? (float) $venta->mensajero_tasa : null,
+                'monto_cup'      => $venta->mensajero_tasa > 0
                     ? round((float) $venta->mensajero_monto * (float) $venta->mensajero_tasa, 2)
                     : null,
                 'cuenta' => $venta->mensajeroCuenta ? [
@@ -1775,7 +1798,7 @@ class VentaController extends Controller
                     'id'               => $venta->comisionCuenta->id,
                     'nombre'           => $venta->comisionCuenta->nombre_cuenta,
                     'moneda'           => $venta->comisionCuenta->moneda?->codigo_moneda,
-                    'saldo_disponible' => (float) ($venta->comisionCuenta->saldo_actual ?? 0),
+                    'saldo_disponible' => (float) ($venta->comisionCuenta->saldo_cuenta ?? 0),
                 ] : null,
             ] : null,
         ]);
@@ -1887,8 +1910,8 @@ class VentaController extends Controller
                     }
                 }
 
-                // Revertir comisión vendedor
-                if ($venta->total_comision > 0 && $venta->comision_cuenta_id && $venta->comision_tasa > 0) {
+                // Revertir comisión vendedor — solo si no es venta con gestor (XOR)
+                if (!$venta->es_venta_gestor && $venta->total_comision > 0 && $venta->comision_cuenta_id && $venta->comision_tasa > 0) {
                     $cuentaComision = $venta->comisionCuenta;
                     if ($cuentaComision) {
                         $montoCUP = round((float) $venta->total_comision * (float) $venta->comision_tasa, 2);

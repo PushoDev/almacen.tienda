@@ -1402,7 +1402,7 @@ export default function PuntoVentaOficial({
                                             </div>
                                             <div className="space-y-2 rounded-lg border bg-white p-3 dark:bg-zinc-900">
                                                 {/* ── Mensajero toggle ── */}
-                                                <div className="flex items-center justify-between">
+                                                <div className="space-y-2">
                                                     <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
                                                         <input
                                                             type="checkbox"
@@ -1423,8 +1423,10 @@ export default function PuntoVentaOficial({
                                                         <Truck className="h-4 w-4 text-sky-600" />
                                                         Mensajería
                                                     </label>
+
+                                                    {/* Moneda + monto en fila separada */}
                                                     {tieneMensajero && (
-                                                        <div className="flex items-center gap-1">
+                                                        <div className="flex items-center gap-2 pl-6">
                                                             <Select
                                                                 value={mensajeroMonedaId}
                                                                 onValueChange={(val) => {
@@ -1432,8 +1434,8 @@ export default function PuntoVentaOficial({
                                                                     setMensajeroTasaEntrada('');
                                                                 }}
                                                             >
-                                                                <SelectTrigger className="h-7 w-16 text-xs">
-                                                                    <SelectValue placeholder="$" />
+                                                                <SelectTrigger className="h-8 w-20 text-xs">
+                                                                    <SelectValue placeholder="Moneda" />
                                                                 </SelectTrigger>
                                                                 <SelectContent>
                                                                     {monedas.map((m) => (
@@ -1450,29 +1452,29 @@ export default function PuntoVentaOficial({
                                                                 placeholder="0.00"
                                                                 value={mensajeroMonto}
                                                                 onChange={(e) => setMensajeroMonto(e.target.value)}
-                                                                className="h-7 w-24 text-right text-sm"
+                                                                className="h-8 flex-1 text-right text-sm"
+                                                            />
+                                                        </div>
+                                                    )}
+
+                                                    {/* Tasa editable cuando no es USD */}
+                                                    {tieneMensajero && mensajeroMonedaInfo && !mensajeroEsUSD && (
+                                                        <div className="flex items-center justify-between pl-6 text-xs">
+                                                            <span className="text-muted-foreground">
+                                                                Tasa {mensajeroMonedaInfo.codigo_moneda}/USD:
+                                                            </span>
+                                                            <Input
+                                                                type="number"
+                                                                min="0.01"
+                                                                step="0.01"
+                                                                placeholder={String(mensajeroMonedaInfo.tasa_cambio)}
+                                                                value={mensajeroTasaEntrada}
+                                                                onChange={(e) => setMensajeroTasaEntrada(e.target.value)}
+                                                                className="h-7 w-28 text-right text-xs"
                                                             />
                                                         </div>
                                                     )}
                                                 </div>
-
-                                                {/* ── Tasa editable cuando no es USD ── */}
-                                                {tieneMensajero && mensajeroMonedaInfo && !mensajeroEsUSD && (
-                                                    <div className="flex items-center justify-between text-xs">
-                                                        <span className="text-muted-foreground">
-                                                            Tasa {mensajeroMonedaInfo.codigo_moneda}/USD:
-                                                        </span>
-                                                        <Input
-                                                            type="number"
-                                                            min="0.01"
-                                                            step="0.01"
-                                                            placeholder={String(mensajeroMonedaInfo.tasa_cambio)}
-                                                            value={mensajeroTasaEntrada}
-                                                            onChange={(e) => setMensajeroTasaEntrada(e.target.value)}
-                                                            className="h-6 w-24 text-right text-xs"
-                                                        />
-                                                    </div>
-                                                )}
 
                                                 {/* ── Desglose ── */}
                                                 {tieneMensajero && mensajeroMontoUSD > 0 && (
