@@ -338,7 +338,8 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     const [mensajeroFormTipo, setMensajeroFormTipo] = useState<'propio' | 'externo' | ''>('');
     const [mensajeroFormMoneda, setMensajeroFormMoneda] = useState<'USD' | 'CUP'>('USD');
     const [mensajeroFormTasa, setMensajeroFormTasa] = useState('');
-    const [mensajeroFormCuentaExternaId, setMensajeroFormCuentaExternaId] = useState('');
+    const [mensajeroFormCuentaId, setMensajeroFormCuentaId] = useState('');
+    const [cuentasMensajero, setCuentasMensajero] = useState<Cuenta[]>([]);
     const [showComisionForm, setShowComisionForm] = useState(false);
     const [comisionFormCuentaId, setComisionFormCuentaId] = useState('');
     const [comisionFormTasa, setComisionFormTasa] = useState('');
@@ -359,12 +360,48 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
             .get(route('ventas.getCuentasParaGestor'))
             .then((r) => setCuentasGestor(r.data))
             .catch(() => {});
-        // Cargar cuentas CUP para comisión vendedor (filtramos CUP en el cliente)
+        // Cargar cuentas CUP para comisión y mensajero
         axios
             .get(route('ventas.getCuentasParaGestor'))
-            .then((r) => setCuentasComision((r.data as Cuenta[]).filter((c) => c.moneda?.codigo === 'CUP')))
+            .then((r) => {
+                const cup = (r.data as Cuenta[]).filter((c) => c.moneda?.codigo === 'CUP');
+                setCuentasComision(cup);
+                setCuentasMensajero(cup);
+            })
             .catch(() => {});
     }, []);
+
+    // Pre-llenar form mensajero al abrirlo
+    useEffect(() => {
+        if (!showMensajeroForm || !currentVenta.mensajero) return;
+        setMensajeroFormTipo(currentVenta.mensajero.tipo ?? '');
+        const tasaCUPSistema = monedasSistema.find(m => m.codigo === 'CUP')?.tasa ?? 0;
+        const tasaGuardada = currentVenta.mensajero.tasa;
+        const tasaRef = tasaGuardada ?? (tasaCUPSistema > 0 ? tasaCUPSistema : 0);
+        setMensajeroFormTasa(tasaRef > 0 ? String(tasaRef) : '');
+        const montoUSD = Number(currentVenta.mensajero.monto ?? 0);
+        const esCUP = currentVenta.mensajero.moneda === 'CUP' && Number(currentVenta.mensajero.monto_original) > 0;
+        if (esCUP) {
+            setMensajeroFormMoneda('CUP');
+            setMensajeroFormMonto(String(Number(currentVenta.mensajero.monto_original).toFixed(2)));
+        } else {
+            setMensajeroFormMoneda('CUP');
+            const cupMonto = tasaRef > 0 ? montoUSD * tasaRef : 0;
+            setMensajeroFormMonto(cupMonto > 0 ? String(cupMonto.toFixed(2)) : '');
+        }
+        // Solo pre-llenar si ya se guardó una cuenta antes — la cuenta del almacén es config de destino, no de pago
+        const cuentaGuardada = currentVenta.mensajero.cuenta?.id;
+        setMensajeroFormCuentaId(cuentaGuardada ? String(cuentaGuardada) : '');
+    }, [showMensajeroForm]);
+
+    // Pre-llenar form comisión al abrirlo
+    useEffect(() => {
+        if (!showComisionForm || !currentVenta.comision_pago) return;
+        setComisionFormCuentaId(String(currentVenta.comision_pago.cuenta?.id ?? ''));
+        const tasaCUPSistema = monedasSistema.find(m => m.codigo === 'CUP')?.tasa ?? 0;
+        const tasaGuardada = currentVenta.comision_pago.tasa;
+        setComisionFormTasa(tasaGuardada ? String(tasaGuardada) : (tasaCUPSistema > 0 ? String(tasaCUPSistema) : ''));
+    }, [showComisionForm]);
 
     // Auto-abrir AlertDialog si el vendedor aún no vio el veredicto del admin
     useEffect(() => {
@@ -471,19 +508,26 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
     const guardarMensajero = () => {
         if (!mensajeroFormTipo) { toast.error('Selecciona el tipo de mensajero.'); return; }
-        const monto = parseFloat(mensajeroFormMonto);
-        if (isNaN(monto) || monto <= 0) { toast.error('Ingresa el monto real a dar al mensajero.'); return; }
-        // Tasa solo aplica cuando el mensajero es USD (necesita conversión a CUP para mover la cuenta)
-        const esUSD = !currentVenta.mensajero?.monto_original || currentVenta.mensajero.moneda === 'USD';
-        const payload: Record<string, unknown> = {
-            mensajero_monto: monto,
+        if (!mensajeroFormCuentaId) { toast.error('Selecciona la cuenta CUP de donde salen los fondos.'); return; }
+        const cupMonto = parseFloat(mensajeroFormMonto);
+        const tasa = parseFloat(mensajeroFormTasa);
+        if (!cupMonto || cupMonto <= 0) { toast.error('Ingresa el monto CUP al mensajero.'); return; }
+        if (!tasa || tasa <= 0) { toast.error('Ingresa la tasa CUP/USD.'); return; }
+        // Normalizar: el cupMonto depende de si el monto está en CUP o USD
+        const cupReal = mensajeroFormMoneda === 'CUP' ? cupMonto : cupMonto * tasa;
+        // Validar saldo
+        const cuentaSel = cuentasMensajero.find(c => String(c.id) === mensajeroFormCuentaId);
+        if (cuentaSel && (cuentaSel.saldo_actual ?? 0) < cupReal) {
+            toast.error(`Saldo insuficiente. Necesitas ${cupReal.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP, la cuenta tiene ${(cuentaSel.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP.`);
+            return;
+        }
+        // El backend trabaja con USD + tasa. monto_USD ya está en la venta (del POS).
+        // Solo actualizamos tipo, cuenta y tasa (la tasa determina cuánto CUP se mueve).
+        guardarDistribucion({
             mensajero_tipo: mensajeroFormTipo,
-            mensajero_tasa: esUSD && mensajeroFormTasa ? parseFloat(mensajeroFormTasa) : null,
-            mensajero_cuenta_id: mensajeroFormTipo === 'propio'
-                ? (currentVenta.almacen.mensajero_cuenta_id ?? null)
-                : (mensajeroFormCuentaExternaId ? Number(mensajeroFormCuentaExternaId) : null),
-        };
-        guardarDistribucion(payload);
+            mensajero_tasa: tasa,
+            mensajero_cuenta_id: Number(mensajeroFormCuentaId),
+        });
     };
 
     const guardarComisionVendedor = () => {
@@ -517,19 +561,26 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     const getCurrencySymbol = (moneda: MonedaPago | MonedaPrincipal | null) => moneda?.simbolo || moneda?.codigo || 'USD';
 
     // Siempre: USD + CUP. Sin excepciones, sin inventar formatos distintos.
-    const mensajeroMontos = (m: typeof currentVenta.mensajero): { usd: string; cup: string } => {
-        if (!m) return { usd: '', cup: '' };
-        // USD: si vino en USD usamos monto directamente; si vino en otra moneda dividimos por tasa_entrada
+    const mensajeroMontos = (m: typeof currentVenta.mensajero): { usd: string; cup: string; cobrado: string } => {
+        if (!m) return { usd: '', cup: '', cobrado: '' };
+        const tasaSistema = monedasSistema.find(mon => mon.codigo === 'CUP')?.tasa ?? 0;
+        // USD normalizado (siempre)
         const usdVal = (!m.monto_original || m.moneda === 'USD')
-            ? m.monto
-            : (m.tasa_entrada ? Number(m.monto_original) / m.tasa_entrada : m.monto);
-        // CUP: si vino en CUP usamos monto_original; si vino en USD multiplicamos por tasa o monto_cup
+            ? Number(m.monto)
+            : (m.tasa_entrada ? Number(m.monto_original) / m.tasa_entrada : Number(m.monto));
+        // CUP: usa monto_original si el cliente pagó en CUP, si no convierte con tasa guardada → tasa sistema
+        const tasaParaCUP = m.tasa ?? (tasaSistema > 0 ? tasaSistema : null);
         const cupVal = (m.moneda === 'CUP' && m.monto_original)
             ? Number(m.monto_original)
-            : (m.monto_cup ?? (m.tasa ? usdVal * m.tasa : null));
+            : (m.monto_cup ?? (tasaParaCUP ? usdVal * tasaParaCUP : null));
+        // cobrado = lo que pagó el cliente en su moneda original
+        const cobrado = (m.monto_original && m.moneda && m.moneda !== 'USD')
+            ? `${Number(m.monto_original).toLocaleString('es-ES', { minimumFractionDigits: 2 })} ${m.moneda}`
+            : formatCurrency(usdVal, 'USD');
         return {
             usd: formatCurrency(usdVal, 'USD'),
             cup: cupVal !== null ? `${Number(cupVal).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP` : '',
+            cobrado,
         };
     };
 
@@ -1995,10 +2046,22 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                 {/* ── Panel Distribución unificado ── */}
                 {isVentaPendiente && (
                     <div className="bg-card border-sidebar-accent rounded-lg border p-6 shadow-sm">
-                        <h3 className="mb-4 flex items-center gap-2 text-base font-semibold">
+                        <h3 className="mb-3 flex items-center gap-2 text-base font-semibold">
                             <DollarSign className="h-5 w-5 text-emerald-600" />
                             Distribución de la Venta
                         </h3>
+
+                        {/* ── Gadget de tasas del sistema ── */}
+                        {monedasSistema.length > 0 && (
+                            <div className="mb-4 flex flex-wrap gap-2">
+                                {monedasSistema.map(m => (
+                                    <span key={m.id} className="inline-flex items-center gap-1 rounded-full border bg-muted px-2.5 py-0.5 text-xs font-medium">
+                                        <span className="text-muted-foreground">1 USD =</span>
+                                        <span className="font-bold">{Number(m.tasa).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {m.codigo}</span>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
 
                         {/* ── Resumen de cobro ── */}
                         <div className="mb-4 rounded-lg bg-slate-50 p-3 dark:bg-slate-900">
@@ -2011,14 +2074,21 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                     </span>
                                 </div>
                                 {currentVenta.mensajero && (
-                                    <div className="flex justify-between">
+                                    <div className="flex justify-between items-start">
                                         <span className="text-muted-foreground flex items-center gap-1">
                                             <Truck className="h-3 w-3" /> Mensajería:
                                         </span>
-                                        <span className="font-medium text-sky-600">
+                                        <span className="text-right font-medium text-sky-600">
                                             {(() => {
-                                                const { usd, cup } = mensajeroMontos(currentVenta.mensajero);
-                                                return `+${usd}${cup ? ' = ' + cup : ''}`;
+                                                const { usd, cup, cobrado } = mensajeroMontos(currentVenta.mensajero);
+                                                const esUSD = !currentVenta.mensajero?.monto_original || currentVenta.mensajero.moneda === 'USD';
+                                                return (
+                                                    <span className="flex flex-col items-end">
+                                                        <span>+{cobrado}</span>
+                                                        {!esUSD && <span className="text-xs text-muted-foreground">≈ {usd}</span>}
+                                                        {cup && <span className="text-xs text-emerald-600">→ {cup} a distribuir</span>}
+                                                    </span>
+                                                );
                                             })()}
                                         </span>
                                     </div>
@@ -2062,16 +2132,20 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                 </h4>
                                 <Button size="sm" variant="outline" onClick={() => {
                                     if (currentVenta.mensajero) {
-                                        // Pre-llenar con el monto original si existe, si no con USD
-                                        const montoRef = currentVenta.mensajero.monto_original ?? currentVenta.mensajero.monto;
-                                        setMensajeroFormMonto(String(montoRef));
                                         setMensajeroFormTipo(currentVenta.mensajero.tipo);
-                                        setMensajeroFormTasa(
-                                            currentVenta.mensajero.tasa
-                                                ? String(currentVenta.mensajero.tasa)
-                                                : String(currentVenta.tasa_aplicada_venta ?? currentVenta.tasa_cambio_principal ?? '')
-                                        );
-                                        setMensajeroFormCuentaExternaId('');
+                                        // Tasa CUP real: guardada en la venta, o la de la moneda CUP del sistema
+                                        const tasaCUPSistema = monedasSistema.find(m => m.codigo === 'CUP')?.tasa;
+                                        const tasaRef = currentVenta.mensajero.tasa ?? tasaCUPSistema ?? 0;
+                                        setMensajeroFormTasa(String(tasaRef));
+                                        // Monto CUP: si el mensajero ya era CUP usar monto_original, si era USD multiplicar por tasa CUP
+                                        const montoUSD = currentVenta.mensajero.monto;
+                                        const cupMonto = currentVenta.mensajero.moneda === 'CUP' && currentVenta.mensajero.monto_original
+                                            ? Number(currentVenta.mensajero.monto_original)
+                                            : montoUSD * tasaRef;
+                                        setMensajeroFormMonto(cupMonto > 0 ? String(cupMonto.toFixed(2)) : '');
+                                        // Solo la cuenta guardada previamente — no la default del almacén
+                                        const cuentaGuardada = currentVenta.mensajero.cuenta?.id;
+                                        setMensajeroFormCuentaId(cuentaGuardada ? String(cuentaGuardada) : '');
                                     }
                                     setShowMensajeroForm(!showMensajeroForm);
                                 }}>
@@ -2096,69 +2170,135 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
                             {showMensajeroForm && (
                                 <div className="mt-2 space-y-3 rounded-lg border p-3">
-                                    {/* Referencia del POS */}
-                                    {currentVenta.mensajero && (
-                                        <div className="rounded-md bg-sky-50 px-3 py-2 text-xs text-muted-foreground dark:bg-sky-950">
-                                            <span>Cobrado al cliente (POS): </span>
-                                            <span className="font-semibold text-sky-700">
-                                                {(() => {
-                                                    const { usd, cup } = mensajeroMontos(currentVenta.mensajero);
-                                                    return `${usd}${cup ? ' = ' + cup : ''}`;
-                                                })()}
-                                            </span>
-                                        </div>
-                                    )}
-                                    <div className="grid grid-cols-2 gap-2">
+                                    {/* Fila 1: Tipo */}
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Tipo de mensajero</Label>
+                                        <Select value={mensajeroFormTipo} onValueChange={v => setMensajeroFormTipo(v as 'propio' | 'externo')}>
+                                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Tipo..." /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="propio">🚗 Vehículo propio</SelectItem>
+                                                <SelectItem value="externo">🛵 Mensajero externo</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    {/* Referencia USD del POS — solo lectura */}
+                                    <div className="rounded-md bg-muted px-3 py-2 text-xs">
+                                        <span className="text-muted-foreground">Del POS (USD cobrado): </span>
+                                        <span className="font-semibold">{formatCurrency(currentVenta.mensajero?.monto ?? 0, 'USD')}</span>
+                                    </div>
+
+                                    {/* Monto + Tasa — bidireccionales */}
+                                    <div className="space-y-2">
                                         <div className="space-y-1">
-                                            <Label className="text-xs">Monto real al mensajero</Label>
-                                            <Input type="number" min="0.01" step="0.01" value={mensajeroFormMonto}
-                                                onChange={e => setMensajeroFormMonto(e.target.value)}
-                                                placeholder={currentVenta.mensajero?.monto_original
-                                                    ? String(currentVenta.mensajero.monto_original)
-                                                    : String(currentVenta.mensajero?.monto ?? '')}
+                                            <Label className="text-xs">
+                                                Monto al mensajero
+                                                <span className="ml-1 text-muted-foreground">(editable)</span>
+                                            </Label>
+                                            <div className="flex gap-1">
+                                                {/* Selector de moneda */}
+                                                <Select value={mensajeroFormMoneda} onValueChange={(v) => {
+                                                    const nuevo = v as 'CUP' | 'USD';
+                                                    setMensajeroFormMoneda(nuevo);
+                                                    const usd = Number(currentVenta.mensajero?.monto ?? 0);
+                                                    const tasa = parseFloat(mensajeroFormTasa);
+                                                    if (nuevo === 'USD') {
+                                                        setMensajeroFormMonto(usd > 0 ? String(usd.toFixed(2)) : '');
+                                                    } else {
+                                                        setMensajeroFormMonto(usd > 0 && tasa > 0 ? String((usd * tasa).toFixed(2)) : '');
+                                                    }
+                                                }}>
+                                                    <SelectTrigger className="h-8 w-20 text-xs font-bold">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="CUP">CUP</SelectItem>
+                                                        <SelectItem value="USD">USD</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                                <Input type="number" min="0.01" step="0.01" value={mensajeroFormMonto}
+                                                    onChange={e => {
+                                                        setMensajeroFormMonto(e.target.value);
+                                                        const val = parseFloat(e.target.value);
+                                                        const usd = Number(currentVenta.mensajero?.monto ?? 0);
+                                                        if (mensajeroFormMoneda === 'CUP' && val > 0 && usd > 0) {
+                                                            setMensajeroFormTasa((val / usd).toFixed(2));
+                                                        }
+                                                    }}
+                                                    className="h-8 flex-1 text-sm" />
+                                            </div>
+                                            {/* Equivalente en la otra moneda */}
+                                            {mensajeroFormMonto && mensajeroFormTasa && (() => {
+                                                const val = parseFloat(mensajeroFormMonto);
+                                                const tasa = parseFloat(mensajeroFormTasa);
+                                                const usd = Number(currentVenta.mensajero?.monto ?? 0);
+                                                if (!val || !tasa) return null;
+                                                if (mensajeroFormMoneda === 'CUP') {
+                                                    return <p className="text-xs text-muted-foreground">≈ {usd.toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD</p>;
+                                                } else {
+                                                    return <p className="text-xs text-muted-foreground">= {(val * tasa).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</p>;
+                                                }
+                                            })()}
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">Tasa CUP/USD</Label>
+                                            <Input type="number" min="0.01" step="0.01" value={mensajeroFormTasa}
+                                                onChange={e => {
+                                                    setMensajeroFormTasa(e.target.value);
+                                                    const tasa = parseFloat(e.target.value);
+                                                    const usd = Number(currentVenta.mensajero?.monto ?? 0);
+                                                    if (mensajeroFormMoneda === 'CUP' && tasa > 0 && usd > 0) {
+                                                        setMensajeroFormMonto((usd * tasa).toFixed(2));
+                                                    }
+                                                }}
                                                 className="h-8 text-sm" />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <Label className="text-xs">Tipo</Label>
-                                            <Select value={mensajeroFormTipo} onValueChange={v => setMensajeroFormTipo(v as 'propio' | 'externo')}>
-                                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Tipo..." /></SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="propio">🚗 Vehículo propio</SelectItem>
-                                                    <SelectItem value="externo">🛵 Mensajero externo</SelectItem>
-                                                </SelectContent>
-                                            </Select>
                                         </div>
                                     </div>
-                                    {/* Tasa CUP/USD solo cuando el mensajero era USD */}
-                                    {(!currentVenta.mensajero?.monto_original || currentVenta.mensajero.moneda === 'USD') && (
-                                        <div className="space-y-1">
-                                            <Label className="text-xs">Tasa CUP/USD (para mover a cuenta)</Label>
-                                            <Input type="number" min="0.01" step="0.01" value={mensajeroFormTasa}
-                                                onChange={e => setMensajeroFormTasa(e.target.value)}
-                                                className="h-8 text-sm" />
-                                        </div>
-                                    )}
-                                    {mensajeroFormTipo === 'propio' && currentVenta.almacen.mensajero_cuenta && (
-                                        <p className="text-xs text-sky-600">
-                                            Fondos → <strong>{currentVenta.almacen.mensajero_cuenta.nombre}</strong>
-                                        </p>
-                                    )}
-                                    {mensajeroFormTipo === 'propio' && !currentVenta.almacen.mensajero_cuenta && (
-                                        <p className="text-xs text-amber-600">⚠️ Este almacén no tiene cuenta de mensajería configurada.</p>
-                                    )}
-                                    {mensajeroFormTipo === 'externo' && (
-                                        <div className="space-y-1">
-                                            <Label className="text-xs">Cuenta destino (externo)</Label>
-                                            <Select value={mensajeroFormCuentaExternaId} onValueChange={setMensajeroFormCuentaExternaId}>
-                                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar cuenta..." /></SelectTrigger>
-                                                <SelectContent>
-                                                    {cuentasGestor.map(c => (
-                                                        <SelectItem key={c.id} value={String(c.id)}>{c.nombre_cuenta}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                    )}
+
+                                    {/* ORIGEN: de donde sale el dinero */}
+                                    <div className="rounded-md border border-dashed border-orange-300 p-2 space-y-1.5">
+                                        <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">← Origen (de donde sale)</p>
+                                        <Select value={mensajeroFormCuentaId} onValueChange={setMensajeroFormCuentaId}>
+                                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar cuenta CUP..." /></SelectTrigger>
+                                            <SelectContent>
+                                                {cuentasMensajero.map(c => (
+                                                    <SelectItem key={c.id} value={String(c.id)}>
+                                                        {c.nombre_cuenta} — {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {mensajeroFormCuentaId && (() => {
+                                            const val = parseFloat(mensajeroFormMonto);
+                                            const tasa = parseFloat(mensajeroFormTasa);
+                                            const cupNecesario = mensajeroFormMoneda === 'CUP' ? val : (val * tasa);
+                                            const cuentaSel = cuentasMensajero.find(c => String(c.id) === mensajeroFormCuentaId);
+                                            const saldo = cuentaSel?.saldo_actual ?? 0;
+                                            const alcanza = !cupNecesario || saldo >= cupNecesario;
+                                            return (
+                                                <p className={`text-xs ${alcanza ? 'text-emerald-600' : 'text-red-600'}`}>
+                                                    Saldo: <strong>{saldo.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong>
+                                                    {cupNecesario > 0 && <> — Necesario: <strong>{cupNecesario.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong> {alcanza ? '✓' : '⚠️ Insuficiente'}</>}
+                                                </p>
+                                            );
+                                        })()}
+                                    </div>
+
+                                    {/* DESTINO: a donde va el dinero */}
+                                    <div className="rounded-md border border-dashed border-sky-300 p-2 space-y-1">
+                                        <p className="text-xs font-semibold text-sky-600 uppercase tracking-wide">→ Destino (a donde va)</p>
+                                        {mensajeroFormTipo === 'propio' && (
+                                            <p className="text-xs text-sky-700">
+                                                Vehículo propio del negocio — los CUP se acreditan internamente
+                                            </p>
+                                        )}
+                                        {mensajeroFormTipo === 'externo' && (
+                                            <p className="text-xs text-sky-700">
+                                                Pago en efectivo al mensajero externo
+                                            </p>
+                                        )}
+                                        {!mensajeroFormTipo && <p className="text-xs text-muted-foreground">Selecciona el tipo primero</p>}
+                                    </div>
                                     <div className="flex gap-2 justify-end">
                                         {currentVenta.mensajero && (
                                             <Button size="sm" variant="outline" className="text-red-600" disabled={guardandoDistribucion}
@@ -2267,10 +2407,12 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         <Button size="sm" variant="outline" onClick={() => {
                                             if (currentVenta.comision_pago) {
                                                 setComisionFormCuentaId(String(currentVenta.comision_pago.cuenta?.id ?? ''));
+                                                // Tasa: guardada, o tasa CUP real del sistema
+                                                const tasaCUP = monedasSistema.find(m => m.codigo === 'CUP')?.tasa;
                                                 setComisionFormTasa(
                                                     currentVenta.comision_pago.tasa
                                                         ? String(currentVenta.comision_pago.tasa)
-                                                        : String(currentVenta.tasa_aplicada_venta ?? currentVenta.tasa_cambio_principal ?? '')
+                                                        : String(tasaCUP ?? currentVenta.tasa_cambio_principal ?? '')
                                                 );
                                             }
                                             setShowComisionForm(!showComisionForm);
@@ -2295,34 +2437,63 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
                                     {showComisionForm && (
                                         <div className="mt-2 space-y-3 rounded-lg border p-3">
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <div className="space-y-1">
-                                                    <Label className="text-xs">Cuenta CUP</Label>
-                                                    <Select value={comisionFormCuentaId} onValueChange={setComisionFormCuentaId}>
-                                                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                                                        <SelectContent>
-                                                            {cuentasComision.map(c => (
-                                                                <SelectItem key={c.id} value={String(c.id)}>
-                                                                    {c.nombre_cuenta} · {c.saldo_actual.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <Label className="text-xs">Tasa CUP/USD</Label>
-                                                    <Input type="number" min="0.01" step="0.01" value={comisionFormTasa}
-                                                        onChange={e => setComisionFormTasa(e.target.value)}
-                                                        className="h-8 text-sm" />
-                                                </div>
+                                            {/* Comisión USD fija de la venta */}
+                                            <div className="rounded-md bg-amber-50 px-3 py-2 text-xs dark:bg-amber-950">
+                                                <span className="text-muted-foreground">Comisión a distribuir: </span>
+                                                <span className="font-bold text-amber-700">{formatCurrency(currentVenta.total_comision, 'USD')}</span>
                                             </div>
-                                            {comisionFormCuentaId && comisionFormTasa && (
-                                                <p className="text-xs text-amber-600">
-                                                    Se debitarán <strong>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Tasa CUP/USD</Label>
+                                                <Input type="number" min="0.01" step="0.01" value={comisionFormTasa}
+                                                    onChange={e => setComisionFormTasa(e.target.value)}
+                                                    className="h-8 text-sm" />
+                                            </div>
+                                            {/* CUP en vivo */}
+                                            {comisionFormTasa && parseFloat(comisionFormTasa) > 0 && (
+                                                <div className="rounded-md bg-sky-50 px-3 py-2 text-xs dark:bg-sky-950">
+                                                    <span className="text-muted-foreground">Equivale a: </span>
+                                                    <span className="font-bold text-sky-700">
                                                         {(currentVenta.total_comision * parseFloat(comisionFormTasa)).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
-                                                    </strong> al aprobar.
-                                                </p>
+                                                    </span>
+                                                </div>
                                             )}
+                                            {/* ORIGEN: de donde sale */}
+                                            <div className="rounded-md border border-dashed border-orange-300 p-2 space-y-1.5">
+                                                <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">← Origen (de donde sale)</p>
+                                                <Select value={comisionFormCuentaId} onValueChange={setComisionFormCuentaId}>
+                                                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Cuenta CUP..." /></SelectTrigger>
+                                                    <SelectContent>
+                                                        {cuentasComision.map(c => (
+                                                            <SelectItem key={c.id} value={String(c.id)}>
+                                                                {c.nombre_cuenta} — {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                {comisionFormCuentaId && comisionFormTasa && parseFloat(comisionFormTasa) > 0 && (() => {
+                                                    const cup = currentVenta.total_comision * parseFloat(comisionFormTasa);
+                                                    const cuentaSel = cuentasComision.find(c => String(c.id) === comisionFormCuentaId);
+                                                    const saldo = cuentaSel?.saldo_actual ?? 0;
+                                                    const alcanza = saldo >= cup;
+                                                    return (
+                                                        <p className={`text-xs ${alcanza ? 'text-emerald-600' : 'text-red-600'}`}>
+                                                            Saldo: <strong>{saldo.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong>
+                                                            {' — '}Necesario: <strong>{cup.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong> {alcanza ? '✓' : '⚠️ Insuficiente'}
+                                                        </p>
+                                                    );
+                                                })()}
+                                            </div>
+
+                                            {/* DESTINO: a donde va */}
+                                            <div className="rounded-md border border-dashed border-amber-300 p-2 space-y-1">
+                                                <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide">→ Destino (a donde va)</p>
+                                                <p className="text-xs text-amber-700">
+                                                    Comisión del vendedor <strong>{currentVenta.usuario?.nombre}</strong>
+                                                    {comisionFormTasa && parseFloat(comisionFormTasa) > 0
+                                                        ? ` — ${(currentVenta.total_comision * parseFloat(comisionFormTasa)).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
+                                                        : ''}
+                                                </p>
+                                            </div>
                                             <div className="flex justify-end gap-2">
                                                 {currentVenta.comision_pago?.cuenta && (
                                                     <Button size="sm" variant="outline" className="text-red-600" disabled={guardandoDistribucion}
