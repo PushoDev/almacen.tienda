@@ -499,6 +499,7 @@ class VentaController extends Controller
             'monedaCobro',
             'gestorCuenta.moneda',
             'mensajeroCuenta.moneda',
+            'mensajeroMoneda',
             'comisionCuenta.moneda',
         ])->findOrFail($id);
 
@@ -631,11 +632,14 @@ class VentaController extends Controller
             'nota_venta_especial' => $venta->nota_venta_especial,
             'decision_notificada' => (bool) $venta->decision_notificada,
             'mensajero' => $venta->mensajero_monto > 0 ? [
-                'monto'    => (float) $venta->mensajero_monto,
-                'tipo'     => $venta->mensajero_tipo,
-                'moneda'   => $venta->mensajero_tasa > 0 ? 'USD' : 'CUP',
-                'tasa'     => $venta->mensajero_tasa ? (float) $venta->mensajero_tasa : null,
-                'monto_cup' => $venta->mensajero_tasa > 0
+                'monto'            => (float) $venta->mensajero_monto,
+                'tipo'             => $venta->mensajero_tipo,
+                'moneda_codigo'    => $venta->mensajeroMoneda?->codigo_moneda ?? 'USD',
+                'moneda_id'        => $venta->mensajero_moneda_id,
+                'monto_original'   => $venta->mensajero_monto_original ? (float) $venta->mensajero_monto_original : null,
+                'tasa_entrada'     => $venta->mensajero_tasa_entrada ? (float) $venta->mensajero_tasa_entrada : null,
+                'tasa'             => $venta->mensajero_tasa ? (float) $venta->mensajero_tasa : null,
+                'monto_cup'        => $venta->mensajero_tasa > 0
                     ? round((float) $venta->mensajero_monto * (float) $venta->mensajero_tasa, 2)
                     : null,
                 'cuenta' => $venta->mensajeroCuenta ? [
@@ -785,10 +789,13 @@ class VentaController extends Controller
             'es_venta_especial'    => 'nullable|boolean',
             'nota_venta_especial'  => 'nullable|string|max:500|required_if:es_venta_especial,true',
             // MENSAJERO
-            'mensajero_monto'      => 'nullable|numeric|min:0.01',
-            'mensajero_tipo'       => 'nullable|in:propio,externo',
-            'mensajero_cuenta_id'  => 'nullable|exists:cuentas,id',
-            'mensajero_tasa'       => 'nullable|numeric|min:0.0001',
+            'mensajero_monto'          => 'nullable|numeric|min:0.01',
+            'mensajero_tipo'           => 'nullable|in:propio,externo',
+            'mensajero_cuenta_id'      => 'nullable|exists:cuentas,id',
+            'mensajero_tasa'           => 'nullable|numeric|min:0.0001',
+            'mensajero_moneda_id'      => 'nullable|exists:monedas,id',
+            'mensajero_monto_original' => 'nullable|numeric|min:0.01',
+            'mensajero_tasa_entrada'   => 'nullable|numeric|min:0.0001',
             // COMISIÓN VENDEDOR
             'comision_cuenta_id'   => 'nullable|exists:cuentas,id',
             'comision_tasa'        => 'nullable|numeric|min:0.0001',
@@ -960,10 +967,13 @@ class VentaController extends Controller
                 'nota_venta_especial' => $esEspecial ? ($validatedData['nota_venta_especial'] ?? null) : null,
                 'decision_notificada' => false,
                 // MENSAJERO
-                'mensajero_monto'     => $validatedData['mensajero_monto'] ?? null,
-                'mensajero_tipo'      => $validatedData['mensajero_tipo'] ?? null,
-                'mensajero_cuenta_id' => $validatedData['mensajero_cuenta_id'] ?? null,
-                'mensajero_tasa'      => $validatedData['mensajero_tasa'] ?? null,
+                'mensajero_monto'          => $validatedData['mensajero_monto'] ?? null,
+                'mensajero_tipo'           => $validatedData['mensajero_tipo'] ?? null,
+                'mensajero_cuenta_id'      => $validatedData['mensajero_cuenta_id'] ?? null,
+                'mensajero_tasa'           => $validatedData['mensajero_tasa'] ?? null,
+                'mensajero_moneda_id'      => $validatedData['mensajero_moneda_id'] ?? null,
+                'mensajero_monto_original' => $validatedData['mensajero_monto_original'] ?? null,
+                'mensajero_tasa_entrada'   => $validatedData['mensajero_tasa_entrada'] ?? null,
                 // COMISIÓN VENDEDOR
                 'comision_cuenta_id'  => $validatedData['comision_cuenta_id'] ?? null,
                 'comision_tasa'       => $validatedData['comision_tasa'] ?? null,
@@ -1330,10 +1340,19 @@ class VentaController extends Controller
                 $cuentaMensajero = $venta->mensajeroCuenta;
 
                 if ($cuentaMensajero) {
-                    // Si hay tasa, el monto original era USD y se convierte a CUP; si no, ya era CUP directo
-                    $montoFinal = $venta->mensajero_tasa > 0
-                        ? round((float) $venta->mensajero_monto * (float) $venta->mensajero_tasa, 2)
-                        : (float) $venta->mensajero_monto;
+                    // Si el mensajero fue cobrado en moneda no-USD (ej. CUP),
+                    // usar el monto original directamente (ya está en la moneda de la cuenta).
+                    // Si fue en USD, convertir a CUP via tasa configurada en Show.
+                    $mensajeroMoneda = $venta->mensajeroMoneda;
+                    $esOriginalNoUSD = $mensajeroMoneda
+                        && $mensajeroMoneda->codigo_moneda !== 'USD'
+                        && $venta->mensajero_monto_original > 0;
+
+                    $montoFinal = $esOriginalNoUSD
+                        ? (float) $venta->mensajero_monto_original
+                        : ($venta->mensajero_tasa > 0
+                            ? round((float) $venta->mensajero_monto * (float) $venta->mensajero_tasa, 2)
+                            : (float) $venta->mensajero_monto);
 
                     if ($venta->mensajero_tipo === 'propio') {
                         $cuentaMensajero->increment('saldo_cuenta', $montoFinal);
@@ -1708,9 +1727,9 @@ class VentaController extends Controller
         $nuevoMensajeroMonto = $limpiarMensajero ? null : ($validated['mensajero_monto'] ?? $venta->mensajero_monto);
         $nuevoMensajeroTasa  = $limpiarMensajero ? null : ($validated['mensajero_tasa'] ?? (isset($validated['mensajero_monto']) ? null : $venta->mensajero_tasa));
 
-        $mensajeroEnUSD = ($nuevoMensajeroMonto > 0 && $nuevoMensajeroTasa > 0)
-            ? (float) $nuevoMensajeroMonto
-            : 0;
+        // mensajero_monto siempre es el equivalente en USD (calculado en el POS)
+        // no depende de mensajero_tasa (que es la tasa de la cuenta CUP en Show)
+        $mensajeroEnUSD = $nuevoMensajeroMonto > 0 ? (float) $nuevoMensajeroMonto : 0;
 
         $updates = ['total' => $totalProductos + $mensajeroEnUSD];
 
@@ -1777,7 +1796,7 @@ class VentaController extends Controller
         ]);
 
         // Cargar relaciones necesarias para poder revertirlas
-        $venta->load(['detalles', 'pagos.cliente', 'pagos.cuenta', 'gestorCuenta', 'comisionCuenta']);
+        $venta->load(['detalles', 'pagos.cliente', 'pagos.cuenta', 'gestorCuenta', 'comisionCuenta', 'mensajeroCuenta', 'mensajeroMoneda']);
 
         DB::transaction(function () use ($venta, $validated) {
             // ✅ SIEMPRE revertir stock (pendiente o completada)
@@ -1849,9 +1868,16 @@ class VentaController extends Controller
                 if ($venta->mensajero_monto > 0 && $venta->mensajero_cuenta_id) {
                     $cuentaMensajero = $venta->mensajeroCuenta;
                     if ($cuentaMensajero) {
-                        $montoFinal = $venta->mensajero_tasa > 0
-                            ? round((float) $venta->mensajero_monto * (float) $venta->mensajero_tasa, 2)
-                            : (float) $venta->mensajero_monto;
+                        $mensajeroMoneda = $venta->mensajeroMoneda;
+                        $esOriginalNoUSD = $mensajeroMoneda
+                            && $mensajeroMoneda->codigo_moneda !== 'USD'
+                            && $venta->mensajero_monto_original > 0;
+
+                        $montoFinal = $esOriginalNoUSD
+                            ? (float) $venta->mensajero_monto_original
+                            : ($venta->mensajero_tasa > 0
+                                ? round((float) $venta->mensajero_monto * (float) $venta->mensajero_tasa, 2)
+                                : (float) $venta->mensajero_monto);
 
                         if ($venta->mensajero_tipo === 'propio') {
                             $cuentaMensajero->decrement('saldo_cuenta', $montoFinal);
