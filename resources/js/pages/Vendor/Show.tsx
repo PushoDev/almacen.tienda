@@ -516,6 +516,23 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
     const getCurrencySymbol = (moneda: MonedaPago | MonedaPrincipal | null) => moneda?.simbolo || moneda?.codigo || 'USD';
 
+    // Siempre: USD + CUP. Sin excepciones, sin inventar formatos distintos.
+    const mensajeroMontos = (m: typeof currentVenta.mensajero): { usd: string; cup: string } => {
+        if (!m) return { usd: '', cup: '' };
+        // USD: si vino en USD usamos monto directamente; si vino en otra moneda dividimos por tasa_entrada
+        const usdVal = (!m.monto_original || m.moneda === 'USD')
+            ? m.monto
+            : (m.tasa_entrada ? Number(m.monto_original) / m.tasa_entrada : m.monto);
+        // CUP: si vino en CUP usamos monto_original; si vino en USD multiplicamos por tasa o monto_cup
+        const cupVal = (m.moneda === 'CUP' && m.monto_original)
+            ? Number(m.monto_original)
+            : (m.monto_cup ?? (m.tasa ? usdVal * m.tasa : null));
+        return {
+            usd: formatCurrency(usdVal, 'USD'),
+            cup: cupVal !== null ? `${Number(cupVal).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP` : '',
+        };
+    };
+
     const limpiarEstadosGestor = () => {
         setEsVentaGestor(false);
         setGestorMonto('');
@@ -1033,11 +1050,13 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                             <div className="bg-card rounded-xl border p-4 text-center">
                                 <Truck size={24} className="mx-auto mb-2 text-sky-500" />
                                 <p className="text-muted-foreground mb-1 text-sm">Mensajería</p>
-                                <p className="text-2xl font-bold text-sky-600">
-                                    {currentVenta.mensajero.monto_original && currentVenta.mensajero.moneda !== 'USD'
-                                        ? `${Number(currentVenta.mensajero.monto_original).toLocaleString('es-ES', { minimumFractionDigits: 2 })} ${currentVenta.mensajero.moneda}`
-                                        : formatCurrency(currentVenta.mensajero.monto, 'USD')}
-                                </p>
+                                {(() => {
+                                    const { usd, cup } = mensajeroMontos(currentVenta.mensajero);
+                                    return <>
+                                        <p className="text-2xl font-bold text-sky-600">{usd}</p>
+                                        {cup && <p className="text-sm text-sky-500">= {cup}</p>}
+                                    </>;
+                                })()}
                                 <p className="text-muted-foreground mt-1 text-xs capitalize">
                                     {currentVenta.mensajero.tipo === 'propio' ? 'Vehículo propio' : 'Mensajero externo'}
                                 </p>
@@ -1997,9 +2016,10 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                             <Truck className="h-3 w-3" /> Mensajería:
                                         </span>
                                         <span className="font-medium text-sky-600">
-                                            {currentVenta.mensajero.monto_original && currentVenta.mensajero.moneda !== 'USD'
-                                                ? `+${Number(currentVenta.mensajero.monto_original).toLocaleString('es-ES', { minimumFractionDigits: 2 })} ${currentVenta.mensajero.moneda}${currentVenta.mensajero.tasa_entrada ? ` ≈ ${formatCurrency(Number(currentVenta.mensajero.monto_original) / currentVenta.mensajero.tasa_entrada, 'USD')}` : ''}`
-                                                : `+${formatCurrency(currentVenta.mensajero.monto, 'USD')}`}
+                                            {(() => {
+                                                const { usd, cup } = mensajeroMontos(currentVenta.mensajero);
+                                                return `+${usd}${cup ? ' = ' + cup : ''}`;
+                                            })()}
                                         </span>
                                     </div>
                                 )}
@@ -2066,18 +2086,10 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         {currentVenta.mensajero.cuenta?.nombre ?? 'Sin cuenta asignada'}
                                     </span>
                                     <span className="font-semibold text-sky-700">
-                                        {currentVenta.mensajero.monto_original && currentVenta.mensajero.moneda !== 'USD'
-                                            ? (() => {
-                                                const base = `${Number(currentVenta.mensajero.monto_original).toLocaleString('es-ES', { minimumFractionDigits: 2 })} ${currentVenta.mensajero.moneda}`;
-                                                const usd = currentVenta.mensajero.tasa_entrada
-                                                    ? ` ≈ ${formatCurrency(Number(currentVenta.mensajero.monto_original) / currentVenta.mensajero.tasa_entrada, 'USD')}`
-                                                    : '';
-                                                return base + usd;
-                                            })()
-                                            : formatCurrency(currentVenta.mensajero.monto, 'USD')}
-                                        {(!currentVenta.mensajero.monto_original || currentVenta.mensajero.moneda === 'USD') && currentVenta.mensajero.monto_cup
-                                            ? ` = ${currentVenta.mensajero.monto_cup.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
-                                            : ''}
+                                        {(() => {
+                                            const { usd, cup } = mensajeroMontos(currentVenta.mensajero);
+                                            return `${usd}${cup ? ' = ' + cup : ''}`;
+                                        })()}
                                     </span>
                                 </div>
                             )}
@@ -2089,9 +2101,10 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         <div className="rounded-md bg-sky-50 px-3 py-2 text-xs text-muted-foreground dark:bg-sky-950">
                                             <span>Cobrado al cliente (POS): </span>
                                             <span className="font-semibold text-sky-700">
-                                                {currentVenta.mensajero.monto_original && currentVenta.mensajero.moneda !== 'USD'
-                                                    ? `${Number(currentVenta.mensajero.monto_original).toLocaleString('es-ES', { minimumFractionDigits: 2 })} ${currentVenta.mensajero.moneda}${currentVenta.mensajero.tasa_entrada ? ` ≈ ${formatCurrency(Number(currentVenta.mensajero.monto_original) / currentVenta.mensajero.tasa_entrada, 'USD')}` : ''}`
-                                                    : formatCurrency(currentVenta.mensajero.monto, 'USD')}
+                                                {(() => {
+                                                    const { usd, cup } = mensajeroMontos(currentVenta.mensajero);
+                                                    return `${usd}${cup ? ' = ' + cup : ''}`;
+                                                })()}
                                             </span>
                                         </div>
                                     )}
@@ -2581,25 +2594,21 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                     </h3>
                                 </div>
                                 <div className="space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground text-xs font-medium">Monto cobrado al cliente:</span>
-                                        <Badge variant="outline" className="font-bold text-sky-600">
-                                            {currentVenta.mensajero.monto_original && currentVenta.mensajero.moneda !== 'USD'
-                                                ? `${Number(currentVenta.mensajero.monto_original).toLocaleString('es-ES', { minimumFractionDigits: 2 })} ${currentVenta.mensajero.moneda}`
-                                                : formatCurrency(currentVenta.mensajero.monto, 'USD')}
-                                        </Badge>
-                                    </div>
-                                    {currentVenta.mensajero.tasa_entrada && currentVenta.mensajero.moneda !== 'USD' && (
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-muted-foreground text-xs font-medium">Equivalente USD:</span>
-                                            <span className="text-sm font-medium">
-                                                {formatCurrency(
-                                                    Number(currentVenta.mensajero.monto_original) / currentVenta.mensajero.tasa_entrada,
-                                                    'USD'
-                                                )}
-                                            </span>
-                                        </div>
-                                    )}
+                                    {(() => {
+                                        const { usd, cup } = mensajeroMontos(currentVenta.mensajero);
+                                        return <>
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-muted-foreground text-xs font-medium">USD:</span>
+                                                <Badge variant="outline" className="font-bold text-sky-600">{usd}</Badge>
+                                            </div>
+                                            {cup && (
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-muted-foreground text-xs font-medium">CUP:</span>
+                                                    <Badge variant="outline" className="font-bold text-sky-600">{cup}</Badge>
+                                                </div>
+                                            )}
+                                        </>;
+                                    })()}
                                     {currentVenta.mensajero.tasa && (
                                         <div className="flex items-center justify-between">
                                             <span className="text-muted-foreground text-xs font-medium">Tasa aplicada:</span>
