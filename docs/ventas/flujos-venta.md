@@ -1,6 +1,6 @@
 # Flujos de Venta — Contexto y Diseño
 
-**Última actualización:** 2026-06-25
+**Última actualización:** 2026-06-28
 
 ---
 
@@ -107,7 +107,7 @@ Aparece solo en ventas `pendiente`. Se gestiona ANTES de aprobar.
 | Sección | Contenido |
 |---|---|
 | Resumen de cobro | Productos / Mensajería / Total cliente / Pagos recibidos desglosados |
-| Mensajero | Configura tipo (propio/externo) + cuenta + tasa CUP para el movimiento real |
+| Mensajero | Configura tipo (propio/externo) + cuenta CUP + **monto final CUP editable** (permite premio/sanción) |
 | Comisión | Selector XOR: **Punto de Venta** O **Gestor** (nunca ambos) |
 
 **Comisión — diseño propuesto (pendiente de implementar):**
@@ -124,15 +124,17 @@ El panel de distribución debe mostrar un selector explícito con dos botones:
 Actualmente el modo se infiere implícitamente de si existe `gestor` en la venta,
 lo que genera confusión y riesgo de tener ambos configurados en DB simultáneamente.
 
-**El mensajero siempre se acumula en CUP:**
-- **Propio:** CUP equivalente se acredita en la cuenta CUP del almacén (entra dinero)
-- **Externo:** CUP equivalente se debita de una cuenta CUP (sale dinero para pagar al mensajero)
+**El mensajero siempre se paga en CUP:**
+- **Propio:** `monto_final_cup` se acredita en la cuenta CUP (entra dinero)
+- **Externo:** `monto_final_cup` se debita de la cuenta CUP (sale dinero para pagar al mensajero)
 
-**Lógica smart de movimiento mensajero (implementado 2026-06-25):**
-- Si `mensajero_moneda_id` es no-USD y `mensajero_monto_original > 0`:
-  usa `monto_original` directamente (el cliente ya pagó en esa moneda)
-- Si es USD o no hay moneda original:
-  usa `mensajero_monto × mensajero_tasa` (conversión a CUP vía tasa de Show.tsx)
+**Monto final CUP editable (implementado 2026-06-28):**
+- `monto_original` del POS es la referencia inmutable — lo que el cliente pagó
+- `monto_final_cup` en Show es el monto real que se mueve en la cuenta — editable
+- Si `monto_final_cup > monto_original` → premio al mensajero (verde en UI)
+- Si `monto_final_cup < monto_original` → sanción al mensajero (amarillo en UI)
+- Si no se edita → backend usa `monto_original` como fallback
+- La tasa ya no dicta el monto final — es solo referencia informativa
 
 ### Show.tsx — Otras secciones
 
@@ -151,24 +153,27 @@ POS:   productos → pago USD → crear venta
 Show:  (opcional) ajustar precio → configurar comisión [PV] cuenta CUP + tasa → aprobar
 ```
 
-### Flujo B — Venta con mensajero propio (multi-moneda)
+### Flujo B — Venta con mensajero propio
 ```
-POS:   productos ($100) + mensajero CUP 5000 (tasa 500 = $10 USD) = total cliente $110
-       cliente paga $110 completo (zelle, CUP, efectivo, etc.)
-       → mensajero_monto = $10 USD, mensajero_monto_original = 5000, mensajero_moneda_id = CUP
+POS:   productos ($100) + mensajero 5000 CUP (tasa 500 = $10 USD) = total cliente $110
+       cliente paga $110 completo
+       → mensajero_monto = $10 USD, mensajero_monto_original = 5000 CUP
 
-Show:  mensajero: tipo=propio → 5000 CUP acreditados directamente (usa monto_original)
-       comisión [PV]: cuenta CUP, tasa=500 → X CUP debitados
+Show:  mensajero: tipo=propio
+       monto_final_cup = 5000 CUP (o ajustado: 5500 = premio, 4500 = sanción)
+       cuenta CUP del vehículo/negocio → se acreditan los CUP
+       comisión [PV]: cuenta CUP, tasa → X CUP debitados
        aprobar
 ```
 
 ### Flujo C — Venta con mensajero externo
 ```
-POS:   productos + mensajero ($15 USD) = total cliente
+POS:   productos + mensajero 8000 CUP = total cliente
        cliente paga todo
 
-Show:  mensajero: tipo=externo, cuenta CUP origen, tasa → 7500 CUP salen de la cuenta
-       (ese dinero se le paga en mano al mensajero externo)
+Show:  mensajero: tipo=externo
+       monto_final_cup = 8000 CUP (editable — permite premio o sanción)
+       cuenta CUP de la empresa → 8000 CUP salen (se le pagan en mano al mensajero)
        comisión → [PV] o [Gestor]
        aprobar
 ```

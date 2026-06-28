@@ -1,6 +1,7 @@
 # Contexto de Ventas — Estado Actual del Código
 
 **Creado:** 2026-06-28
+**Última actualización:** 2026-06-28
 **Referencia:** Ver `flujos-venta.md` para diseño y flujos, `pendiente-cierre-caja.md` para cierre.
 
 ---
@@ -9,7 +10,7 @@
 
 | Archivo | Rol |
 |---|---|
-| `app/Http/Controllers/VentaController.php` | Controlador principal (2033 líneas) |
+| `app/Http/Controllers/VentaController.php` | Controlador principal |
 | `app/Models/Venta.php` | Modelo principal |
 | `app/Models/VentaDetalle.php` | Ítem por producto |
 | `app/Models/PagoVenta.php` | Pago individual (puede ir a cuenta o cliente) |
@@ -72,7 +73,7 @@ completada → cancelada
 |---|---|
 | `procesarVenta()` | Crea venta, descuenta stock inmediatamente, calcula comisión, crea pagos |
 | `guardarDestinatario()` | Guarda receptor + configura gestor (solo en estado `pendiente`) |
-| `guardarDistribucion()` | Configura mensajero (tipo/cuenta/tasa) y/o comisión vendedor |
+| `guardarDistribucion()` | Configura mensajero (tipo/cuenta/monto_final_cup) y/o comisión vendedor |
 | `editarVentaPendiente()` | Reemplaza pagos completo + recalcula precios/comisiones si vienen items |
 | `aprobarVenta()` | Ejecuta todos los movimientos financieros → estado `completada` |
 | `anularVenta()` | Revierte stock siempre; revierte financiero solo si estaba `completada` |
@@ -115,28 +116,42 @@ La ganancia de la agencia es siempre `(precio_venta - precio_compra) * cantidad 
 
 ## Mensajero — campos en `ventas`
 
-| Campo | Cuándo se llena |
-|---|---|
-| `mensajero_monto` | POS — monto en USD |
-| `mensajero_moneda_id` | POS — moneda en que el cliente paga el envío |
-| `mensajero_monto_original` | POS — monto en moneda original (si no es USD) |
-| `mensajero_tasa_entrada` | POS — tasa usada para calcular el equivalente USD |
-| `mensajero_tipo` | Show — `propio` o `externo` |
-| `mensajero_cuenta_id` | Show — cuenta que recibe/paga el mensajero |
-| `mensajero_tasa` | Show — tasa CUP para el movimiento de cuenta al aprobar |
+El mensajero es el cobro por entrega a domicilio. El cliente lo paga en el POS junto a los
+productos. En Show se configura a quién se le paga y cuánto exactamente.
 
-**Lógica al aprobar:**
-```
-si mensajero_moneda != USD y monto_original > 0  →  usa monto_original directamente
-si mensajero_tasa > 0                            →  mensajero_monto × mensajero_tasa
-sino                                             →  mensajero_monto tal cual
-```
+| Campo | Cuándo se llena | Descripción |
+|---|---|---|
+| `mensajero_monto` | POS | Equivalente en USD del cobro al cliente |
+| `mensajero_moneda_id` | POS | Moneda en que el cliente pagó el envío |
+| `mensajero_monto_original` | POS | Monto en moneda original (referencia inmutable del POS) |
+| `mensajero_tasa_entrada` | POS | Tasa usada para calcular el equivalente USD |
+| `mensajero_tipo` | Show | `propio` o `externo` |
+| `mensajero_cuenta_id` | Show | Cuenta CUP que recibe o paga al mensajero |
+| `mensajero_tasa` | Show | Tasa CUP/USD (referencia — ya no dicta el monto final) |
+| `mensajero_monto_final_cup` | Show | **Monto real en CUP que se mueve en la cuenta** (editable, permite premio/sanción) |
 
-**Efecto en cuenta:**
-- `propio` → `cuentaMensajero.saldo += montoFinal`
-- `externo` → `cuentaMensajero.saldo -= montoFinal`
+### Reglas del mensajero
+
+- El cliente **siempre paga en CUP** → se convierte a USD por tasa para acumular al total
+- La empresa **siempre paga al mensajero en CUP** → la cuenta en Show es siempre CUP
+- `monto_original` es la referencia del POS — **no se modifica desde Show**
+- `monto_final_cup` es el monto editable — puede ser mayor (premio) o menor (sanción) que `monto_original`
+- Si `monto_final_cup` no está configurado, el backend usa `monto_original` como fallback
+
+**Efecto en cuenta al aprobar:**
+- `propio` → `cuentaMensajero.saldo += monto_final_cup`
+- `externo` → `cuentaMensajero.saldo -= monto_final_cup`
 
 **El mensajero se excluye del total USD de productos y del cálculo cambiario.**
+
+### Validaciones en `aprobarVenta` (añadidas 2026-06-28)
+
+```
+Si mensajero_monto > 0 y mensajero_cuenta_id es null  → bloquea con error
+Si mensajero_monto > 0 y mensajero_tipo es null       → bloquea con error
+```
+
+Antes de esta corrección el movimiento se saltaba silenciosamente si faltaban estos campos.
 
 ---
 
@@ -185,6 +200,11 @@ Regalos (`total = 0`) pueden tener `pagos = []` vacío.
 ## Orden de ejecución en `aprobarVenta`
 
 ```
+0. Validaciones previas (ANTES de la transacción):
+   - estado === 'pendiente'
+   - tiene destinatario
+   - si mensajero_monto > 0: debe tener mensajero_cuenta_id y mensajero_tipo
+
 1. estado → completada
 2. Procesar pagos:
    - cliente físico → incrementa deuda_pago_cliente
@@ -192,7 +212,8 @@ Regalos (`total = 0`) pueden tener `pagos = []` vacío.
 3. Calcular ganancia_perdida_cambiaria (solo sobre CUP, sin mensajero)
 4. Actualizar ganancia_perdida_cambiaria y ganancia_real_total
 5. Descuento gestor (si es_venta_gestor && gestor_cuenta_id && gestor_monto > 0)
-6. Mensajero (si mensajero_monto > 0 && mensajero_cuenta_id)
+6. Mensajero (si mensajero_monto > 0 && mensajero_cuenta_id):
+   montoFinal = mensajero_monto_final_cup ?? mensajero_monto_original
 7. Comisión vendedor (si !es_venta_gestor && comision_cuenta_id && comision_tasa > 0)
 ```
 
@@ -211,28 +232,63 @@ SOLO SI estaba completada:
   - cuenta.saldo -= pago.monto                     (pagos a cuentas)
   - gestorCuenta.saldo += gestor_monto             (revertir gestor)
   - mensajeroCuenta.saldo +=/-= montoFinal         (inverso al tipo propio/externo)
+    donde montoFinal = mensajero_monto_final_cup ?? mensajero_monto_original
   - comisionCuenta.saldo += total_comision × tasa  (revertir comisión vendedor)
 ```
 
 ---
 
-## Bugs pendientes conocidos (de flujos-venta.md)
+## Bugs resueltos (2026-06-28)
+
+| ID | Ubicación | Descripción | Estado |
+|---|---|---|---|
+| B_mensajero_skip | `aprobarVenta` | Movimiento del mensajero se saltaba silenciosamente si faltaba cuenta o tipo | ✅ Resuelto — bloquea con error claro |
+| B_mensajero_tasa | `aprobarVenta` / Show.tsx | La tasa en Show no tenía efecto real cuando moneda era CUP | ✅ Resuelto — reemplazado por `monto_final_cup` editable |
+
+## Bugs pendientes conocidos
 
 | ID | Ubicación | Descripción | Impacto |
 |---|---|---|---|
 | B1 | `guardarDistribucion` | Devuelve `saldo_actual` en respuesta pero el campo es `saldo_cuenta` | UI muestra dato incorrecto |
 | B2 | `aprobarVenta` / `anularVenta` | Falta guardia XOR — la comisión vendedor podría ejecutarse aunque haya gestor | Doble débito potencial |
-| B3 | `procesarVenta` | `foreach ($validatedData['pagos'] as $pago)` sin `?? []` en la primera iteración (línea ~810) | Crash si pagos es null |
+| B3 | `procesarVenta` | `foreach ($validatedData['pagos'] as $pago)` sin `?? []` (línea ~810) | Crash si pagos es null |
 
 ---
 
-## Features pendientes conocidas (de flujos-venta.md)
+## Features pendientes conocidas
 
 | ID | Pantalla | Descripción |
 |---|---|---|
 | F1 | Show.tsx | Selector XOR visual `[Punto de Venta] / [Gestor]` en panel distribución |
-| F2 | Show.tsx | Display mensajero multi-moneda (interface TypeScript incompleta) |
-| F3 | Show.tsx | Form edición mensajero en Show — solo acepta USD/CUP, falta soporte multi-moneda |
+
+---
+
+## Widget de tasas de cambio (TasasFlotante)
+
+Componente global añadido el 2026-06-28 para que vendedores y admin consulten las tasas
+en cualquier pantalla sin salir del flujo de trabajo.
+
+| Archivo | Rol |
+|---|---|
+| `resources/js/components/TasasFlotante.tsx` | Componente flotante |
+| `app/Http/Middleware/HandleInertiaRequests.php` | Comparte `tasas` globalmente via Inertia |
+| `resources/js/types/index.d.ts` | Interfaz `TasaMoneda` + campo `tasas` en `SharedData` |
+| `resources/js/layouts/app/app-sidebar-layout.tsx` | Inyectado aquí |
+| `resources/js/layouts/app/app-header-layout.tsx` | Inyectado aquí |
+
+**Comportamiento:**
+- Botón redondo fijo abajo a la derecha en todas las páginas del layout principal
+- Click → panel con todas las monedas activas ordenadas (principal primero)
+- Muestra: código de moneda + cuántas unidades equivalen a 1 USD
+- La moneda base aparece marcada en azul con etiqueta `base`
+- Solo lectura — no permite editar tasas desde aquí
+- Las tasas vienen en cada respuesta Inertia (sin llamadas adicionales al servidor)
+- Soporta modo claro y oscuro
+
+**Por qué es relevante para ventas:**
+- El vendedor necesita la tasa CUP al configurar el mensajero en Show
+- Al cobrar pagos en múltiples monedas en el POS, la tasa determina el equivalente USD
+- El cálculo cambiario al aprobar usa la tasa oficial del sistema
 
 ---
 
@@ -244,3 +300,5 @@ SOLO SI estaba completada:
 - **Stock se descuenta al crear** (no al aprobar) — reversión siempre aplica sin importar el estado
 - **Pagos a clientes no modifican cuentas** — solo incrementan deuda del cliente
 - **Los movimientos financieros (cuentas/deudas) solo ocurren al aprobar**, no al crear
+- **`monto_final_cup` es la fuente de verdad del mensajero** — no `monto_original` ni `tasa`
+- **La misma cuenta CUP puede recibir y pagar en la misma aprobación** (pago cliente + mensajero + comisión) — todo ocurre en una sola `DB::transaction()` de forma secuencial

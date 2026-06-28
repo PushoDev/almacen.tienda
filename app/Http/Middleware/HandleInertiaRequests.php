@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Moneda;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -55,6 +56,10 @@ class HandleInertiaRequests extends Middleware
                 'success' => fn() => $request->session()->get('success'),
                 'error' => fn() => $request->session()->get('error'),
             ],
+            'tasas' => fn() => Moneda::where('estado', true)
+                ->orderBy('principal', 'desc')
+                ->orderBy('codigo_moneda')
+                ->get(['codigo_moneda', 'tasa_cambio', 'principal']),
         ];
     }
 }
