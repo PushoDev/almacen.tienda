@@ -238,6 +238,10 @@ class CierreCajaController extends Controller
                 'ventas_anuladas_count'         => $calculos['ventas_anuladas_count'] ?? 0,
                 'ventas_anuladas_total_usd'     => $calculos['ventas_anuladas_total_usd'] ?? 0,
                 'ventas_anuladas_detalles'      => $calculos['ventas_anuladas_detalles'] ?? [],
+                // Mensajería del turno
+                'mensajero_total_usd'           => $calculos['mensajero_total_usd'] ?? 0,
+                'mensajero_total_cup'           => $calculos['mensajero_total_cup'] ?? 0,
+                'mensajero_count'               => $calculos['mensajero_count'] ?? 0,
             ],
             // NUEVO: Comparativa con cierre anterior
             'comparativa_cuentas' => $comparativaCuentas,
@@ -471,17 +475,34 @@ class CierreCajaController extends Controller
         $ventasAnuladasCierre = \App\Models\Venta::where('user_id', $cierre->user_id)
             ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
             ->where('estado', 'cancelada')
+            ->with('detalles')
             ->get();
 
         $vaCount    = $ventasAnuladasCierre->count();
-        $vaTotalUSD = round($ventasAnuladasCierre->sum(fn($v) => (float) $v->total), 2);
+        $vaTotalUSD = round($ventasAnuladasCierre->sum(fn($v) => (float) $v->detalles->sum('subtotal')), 2);
         $vaDetalles = $ventasAnuladasCierre->map(fn($v) => [
             'venta_id' => $v->id,
-            'total'    => round((float) $v->total, 2),
+            'total'    => round((float) $v->detalles->sum('subtotal'), 2),
             'motivo'   => $v->motivo_anulacion ?? 'sin_motivo',
             'detalle'  => $v->detalle_anulacion,
             'fecha'    => $v->created_at->format('Y-m-d H:i'),
         ])->values()->all();
+
+        // Mensajería del período del cierre
+        $mensajeroCierre = \App\Models\Venta::where('user_id', $cierre->user_id)
+            ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
+            ->where('estado', 'completada')
+            ->whereNotNull('mensajero_monto')
+            ->where('mensajero_monto', '>', 0)
+            ->get(['mensajero_monto', 'mensajero_monto_original', 'mensajero_monto_final_cup']);
+
+        $mensajeroCount  = $mensajeroCierre->count();
+        $mensajeroTotUSD = round($mensajeroCierre->sum(fn($v) => (float) $v->mensajero_monto), 2);
+        $mensajeroTotCUP = round($mensajeroCierre->sum(fn($v) =>
+            $v->mensajero_monto_final_cup
+                ? (float) $v->mensajero_monto_final_cup
+                : (float) ($v->mensajero_monto_original ?? 0)
+        ), 2);
 
         $showPayload = [
             'cierre'                => $cierre,
@@ -500,6 +521,10 @@ class CierreCajaController extends Controller
             'ventas_anuladas_count'         => $vaCount,
             'ventas_anuladas_total_usd'     => $vaTotalUSD,
             'ventas_anuladas_detalles'      => $vaDetalles,
+            // Mensajería del turno
+            'mensajero_total_usd'           => $mensajeroTotUSD,
+            'mensajero_total_cup'           => $mensajeroTotCUP,
+            'mensajero_count'               => $mensajeroCount,
         ];
 
         if (! $puedeVerCostoImpactoEspeciales) {
@@ -540,6 +565,15 @@ class CierreCajaController extends Controller
                 ->where('created_at', '>=', $inicioTurno)
                 ->where('estado', 'completada');
         })->with(['moneda', 'cuenta', 'cliente', 'venta.detalles.producto.categoria'])->get();
+
+        // Acumular mensajero del turno (solo ventas completadas con mensajero)
+        $ventasConMensajero = \App\Models\Venta::where('user_id', $user->id)
+            ->where('created_at', '>=', $inicioTurno)
+            ->where('estado', 'completada')
+            ->whereNotNull('mensajero_monto')
+            ->where('mensajero_monto', '>', 0)
+            ->with('mensajeroMoneda')
+            ->get(['mensajero_monto', 'mensajero_monto_original', 'mensajero_monto_final_cup', 'mensajero_moneda_id', 'mensajero_tipo', 'mensajero_cuenta_id']);
 
         // 2. Obtener IDs de cuentas del usuario para buscar transferencias entrantes
         $cuentaIds = $user->cuentas()->pluck('id')->toArray();
@@ -1021,27 +1055,60 @@ class CierreCajaController extends Controller
             (float) $v->total_ganancia - (float) $v->total_comision
         );
 
+        // --- MENSAJERO DEL TURNO ---
+        $mensajeroTotalUSD = 0;
+        $mensajeroTotalCUP = 0;
+        $mensajeroDetalles = [];
+
+        foreach ($ventasConMensajero as $v) {
+            $montoUSD = (float) $v->mensajero_monto;
+            // Monto CUP real pagado: usa monto_final_cup si fue editado, sino monto_original del POS
+            $montoCUP = $v->mensajero_monto_final_cup
+                ? (float) $v->mensajero_monto_final_cup
+                : (float) ($v->mensajero_monto_original ?? 0);
+
+            $mensajeroTotalUSD += $montoUSD;
+            $mensajeroTotalCUP += $montoCUP;
+            $mensajeroDetalles[] = [
+                'monto_usd'  => round($montoUSD, 2),
+                'monto_cup'  => round($montoCUP, 2),
+                'tipo'       => $v->mensajero_tipo,
+            ];
+        }
+        $mensajeroTotalUSD = round($mensajeroTotalUSD, 2);
+        $mensajeroTotalCUP = round($mensajeroTotalCUP, 2);
+
         // --- VENTAS ANULADAS EN EL TURNO ---
         $ventasAnuladas = Venta::where('user_id', $user->id)
             ->where('created_at', '>=', $inicioTurno)
             ->where('estado', 'cancelada')
+            ->with('detalles')
             ->get();
 
         $ventasAnuladasCount    = $ventasAnuladas->count();
-        $ventasAnuladasTotalUSD = round($ventasAnuladas->sum(fn($v) => (float) $v->total), 2);
+        // Usar suma de subtotales de productos (excluye mensajero del total)
+        $ventasAnuladasTotalUSD = round($ventasAnuladas->sum(fn($v) => (float) $v->detalles->sum('subtotal')), 2);
         $ventasAnuladasDetalles = $ventasAnuladas->map(fn($v) => [
             'venta_id' => $v->id,
-            'total'    => round((float) $v->total, 2),
+            'total'    => round((float) $v->detalles->sum('subtotal'), 2),
             'motivo'   => $v->motivo_anulacion ?? 'sin_motivo',
             'detalle'  => $v->detalle_anulacion,
             'fecha'    => $v->created_at->format('Y-m-d H:i'),
         ])->values()->all();
 
+        // El mensajero cobrado al cliente entra al saldo pero es pass-through —
+        // se resta del saldo esperado porque al aprobar ya salió a la cuenta del mensajero.
+        $saldoEsperadoSinMensajero = round($saldoEsperadoTotalUSD - $mensajeroTotalUSD, 2);
+
         $result = [
             'detalles' => array_values($resumenPorMoneda),
             'ventas_efectivo' => round($ventasEfectivoTotalUSD, 2),
             'ventas_otros' => round($ventasOtrosTotalUSD, 2),
-            'saldo_esperado_global' => round($saldoEsperadoTotalUSD, 2),
+            'saldo_esperado_global' => $saldoEsperadoSinMensajero,
+            // Mensajero del turno — informativo y ya descontado del saldo esperado
+            'mensajero_total_usd' => $mensajeroTotalUSD,
+            'mensajero_total_cup' => $mensajeroTotalCUP,
+            'mensajero_count'     => count($mensajeroDetalles),
             // Totales separados por destino
             'ventas_a_cuentas_total_usd' => round($ventasACuentasTotalUSD, 2),
             'ventas_a_clientes_total_usd' => round($ventasAClientesTotalUSD, 2),

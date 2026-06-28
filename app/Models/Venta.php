@@ -39,6 +39,17 @@ class Venta extends Model
         // ANULACIÓN
         'motivo_anulacion',
         'detalle_anulacion',
+        // MENSAJERO
+        'mensajero_monto',
+        'mensajero_tipo',
+        'mensajero_cuenta_id',
+        'mensajero_tasa',
+        'mensajero_moneda_id',
+        'mensajero_monto_original',
+        'mensajero_tasa_entrada',
+        // COMISIÓN VENDEDOR
+        'comision_cuenta_id',
+        'comision_tasa',
     ];
 
     protected $casts = [
@@ -53,6 +64,11 @@ class Venta extends Model
         'tasa_aplicada_gestor' => 'decimal:2',
         'es_venta_especial'   => 'boolean',
         'decision_notificada' => 'boolean',
+        'mensajero_monto'          => 'decimal:2',
+        'mensajero_tasa'           => 'decimal:4',
+        'mensajero_monto_original' => 'decimal:4',
+        'mensajero_tasa_entrada'   => 'decimal:4',
+        'comision_tasa'            => 'decimal:4',
     ];
 
     public function usuario()
@@ -120,5 +136,22 @@ class Venta extends Model
     public function gestorCuenta()
     {
         return $this->belongsTo(Cuenta::class, 'gestor_cuenta_id');
+    }
+
+    // RELACIÓN MENSAJERO
+    public function mensajeroCuenta()
+    {
+        return $this->belongsTo(Cuenta::class, 'mensajero_cuenta_id');
+    }
+
+    public function mensajeroMoneda()
+    {
+        return $this->belongsTo(Moneda::class, 'mensajero_moneda_id');
+    }
+
+    // RELACIÓN COMISIÓN VENDEDOR
+    public function comisionCuenta()
+    {
+        return $this->belongsTo(Cuenta::class, 'comision_cuenta_id');
     }
 }

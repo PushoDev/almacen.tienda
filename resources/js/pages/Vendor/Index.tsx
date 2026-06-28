@@ -40,7 +40,9 @@ import {
     Search,
     ShoppingBag,
     ShoppingCart,
+    Store,
     Trash2,
+    Truck,
     Users,
     X,
 } from 'lucide-react';
@@ -50,6 +52,8 @@ import { toast } from 'sonner';
 interface Almacen {
     id: number | string;
     nombre_almacen: string;
+    mensajero_cuenta_id?: number | null;
+    mensajero_cuenta?: { id: number; nombre: string } | null;
 }
 interface Cliente {
     id: number | string;
@@ -144,6 +148,7 @@ export default function PuntoVentaOficial({
         monedas: Moneda[];
         tasa_usd: number;
         tasa_mlc: number;
+        cuentas_usuario?: { id: string; nombre: string; saldo: number; moneda: { id: string; codigo: string } | null }[];
     };
 }) {
     const [almacenes, setAlmacenes] = useState<Almacen[]>([]);
@@ -159,6 +164,13 @@ export default function PuntoVentaOficial({
     const [codigoSeleccionadoPorProducto, setCodigoSeleccionadoPorProducto] = useState<Record<string, number>>({});
     const [procesandoVenta, setProcesandoVenta] = useState<boolean>(false);
     const [payments, setPayments] = useState<Payment[]>([]);
+
+    // ── Mensajero (monto a cobrar al cliente) ────────────────────────────────
+    const [tieneMensajero, setTieneMensajero] = useState<boolean>(false);
+    const [mensajeroMonto, setMensajeroMonto] = useState<string>('');
+    const [mensajeroMonedaId, setMensajeroMonedaId] = useState<string>('');
+    const [mensajeroTasaEntrada, setMensajeroTasaEntrada] = useState<string>('');
+
     // ── Venta Especial ────────────────────────────────────────────────────────
     const [esVentaEspecial, setEsVentaEspecial] = useState<boolean>(false);
     const [motivoEspecial, setMotivoEspecial] = useState<string>('');
@@ -271,13 +283,23 @@ export default function PuntoVentaOficial({
         cargarClientesFisicos();
     }, []);
 
+    // Tasa CUP del sistema (de la moneda con código "CUP")
+    const tasaCUPSistema = useMemo(() => {
+        const cup = monedas.find((m) => m.codigo_moneda === 'CUP');
+        return cup?.tasa_cambio ?? 0;
+    }, [monedas]);
+
+
     const handleAlmacenChange = (value: string) => {
-        console.log('Almacén seleccionado:', value);
         setAlmacenSeleccionado(value);
         cargarProductos(value);
         setBusqueda('');
         setCarrito([]);
         setCodigoSeleccionadoPorProducto({});
+        setTieneMensajero(false);
+        setMensajeroMonto('');
+        setMensajeroMonedaId('');
+        setMensajeroTasaEntrada('');
     };
 
     const handleClienteChange = (value: string) => {
@@ -472,16 +494,47 @@ export default function PuntoVentaOficial({
 
     const calcularComisionEfectiva = (item: ItemCarrito): number => {
         const base = item.comision;
-        if (item.precio_venta >= item.precio_base) return base;
+        if (item.precio_venta > item.precio_base) return base + (item.precio_venta - item.precio_base);
+        if (item.precio_venta === item.precio_base) return base;
         return Math.max(0, base - (item.precio_base - item.precio_venta));
     };
 
-    const calcularTotal = useMemo(() => {
-        return carrito.reduce((total, item) => {
-            const subtotal = item.cantidad * item.precio_venta;
-            return total + (isNaN(subtotal) ? 0 : subtotal);
-        }, 0);
-    }, [carrito]);
+    const almacenActual = useMemo(
+        () => almacenes.find((a) => String(a.id) === String(almacenSeleccionado)) ?? null,
+        [almacenes, almacenSeleccionado],
+    );
+
+
+    const comisionTotalNum = useMemo(
+        () => carrito.reduce((sum, item) => sum + calcularComisionEfectiva(item) * item.cantidad, 0),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [carrito],
+    );
+
+    const subtotalProductos = useMemo(
+        () => carrito.reduce((total, item) => {
+            const sub = item.cantidad * item.precio_venta;
+            return total + (isNaN(sub) ? 0 : sub);
+        }, 0),
+        [carrito],
+    );
+
+    const mensajeroMonedaInfo = useMemo(() => {
+        if (!tieneMensajero || !mensajeroMonedaId) return null;
+        return monedas.find((m) => String(m.id) === mensajeroMonedaId) ?? null;
+    }, [monedas, mensajeroMonedaId, tieneMensajero]);
+
+    const mensajeroEsUSD = !mensajeroMonedaInfo || mensajeroMonedaInfo.codigo_moneda === 'USD';
+    const mensajeroTasaNum = parseFloat(mensajeroTasaEntrada) || mensajeroMonedaInfo?.tasa_cambio || 1;
+    const mensajeroMontoOriginalNum = tieneMensajero ? (parseFloat(mensajeroMonto) || 0) : 0;
+    const mensajeroMontoUSD =
+        tieneMensajero && mensajeroMontoOriginalNum > 0
+            ? mensajeroEsUSD
+                ? mensajeroMontoOriginalNum
+                : mensajeroMontoOriginalNum / mensajeroTasaNum
+            : 0;
+
+    const calcularTotal = subtotalProductos + mensajeroMontoUSD;
 
     const incrementarCantidad = (id: string) => {
         const item = carrito.find((item) => item.id === id);
@@ -600,6 +653,10 @@ export default function PuntoVentaOficial({
                 subtotal: item.subtotal,
             })),
             total: calcularTotal,
+            mensajero_monto: mensajeroMontoUSD > 0 ? mensajeroMontoUSD : undefined,
+            mensajero_moneda_id: mensajeroMonedaId || undefined,
+            mensajero_monto_original: mensajeroMontoOriginalNum > 0 ? mensajeroMontoOriginalNum : undefined,
+            mensajero_tasa_entrada: !mensajeroEsUSD && mensajeroTasaNum > 1 ? mensajeroTasaNum : undefined,
             pagos: payments.map((p) => ({
                 metodo: p.method,
                 moneda_id: p.moneda_id,
@@ -637,6 +694,10 @@ export default function PuntoVentaOficial({
                 setCodigoSeleccionadoPorProducto({});
                 setEsVentaEspecial(false);
                 setMotivoEspecial('');
+                setTieneMensajero(false);
+                setMensajeroMonto('');
+                setMensajeroMonedaId('');
+                setMensajeroTasaEntrada('');
                 if (response.data.redirect) {
                     setTimeout(() => {
                         window.location.href = response.data.redirect;
@@ -1339,29 +1400,117 @@ export default function PuntoVentaOficial({
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div className="space-y-3">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="font-medium">Total:</span>
+                                            <div className="space-y-2 rounded-lg border bg-white p-3 dark:bg-zinc-900">
+                                                {/* ── Mensajero toggle ── */}
+                                                <div className="space-y-2">
+                                                    <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={tieneMensajero}
+                                                            onChange={(e) => {
+                                                                setTieneMensajero(e.target.checked);
+                                                                if (e.target.checked) {
+                                                                    const usd = monedas.find((m) => m.codigo_moneda === 'USD' || m.principal);
+                                                                    if (usd) setMensajeroMonedaId(String(usd.id));
+                                                                } else {
+                                                                    setMensajeroMonto('');
+                                                                    setMensajeroMonedaId('');
+                                                                    setMensajeroTasaEntrada('');
+                                                                }
+                                                            }}
+                                                            className="h-4 w-4 rounded"
+                                                        />
+                                                        <Truck className="h-4 w-4 text-sky-600" />
+                                                        Mensajería
+                                                    </label>
+
+                                                    {/* Moneda + monto en fila separada */}
+                                                    {tieneMensajero && (
+                                                        <div className="flex items-center gap-2 pl-6">
+                                                            <Select
+                                                                value={mensajeroMonedaId}
+                                                                onValueChange={(val) => {
+                                                                    setMensajeroMonedaId(val);
+                                                                    setMensajeroTasaEntrada('');
+                                                                }}
+                                                            >
+                                                                <SelectTrigger className="h-8 w-20 text-xs">
+                                                                    <SelectValue placeholder="Moneda" />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {monedas.map((m) => (
+                                                                        <SelectItem key={m.id} value={String(m.id)}>
+                                                                            {m.codigo_moneda}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                            <Input
+                                                                type="number"
+                                                                min="0.01"
+                                                                step="0.01"
+                                                                placeholder="0.00"
+                                                                value={mensajeroMonto}
+                                                                onChange={(e) => setMensajeroMonto(e.target.value)}
+                                                                className="h-8 flex-1 text-right text-sm"
+                                                            />
+                                                        </div>
+                                                    )}
+
+                                                    {/* Tasa editable cuando no es USD */}
+                                                    {tieneMensajero && mensajeroMonedaInfo && !mensajeroEsUSD && (
+                                                        <div className="flex items-center justify-between pl-6 text-xs">
+                                                            <span className="text-muted-foreground">
+                                                                Tasa {mensajeroMonedaInfo.codigo_moneda}/USD:
+                                                            </span>
+                                                            <Input
+                                                                type="number"
+                                                                min="0.01"
+                                                                step="0.01"
+                                                                placeholder={String(mensajeroMonedaInfo.tasa_cambio)}
+                                                                value={mensajeroTasaEntrada}
+                                                                onChange={(e) => setMensajeroTasaEntrada(e.target.value)}
+                                                                className="h-7 w-28 text-right text-xs"
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* ── Desglose ── */}
+                                                {tieneMensajero && mensajeroMontoUSD > 0 && (
+                                                    <div className="flex items-center justify-between text-sm text-sky-600">
+                                                        <span>Productos:</span>
+                                                        <span>
+                                                            ${subtotalProductos.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {tieneMensajero && mensajeroMontoUSD > 0 && (
+                                                    <div className="flex items-center justify-between text-sm text-sky-600">
+                                                        <span>+ Mensajería:</span>
+                                                        <span>
+                                                            {mensajeroEsUSD
+                                                                ? `$${mensajeroMontoUSD.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                                                : `${mensajeroMonedaInfo?.simbolo_moneda}${mensajeroMontoOriginalNum.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ≈ $${mensajeroMontoUSD.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                <div className="flex items-center justify-between border-t pt-2">
+                                                    <span className="font-semibold">Total a cobrar:</span>
                                                     <span className="text-xl font-bold text-emerald-600">
-                                                        $
-                                                        {Number(calcularTotal).toLocaleString('es-ES', {
-                                                            minimumFractionDigits: 2,
-                                                            maximumFractionDigits: 2,
-                                                        })}
+                                                        ${Number(calcularTotal).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                     </span>
                                                 </div>
-                                                <div className="flex items-center justify-between border-t pt-2 text-sm">
-                                                    <span className="text-muted-foreground">Comisión total estimada:</span>
-                                                    <span className="font-semibold text-amber-600">
-                                                        $
-                                                        {Number(
-                                                            carrito.reduce((sum, item) => sum + calcularComisionEfectiva(item) * item.cantidad, 0),
-                                                        ).toLocaleString('es-ES', {
-                                                            minimumFractionDigits: 2,
-                                                            maximumFractionDigits: 2,
-                                                        })}
-                                                    </span>
-                                                </div>
+                                                {!esVentaEspecial && comisionTotalNum > 0 && (
+                                                    <div className="flex items-center justify-between text-sm">
+                                                        <span className="text-amber-600 font-medium">Comisión estimada:</span>
+                                                        <span className="font-bold text-amber-700">
+                                                            ${comisionTotalNum.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                <p className="text-muted-foreground text-xs">Distribución del mensajero se configura en el detalle de la venta.</p>
+
                                                 <AlertDialog>
                                                     <AlertDialogTrigger asChild>
                                                         <Button className="w-full" size="lg" disabled={procesandoVenta}>

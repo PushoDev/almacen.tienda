@@ -231,6 +231,10 @@ interface Calculos {
     ventas_anuladas_count?: number;
     ventas_anuladas_total_usd?: number;
     ventas_anuladas_detalles?: VentaAnuladaItem[];
+    // Mensajero del turno
+    mensajero_total_usd?: number;
+    mensajero_total_cup?: number;
+    mensajero_count?: number;
 }
 
 interface VentaEspecialItem {
@@ -1463,6 +1467,22 @@ export default function Create({
                                 </div>
                             )}
                         </div>
+
+                        {/* Mensajería del turno — informativo */}
+                        {(calculos.mensajero_count ?? 0) > 0 && (
+                            <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 dark:border-sky-800 dark:bg-sky-950">
+                                <p className="text-muted-foreground mb-1 text-xs font-bold uppercase">Mensajería del Turno</p>
+                                <p className="text-xl font-black text-sky-700 dark:text-sky-300">
+                                    {Number(calculos.mensajero_total_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                </p>
+                                <p className="mt-1 text-xs text-sky-600 dark:text-sky-400">
+                                    ≈ ${Number(calculos.mensajero_total_usd ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD · {calculos.mensajero_count} entrega{(calculos.mensajero_count ?? 0) > 1 ? 's' : ''}
+                                </p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                    Ya descontado del saldo esperado (pass-through)
+                                </p>
+                            </div>
+                        )}
 
                         {/* Ventas Anuladas — tarjeta resumen */}
                         {(calculos.ventas_anuladas_count ?? 0) > 0 && (

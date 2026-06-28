@@ -26,6 +26,12 @@ export interface NavItem {
     roles: Array<'admin' | 'moderador' | 'vendedor'>;
 }
 
+export interface TasaMoneda {
+    codigo_moneda: string;
+    tasa_cambio: number;
+    principal: boolean;
+}
+
 export interface SharedData {
     name: string;
     quote: { message: string; author: string };
@@ -36,6 +42,7 @@ export interface SharedData {
         success?: string;
         error?: string;
     };
+    tasas: TasaMoneda[];
     [key: string]: unknown;
 }
 

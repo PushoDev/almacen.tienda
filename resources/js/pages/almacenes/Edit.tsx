@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
-import { Building, IdCard, Mail, MapPin, Phone, User, Warehouse } from 'lucide-react';
+import { Building, IdCard, Mail, MapPin, Phone, Truck, User, Warehouse } from 'lucide-react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -28,10 +28,10 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function EditarAlmacenesPage({ almacen }: { almacen: AlmacenProps }) {
-    // Manejo del formulario con useForm - incluyendo todos los campos
+type Cuenta = { id: number; nombre: string; moneda: string };
+
+export default function EditarAlmacenesPage({ almacen, cuentas = [] }: { almacen: AlmacenProps; cuentas: Cuenta[] }) {
     const { data, setData, put, errors, processing } = useForm({
-        // Datos del almacén
         nombre_almacen: almacen.nombre_almacen,
         telefono_almacen: almacen.telefono_almacen,
         correo_almacen: almacen.correo_almacen || '',
@@ -39,12 +39,11 @@ export default function EditarAlmacenesPage({ almacen }: { almacen: AlmacenProps
         ciudad_almacen: almacen.ciudad_almacen || '',
         notas_almacen: almacen.notas_almacen || '',
         tipo_almacen: almacen.tipo_almacen || 'punto_venta',
-
-        // Nuevos campos del responsable
         nombre_responsable: almacen.nombre_responsable || '',
         apellido_responsable: almacen.apellido_responsable || '',
         carnet_responsable: almacen.carnet_responsable || '',
         telefono_responsable: almacen.telefono_responsable || '',
+        mensajero_cuenta_id: (almacen as any).mensajero_cuenta_id?.toString() || '',
     });
 
     // Función para enviar el formulario
@@ -292,6 +291,44 @@ export default function EditarAlmacenesPage({ almacen }: { almacen: AlmacenProps
                                             <InputError message={errors.telefono_responsable} />
                                         </div>
                                     </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Separator />
+
+                        {/* Sección: Mensajería */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Truck className="h-5 w-5" />
+                                    Cuenta de Mensajería
+                                </CardTitle>
+                                <CardDescription>
+                                    Si este punto de venta tiene vehículo propio, asigna la cuenta donde se acumularán los fondos de mensajería.
+                                    Si no tiene vehículo, dejar vacío.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="max-w-sm space-y-2">
+                                    <Label htmlFor="mensajero_cuenta_id">Cuenta de mensajería (vehículo propio)</Label>
+                                    <Select
+                                        value={data.mensajero_cuenta_id}
+                                        onValueChange={(v) => setData('mensajero_cuenta_id', v === 'ninguna' ? '' : v)}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Sin cuenta de mensajería" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="ninguna">Sin cuenta de mensajería</SelectItem>
+                                            {cuentas.map((c) => (
+                                                <SelectItem key={c.id} value={c.id.toString()}>
+                                                    {c.nombre} ({c.moneda})
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <InputError message={errors.mensajero_cuenta_id} />
                                 </div>
                             </CardContent>
                         </Card>

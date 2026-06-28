@@ -105,10 +105,18 @@ class VentaController extends Controller
         }
 
         $almacenes = in_array($user->role, ['admin', 'moderador'])
-            ? Almacen::select('id', 'nombre_almacen')->get()
-            : ($user ? $user->almacenes()->select('id', 'nombre_almacen')->get() : collect());
+            ? Almacen::with('mensajeroCuenta')->select('id', 'nombre_almacen', 'mensajero_cuenta_id')->get()
+            : ($user ? $user->almacenes()->with('mensajeroCuenta')->select('id', 'nombre_almacen', 'mensajero_cuenta_id')->get() : collect());
 
-        return response()->json($almacenes);
+        return response()->json($almacenes->map(fn($a) => [
+            'id'                   => $a->id,
+            'nombre_almacen'       => $a->nombre_almacen,
+            'mensajero_cuenta_id'  => $a->mensajero_cuenta_id,
+            'mensajero_cuenta'     => $a->mensajeroCuenta ? [
+                'id'     => $a->mensajeroCuenta->id,
+                'nombre' => $a->mensajeroCuenta->nombre_cuenta,
+            ] : null,
+        ]));
     }
 
     /**
@@ -482,21 +490,29 @@ class VentaController extends Controller
             'detalles.producto.categoria',
             'detalles.productoCodigo',
             'pagos.cuenta.moneda',
-            'pagos.cliente', // ✅ AGREGAR: relación con cliente para pagos
+            'pagos.cliente',
             'pagos.moneda',
             'cliente',
-            'almacen',
+            'almacen.mensajeroCuenta',
             'usuario',
             'moneda',
             'monedaCobro',
             'gestorCuenta.moneda',
+            'mensajeroCuenta.moneda',
+            'mensajeroMoneda',
+            'comisionCuenta.moneda',
         ])->findOrFail($id);
 
         $ventaData = [
             'id' => $venta->id,
             'almacen' => [
-                'id' => $venta->almacen->id,
-                'nombre' => $venta->almacen->nombre_almacen,
+                'id'                  => $venta->almacen->id,
+                'nombre'              => $venta->almacen->nombre_almacen,
+                'mensajero_cuenta_id' => $venta->almacen->mensajero_cuenta_id,
+                'mensajero_cuenta'    => $venta->almacen->mensajeroCuenta ? [
+                    'id'     => $venta->almacen->mensajeroCuenta->id,
+                    'nombre' => $venta->almacen->mensajeroCuenta->nombre_cuenta,
+                ] : null,
             ],
             'cliente' => $venta->cliente ? [
                 'id' => $venta->cliente->id,
@@ -613,8 +629,38 @@ class VentaController extends Controller
             'monedas_para_reporte' => $this->buildMonedasParaReporte($venta),
             'monto_diferencia_cambiaria' => $venta->monto_diferencia_cambiaria,
             'es_venta_especial'   => (bool) $venta->es_venta_especial,
-            'nota_venta_especial'     => $venta->nota_venta_especial,
+            'nota_venta_especial' => $venta->nota_venta_especial,
             'decision_notificada' => (bool) $venta->decision_notificada,
+            'mensajero' => $venta->mensajero_monto > 0 ? [
+                'monto'           => (float) $venta->mensajero_monto,
+                'tipo'            => $venta->mensajero_tipo,
+                'moneda_codigo'   => $venta->mensajeroMoneda?->codigo_moneda ?? 'USD',
+                'moneda_id'       => $venta->mensajero_moneda_id,
+                'monto_original'  => $venta->mensajero_monto_original ? (float) $venta->mensajero_monto_original : null,
+                'tasa_entrada'    => $venta->mensajero_tasa_entrada ? (float) $venta->mensajero_tasa_entrada : null,
+                'tasa'            => $venta->mensajero_tasa ? (float) $venta->mensajero_tasa : null,
+                'monto_cup'       => $venta->mensajero_tasa > 0
+                    ? round((float) $venta->mensajero_monto * (float) $venta->mensajero_tasa, 2)
+                    : null,
+                'monto_final_cup' => $venta->mensajero_monto_final_cup ? (float) $venta->mensajero_monto_final_cup : null,
+                'cuenta' => $venta->mensajeroCuenta ? [
+                    'id'     => $venta->mensajeroCuenta->id,
+                    'nombre' => $venta->mensajeroCuenta->nombre_cuenta,
+                    'moneda' => $venta->mensajeroCuenta->moneda?->codigo_moneda,
+                ] : null,
+            ] : null,
+            'comision_pago' => $venta->comision_cuenta_id ? [
+                'tasa'      => $venta->comision_tasa ? (float) $venta->comision_tasa : null,
+                'monto_cup' => ($venta->comision_tasa > 0)
+                    ? round((float) $venta->total_comision * (float) $venta->comision_tasa, 2)
+                    : null,
+                'cuenta'    => $venta->comisionCuenta ? [
+                    'id'               => $venta->comisionCuenta->id,
+                    'nombre'           => $venta->comisionCuenta->nombre_cuenta,
+                    'moneda'           => $venta->comisionCuenta->moneda?->codigo_moneda,
+                    'saldo_disponible' => (float) $venta->comisionCuenta->saldo_cuenta,
+                ] : null,
+            ] : null,
             'gestor' => $venta->es_venta_gestor && $venta->gestor_cuenta_id ? [
                 'monto' => (float) $venta->gestor_monto,
                 'monto_usd' => $venta->tasa_aplicada_gestor > 0
@@ -743,6 +789,17 @@ class VentaController extends Controller
             // VENTA ESPECIAL
             'es_venta_especial'    => 'nullable|boolean',
             'nota_venta_especial'  => 'nullable|string|max:500|required_if:es_venta_especial,true',
+            // MENSAJERO
+            'mensajero_monto'          => 'nullable|numeric|min:0.01',
+            'mensajero_tipo'           => 'nullable|in:propio,externo',
+            'mensajero_cuenta_id'      => 'nullable|exists:cuentas,id',
+            'mensajero_tasa'           => 'nullable|numeric|min:0.0001',
+            'mensajero_moneda_id'      => 'nullable|exists:monedas,id',
+            'mensajero_monto_original' => 'nullable|numeric|min:0.01',
+            'mensajero_tasa_entrada'   => 'nullable|numeric|min:0.0001',
+            // COMISIÓN VENDEDOR
+            'comision_cuenta_id'   => 'nullable|exists:cuentas,id',
+            'comision_tasa'        => 'nullable|numeric|min:0.0001',
         ]);
 
         $user = Auth::user();
@@ -751,7 +808,7 @@ class VentaController extends Controller
         }
 
         // ✅ CAMBIO 2: Agregar validación lógica después del validate
-        foreach ($validatedData['pagos'] as $pago) {
+        foreach ($validatedData['pagos'] ?? [] as $pago) {
             // Cada pago debe tener cuenta_id O cliente_id
             if (empty($pago['cuenta_id']) && empty($pago['cliente_id'])) {
                 throw new \Exception('Cada pago debe tener una cuenta o un cliente como destino.');
@@ -907,9 +964,20 @@ class VentaController extends Controller
                 'gestor_comentario' => $esEspecial ? null : ($validatedData['gestor_comentario'] ?? null),
                 'tasa_aplicada_gestor' => $esEspecial ? null : ($validatedData['tasa_aplicada_gestor'] ?? null),
                 // CAMPOS VENTA ESPECIAL
-                'es_venta_especial' => $esEspecial,
-                'nota_venta_especial'   => $esEspecial ? ($validatedData['nota_venta_especial'] ?? null) : null,
+                'es_venta_especial'   => $esEspecial,
+                'nota_venta_especial' => $esEspecial ? ($validatedData['nota_venta_especial'] ?? null) : null,
                 'decision_notificada' => false,
+                // MENSAJERO
+                'mensajero_monto'          => $validatedData['mensajero_monto'] ?? null,
+                'mensajero_tipo'           => $validatedData['mensajero_tipo'] ?? null,
+                'mensajero_cuenta_id'      => $validatedData['mensajero_cuenta_id'] ?? null,
+                'mensajero_tasa'           => $validatedData['mensajero_tasa'] ?? null,
+                'mensajero_moneda_id'      => $validatedData['mensajero_moneda_id'] ?? null,
+                'mensajero_monto_original' => $validatedData['mensajero_monto_original'] ?? null,
+                'mensajero_tasa_entrada'   => $validatedData['mensajero_tasa_entrada'] ?? null,
+                // COMISIÓN VENDEDOR
+                'comision_cuenta_id'  => $validatedData['comision_cuenta_id'] ?? null,
+                'comision_tasa'       => $validatedData['comision_tasa'] ?? null,
             ]);
 
             HistorialStock::whereIn('id', $historialStockIds)->update(['venta_id' => $venta->id]);
@@ -957,19 +1025,32 @@ class VentaController extends Controller
             $usd_objetivo = $costo_total_productos + $total_ganancia;
 
             // CÁLCULO DE DIFERENCIA CAMBIARIA (POSITIVA O NEGATIVA)
+            // El mensajero es pass-through y se excluye del cálculo — no es ingreso de la agencia
             $monto_diferencia_cambiaria = 0;
             if ($venta->moneda_cobro_id) {
                 $monedaCobro = Moneda::find($venta->moneda_cobro_id);
                 if ($monedaCobro) {
                     $tasa_oficial = $monedaCobro->tasa_cambio;
-
                     $monto_esperado_oficial = $usd_objetivo * $tasa_oficial;
 
                     $monto_real_cobrado = collect($validatedData['pagos'])
                         ->where('moneda_id', $venta->moneda_cobro_id)
                         ->sum('monto');
 
-                    $monto_diferencia_cambiaria = $monto_real_cobrado - $monto_esperado_oficial;
+                    // Excluir el mensajero (solo si la moneda de cobro coincide con la del mensajero)
+                    $mensajero_en_moneda_cobro = 0;
+                    if ($venta->mensajero_monto > 0) {
+                        if ($venta->mensajero_tasa > 0) {
+                            // Mensajero era USD → su equivalente en moneda cobro
+                            $mensajero_en_moneda_cobro = (float) $venta->mensajero_monto * (float) $venta->mensajero_tasa;
+                        } else {
+                            // Mensajero ya era en la moneda de cobro directamente
+                            $mensajero_en_moneda_cobro = (float) $venta->mensajero_monto;
+                        }
+                    }
+
+                    $monto_real_cobrado_productos = $monto_real_cobrado - $mensajero_en_moneda_cobro;
+                    $monto_diferencia_cambiaria = round($monto_real_cobrado_productos - $monto_esperado_oficial, 2);
                 }
             }
 
@@ -1170,6 +1251,14 @@ class VentaController extends Controller
             return response()->json(['success' => false, 'message' => 'Falta receptor'], 400);
         }
 
+        if ($venta->mensajero_monto > 0 && !$venta->mensajero_cuenta_id) {
+            return response()->json(['success' => false, 'message' => 'Esta venta tiene mensajero pero no se ha asignado la cuenta del mensajero'], 400);
+        }
+
+        if ($venta->mensajero_monto > 0 && !$venta->mensajero_tipo) {
+            return response()->json(['success' => false, 'message' => 'Esta venta tiene mensajero pero no se ha definido el tipo (propio o externo)'], 400);
+        }
+
         DB::transaction(function () use ($venta) {
             // 1. Cambiar estado a completada
             $venta->update(['estado' => 'completada']);
@@ -1179,15 +1268,24 @@ class VentaController extends Controller
                 ->where('codigo_moneda', 'CUP')
                 ->value('tasa_cambio') ?? 365;
 
+            // El mensajero es pass-through — excluirlo del cálculo de ganancia cambiaria
+            $mensajero_cup = 0;
+            if ($venta->mensajero_monto > 0) {
+                $mensajero_cup = $venta->mensajero_tasa > 0
+                    ? round((float) $venta->mensajero_monto * (float) $venta->mensajero_tasa, 2)
+                    : (float) $venta->mensajero_monto;
+            }
+
+            $totalCupPagado     = 0;
+            $totalCupContadoUSD = 0;
+
             $gananciaExtraUSD = 0;
 
             foreach ($venta->pagos as $pago) {
-                // Cálculo de ganancia/perdida cambiaria solo para pagos en CUP
+                // Acumular CUP separado del loop de cuentas para calcular cambiaria limpia
                 if ($pago->moneda && $pago->moneda->codigo_moneda === 'CUP') {
-                    $montoCUP = $pago->monto;
-                    $valorRealUSD = $montoCUP / $tasaOficialCUP;
-                    $valorContadoUSD = $pago->monto_equivalente;
-                    $gananciaExtraUSD += ($valorRealUSD - $valorContadoUSD);
+                    $totalCupPagado     += $pago->monto;
+                    $totalCupContadoUSD += $pago->monto_equivalente;
                 }
 
                 // ✅ CAMBIO: Manejar destino del dinero (cuenta O cliente)
@@ -1220,27 +1318,65 @@ class VentaController extends Controller
                 // Si no coinciden, por seguridad no acumulamos
             }
 
-            $gananciaExtraUSD = round($gananciaExtraUSD, 2);
+            // Calcular ganancia cambiaria solo sobre los CUP de productos (sin mensajero)
+            $cupProductos = max(0.0, $totalCupPagado - $mensajero_cup);
+            if ($totalCupPagado > 0 && $cupProductos > 0) {
+                $proporcion             = $cupProductos / $totalCupPagado;
+                $cupContadoUSD_productos = $totalCupContadoUSD * $proporcion;
+                $gananciaExtraUSD       = round(($cupProductos / $tasaOficialCUP) - $cupContadoUSD_productos, 2);
+            }
 
             $venta->update([
                 'ganancia_perdida_cambiaria' => $gananciaExtraUSD,
                 'ganancia_real_total'        => $venta->total_ganancia + $gananciaExtraUSD,
             ]);
 
-            // ✅ DESCUENTO GESTOR
+            // DESCUENTO GESTOR
             if ($venta->es_venta_gestor && $venta->gestor_cuenta_id && $venta->gestor_monto > 0) {
                 $cuentaGestor = $venta->gestorCuenta;
 
                 if ($cuentaGestor) {
-                    // ✅ NUEVO: Validar saldo suficiente antes de descontar
                     if ($cuentaGestor->saldo_cuenta < $venta->gestor_monto) {
                         throw new \Exception('La cuenta del gestor no tiene saldo suficiente para cubrir la comisión');
                     }
 
                     $cuentaGestor->decrement('saldo_cuenta', $venta->gestor_monto);
+                }
+            }
 
-                    // Opcional: Registrar en historial de cuenta
-                    // HistorialCuenta::create([...]);
+            // MENSAJERO
+            if ($venta->mensajero_monto > 0 && $venta->mensajero_cuenta_id) {
+                $cuentaMensajero = $venta->mensajeroCuenta;
+
+                if ($cuentaMensajero) {
+                    // monto_final_cup es el monto editable desde Show (puede incluir premio/sanción).
+                    // Si no fue configurado, cae al monto original que pagó el cliente en el POS.
+                    $montoFinal = $venta->mensajero_monto_final_cup
+                        ? (float) $venta->mensajero_monto_final_cup
+                        : (float) $venta->mensajero_monto_original;
+
+                    if ($venta->mensajero_tipo === 'propio') {
+                        $cuentaMensajero->increment('saldo_cuenta', $montoFinal);
+                    } elseif ($venta->mensajero_tipo === 'externo') {
+                        $cuentaMensajero->decrement('saldo_cuenta', $montoFinal);
+                    }
+                }
+            }
+
+            // COMISIÓN VENDEDOR — solo si no es venta con gestor (XOR)
+            if (!$venta->es_venta_gestor && $venta->total_comision > 0 && $venta->comision_cuenta_id && $venta->comision_tasa > 0) {
+                $cuentaComision = $venta->comisionCuenta;
+
+                if ($cuentaComision) {
+                    $montoCUP = round((float) $venta->total_comision * (float) $venta->comision_tasa, 2);
+
+                    if ($cuentaComision->saldo_cuenta < $montoCUP) {
+                        throw new \Exception(
+                            "La cuenta de comisión no tiene saldo suficiente. Necesita {$montoCUP} CUP, disponible: {$cuentaComision->saldo_cuenta} CUP."
+                        );
+                    }
+
+                    $cuentaComision->decrement('saldo_cuenta', $montoCUP);
                 }
             }
         });
@@ -1262,7 +1398,7 @@ class VentaController extends Controller
         }
 
         // Construir query base
-        $query = Venta::with(['cliente', 'almacen', 'usuario', 'pagos', 'moneda', 'destinatario', 'monedaCobro', 'gestorCuenta'])
+        $query = Venta::with(['cliente', 'almacen', 'usuario', 'pagos', 'moneda', 'destinatario', 'monedaCobro', 'gestorCuenta', 'mensajeroCuenta'])
             ->withCount('detalles');
 
         // Filtrar por usuario (excepto admin y moderador)
@@ -1338,7 +1474,12 @@ class VentaController extends Controller
                     ] : null,
                     'monto_diferencia_cambiaria' => $venta->monto_diferencia_cambiaria,
                     'es_venta_especial'   => (bool) $venta->es_venta_especial,
-                    'nota_venta_especial'     => $venta->nota_venta_especial,
+                    'nota_venta_especial' => $venta->nota_venta_especial,
+                    // MENSAJERO
+                    'mensajero' => $venta->mensajero_monto > 0 ? [
+                        'monto' => (float) $venta->mensajero_monto,
+                        'tipo'  => $venta->mensajero_tipo,
+                    ] : null,
                     // GESTOR
                     'gestor' => $venta->es_venta_gestor && $venta->gestor_cuenta_id ? [
                         'monto' => (float) $venta->gestor_monto,
@@ -1486,8 +1627,13 @@ class VentaController extends Controller
                     $nuevaComision += round($comisionUnitaria * $detalle->cantidad, 2);
                 }
 
+                // Sumar mensajero en USD al total (si era USD; si era CUP directo no se suma al total USD)
+                $mensajeroEnUSD = ($venta->mensajero_monto > 0 && $venta->mensajero_tasa > 0)
+                    ? (float) $venta->mensajero_monto
+                    : 0;
+
                 $venta->update([
-                    'total'          => $nuevoTotal,
+                    'total'          => $nuevoTotal + $mensajeroEnUSD,
                     'total_ganancia' => $nuevaGanancia,
                     'total_comision' => round($nuevaComision, 2),
                 ]);
@@ -1555,6 +1701,114 @@ class VentaController extends Controller
     }
 
     /**
+     * Guardar distribución de la venta: mensajero y comisión vendedor
+     */
+    public function guardarDistribucion(Request $request, Venta $venta)
+    {
+        if ($venta->estado !== 'pendiente') {
+            return response()->json(['success' => false, 'message' => 'Solo se puede modificar una venta pendiente.'], 422);
+        }
+
+        $validated = $request->validate([
+            'mensajero_monto'          => 'nullable|numeric|min:0.01',
+            'mensajero_tipo'           => 'nullable|in:propio,externo',
+            'mensajero_cuenta_id'      => 'nullable|exists:cuentas,id',
+            'mensajero_tasa'           => 'nullable|numeric|min:0.0001',
+            'mensajero_monto_final_cup' => 'nullable|numeric|min:0.01',
+            'limpiar_mensajero'        => 'nullable|boolean',
+            'limpiar_gestor'      => 'nullable|boolean',
+            'comision_cuenta_id'  => 'nullable|exists:cuentas,id',
+            'comision_tasa'       => 'nullable|numeric|min:0.0001',
+            'limpiar_comision'    => 'nullable|boolean',
+        ]);
+
+        $totalProductos = (float) $venta->detalles->sum('subtotal');
+
+        $limpiarMensajero = $validated['limpiar_mensajero'] ?? false;
+        $limpiarComision  = $validated['limpiar_comision'] ?? false;
+        $limpiarGestor    = $validated['limpiar_gestor'] ?? false;
+
+        // El monto USD del mensajero viene del POS y no cambia desde Show.
+        // Solo se actualiza si el payload incluye explícitamente mensajero_monto (caso raro).
+        $nuevoMensajeroMonto = $limpiarMensajero ? null : ($validated['mensajero_monto'] ?? $venta->mensajero_monto);
+        $mensajeroEnUSD = $nuevoMensajeroMonto > 0 ? (float) $nuevoMensajeroMonto : 0;
+
+        $updates = ['total' => $totalProductos + $mensajeroEnUSD];
+
+        // Actualizar monto solo si viene explícito
+        if (array_key_exists('mensajero_monto', $validated) || $limpiarMensajero) {
+            $updates['mensajero_monto'] = $limpiarMensajero ? null : ($validated['mensajero_monto'] ?? null);
+        }
+
+        // Tipo, cuenta y tasa se pueden actualizar sin enviar monto (Show.tsx solo configura distribución)
+        $hayConfigMensajero = $limpiarMensajero
+            || array_key_exists('mensajero_tipo', $request->all())
+            || array_key_exists('mensajero_cuenta_id', $request->all())
+            || array_key_exists('mensajero_tasa', $request->all());
+
+        if ($hayConfigMensajero) {
+            $updates['mensajero_tipo']           = $limpiarMensajero ? null : ($validated['mensajero_tipo'] ?? $venta->mensajero_tipo);
+            $updates['mensajero_cuenta_id']      = $limpiarMensajero ? null : ($validated['mensajero_cuenta_id'] ?? null);
+            $updates['mensajero_tasa']           = $limpiarMensajero ? null : ($validated['mensajero_tasa'] ?? null);
+            $updates['mensajero_monto_final_cup'] = $limpiarMensajero ? null : ($validated['mensajero_monto_final_cup'] ?? null);
+        }
+
+        if (array_key_exists('comision_cuenta_id', $validated) || $limpiarComision) {
+            $updates['comision_cuenta_id'] = $limpiarComision ? null : ($validated['comision_cuenta_id'] ?? null);
+            $updates['comision_tasa']      = $limpiarComision ? null : ($validated['comision_tasa'] ?? null);
+        }
+
+        // Limpiar gestor: la comisión pasa al punto de venta
+        if ($limpiarGestor) {
+            $updates['es_venta_gestor']      = false;
+            $updates['gestor_cuenta_id']     = null;
+            $updates['gestor_monto']         = null;
+            $updates['gestor_comentario']    = null;
+            $updates['tasa_aplicada_gestor'] = null;
+        }
+
+        $venta->update($updates);
+        $venta->refresh()->load(['mensajeroCuenta.moneda', 'comisionCuenta.moneda', 'mensajeroMoneda']);
+
+        return response()->json([
+            'success'  => true,
+            'message'  => 'Distribución guardada correctamente.',
+            'total'    => (float) $venta->total,
+            'gestor'   => $limpiarGestor ? null : 'unchanged',
+            'mensajero' => $venta->mensajero_monto > 0 ? [
+                'monto'           => (float) $venta->mensajero_monto,
+                'tipo'            => $venta->mensajero_tipo,
+                'moneda'          => $venta->mensajeroMoneda?->codigo_moneda ?? ($venta->mensajero_tasa > 0 ? 'USD' : 'CUP'),
+                'moneda_id'       => $venta->mensajero_moneda_id,
+                'monto_original'  => $venta->mensajero_monto_original ? (float) $venta->mensajero_monto_original : null,
+                'tasa_entrada'    => $venta->mensajero_tasa_entrada ? (float) $venta->mensajero_tasa_entrada : null,
+                'tasa'            => $venta->mensajero_tasa ? (float) $venta->mensajero_tasa : null,
+                'monto_cup'       => $venta->mensajero_tasa > 0
+                    ? round((float) $venta->mensajero_monto * (float) $venta->mensajero_tasa, 2)
+                    : null,
+                'monto_final_cup' => $venta->mensajero_monto_final_cup ? (float) $venta->mensajero_monto_final_cup : null,
+                'cuenta' => $venta->mensajeroCuenta ? [
+                    'id'     => $venta->mensajeroCuenta->id,
+                    'nombre' => $venta->mensajeroCuenta->nombre_cuenta,
+                    'moneda' => $venta->mensajeroCuenta->moneda?->codigo_moneda,
+                ] : null,
+            ] : null,
+            'comision_pago' => $venta->comision_cuenta_id ? [
+                'tasa'      => $venta->comision_tasa ? (float) $venta->comision_tasa : null,
+                'monto_cup' => $venta->comision_tasa > 0
+                    ? round((float) $venta->total_comision * (float) $venta->comision_tasa, 2)
+                    : null,
+                'cuenta' => $venta->comisionCuenta ? [
+                    'id'               => $venta->comisionCuenta->id,
+                    'nombre'           => $venta->comisionCuenta->nombre_cuenta,
+                    'moneda'           => $venta->comisionCuenta->moneda?->codigo_moneda,
+                    'saldo_disponible' => (float) ($venta->comisionCuenta->saldo_cuenta ?? 0),
+                ] : null,
+            ] : null,
+        ]);
+    }
+
+    /**
      * Anular venta (pendiente o completada)
      */
     public function anularVenta(Request $request, Venta $venta)
@@ -1569,7 +1823,7 @@ class VentaController extends Controller
         ]);
 
         // Cargar relaciones necesarias para poder revertirlas
-        $venta->load(['detalles', 'pagos.cliente', 'pagos.cuenta', 'gestorCuenta']);
+        $venta->load(['detalles', 'pagos.cliente', 'pagos.cuenta', 'gestorCuenta', 'comisionCuenta', 'mensajeroCuenta', 'mensajeroMoneda']);
 
         DB::transaction(function () use ($venta, $validated) {
             // ✅ SIEMPRE revertir stock (pendiente o completada)
@@ -1634,6 +1888,31 @@ class VentaController extends Controller
                     $cuentaGestor = $venta->gestorCuenta;
                     if ($cuentaGestor) {
                         $cuentaGestor->increment('saldo_cuenta', $venta->gestor_monto);
+                    }
+                }
+
+                // Revertir mensajero — inverso exacto del aprobarVenta
+                if ($venta->mensajero_monto > 0 && $venta->mensajero_cuenta_id) {
+                    $cuentaMensajero = $venta->mensajeroCuenta;
+                    if ($cuentaMensajero) {
+                        $montoFinal = $venta->mensajero_monto_final_cup
+                            ? (float) $venta->mensajero_monto_final_cup
+                            : (float) $venta->mensajero_monto_original;
+
+                        if ($venta->mensajero_tipo === 'propio') {
+                            $cuentaMensajero->decrement('saldo_cuenta', $montoFinal);
+                        } elseif ($venta->mensajero_tipo === 'externo') {
+                            $cuentaMensajero->increment('saldo_cuenta', $montoFinal);
+                        }
+                    }
+                }
+
+                // Revertir comisión vendedor — solo si no es venta con gestor (XOR)
+                if (!$venta->es_venta_gestor && $venta->total_comision > 0 && $venta->comision_cuenta_id && $venta->comision_tasa > 0) {
+                    $cuentaComision = $venta->comisionCuenta;
+                    if ($cuentaComision) {
+                        $montoCUP = round((float) $venta->total_comision * (float) $venta->comision_tasa, 2);
+                        $cuentaComision->increment('saldo_cuenta', $montoCUP);
                     }
                 }
             }
