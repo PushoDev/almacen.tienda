@@ -376,10 +376,21 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     useEffect(() => {
         if (!showMensajeroForm || !currentVenta.mensajero) return;
         setMensajeroFormTipo(currentVenta.mensajero.tipo ?? '');
-        // Prioridad: monto_final_cup editado previamente → monto_original del POS → vacío
-        const montoInicial = currentVenta.mensajero.monto_final_cup
-            ?? currentVenta.mensajero.monto_original
-            ?? 0;
+        // Prioridad: monto_final_cup ya guardado → convertir monto_original a CUP si es necesario
+        let montoInicial = 0;
+        if (currentVenta.mensajero.monto_final_cup) {
+            montoInicial = currentVenta.mensajero.monto_final_cup;
+        } else if (currentVenta.mensajero.monto_original) {
+            if (currentVenta.mensajero.moneda === 'CUP') {
+                montoInicial = currentVenta.mensajero.monto_original;
+            } else {
+                const tasa = currentVenta.mensajero.tasa_entrada
+                    ?? currentVenta.mensajero.tasa
+                    ?? monedasSistema.find(m => m.codigo === 'CUP')?.tasa
+                    ?? 0;
+                montoInicial = currentVenta.mensajero.monto_original * tasa;
+            }
+        }
         setMensajeroFormMontoCUP(montoInicial > 0 ? String(Number(montoInicial).toFixed(2)) : '');
         const cuentaGuardada = currentVenta.mensajero.cuenta?.id;
         setMensajeroFormCuentaId(cuentaGuardada ? String(cuentaGuardada) : '');
@@ -389,10 +400,10 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
     // Pre-llenar form comisión al abrirlo
     useEffect(() => {
-        if (!showComisionForm || !currentVenta.comision_pago) return;
-        setComisionFormCuentaId(String(currentVenta.comision_pago.cuenta?.id ?? ''));
+        if (!showComisionForm) return;
         const tasaCUPSistema = monedasSistema.find(m => m.codigo === 'CUP')?.tasa ?? 0;
-        const tasaGuardada = currentVenta.comision_pago.tasa;
+        const tasaGuardada = currentVenta.comision_pago?.tasa;
+        setComisionFormCuentaId(String(currentVenta.comision_pago?.cuenta?.id ?? ''));
         setComisionFormTasa(tasaGuardada ? String(tasaGuardada) : (tasaCUPSistema > 0 ? String(tasaCUPSistema) : ''));
     }, [showComisionForm]);
 
