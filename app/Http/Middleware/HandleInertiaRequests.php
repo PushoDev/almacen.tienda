@@ -59,7 +59,7 @@ class HandleInertiaRequests extends Middleware
             'tasas' => fn() => Moneda::where('estado', true)
                 ->orderBy('principal', 'desc')
                 ->orderBy('codigo_moneda')
-                ->get(['codigo_moneda', 'tasa_cambio', 'principal']),
+                ->get(['codigo_moneda', 'nombre_moneda', 'tasa_cambio', 'principal']),
         ];
     }
 }
