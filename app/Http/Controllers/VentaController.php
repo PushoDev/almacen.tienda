@@ -500,6 +500,7 @@ class VentaController extends Controller
             'gestorCuenta.moneda',
             'mensajeroCuenta.moneda',
             'mensajeroMoneda',
+            'mensajeroOrigenCuenta',
             'comisionCuenta.moneda',
         ])->findOrFail($id);
 
@@ -647,6 +648,10 @@ class VentaController extends Controller
                     'id'     => $venta->mensajeroCuenta->id,
                     'nombre' => $venta->mensajeroCuenta->nombre_cuenta,
                     'moneda' => $venta->mensajeroCuenta->moneda?->codigo_moneda,
+                ] : null,
+                'cuenta_origen' => $venta->mensajeroOrigenCuenta ? [
+                    'id'     => $venta->mensajeroOrigenCuenta->id,
+                    'nombre' => $venta->mensajeroOrigenCuenta->nombre_cuenta,
                 ] : null,
             ] : null,
             'comision_pago' => $venta->comision_cuenta_id ? [
@@ -1252,11 +1257,15 @@ class VentaController extends Controller
         }
 
         if ($venta->mensajero_monto > 0 && !$venta->mensajero_cuenta_id) {
-            return response()->json(['success' => false, 'message' => 'Esta venta tiene mensajero pero no se ha asignado la cuenta del mensajero'], 400);
+            return response()->json(['success' => false, 'message' => 'Esta venta tiene mensajero pero no se ha asignado la cuenta destino del mensajero'], 400);
         }
 
         if ($venta->mensajero_monto > 0 && !$venta->mensajero_tipo) {
             return response()->json(['success' => false, 'message' => 'Esta venta tiene mensajero pero no se ha definido el tipo (propio o externo)'], 400);
+        }
+
+        if ($venta->mensajero_monto > 0 && $venta->mensajero_tipo === 'propio' && !$venta->mensajero_cuenta_origen_id) {
+            return response()->json(['success' => false, 'message' => 'El mensajero propio requiere especificar la cuenta CUP de donde sale el dinero'], 400);
         }
 
         DB::transaction(function () use ($venta) {
@@ -1356,8 +1365,18 @@ class VentaController extends Controller
                         : (float) $venta->mensajero_monto_original;
 
                     if ($venta->mensajero_tipo === 'propio') {
+                        // PROPIO: sale de la cuenta origen (CUP cobrado al cliente)
+                        //         y entra a la cuenta del mensajero del almacén
+                        if ($venta->mensajero_cuenta_origen_id) {
+                            $cuentaOrigen = Cuenta::find($venta->mensajero_cuenta_origen_id);
+                            if ($cuentaOrigen) {
+                                $cuentaOrigen->decrement('saldo_cuenta', $montoFinal);
+                            }
+                        }
                         $cuentaMensajero->increment('saldo_cuenta', $montoFinal);
                     } elseif ($venta->mensajero_tipo === 'externo') {
+                        // EXTERNO: sale de la cuenta origen (cuenta del POS)
+                        //          para pagar al mensajero externo (pago físico, sin cuenta destino)
                         $cuentaMensajero->decrement('saldo_cuenta', $montoFinal);
                     }
                 }
@@ -1710,12 +1729,13 @@ class VentaController extends Controller
         }
 
         $validated = $request->validate([
-            'mensajero_monto'          => 'nullable|numeric|min:0.01',
-            'mensajero_tipo'           => 'nullable|in:propio,externo',
-            'mensajero_cuenta_id'      => 'nullable|exists:cuentas,id',
-            'mensajero_tasa'           => 'nullable|numeric|min:0.0001',
-            'mensajero_monto_final_cup' => 'nullable|numeric|min:0.01',
-            'limpiar_mensajero'        => 'nullable|boolean',
+            'mensajero_monto'             => 'nullable|numeric|min:0.01',
+            'mensajero_tipo'              => 'nullable|in:propio,externo',
+            'mensajero_cuenta_id'         => 'nullable|exists:cuentas,id',
+            'mensajero_cuenta_origen_id'  => 'nullable|exists:cuentas,id',
+            'mensajero_tasa'              => 'nullable|numeric|min:0.0001',
+            'mensajero_monto_final_cup'   => 'nullable|numeric|min:0.01',
+            'limpiar_mensajero'           => 'nullable|boolean',
             'limpiar_gestor'      => 'nullable|boolean',
             'comision_cuenta_id'  => 'nullable|exists:cuentas,id',
             'comision_tasa'       => 'nullable|numeric|min:0.0001',
@@ -1744,13 +1764,15 @@ class VentaController extends Controller
         $hayConfigMensajero = $limpiarMensajero
             || array_key_exists('mensajero_tipo', $request->all())
             || array_key_exists('mensajero_cuenta_id', $request->all())
+            || array_key_exists('mensajero_cuenta_origen_id', $request->all())
             || array_key_exists('mensajero_tasa', $request->all());
 
         if ($hayConfigMensajero) {
-            $updates['mensajero_tipo']           = $limpiarMensajero ? null : ($validated['mensajero_tipo'] ?? $venta->mensajero_tipo);
-            $updates['mensajero_cuenta_id']      = $limpiarMensajero ? null : ($validated['mensajero_cuenta_id'] ?? null);
-            $updates['mensajero_tasa']           = $limpiarMensajero ? null : ($validated['mensajero_tasa'] ?? null);
-            $updates['mensajero_monto_final_cup'] = $limpiarMensajero ? null : ($validated['mensajero_monto_final_cup'] ?? null);
+            $updates['mensajero_tipo']              = $limpiarMensajero ? null : ($validated['mensajero_tipo'] ?? $venta->mensajero_tipo);
+            $updates['mensajero_cuenta_id']         = $limpiarMensajero ? null : ($validated['mensajero_cuenta_id'] ?? null);
+            $updates['mensajero_cuenta_origen_id']  = $limpiarMensajero ? null : ($validated['mensajero_cuenta_origen_id'] ?? null);
+            $updates['mensajero_tasa']              = $limpiarMensajero ? null : ($validated['mensajero_tasa'] ?? null);
+            $updates['mensajero_monto_final_cup']   = $limpiarMensajero ? null : ($validated['mensajero_monto_final_cup'] ?? null);
         }
 
         if (array_key_exists('comision_cuenta_id', $validated) || $limpiarComision) {
@@ -1768,7 +1790,7 @@ class VentaController extends Controller
         }
 
         $venta->update($updates);
-        $venta->refresh()->load(['mensajeroCuenta.moneda', 'comisionCuenta.moneda', 'mensajeroMoneda']);
+        $venta->refresh()->load(['mensajeroCuenta.moneda', 'comisionCuenta.moneda', 'mensajeroMoneda', 'mensajeroOrigenCuenta']);
 
         return response()->json([
             'success'  => true,
@@ -1791,6 +1813,10 @@ class VentaController extends Controller
                     'id'     => $venta->mensajeroCuenta->id,
                     'nombre' => $venta->mensajeroCuenta->nombre_cuenta,
                     'moneda' => $venta->mensajeroCuenta->moneda?->codigo_moneda,
+                ] : null,
+                'cuenta_origen' => $venta->mensajeroOrigenCuenta ? [
+                    'id'     => $venta->mensajeroOrigenCuenta->id,
+                    'nombre' => $venta->mensajeroOrigenCuenta->nombre_cuenta,
                 ] : null,
             ] : null,
             'comision_pago' => $venta->comision_cuenta_id ? [
@@ -1900,6 +1926,13 @@ class VentaController extends Controller
                             : (float) $venta->mensajero_monto_original;
 
                         if ($venta->mensajero_tipo === 'propio') {
+                            // Revertir: devolver a cuenta origen, quitar de cuenta mensajero
+                            if ($venta->mensajero_cuenta_origen_id) {
+                                $cuentaOrigen = Cuenta::find($venta->mensajero_cuenta_origen_id);
+                                if ($cuentaOrigen) {
+                                    $cuentaOrigen->increment('saldo_cuenta', $montoFinal);
+                                }
+                            }
                             $cuentaMensajero->decrement('saldo_cuenta', $montoFinal);
                         } elseif ($venta->mensajero_tipo === 'externo') {
                             $cuentaMensajero->increment('saldo_cuenta', $montoFinal);

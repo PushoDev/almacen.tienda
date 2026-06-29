@@ -50,6 +50,8 @@ class Venta extends Model
         // COMISIÓN VENDEDOR
         'comision_cuenta_id',
         'comision_tasa',
+        // MENSAJERO ORIGEN
+        'mensajero_cuenta_origen_id',
     ];
 
     protected $casts = [
@@ -153,5 +155,11 @@ class Venta extends Model
     public function comisionCuenta()
     {
         return $this->belongsTo(Cuenta::class, 'comision_cuenta_id');
+    }
+
+    // RELACIÓN MENSAJERO CUENTA ORIGEN (de donde sale el dinero)
+    public function mensajeroOrigenCuenta()
+    {
+        return $this->belongsTo(Cuenta::class, 'mensajero_cuenta_origen_id');
     }
 }
