@@ -2640,7 +2640,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                 <div className="space-y-3">
                                     <div className="flex items-center justify-between">
                                         <span className="text-muted-foreground text-xs font-medium">Monto en USD:</span>
-                                        <Badge variant="outline" className="font-bold text-orange-600">
+                                        <Badge variant="outline">
                                             {formatCurrency(currentVenta.total_comision, 'USD')}
                                         </Badge>
                                     </div>
@@ -2655,7 +2655,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                     {currentVenta.comision_pago.monto_cup && (
                                         <div className="flex items-center justify-between">
                                             <span className="text-muted-foreground text-xs font-medium">Monto en CUP:</span>
-                                            <Badge variant="secondary" className="font-bold text-orange-700">
+                                            <Badge variant="secondary">
                                                 {Number(currentVenta.comision_pago.monto_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
                                             </Badge>
                                         </div>
@@ -2718,7 +2718,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                             <TrendingUp className="h-4 w-4 text-green-600" />
                                             <span className="text-muted-foreground text-xs font-medium">Descontado:</span>
                                         </div>
-                                        <Badge variant="outline" className="font-bold text-green-600">
+                                        <Badge variant="outline">
                                             {Number(currentVenta.gestor.monto).toLocaleString('es-ES', { minimumFractionDigits: 2 })}{' '}
                                             {currentVenta.gestor.moneda?.codigo || ''}
                                         </Badge>
@@ -2802,12 +2802,12 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         return <>
                                             <div className="flex items-center justify-between">
                                                 <span className="text-muted-foreground text-xs font-medium">USD:</span>
-                                                <Badge variant="outline" className="font-bold text-sky-600">{usd}</Badge>
+                                                <Badge variant="outline">{usd}</Badge>
                                             </div>
                                             {cup && (
                                                 <div className="flex items-center justify-between">
                                                     <span className="text-muted-foreground text-xs font-medium">CUP:</span>
-                                                    <Badge variant="outline" className="font-bold text-sky-600">{cup}</Badge>
+                                                    <Badge variant="outline">{cup}</Badge>
                                                 </div>
                                             )}
                                         </>;
