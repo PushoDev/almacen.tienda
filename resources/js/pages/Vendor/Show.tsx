@@ -580,11 +580,13 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
         const usdVal = (!m.monto_original || m.moneda === 'USD')
             ? Number(m.monto)
             : (m.tasa_entrada ? Number(m.monto_original) / m.tasa_entrada : Number(m.monto));
-        // CUP: usa monto_original si el cliente pagó en CUP, si no convierte con tasa guardada → tasa sistema
+        // CUP: prioridad → monto_final_cup (configurado en distribución) → monto_original si pagó en CUP → calcular con tasa
         const tasaParaCUP = m.tasa ?? (tasaSistema > 0 ? tasaSistema : null);
-        const cupVal = (m.moneda === 'CUP' && m.monto_original)
-            ? Number(m.monto_original)
-            : (m.monto_cup ?? (tasaParaCUP ? usdVal * tasaParaCUP : null));
+        const cupVal = m.monto_final_cup
+            ? Number(m.monto_final_cup)
+            : (m.moneda === 'CUP' && m.monto_original)
+                ? Number(m.monto_original)
+                : (tasaParaCUP ? usdVal * tasaParaCUP : null);
         // cobrado = lo que pagó el cliente en su moneda original
         const cobrado = (m.monto_original && m.moneda && m.moneda !== 'USD')
             ? `${Number(m.monto_original).toLocaleString('es-ES', { minimumFractionDigits: 2 })} ${m.moneda}`
@@ -2219,14 +2221,23 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                     </div>
 
                                     {/* Referencia del POS — solo lectura */}
-                                    <div className="rounded-md bg-muted px-3 py-2 text-xs">
-                                        <span className="text-muted-foreground">Cobrado al cliente: </span>
-                                        <span className="font-semibold">
-                                            {currentVenta.mensajero?.monto_original
-                                                ? `${Number(currentVenta.mensajero.monto_original).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
-                                                : formatCurrency(currentVenta.mensajero?.monto ?? 0, 'USD')}
-                                        </span>
-                                    </div>
+                                    {(() => {
+                                        const m = currentVenta.mensajero!;
+                                        const tasa = m.tasa_entrada ?? m.tasa ?? monedasSistema.find(x => x.codigo === 'CUP')?.tasa ?? 0;
+                                        const refCUP = m.monto_original
+                                            ? (m.moneda === 'CUP' ? Number(m.monto_original) : Number(m.monto_original) * tasa)
+                                            : Number(m.monto) * tasa;
+                                        return (
+                                            <div className="rounded-md bg-muted px-3 py-2 text-xs">
+                                                <span className="text-muted-foreground">Cobrado al cliente: </span>
+                                                <span className="font-semibold">
+                                                    {refCUP > 0
+                                                        ? `${refCUP.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
+                                                        : formatCurrency(m.monto ?? 0, 'USD')}
+                                                </span>
+                                            </div>
+                                        );
+                                    })()}
 
                                     {/* Monto final al mensajero — editable */}
                                     <div className="space-y-1">
@@ -2240,18 +2251,11 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                             placeholder="Ej: 10000.00"
                                             className="h-8 text-sm"
                                         />
-                                        {/* Diferencia respecto al POS */}
-                                        {mensajeroFormMontoCUP && currentVenta.mensajero?.monto_original && (() => {
-                                            const final = parseFloat(mensajeroFormMontoCUP);
-                                            const original = Number(currentVenta.mensajero!.monto_original);
-                                            const diff = final - original;
-                                            if (!diff) return null;
-                                            return (
-                                                <p className={`text-xs font-medium ${diff > 0 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                                                    {diff > 0 ? `+${diff.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP (premio)` : `${diff.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP (sanción)`}
-                                                </p>
-                                            );
-                                        })()}
+                                        {mensajeroFormMontoCUP && parseFloat(mensajeroFormMontoCUP) > 0 && (
+                                            <p className="text-xs font-medium text-sky-600">
+                                                Pago a mensajería: {parseFloat(mensajeroFormMontoCUP).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                            </p>
+                                        )}
                                     </div>
 
                                     {/* Cuentas CUP — condicional según tipo */}
