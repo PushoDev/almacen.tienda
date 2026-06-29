@@ -28,6 +28,7 @@ export interface NavItem {
 
 export interface TasaMoneda {
     codigo_moneda: string;
+    nombre_moneda: string;
     tasa_cambio: number;
     principal: boolean;
 }
