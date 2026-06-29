@@ -2075,9 +2075,12 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                         {monedasSistema.length > 0 && (
                             <div className="mb-4 flex flex-wrap gap-2">
                                 {monedasSistema.map(m => (
-                                    <span key={m.id} className="inline-flex items-center gap-1 rounded-full border bg-muted px-2.5 py-0.5 text-xs font-medium">
-                                        <span className="text-muted-foreground">1 USD =</span>
-                                        <span className="font-bold">{Number(m.tasa).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {m.codigo}</span>
+                                    <span key={m.id} className="inline-flex items-center gap-1.5 rounded-full border bg-muted px-2.5 py-0.5 text-xs font-medium">
+                                        <span className="text-muted-foreground">{m.nombre}</span>
+                                        <span className="text-muted-foreground opacity-40">·</span>
+                                        <span className="font-semibold text-foreground">{m.codigo}</span>
+                                        <span className="text-muted-foreground opacity-40">·</span>
+                                        <span className="font-bold text-emerald-600">{Number(m.tasa).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</span>
                                     </span>
                                 ))}
                             </div>

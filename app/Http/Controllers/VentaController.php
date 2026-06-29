@@ -687,7 +687,7 @@ class VentaController extends Controller
             ] : null,
         ];
 
-        $monedasSistema = Moneda::orderBy('codigo_moneda')->get()->map(fn($m) => [
+        $monedasSistema = Moneda::where('estado', true)->orderBy('codigo_moneda')->get()->map(fn($m) => [
             'id'     => $m->id,
             'codigo' => $m->codigo_moneda,
             'nombre' => $m->nombre_moneda,
