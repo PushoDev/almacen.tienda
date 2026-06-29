@@ -494,15 +494,32 @@ class CierreCajaController extends Controller
             ->where('estado', 'completada')
             ->whereNotNull('mensajero_monto')
             ->where('mensajero_monto', '>', 0)
-            ->get(['mensajero_monto', 'mensajero_monto_original', 'mensajero_monto_final_cup']);
+            ->get(['mensajero_monto', 'mensajero_monto_original', 'mensajero_monto_final_cup', 'mensajero_tipo', 'mensajero_tasa', 'mensajero_tasa_entrada']);
 
-        $mensajeroCount  = $mensajeroCierre->count();
-        $mensajeroTotUSD = round($mensajeroCierre->sum(fn($v) => (float) $v->mensajero_monto), 2);
-        $mensajeroTotCUP = round($mensajeroCierre->sum(fn($v) =>
-            $v->mensajero_monto_final_cup
-                ? (float) $v->mensajero_monto_final_cup
-                : (float) ($v->mensajero_monto_original ?? 0)
-        ), 2);
+        $mensajeroCount       = $mensajeroCierre->count();
+        $mensajeroTotUSD      = round($mensajeroCierre->sum(fn($v) => (float) $v->mensajero_monto), 2);
+        $mensajeroPropioTotCUP  = 0;
+        $mensajeroExternoTotCUP = 0;
+
+        $mensajeroTotCUP = round($mensajeroCierre->sum(function ($v) use (&$mensajeroPropioTotCUP, &$mensajeroExternoTotCUP) {
+            $montoUSD = (float) $v->mensajero_monto;
+            if ($v->mensajero_monto_final_cup) {
+                $cup = (float) $v->mensajero_monto_final_cup;
+            } elseif ($v->mensajero_tasa_entrada > 0 || $v->mensajero_tasa > 0) {
+                $tasa = (float) ($v->mensajero_tasa_entrada ?? $v->mensajero_tasa);
+                $cup = $montoUSD * $tasa;
+            } else {
+                $cup = (float) ($v->mensajero_monto_original ?? $montoUSD);
+            }
+            if ($v->mensajero_tipo === 'propio') {
+                $mensajeroPropioTotCUP += $cup;
+            } else {
+                $mensajeroExternoTotCUP += $cup;
+            }
+            return $cup;
+        }), 2);
+        $mensajeroPropioTotCUP  = round($mensajeroPropioTotCUP, 2);
+        $mensajeroExternoTotCUP = round($mensajeroExternoTotCUP, 2);
 
         $showPayload = [
             'cierre'                => $cierre,
@@ -525,6 +542,8 @@ class CierreCajaController extends Controller
             'mensajero_total_usd'           => $mensajeroTotUSD,
             'mensajero_total_cup'           => $mensajeroTotCUP,
             'mensajero_count'               => $mensajeroCount,
+            'mensajero_propio_total_cup'    => $mensajeroPropioTotCUP,
+            'mensajero_externo_total_cup'   => $mensajeroExternoTotCUP,
         ];
 
         if (! $puedeVerCostoImpactoEspeciales) {
@@ -573,7 +592,7 @@ class CierreCajaController extends Controller
             ->whereNotNull('mensajero_monto')
             ->where('mensajero_monto', '>', 0)
             ->with('mensajeroMoneda')
-            ->get(['mensajero_monto', 'mensajero_monto_original', 'mensajero_monto_final_cup', 'mensajero_moneda_id', 'mensajero_tipo', 'mensajero_cuenta_id']);
+            ->get(['mensajero_monto', 'mensajero_monto_original', 'mensajero_monto_final_cup', 'mensajero_moneda_id', 'mensajero_tipo', 'mensajero_cuenta_id', 'mensajero_tasa', 'mensajero_tasa_entrada', 'mensajero_cuenta_origen_id']);
 
         // 2. Obtener IDs de cuentas del usuario para buscar transferencias entrantes
         $cuentaIds = $user->cuentas()->pluck('id')->toArray();
@@ -1060,23 +1079,46 @@ class CierreCajaController extends Controller
         $mensajeroTotalCUP = 0;
         $mensajeroDetalles = [];
 
+        $mensajeroPropioTotalCUP  = 0;
+        $mensajeroPropioCount     = 0;
+        $mensajeroExternoTotalCUP = 0;
+        $mensajeroExternoCount    = 0;
+
         foreach ($ventasConMensajero as $v) {
             $montoUSD = (float) $v->mensajero_monto;
-            // Monto CUP real pagado: usa monto_final_cup si fue editado, sino monto_original del POS
-            $montoCUP = $v->mensajero_monto_final_cup
-                ? (float) $v->mensajero_monto_final_cup
-                : (float) ($v->mensajero_monto_original ?? 0);
+
+            // CUP real: usa monto_final_cup si fue configurado en distribución
+            // Si no, convierte con tasa si había conversión USD→CUP, o usa monto_original directo si era CUP
+            if ($v->mensajero_monto_final_cup) {
+                $montoCUP = (float) $v->mensajero_monto_final_cup;
+            } elseif ($v->mensajero_tasa_entrada > 0 || $v->mensajero_tasa > 0) {
+                $tasa = (float) ($v->mensajero_tasa_entrada ?? $v->mensajero_tasa);
+                $montoCUP = $montoUSD * $tasa;
+            } else {
+                $montoCUP = (float) ($v->mensajero_monto_original ?? $montoUSD);
+            }
 
             $mensajeroTotalUSD += $montoUSD;
             $mensajeroTotalCUP += $montoCUP;
+
+            if ($v->mensajero_tipo === 'propio') {
+                $mensajeroPropioTotalCUP += $montoCUP;
+                $mensajeroPropioCount++;
+            } else {
+                $mensajeroExternoTotalCUP += $montoCUP;
+                $mensajeroExternoCount++;
+            }
+
             $mensajeroDetalles[] = [
                 'monto_usd'  => round($montoUSD, 2),
                 'monto_cup'  => round($montoCUP, 2),
                 'tipo'       => $v->mensajero_tipo,
             ];
         }
-        $mensajeroTotalUSD = round($mensajeroTotalUSD, 2);
-        $mensajeroTotalCUP = round($mensajeroTotalCUP, 2);
+        $mensajeroTotalUSD        = round($mensajeroTotalUSD, 2);
+        $mensajeroTotalCUP        = round($mensajeroTotalCUP, 2);
+        $mensajeroPropioTotalCUP  = round($mensajeroPropioTotalCUP, 2);
+        $mensajeroExternoTotalCUP = round($mensajeroExternoTotalCUP, 2);
 
         // --- VENTAS ANULADAS EN EL TURNO ---
         $ventasAnuladas = Venta::where('user_id', $user->id)
@@ -1106,9 +1148,13 @@ class CierreCajaController extends Controller
             'ventas_otros' => round($ventasOtrosTotalUSD, 2),
             'saldo_esperado_global' => $saldoEsperadoSinMensajero,
             // Mensajero del turno — informativo y ya descontado del saldo esperado
-            'mensajero_total_usd' => $mensajeroTotalUSD,
-            'mensajero_total_cup' => $mensajeroTotalCUP,
-            'mensajero_count'     => count($mensajeroDetalles),
+            'mensajero_total_usd'          => $mensajeroTotalUSD,
+            'mensajero_total_cup'          => $mensajeroTotalCUP,
+            'mensajero_count'              => count($mensajeroDetalles),
+            'mensajero_propio_total_cup'   => $mensajeroPropioTotalCUP,
+            'mensajero_propio_count'       => $mensajeroPropioCount,
+            'mensajero_externo_total_cup'  => $mensajeroExternoTotalCUP,
+            'mensajero_externo_count'      => $mensajeroExternoCount,
             // Totales separados por destino
             'ventas_a_cuentas_total_usd' => round($ventasACuentasTotalUSD, 2),
             'ventas_a_clientes_total_usd' => round($ventasAClientesTotalUSD, 2),
