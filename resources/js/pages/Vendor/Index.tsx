@@ -165,11 +165,9 @@ export default function PuntoVentaOficial({
     const [procesandoVenta, setProcesandoVenta] = useState<boolean>(false);
     const [payments, setPayments] = useState<Payment[]>([]);
 
-    // ── Mensajero (monto a cobrar al cliente) ────────────────────────────────
+    // ── Mensajero (monto a cobrar al cliente, siempre en USD) ────────────────
     const [tieneMensajero, setTieneMensajero] = useState<boolean>(false);
     const [mensajeroMonto, setMensajeroMonto] = useState<string>('');
-    const [mensajeroMonedaId, setMensajeroMonedaId] = useState<string>('');
-    const [mensajeroTasaEntrada, setMensajeroTasaEntrada] = useState<string>('');
 
     // ── Venta Especial ────────────────────────────────────────────────────────
     const [esVentaEspecial, setEsVentaEspecial] = useState<boolean>(false);
@@ -298,8 +296,6 @@ export default function PuntoVentaOficial({
         setCodigoSeleccionadoPorProducto({});
         setTieneMensajero(false);
         setMensajeroMonto('');
-        setMensajeroMonedaId('');
-        setMensajeroTasaEntrada('');
     };
 
     const handleClienteChange = (value: string) => {
@@ -519,20 +515,7 @@ export default function PuntoVentaOficial({
         [carrito],
     );
 
-    const mensajeroMonedaInfo = useMemo(() => {
-        if (!tieneMensajero || !mensajeroMonedaId) return null;
-        return monedas.find((m) => String(m.id) === mensajeroMonedaId) ?? null;
-    }, [monedas, mensajeroMonedaId, tieneMensajero]);
-
-    const mensajeroEsUSD = !mensajeroMonedaInfo || mensajeroMonedaInfo.codigo_moneda === 'USD';
-    const mensajeroTasaNum = parseFloat(mensajeroTasaEntrada) || mensajeroMonedaInfo?.tasa_cambio || 1;
-    const mensajeroMontoOriginalNum = tieneMensajero ? (parseFloat(mensajeroMonto) || 0) : 0;
-    const mensajeroMontoUSD =
-        tieneMensajero && mensajeroMontoOriginalNum > 0
-            ? mensajeroEsUSD
-                ? mensajeroMontoOriginalNum
-                : mensajeroMontoOriginalNum / mensajeroTasaNum
-            : 0;
+    const mensajeroMontoUSD = tieneMensajero ? (parseFloat(mensajeroMonto) || 0) : 0;
 
     const calcularTotal = subtotalProductos + mensajeroMontoUSD;
 
@@ -654,9 +637,6 @@ export default function PuntoVentaOficial({
             })),
             total: calcularTotal,
             mensajero_monto: mensajeroMontoUSD > 0 ? mensajeroMontoUSD : undefined,
-            mensajero_moneda_id: mensajeroMonedaId || undefined,
-            mensajero_monto_original: mensajeroMontoOriginalNum > 0 ? mensajeroMontoOriginalNum : undefined,
-            mensajero_tasa_entrada: !mensajeroEsUSD && mensajeroTasaNum > 1 ? mensajeroTasaNum : undefined,
             pagos: payments.map((p) => ({
                 metodo: p.method,
                 moneda_id: p.moneda_id,
@@ -696,8 +676,6 @@ export default function PuntoVentaOficial({
                 setMotivoEspecial('');
                 setTieneMensajero(false);
                 setMensajeroMonto('');
-                setMensajeroMonedaId('');
-                setMensajeroTasaEntrada('');
                 if (response.data.redirect) {
                     setTimeout(() => {
                         window.location.href = response.data.redirect;
@@ -1409,13 +1387,8 @@ export default function PuntoVentaOficial({
                                                             checked={tieneMensajero}
                                                             onChange={(e) => {
                                                                 setTieneMensajero(e.target.checked);
-                                                                if (e.target.checked) {
-                                                                    const usd = monedas.find((m) => m.codigo_moneda === 'USD' || m.principal);
-                                                                    if (usd) setMensajeroMonedaId(String(usd.id));
-                                                                } else {
+                                                                if (!e.target.checked) {
                                                                     setMensajeroMonto('');
-                                                                    setMensajeroMonedaId('');
-                                                                    setMensajeroTasaEntrada('');
                                                                 }
                                                             }}
                                                             className="h-4 w-4 rounded"
@@ -1424,27 +1397,9 @@ export default function PuntoVentaOficial({
                                                         Mensajería
                                                     </label>
 
-                                                    {/* Moneda + monto en fila separada */}
                                                     {tieneMensajero && (
                                                         <div className="flex items-center gap-2 pl-6">
-                                                            <Select
-                                                                value={mensajeroMonedaId}
-                                                                onValueChange={(val) => {
-                                                                    setMensajeroMonedaId(val);
-                                                                    setMensajeroTasaEntrada('');
-                                                                }}
-                                                            >
-                                                                <SelectTrigger className="h-8 w-20 text-xs">
-                                                                    <SelectValue placeholder="Moneda" />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {monedas.map((m) => (
-                                                                        <SelectItem key={m.id} value={String(m.id)}>
-                                                                            {m.codigo_moneda}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
+                                                            <span className="text-xs font-medium text-muted-foreground w-10">USD</span>
                                                             <Input
                                                                 type="number"
                                                                 min="0.01"
@@ -1453,24 +1408,6 @@ export default function PuntoVentaOficial({
                                                                 value={mensajeroMonto}
                                                                 onChange={(e) => setMensajeroMonto(e.target.value)}
                                                                 className="h-8 flex-1 text-right text-sm"
-                                                            />
-                                                        </div>
-                                                    )}
-
-                                                    {/* Tasa editable cuando no es USD */}
-                                                    {tieneMensajero && mensajeroMonedaInfo && !mensajeroEsUSD && (
-                                                        <div className="flex items-center justify-between pl-6 text-xs">
-                                                            <span className="text-muted-foreground">
-                                                                Tasa {mensajeroMonedaInfo.codigo_moneda}/USD:
-                                                            </span>
-                                                            <Input
-                                                                type="number"
-                                                                min="0.01"
-                                                                step="0.01"
-                                                                placeholder={String(mensajeroMonedaInfo.tasa_cambio)}
-                                                                value={mensajeroTasaEntrada}
-                                                                onChange={(e) => setMensajeroTasaEntrada(e.target.value)}
-                                                                className="h-7 w-28 text-right text-xs"
                                                             />
                                                         </div>
                                                     )}
@@ -1489,9 +1426,7 @@ export default function PuntoVentaOficial({
                                                     <div className="flex items-center justify-between text-sm text-sky-600">
                                                         <span>+ Mensajería:</span>
                                                         <span>
-                                                            {mensajeroEsUSD
-                                                                ? `$${mensajeroMontoUSD.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                                                                : `${mensajeroMonedaInfo?.simbolo_moneda}${mensajeroMontoOriginalNum.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ≈ $${mensajeroMontoUSD.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                                            ${mensajeroMontoUSD.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                         </span>
                                                     </div>
                                                 )}

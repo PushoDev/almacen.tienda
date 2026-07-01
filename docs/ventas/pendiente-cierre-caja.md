@@ -1,8 +1,8 @@
 # Cierre de Caja — Pendientes y Análisis
 
 **Creado:** 2026-06-24
-**Última actualización:** 2026-06-28
-**Estado:** Problemas principales resueltos el 2026-06-28.
+**Última actualización:** 2026-07-01
+**Estado:** Problemas principales resueltos. Features de desglose financiero añadidos 2026-07-01.
 
 ---
 
@@ -69,17 +69,78 @@ Aplica tanto en `obtenerDetallesCierre()` (Create) como en `show()` (Show del ci
 
 ---
 
-### 🔵 Problema 4 — Comisión no vinculada a cuenta en el cierre (Pendiente / Baja prioridad)
+### ✅ Problema 4 — Comisión no vinculada a cuenta en el cierre (RESUELTO 2026-07-01)
 
-El cierre muestra `comision_pv_total` en USD pero no indica:
-- En qué cuenta CUP se va a debitar la comisión
-- A qué tasa se convierte
-- Si la cuenta tiene saldo suficiente
+Implementado como desglose per-venta en widgets de Comisión PV y Comisión Gestor.
+Ver sección "Features añadidos 2026-07-01" más abajo.
 
-Esto es informativo — al aprobar la venta ya se validó el saldo. Podría mostrarse
-como resumen de comisiones por cuenta para que el vendedor confirme antes de cerrar.
+---
 
-**No implementado — baja prioridad.**
+## Features añadidos 2026-07-01
+
+### Snapshot de mensajero en `cierre_cajas`
+
+**Motivación:** El cierre es un documento histórico — igual que `snapshot_cuentas` y
+`snapshot_clientes`, el mensajero debe guardarse al momento del cierre, no recalcularse.
+
+**Migración:** `2026_07_01_000001_add_mensajero_snapshot_to_cierre_cajas.php`
+Añade 4 columnas a `cierre_cajas`:
+- `mensajero_total_usd` (decimal)
+- `mensajero_total_cup` (decimal)
+- `mensajero_count` (unsignedInteger)
+- `mensajero_detalles` (json, nullable) — array con `{venta_id, monto_usd, monto_cup, tipo}`
+
+**`CierreCaja.php`:** Añadidos a `$fillable` y `$casts`.
+
+**`store()`:** Extrae los 4 campos del `$calculos` y los guarda con `CierreCaja::create()`.
+
+**`show()`:** Snapshot-first — si `mensajero_detalles !== null` usa el snapshot;
+si no (cierres legacy sin snapshot), recalcula desde DB como fallback.
+
+---
+
+### Resumen Financiero del Turno (tarjeta verde)
+
+Aparece arriba de la tarjeta de Mensajería en Create y Show. Muestra:
+- **Ventas brutas** (USD) — suma de `total_esperado_usd` de ventas completadas del turno
+- **Comisiones (PV)** (negativo CUP) — `SUM(total_comision * comision_tasa)` per venta
+- **Mensajería** (negativo CUP) — `mensajero_total_cup`
+- **Ganancia neta agencia** (USD) — `ventas_brutas - mensajero_total_usd`
+
+Campos nuevos en payload `create()` y `show()`:
+`ventas_brutas_usd`, `comisiones_pv_cup`, `comisiones_gestor_cup`, `comisiones_total_cup`
+
+---
+
+### Desglose per-venta en widgets de Comisión PV y Comisión Gestor
+
+Cada widget muestra:
+- Monto total USD (ya existía)
+- Monto total CUP (nuevo) en color azul/morado
+- Botón "Ver detalles" → dialog con tabla `Venta | USD | CUP | Fecha`
+
+**Comisión PV:** `comision_cup = total_comision * comision_tasa` por venta.
+**Comisión Gestor:** filtra cuentas gestor con moneda CUP usando `whereHas`.
+
+Campos nuevos: `comisiones_pv_detalles` (array), `comisiones_gestor_detalles` (ya existía).
+
+---
+
+### Mensajero en modal "Detalles de Venta" (Por dónde entraron)
+
+Al expandir una fila en "Por dónde entraron" y presionar el eye icon se abre el
+modal de detalle de la venta. Si esa venta tuvo mensajero, ahora aparece una
+sección azul "MENSAJERÍA" con el monto CUP y su equivalente USD, colocada
+**antes** del bloque "Total Venta".
+
+Aplica tanto en Create.tsx como en Show.tsx.
+
+---
+
+### Fix: `calculos` referenciado antes de inicialización en Show.tsx
+
+`getOperacionesPorVenta` usaba `calculos.detalles` pero `calculos` se define más
+abajo con `useMemo`. Corregido usando `cierre.detalles` directamente (misma data).
 
 ---
 
@@ -87,9 +148,11 @@ como resumen de comisiones por cuenta para que el vendedor confirme antes de cer
 
 | Archivo | Estado |
 |---|---|
-| `app/Http/Controllers/CierreCajaController.php` | ✅ Actualizado — mensajero separado, anuladas corregidas |
-| `resources/js/pages/Cierres/Create.tsx` | ✅ Actualizado — tarjeta mensajería, interfaces actualizadas |
-| `resources/js/pages/Cierres/Show.tsx` | ✅ Actualizado — tarjeta mensajería, props actualizados |
+| `app/Http/Controllers/CierreCajaController.php` | ✅ Snapshot mensajero, resumen financiero, desglose comisiones PV/Gestor |
+| `app/Models/CierreCaja.php` | ✅ `$fillable` y `$casts` actualizados con campos mensajero |
+| `database/migrations/2026_07_01_000001_*` | ✅ Migración aplicada — 4 columnas mensajero en `cierre_cajas` |
+| `resources/js/pages/Cierres/Create.tsx` | ✅ Resumen financiero, desglose comisiones, mensajero en modal |
+| `resources/js/pages/Cierres/Show.tsx` | ✅ Mismo que Create + fix `calculos` antes de inicialización |
 
 ---
 

@@ -1,7 +1,7 @@
 # Contexto de Ventas — Estado Actual del Código
 
 **Creado:** 2026-06-28
-**Última actualización:** 2026-06-28
+**Última actualización:** 2026-07-01
 **Referencia:** Ver `flujos-venta.md` para diseño y flujos, `pendiente-cierre-caja.md` para cierre.
 
 ---
@@ -260,6 +260,46 @@ SOLO SI estaba completada:
 | ID | Pantalla | Descripción |
 |---|---|---|
 | F1 | Show.tsx | Selector XOR visual `[Punto de Venta] / [Gestor]` en panel distribución |
+
+---
+
+## Cierre de Caja — Archivos y estructura (actualizado 2026-07-01)
+
+| Archivo | Rol |
+|---|---|
+| `app/Http/Controllers/CierreCajaController.php` | Controlador del cierre — `create()`, `store()`, `show()`, `obtenerDetallesCierre()` |
+| `app/Models/CierreCaja.php` | Modelo — snapshot financiero del turno |
+| `resources/js/pages/Cierres/Create.tsx` | Vista de creación — preview en tiempo real |
+| `resources/js/pages/Cierres/Show.tsx` | Vista histórica de cierre guardado |
+| `database/migrations/2026_07_01_000001_add_mensajero_snapshot_to_cierre_cajas.php` | Añade 4 columnas mensajero al cierre |
+
+### Patrón snapshot
+
+El cierre es un documento histórico — los datos se guardan al momento del `store()` y no se recalculan.
+Campos snapshot en `cierre_cajas`: `snapshot_cuentas`, `snapshot_clientes`, `mensajero_detalles`,
+`mensajero_total_usd`, `mensajero_total_cup`, `mensajero_count`.
+
+En `show()` se usa snapshot si existe; si no (cierres legacy), fallback con recálculo desde DB.
+
+### Secciones del payload `create()` / `show()`
+
+| Campo | Descripción |
+|---|---|
+| `ventas_brutas_usd` | Suma `total_esperado_usd` de ventas completadas del turno |
+| `comisiones_pv_cup` | `SUM(total_comision * comision_tasa)` — comisión vendedor en CUP |
+| `comisiones_gestor_cup` | Suma de `gestor_monto` de cuentas CUP |
+| `comisiones_total_cup` | PV + Gestor |
+| `comisiones_pv_detalles` | Array `{venta_id, comision_usd, comision_cup, fecha}` por venta |
+| `mensajero_detalles` | Array `{venta_id, monto_usd, monto_cup, tipo}` por venta |
+| `mensajero_total_usd` / `_cup` / `_count` | Totales del turno |
+
+### Modal "Detalles de Venta" (Por dónde entraron → eye icon)
+
+Muestra pagos, productos, y si la venta tuvo mensajero: sección azul "MENSAJERÍA"
+con CUP + equiv. USD, colocada antes del bloque "Total Venta".
+
+El eye icon está en `Create.tsx` y `Show.tsx`. En Show.tsx, `getOperacionesPorVenta`
+usa `cierre.detalles` directamente (no `calculos` — se inicializa más tarde con useMemo).
 
 ---
 

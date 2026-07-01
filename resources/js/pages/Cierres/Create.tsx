@@ -220,7 +220,13 @@ interface Calculos {
     // Comisiones y ganancia agencia
     comision_pv_total?: number;
     comision_gestor_total?: number;
+    comisiones_pv_detalles?: ComisionPVItem[];
     ganancia_agencia_total?: number;
+    // Resumen financiero
+    ventas_brutas_usd?: number;
+    comisiones_pv_cup?: number;
+    comisiones_gestor_cup?: number;
+    comisiones_total_cup?: number;
     // Ventas especiales
     ventas_especiales_count?: number;
     ventas_especiales_total_usd?: number;
@@ -235,6 +241,14 @@ interface Calculos {
     mensajero_total_usd?: number;
     mensajero_total_cup?: number;
     mensajero_count?: number;
+    mensajero_detalles?: MensajeroDetalleItem[];
+}
+
+interface MensajeroDetalleItem {
+    venta_id: number;
+    monto_usd: number;
+    monto_cup: number;
+    tipo: string;
 }
 
 interface VentaEspecialItem {
@@ -264,6 +278,13 @@ const MOTIVO_LABELS: Record<string, string> = {
     otros:               'Otros',
     sin_motivo:          'Sin motivo registrado',
 };
+
+interface ComisionPVItem {
+    venta_id: number;
+    comision_usd: number;
+    comision_cup: number;
+    fecha: string;
+}
 
 interface ComisionGestorItem {
     venta_id: number;
@@ -330,6 +351,9 @@ export default function Create({
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showTransaccionesDialog, setShowTransaccionesDialog] = useState(false);
     const [showAnuladasDialog, setShowAnuladasDialog] = useState(false);
+    const [showMensajeriaDialog, setShowMensajeriaDialog] = useState(false);
+    const [showComisionPVDialog, setShowComisionPVDialog] = useState(false);
+    const [showComisionGestorDialog, setShowComisionGestorDialog] = useState(false);
     const [selectedVentaDetails, setSelectedVentaDetails] = useState<{
         show: boolean;
         ventaId: number | null;
@@ -1429,7 +1453,14 @@ export default function Create({
                                 <p className="text-xl font-black text-blue-700 dark:text-blue-300">
                                     ${Number(calculos.comision_pv_total ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </p>
-                                <p className="text-muted-foreground mt-1 text-xs">Sin gestor</p>
+                                <p className="mt-0.5 text-xs text-blue-500 dark:text-blue-400">
+                                    {Number(calculos.comisiones_pv_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                </p>
+                                {(calculos.comisiones_pv_detalles ?? []).length > 0 && (
+                                    <button onClick={() => setShowComisionPVDialog(true)} className="mt-1 text-xs text-blue-600 underline hover:text-blue-800 dark:text-blue-400">
+                                        Ver detalles
+                                    </button>
+                                )}
                             </div>
 
                             {/* Comisión Gestor — todos los roles */}
@@ -1438,7 +1469,14 @@ export default function Create({
                                 <p className="text-xl font-black text-purple-700 dark:text-purple-300">
                                     ${Number(calculos.comision_gestor_total ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </p>
-                                <p className="text-muted-foreground mt-1 text-xs">Con gestor</p>
+                                <p className="mt-0.5 text-xs text-purple-500 dark:text-purple-400">
+                                    {Number(calculos.comisiones_gestor_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                </p>
+                                {comisionesGestorDetalles.length > 0 && (
+                                    <button onClick={() => setShowComisionGestorDialog(true)} className="mt-1 text-xs text-purple-600 underline hover:text-purple-800 dark:text-purple-400">
+                                        Ver detalles
+                                    </button>
+                                )}
                             </div>
 
                             {/* Ganancia Agencia — solo admin */}
@@ -1468,6 +1506,48 @@ export default function Create({
                             )}
                         </div>
 
+                        {/* Resumen Financiero del Turno */}
+                        {(calculos.ventas_brutas_usd ?? 0) > 0 && (
+                            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-950">
+                                <p className="text-muted-foreground mb-2 text-xs font-bold uppercase">Resumen Financiero del Turno</p>
+                                <div className="space-y-1.5 text-xs">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-emerald-700 dark:text-emerald-400">Ventas brutas</span>
+                                        <span className="font-semibold text-emerald-800 dark:text-emerald-200">
+                                            ${Number(calculos.ventas_brutas_usd ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
+                                        </span>
+                                    </div>
+                                    {(calculos.comisiones_total_cup ?? 0) > 0 && (
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-amber-600 dark:text-amber-400">
+                                                Comisiones
+                                                {(calculos.comisiones_pv_cup ?? 0) > 0 && (calculos.comisiones_gestor_cup ?? 0) > 0
+                                                    ? ' (PV + Gestor)'
+                                                    : (calculos.comisiones_gestor_cup ?? 0) > 0 ? ' (Gestor)' : ' (PV)'}
+                                            </span>
+                                            <span className="font-semibold text-amber-700 dark:text-amber-300">
+                                                −{Number(calculos.comisiones_total_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                            </span>
+                                        </div>
+                                    )}
+                                    {(calculos.mensajero_total_cup ?? 0) > 0 && (
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-sky-600 dark:text-sky-400">Mensajería</span>
+                                            <span className="font-semibold text-sky-700 dark:text-sky-300">
+                                                −{Number(calculos.mensajero_total_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                            </span>
+                                        </div>
+                                    )}
+                                    <div className="mt-1.5 flex items-center justify-between border-t border-emerald-200 pt-1.5 dark:border-emerald-700">
+                                        <span className="font-bold text-emerald-800 dark:text-emerald-200">Ganancia neta agencia</span>
+                                        <span className="font-black text-emerald-700 dark:text-emerald-300">
+                                            ${Number(calculos.ganancia_agencia_total ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Mensajería del turno — informativo */}
                         {(calculos.mensajero_count ?? 0) > 0 && (
                             <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 dark:border-sky-800 dark:bg-sky-950">
@@ -1481,6 +1561,14 @@ export default function Create({
                                 <p className="mt-1 text-xs text-muted-foreground">
                                     Ya descontado del saldo esperado (pass-through)
                                 </p>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="mt-2 h-7 border-sky-300 text-xs text-sky-700 hover:bg-sky-100 dark:border-sky-700 dark:text-sky-300"
+                                    onClick={() => setShowMensajeriaDialog(true)}
+                                >
+                                    Ver entregas
+                                </Button>
                             </div>
                         )}
 
@@ -1587,6 +1675,158 @@ export default function Create({
                                                 </p>
                                             </div>
                                         ))}
+                                    </div>
+                                </DialogContent>
+                            </Dialog>
+                        )}
+
+                        {/* Dialog detalles de mensajería */}
+                        {(calculos.mensajero_count ?? 0) > 0 && (
+                            <Dialog open={showMensajeriaDialog} onOpenChange={setShowMensajeriaDialog}>
+                                <DialogContent className="sm:max-w-md">
+                                    <DialogHeader>
+                                        <DialogTitle className="text-sky-700 dark:text-sky-300">
+                                            Mensajería del Turno ({calculos.mensajero_count})
+                                        </DialogTitle>
+                                        <DialogDescription>
+                                            Total pagado al mensajero: <strong>{Number(calculos.mensajero_total_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong>
+                                            {' '}≈ <strong>${Number(calculos.mensajero_total_usd ?? 0).toFixed(2)} USD</strong>
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="max-h-[60vh] overflow-y-auto pr-1">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead className="text-xs">Venta</TableHead>
+                                                    <TableHead className="text-right text-xs">USD cobrado</TableHead>
+                                                    <TableHead className="text-right text-xs">CUP pagado</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {(calculos.mensajero_detalles ?? []).map((d) => (
+                                                    <TableRow key={d.venta_id}>
+                                                        <TableCell className="text-xs font-medium">#{d.venta_id}</TableCell>
+                                                        <TableCell className="text-right text-xs">${d.monto_usd.toFixed(2)}</TableCell>
+                                                        <TableCell className="text-right text-xs font-semibold text-sky-700 dark:text-sky-300">
+                                                            {d.monto_cup.toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                            <TableFooter>
+                                                <TableRow>
+                                                    <TableCell className="text-xs font-bold">Total</TableCell>
+                                                    <TableCell className="text-right text-xs font-bold">${Number(calculos.mensajero_total_usd ?? 0).toFixed(2)}</TableCell>
+                                                    <TableCell className="text-right text-xs font-bold text-sky-700 dark:text-sky-300">
+                                                        {Number(calculos.mensajero_total_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                                    </TableCell>
+                                                </TableRow>
+                                            </TableFooter>
+                                        </Table>
+                                    </div>
+                                </DialogContent>
+                            </Dialog>
+                        )}
+
+                        {/* Dialog detalles Comisión PV */}
+                        {(calculos.comisiones_pv_detalles ?? []).length > 0 && (
+                            <Dialog open={showComisionPVDialog} onOpenChange={setShowComisionPVDialog}>
+                                <DialogContent className="sm:max-w-md">
+                                    <DialogHeader>
+                                        <DialogTitle className="text-blue-700 dark:text-blue-300">
+                                            Comisiones P.V. del Turno
+                                        </DialogTitle>
+                                        <DialogDescription>
+                                            Total: <strong>${Number(calculos.comision_pv_total ?? 0).toFixed(2)} USD</strong>
+                                            {' '}≈ <strong>{Number(calculos.comisiones_pv_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong>
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="max-h-[60vh] overflow-y-auto pr-1">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead className="text-xs">Venta</TableHead>
+                                                    <TableHead className="text-right text-xs">USD</TableHead>
+                                                    <TableHead className="text-right text-xs">CUP</TableHead>
+                                                    <TableHead className="text-right text-xs">Fecha</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {(calculos.comisiones_pv_detalles ?? []).map((d) => (
+                                                    <TableRow key={d.venta_id}>
+                                                        <TableCell className="text-xs font-medium">#{d.venta_id}</TableCell>
+                                                        <TableCell className="text-right text-xs">${d.comision_usd.toFixed(2)}</TableCell>
+                                                        <TableCell className="text-right text-xs font-semibold text-blue-700 dark:text-blue-300">
+                                                            {d.comision_cup.toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                                        </TableCell>
+                                                        <TableCell className="text-right text-xs text-muted-foreground">{d.fecha}</TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                            <TableFooter>
+                                                <TableRow>
+                                                    <TableCell className="text-xs font-bold">Total</TableCell>
+                                                    <TableCell className="text-right text-xs font-bold">${Number(calculos.comision_pv_total ?? 0).toFixed(2)}</TableCell>
+                                                    <TableCell className="text-right text-xs font-bold text-blue-700 dark:text-blue-300">
+                                                        {Number(calculos.comisiones_pv_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                                    </TableCell>
+                                                    <TableCell />
+                                                </TableRow>
+                                            </TableFooter>
+                                        </Table>
+                                    </div>
+                                </DialogContent>
+                            </Dialog>
+                        )}
+
+                        {/* Dialog detalles Comisión Gestor */}
+                        {comisionesGestorDetalles.length > 0 && (
+                            <Dialog open={showComisionGestorDialog} onOpenChange={setShowComisionGestorDialog}>
+                                <DialogContent className="sm:max-w-md">
+                                    <DialogHeader>
+                                        <DialogTitle className="text-purple-700 dark:text-purple-300">
+                                            Comisiones Gestor del Turno
+                                        </DialogTitle>
+                                        <DialogDescription>
+                                            Total: <strong>${Number(calculos.comision_gestor_total ?? 0).toFixed(2)} USD</strong>
+                                            {' '}≈ <strong>{Number(calculos.comisiones_gestor_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong>
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="max-h-[60vh] overflow-y-auto pr-1">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead className="text-xs">Venta</TableHead>
+                                                    <TableHead className="text-right text-xs">USD</TableHead>
+                                                    <TableHead className="text-right text-xs">CUP</TableHead>
+                                                    <TableHead className="text-xs">Cuenta</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {comisionesGestorDetalles.map((d) => (
+                                                    <TableRow key={d.venta_id}>
+                                                        <TableCell className="text-xs font-medium">#{d.venta_id}</TableCell>
+                                                        <TableCell className="text-right text-xs">${d.monto_usd.toFixed(2)}</TableCell>
+                                                        <TableCell className="text-right text-xs font-semibold text-purple-700 dark:text-purple-300">
+                                                            {d.moneda_codigo === 'CUP'
+                                                                ? d.monto.toLocaleString('es-ES', { minimumFractionDigits: 2 })
+                                                                : '—'}
+                                                        </TableCell>
+                                                        <TableCell className="text-xs text-muted-foreground">{d.cuenta_nombre}</TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                            <TableFooter>
+                                                <TableRow>
+                                                    <TableCell className="text-xs font-bold">Total</TableCell>
+                                                    <TableCell className="text-right text-xs font-bold">${Number(calculos.comision_gestor_total ?? 0).toFixed(2)}</TableCell>
+                                                    <TableCell className="text-right text-xs font-bold text-purple-700 dark:text-purple-300">
+                                                        {Number(calculos.comisiones_gestor_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                                    </TableCell>
+                                                    <TableCell />
+                                                </TableRow>
+                                            </TableFooter>
+                                        </Table>
                                     </div>
                                 </DialogContent>
                             </Dialog>
@@ -1712,6 +1952,33 @@ export default function Create({
                                         </div>
                                     ))}
                                     {/* Total de la venta */}
+                                    {(() => {
+                                        const mensajeroItem = (calculos.mensajero_detalles ?? []).find(
+                                            (d) => d.venta_id === selectedVentaDetails.ventaId,
+                                        );
+                                        if (!mensajeroItem) return null;
+                                        return (
+                                            <div className="rounded-md border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
+                                                <p className="mb-2 text-xs font-semibold uppercase text-blue-700 dark:text-blue-300">
+                                                    Mensajería
+                                                </p>
+                                                <div className="flex items-center justify-between text-sm">
+                                                    <span className="text-muted-foreground">Mensajería</span>
+                                                    <div className="text-right font-mono">
+                                                        <span className="font-semibold text-blue-600">
+                                                            {Number(mensajeroItem.monto_cup).toLocaleString('es-ES', {
+                                                                minimumFractionDigits: 2,
+                                                            })}{' '}
+                                                            CUP
+                                                        </span>
+                                                        <span className="text-muted-foreground ml-2 text-xs">
+                                                            ≈ ${Number(mensajeroItem.monto_usd).toFixed(2)}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
                                     <div className="rounded-md bg-green-50 p-3 dark:bg-green-900/20">
                                         <div className="flex justify-between">
                                             <span className="font-semibold">Total Venta:</span>

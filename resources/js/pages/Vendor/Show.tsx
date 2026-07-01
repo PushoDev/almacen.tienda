@@ -375,27 +375,18 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     // Pre-llenar form mensajero al abrirlo
     useEffect(() => {
         if (!showMensajeroForm || !currentVenta.mensajero) return;
-        setMensajeroFormTipo(currentVenta.mensajero.tipo ?? '');
-        // Prioridad: monto_final_cup ya guardado → convertir monto_original a CUP si es necesario
+        setMensajeroFormTipo('externo');
+        // Si ya se guardó un monto final, usarlo; si no, sugerir monto_USD × tasa_CUP
         let montoInicial = 0;
         if (currentVenta.mensajero.monto_final_cup) {
             montoInicial = currentVenta.mensajero.monto_final_cup;
-        } else if (currentVenta.mensajero.monto_original) {
-            if (currentVenta.mensajero.moneda === 'CUP') {
-                montoInicial = currentVenta.mensajero.monto_original;
-            } else {
-                const tasa = currentVenta.mensajero.tasa_entrada
-                    ?? currentVenta.mensajero.tasa
-                    ?? monedasSistema.find(m => m.codigo === 'CUP')?.tasa
-                    ?? 0;
-                montoInicial = currentVenta.mensajero.monto_original * tasa;
-            }
+        } else {
+            const tasaCUP = monedasSistema.find(m => m.codigo === 'CUP')?.tasa ?? 0;
+            montoInicial = Number(currentVenta.mensajero.monto) * tasaCUP;
         }
         setMensajeroFormMontoCUP(montoInicial > 0 ? String(Number(montoInicial).toFixed(2)) : '');
         const cuentaGuardada = currentVenta.mensajero.cuenta?.id;
         setMensajeroFormCuentaId(cuentaGuardada ? String(cuentaGuardada) : '');
-        const cuentaOrigenGuardada = currentVenta.mensajero.cuenta_origen?.id;
-        setMensajeroFormCuentaOrigenId(cuentaOrigenGuardada ? String(cuentaOrigenGuardada) : '');
     }, [showMensajeroForm]);
 
     // Pre-llenar form comisión al abrirlo
@@ -511,33 +502,20 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     };
 
     const guardarMensajero = () => {
-        if (!mensajeroFormTipo) { toast.error('Selecciona el tipo de mensajero.'); return; }
         const montoCUP = parseFloat(mensajeroFormMontoCUP);
         if (!montoCUP || montoCUP <= 0) { toast.error('Ingresa el monto CUP al mensajero.'); return; }
 
-        if (mensajeroFormTipo === 'propio') {
-            // PROPIO: necesita cuenta origen (de donde sale) y cuenta destino (del almacén)
-            if (!mensajeroFormCuentaOrigenId) { toast.error('Selecciona la cuenta CUP de donde sale el dinero.'); return; }
-            if (!mensajeroFormCuentaId) { toast.error('Selecciona la cuenta destino del mensajero.'); return; }
-            const cuentaOrigen = cuentasMensajero.find(c => String(c.id) === mensajeroFormCuentaOrigenId);
-            if (cuentaOrigen && (cuentaOrigen.saldo_actual ?? 0) < montoCUP) {
-                toast.error(`Saldo insuficiente en cuenta origen. Necesitas ${montoCUP.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP, la cuenta tiene ${(cuentaOrigen.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP.`);
-                return;
-            }
-        } else {
-            // EXTERNO: solo necesita la cuenta de donde sale el pago
-            if (!mensajeroFormCuentaId) { toast.error('Selecciona la cuenta CUP de donde sale el pago al mensajero.'); return; }
-            const cuentaSel = cuentasMensajero.find(c => String(c.id) === mensajeroFormCuentaId);
-            if (cuentaSel && (cuentaSel.saldo_actual ?? 0) < montoCUP) {
-                toast.error(`Saldo insuficiente. Necesitas ${montoCUP.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP, la cuenta tiene ${(cuentaSel.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP.`);
-                return;
-            }
+        // EXTERNO: solo necesita la cuenta de donde sale el pago
+        if (!mensajeroFormCuentaId) { toast.error('Selecciona la cuenta CUP de donde sale el pago al mensajero.'); return; }
+        const cuentaSel = cuentasMensajero.find(c => String(c.id) === mensajeroFormCuentaId);
+        if (cuentaSel && (cuentaSel.saldo_actual ?? 0) < montoCUP) {
+            toast.error(`Saldo insuficiente. Necesitas ${montoCUP.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP, la cuenta tiene ${(cuentaSel.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP.`);
+            return;
         }
 
         guardarDistribucion({
-            mensajero_tipo: mensajeroFormTipo,
+            mensajero_tipo: 'externo',
             mensajero_cuenta_id: Number(mensajeroFormCuentaId),
-            ...(mensajeroFormTipo === 'propio' ? { mensajero_cuenta_origen_id: Number(mensajeroFormCuentaOrigenId) } : {}),
             mensajero_monto_final_cup: montoCUP,
         });
     };
@@ -2156,15 +2134,6 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                     )}
                                 </h4>
                                 <Button size="sm" variant="outline" onClick={() => {
-                                    if (currentVenta.mensajero) {
-                                        setMensajeroFormTipo(currentVenta.mensajero.tipo);
-                                        const montoInicial = currentVenta.mensajero.monto_final_cup
-                                            ?? currentVenta.mensajero.monto_original
-                                            ?? 0;
-                                        setMensajeroFormMontoCUP(montoInicial > 0 ? String(Number(montoInicial).toFixed(2)) : '');
-                                        const cuentaGuardada = currentVenta.mensajero.cuenta?.id;
-                                        setMensajeroFormCuentaId(cuentaGuardada ? String(cuentaGuardada) : '');
-                                    }
                                     setShowMensajeroForm(!showMensajeroForm);
                                 }}>
                                     {showMensajeroForm ? 'Cancelar' : currentVenta.mensajero ? 'Editar' : 'Agregar'}
@@ -2173,7 +2142,8 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
                             {currentVenta.mensajero && !showMensajeroForm && (
                                 <div className="space-y-1 rounded-md bg-sky-50 px-3 py-2 text-sm dark:bg-sky-950">
-                                    {currentVenta.mensajero.tipo === 'propio' ? (
+                                    {/* Bloque propio comentado — habilitar cuando se implemente vehículo propio */}
+                                    {/* {currentVenta.mensajero.tipo === 'propio' && (
                                         <>
                                             <div className="flex items-center justify-between">
                                                 <span className="text-muted-foreground text-xs">← Origen: {currentVenta.mensajero.cuenta_origen?.nombre ?? <span className="text-red-500">Sin cuenta origen</span>}</span>
@@ -2183,33 +2153,28 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                 <span className="font-semibold text-sky-700">
                                                     {currentVenta.mensajero.monto_final_cup
                                                         ? `${Number(currentVenta.mensajero.monto_final_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
-                                                        : currentVenta.mensajero.monto_original
-                                                            ? `${Number(currentVenta.mensajero.monto_original).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
-                                                            : formatCurrency(currentVenta.mensajero.monto, 'USD')}
+                                                        : formatCurrency(currentVenta.mensajero.monto, 'USD')}
                                                 </span>
                                             </div>
                                         </>
-                                    ) : (
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-muted-foreground">
-                                                🛵 Sale de: {currentVenta.mensajero.cuenta?.nombre ?? 'Sin cuenta asignada'}
-                                            </span>
-                                            <span className="font-semibold text-sky-700">
-                                                {currentVenta.mensajero.monto_final_cup
-                                                    ? `${Number(currentVenta.mensajero.monto_final_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
-                                                    : currentVenta.mensajero.monto_original
-                                                        ? `${Number(currentVenta.mensajero.monto_original).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
-                                                        : formatCurrency(currentVenta.mensajero.monto, 'USD')}
-                                            </span>
-                                        </div>
-                                    )}
+                                    )} */}
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-muted-foreground">
+                                            🛵 Sale de: {currentVenta.mensajero.cuenta?.nombre ?? 'Sin cuenta asignada'}
+                                        </span>
+                                        <span className="font-semibold text-sky-700">
+                                            {currentVenta.mensajero.monto_final_cup
+                                                ? `${Number(currentVenta.mensajero.monto_final_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
+                                                : formatCurrency(currentVenta.mensajero.monto, 'USD')}
+                                        </span>
+                                    </div>
                                 </div>
                             )}
 
                             {showMensajeroForm && (
                                 <div className="mt-2 space-y-3 rounded-lg border p-3">
-                                    {/* Fila 1: Tipo */}
-                                    <div className="space-y-1">
+                                    {/* Selector de tipo — comentado hasta habilitar vehículo propio */}
+                                    {/* <div className="space-y-1">
                                         <Label className="text-xs">Tipo de mensajero</Label>
                                         <Select value={mensajeroFormTipo} onValueChange={v => setMensajeroFormTipo(v as 'propio' | 'externo')}>
                                             <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Tipo..." /></SelectTrigger>
@@ -2218,15 +2183,13 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                 <SelectItem value="externo">🛵 Mensajero externo</SelectItem>
                                             </SelectContent>
                                         </Select>
-                                    </div>
+                                    </div> */}
 
                                     {/* Referencia del POS — solo lectura */}
                                     {(() => {
                                         const m = currentVenta.mensajero!;
-                                        const tasa = m.tasa_entrada ?? m.tasa ?? monedasSistema.find(x => x.codigo === 'CUP')?.tasa ?? 0;
-                                        const refCUP = m.monto_original
-                                            ? (m.moneda === 'CUP' ? Number(m.monto_original) : Number(m.monto_original) * tasa)
-                                            : Number(m.monto) * tasa;
+                                        const tasa = monedasSistema.find(x => x.codigo === 'CUP')?.tasa ?? 0;
+                                        const refCUP = Number(m.monto) * tasa;
                                         return (
                                             <div className="rounded-md bg-muted px-3 py-2 text-xs">
                                                 <span className="text-muted-foreground">Cobrado al cliente: </span>
@@ -2258,10 +2221,36 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         )}
                                     </div>
 
-                                    {/* Cuentas CUP — condicional según tipo */}
-                                    {mensajeroFormTipo === 'propio' ? (
+                                    {/* EXTERNO: cuenta de donde sale el pago */}
+                                    <div className="rounded-md border border-dashed border-orange-300 p-2 space-y-1.5">
+                                        <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">🛵 Cuenta de donde sale el pago</p>
+                                        <Select value={mensajeroFormCuentaId} onValueChange={setMensajeroFormCuentaId}>
+                                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar cuenta CUP..." /></SelectTrigger>
+                                            <SelectContent>
+                                                {cuentasMensajero.map(c => (
+                                                    <SelectItem key={c.id} value={String(c.id)}>
+                                                        {c.nombre_cuenta} — {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {mensajeroFormCuentaId && (() => {
+                                            const montoCUP = parseFloat(mensajeroFormMontoCUP);
+                                            const cuentaSel = cuentasMensajero.find(c => String(c.id) === mensajeroFormCuentaId);
+                                            const saldo = cuentaSel?.saldo_actual ?? 0;
+                                            const alcanza = !montoCUP || saldo >= montoCUP;
+                                            return (
+                                                <p className={`text-xs ${alcanza ? 'text-emerald-600' : 'text-red-600'}`}>
+                                                    Saldo: <strong>{saldo.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong>
+                                                    {montoCUP > 0 && <> — Necesario: <strong>{montoCUP.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong> {alcanza ? '✓' : '⚠️ Insuficiente'}</>}
+                                                </p>
+                                            );
+                                        })()}
+                                    </div>
+
+                                    {/* Bloque propio comentado — habilitar cuando se implemente vehículo propio */}
+                                    {/* {mensajeroFormTipo === 'propio' && (
                                         <>
-                                            {/* PROPIO: cuenta origen (de donde sale) */}
                                             <div className="rounded-md border border-dashed border-orange-300 p-2 space-y-1.5">
                                                 <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">← Cuenta origen (de donde sale)</p>
                                                 <Select value={mensajeroFormCuentaOrigenId} onValueChange={setMensajeroFormCuentaOrigenId}>
@@ -2274,20 +2263,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                         ))}
                                                     </SelectContent>
                                                 </Select>
-                                                {mensajeroFormCuentaOrigenId && (() => {
-                                                    const montoCUP = parseFloat(mensajeroFormMontoCUP);
-                                                    const cuentaSel = cuentasMensajero.find(c => String(c.id) === mensajeroFormCuentaOrigenId);
-                                                    const saldo = cuentaSel?.saldo_actual ?? 0;
-                                                    const alcanza = !montoCUP || saldo >= montoCUP;
-                                                    return (
-                                                        <p className={`text-xs ${alcanza ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                            Saldo: <strong>{saldo.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong>
-                                                            {montoCUP > 0 && <> — Necesario: <strong>{montoCUP.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong> {alcanza ? '✓' : '⚠️ Insuficiente'}</>}
-                                                        </p>
-                                                    );
-                                                })()}
                                             </div>
-                                            {/* PROPIO: cuenta destino (del almacén / mensajero) */}
                                             <div className="rounded-md border border-dashed border-emerald-300 p-2 space-y-1.5">
                                                 <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wide">→ Cuenta destino (mensajero del almacén)</p>
                                                 <Select value={mensajeroFormCuentaId} onValueChange={setMensajeroFormCuentaId}>
@@ -2302,34 +2278,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                 </Select>
                                             </div>
                                         </>
-                                    ) : mensajeroFormTipo === 'externo' ? (
-                                        /* EXTERNO: solo cuenta de donde sale el pago */
-                                        <div className="rounded-md border border-dashed border-orange-300 p-2 space-y-1.5">
-                                            <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">← Cuenta de donde sale el pago</p>
-                                            <Select value={mensajeroFormCuentaId} onValueChange={setMensajeroFormCuentaId}>
-                                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar cuenta CUP..." /></SelectTrigger>
-                                                <SelectContent>
-                                                    {cuentasMensajero.map(c => (
-                                                        <SelectItem key={c.id} value={String(c.id)}>
-                                                            {c.nombre_cuenta} — {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            {mensajeroFormCuentaId && (() => {
-                                                const montoCUP = parseFloat(mensajeroFormMontoCUP);
-                                                const cuentaSel = cuentasMensajero.find(c => String(c.id) === mensajeroFormCuentaId);
-                                                const saldo = cuentaSel?.saldo_actual ?? 0;
-                                                const alcanza = !montoCUP || saldo >= montoCUP;
-                                                return (
-                                                    <p className={`text-xs ${alcanza ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                        Saldo: <strong>{saldo.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong>
-                                                        {montoCUP > 0 && <> — Necesario: <strong>{montoCUP.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong> {alcanza ? '✓' : '⚠️ Insuficiente'}</>}
-                                                    </p>
-                                                );
-                                            })()}
-                                        </div>
-                                    ) : null}
+                                    )} */}
 
                                     <div className="flex gap-2 justify-end">
                                         {currentVenta.mensajero && (

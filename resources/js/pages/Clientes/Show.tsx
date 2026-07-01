@@ -45,7 +45,7 @@ interface CompraCliente {
     fecha_compra: string;
     total_compra: number;
     tipo_compra: string;
-    proveedor: { id: number; nombre_proveedor: string };
+    proveedor: { id: number; nombre_proveedor: string } | null;
     productos: Array<{
         id: number;
         nombre_producto: string;
@@ -1119,12 +1119,16 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                                                                                 </span>
                                                                             </div>
                                                                             <div>
-                                                                                <Link
-                                                                                    href={route('proveedores.show', { proveedor: compra.proveedor.id })}
-                                                                                    className="font-semibold hover:text-blue-600 hover:underline"
-                                                                                >
-                                                                                    {compra.proveedor.nombre_proveedor}
-                                                                                </Link>
+                                                                                {compra.proveedor ? (
+                                                                                    <Link
+                                                                                        href={route('proveedores.show', { proveedor: compra.proveedor.id })}
+                                                                                        className="font-semibold hover:text-blue-600 hover:underline"
+                                                                                    >
+                                                                                        {compra.proveedor.nombre_proveedor}
+                                                                                    </Link>
+                                                                                ) : (
+                                                                                    <span className="text-muted-foreground text-sm font-semibold">Sin proveedor</span>
+                                                                                )}
                                                                                 <p className="text-muted-foreground text-sm">
                                                                                     Total: {formatearMoneda(compra.total_compra)}
                                                                                 </p>
@@ -1206,11 +1210,15 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                                                                         </div>
                                                                     </TableCell>
                                                                     <TableCell>
-                                                                        <Link href={route('proveedores.show', { proveedor: compra.proveedor.id })}>
-                                                                            <Button variant="link" className="h-auto p-0 text-sm font-medium">
-                                                                                {compra.proveedor.nombre_proveedor}
-                                                                            </Button>
-                                                                        </Link>
+                                                                        {compra.proveedor ? (
+                                                                            <Link href={route('proveedores.show', { proveedor: compra.proveedor.id })}>
+                                                                                <Button variant="link" className="h-auto p-0 text-sm font-medium">
+                                                                                    {compra.proveedor.nombre_proveedor}
+                                                                                </Button>
+                                                                            </Link>
+                                                                        ) : (
+                                                                            <span className="text-muted-foreground text-xs">—</span>
+                                                                        )}
                                                                     </TableCell>
                                                                     <TableCell>
                                                                         <span className="font-medium">{formatearMoneda(compra.total_compra)}</span>
@@ -1278,9 +1286,11 @@ export default function ShowClientePage({ cliente }: ShowClientePageProps) {
                                                                                     <p>
                                                                                         <strong>Tipo:</strong> {compra.tipo_compra}
                                                                                     </p>
-                                                                                    <p>
-                                                                                        <strong>Proveedor:</strong> {compra.proveedor.nombre_proveedor}
-                                                                                    </p>
+                                                                                    {compra.proveedor && (
+                                                                                        <p>
+                                                                                            <strong>Proveedor:</strong> {compra.proveedor.nombre_proveedor}
+                                                                                        </p>
+                                                                                    )}
                                                                                     <p>
                                                                                         <strong>Total:</strong> {formatearMoneda(compra.total_compra)}
                                                                                     </p>

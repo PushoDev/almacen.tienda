@@ -635,7 +635,7 @@ class VentaController extends Controller
             'mensajero' => $venta->mensajero_monto > 0 ? [
                 'monto'           => (float) $venta->mensajero_monto,
                 'tipo'            => $venta->mensajero_tipo,
-                'moneda_codigo'   => $venta->mensajeroMoneda?->codigo_moneda ?? 'USD',
+                'moneda'          => $venta->mensajeroMoneda?->codigo_moneda ?? 'USD',
                 'moneda_id'       => $venta->mensajero_moneda_id,
                 'monto_original'  => $venta->mensajero_monto_original ? (float) $venta->mensajero_monto_original : null,
                 'tasa_entrada'    => $venta->mensajero_tasa_entrada ? (float) $venta->mensajero_tasa_entrada : null,
@@ -1264,9 +1264,10 @@ class VentaController extends Controller
             return response()->json(['success' => false, 'message' => 'Esta venta tiene mensajero pero no se ha definido el tipo (propio o externo)'], 400);
         }
 
-        if ($venta->mensajero_monto > 0 && $venta->mensajero_tipo === 'propio' && !$venta->mensajero_cuenta_origen_id) {
-            return response()->json(['success' => false, 'message' => 'El mensajero propio requiere especificar la cuenta CUP de donde sale el dinero'], 400);
-        }
+        // Validación propio comentada — habilitar cuando se implemente vehículo propio
+        // if ($venta->mensajero_monto > 0 && $venta->mensajero_tipo === 'propio' && !$venta->mensajero_cuenta_origen_id) {
+        //     return response()->json(['success' => false, 'message' => 'El mensajero propio requiere especificar la cuenta CUP de donde sale el dinero'], 400);
+        // }
 
         DB::transaction(function () use ($venta) {
             // 1. Cambiar estado a completada
@@ -1364,19 +1365,19 @@ class VentaController extends Controller
                         ? (float) $venta->mensajero_monto_final_cup
                         : (float) $venta->mensajero_monto_original;
 
-                    if ($venta->mensajero_tipo === 'propio') {
-                        // PROPIO: sale de la cuenta origen (CUP cobrado al cliente)
-                        //         y entra a la cuenta del mensajero del almacén
-                        if ($venta->mensajero_cuenta_origen_id) {
-                            $cuentaOrigen = Cuenta::find($venta->mensajero_cuenta_origen_id);
-                            if ($cuentaOrigen) {
-                                $cuentaOrigen->decrement('saldo_cuenta', $montoFinal);
-                            }
-                        }
-                        $cuentaMensajero->increment('saldo_cuenta', $montoFinal);
-                    } elseif ($venta->mensajero_tipo === 'externo') {
-                        // EXTERNO: sale de la cuenta origen (cuenta del POS)
-                        //          para pagar al mensajero externo (pago físico, sin cuenta destino)
+                    // Bloque propio comentado — habilitar cuando se implemente vehículo propio
+                    // if ($venta->mensajero_tipo === 'propio') {
+                    //     if ($venta->mensajero_cuenta_origen_id) {
+                    //         $cuentaOrigen = Cuenta::find($venta->mensajero_cuenta_origen_id);
+                    //         if ($cuentaOrigen) {
+                    //             $cuentaOrigen->decrement('saldo_cuenta', $montoFinal);
+                    //         }
+                    //     }
+                    //     $cuentaMensajero->increment('saldo_cuenta', $montoFinal);
+                    // } else
+
+                    // EXTERNO: sale de la cuenta del POS para pagar al mensajero (pago físico)
+                    if ($venta->mensajero_tipo === 'externo') {
                         $cuentaMensajero->decrement('saldo_cuenta', $montoFinal);
                     }
                 }
@@ -1925,16 +1926,19 @@ class VentaController extends Controller
                             ? (float) $venta->mensajero_monto_final_cup
                             : (float) $venta->mensajero_monto_original;
 
-                        if ($venta->mensajero_tipo === 'propio') {
-                            // Revertir: devolver a cuenta origen, quitar de cuenta mensajero
-                            if ($venta->mensajero_cuenta_origen_id) {
-                                $cuentaOrigen = Cuenta::find($venta->mensajero_cuenta_origen_id);
-                                if ($cuentaOrigen) {
-                                    $cuentaOrigen->increment('saldo_cuenta', $montoFinal);
-                                }
-                            }
-                            $cuentaMensajero->decrement('saldo_cuenta', $montoFinal);
-                        } elseif ($venta->mensajero_tipo === 'externo') {
+                        // Bloque propio comentado — habilitar cuando se implemente vehículo propio
+                        // if ($venta->mensajero_tipo === 'propio') {
+                        //     if ($venta->mensajero_cuenta_origen_id) {
+                        //         $cuentaOrigen = Cuenta::find($venta->mensajero_cuenta_origen_id);
+                        //         if ($cuentaOrigen) {
+                        //             $cuentaOrigen->increment('saldo_cuenta', $montoFinal);
+                        //         }
+                        //     }
+                        //     $cuentaMensajero->decrement('saldo_cuenta', $montoFinal);
+                        // } else
+
+                        // EXTERNO: devolver el dinero a la cuenta del POS
+                        if ($venta->mensajero_tipo === 'externo') {
                             $cuentaMensajero->increment('saldo_cuenta', $montoFinal);
                         }
                     }
