@@ -34,6 +34,10 @@ class CierreCaja extends Model
         'confirmacion_transferencias',
         'snapshot_cuentas',
         'snapshot_clientes',
+        'mensajero_total_usd',
+        'mensajero_total_cup',
+        'mensajero_count',
+        'mensajero_detalles',
     ];
 
     protected $casts = [
@@ -49,12 +53,16 @@ class CierreCaja extends Model
         'saldo_esperado' => 'float',
         'saldo_contado' => 'float',
         'diferencia' => 'float',
+        'mensajero_total_usd' => 'float',
+        'mensajero_total_cup' => 'float',
+        'mensajero_count' => 'integer',
         'detalles' => 'array',
         'arqueo_detalles' => 'array',
         'confirmacion_transferencias' => 'array',
         'comisiones_gestor_detalles' => 'array',
         'snapshot_cuentas' => 'array',
         'snapshot_clientes' => 'array',
+        'mensajero_detalles' => 'array',
     ];
 
     public function usuario()

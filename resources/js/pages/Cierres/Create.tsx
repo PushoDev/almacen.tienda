@@ -235,6 +235,14 @@ interface Calculos {
     mensajero_total_usd?: number;
     mensajero_total_cup?: number;
     mensajero_count?: number;
+    mensajero_detalles?: MensajeroDetalleItem[];
+}
+
+interface MensajeroDetalleItem {
+    venta_id: number;
+    monto_usd: number;
+    monto_cup: number;
+    tipo: string;
 }
 
 interface VentaEspecialItem {
@@ -330,6 +338,7 @@ export default function Create({
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showTransaccionesDialog, setShowTransaccionesDialog] = useState(false);
     const [showAnuladasDialog, setShowAnuladasDialog] = useState(false);
+    const [showMensajeriaDialog, setShowMensajeriaDialog] = useState(false);
     const [selectedVentaDetails, setSelectedVentaDetails] = useState<{
         show: boolean;
         ventaId: number | null;
@@ -1481,6 +1490,14 @@ export default function Create({
                                 <p className="mt-1 text-xs text-muted-foreground">
                                     Ya descontado del saldo esperado (pass-through)
                                 </p>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="mt-2 h-7 border-sky-300 text-xs text-sky-700 hover:bg-sky-100 dark:border-sky-700 dark:text-sky-300"
+                                    onClick={() => setShowMensajeriaDialog(true)}
+                                >
+                                    Ver entregas
+                                </Button>
                             </div>
                         )}
 
@@ -1587,6 +1604,54 @@ export default function Create({
                                                 </p>
                                             </div>
                                         ))}
+                                    </div>
+                                </DialogContent>
+                            </Dialog>
+                        )}
+
+                        {/* Dialog detalles de mensajería */}
+                        {(calculos.mensajero_count ?? 0) > 0 && (
+                            <Dialog open={showMensajeriaDialog} onOpenChange={setShowMensajeriaDialog}>
+                                <DialogContent className="sm:max-w-md">
+                                    <DialogHeader>
+                                        <DialogTitle className="text-sky-700 dark:text-sky-300">
+                                            Mensajería del Turno ({calculos.mensajero_count})
+                                        </DialogTitle>
+                                        <DialogDescription>
+                                            Total pagado al mensajero: <strong>{Number(calculos.mensajero_total_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong>
+                                            {' '}≈ <strong>${Number(calculos.mensajero_total_usd ?? 0).toFixed(2)} USD</strong>
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="max-h-[60vh] overflow-y-auto pr-1">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead className="text-xs">Venta</TableHead>
+                                                    <TableHead className="text-right text-xs">USD cobrado</TableHead>
+                                                    <TableHead className="text-right text-xs">CUP pagado</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {(calculos.mensajero_detalles ?? []).map((d) => (
+                                                    <TableRow key={d.venta_id}>
+                                                        <TableCell className="text-xs font-medium">#{d.venta_id}</TableCell>
+                                                        <TableCell className="text-right text-xs">${d.monto_usd.toFixed(2)}</TableCell>
+                                                        <TableCell className="text-right text-xs font-semibold text-sky-700 dark:text-sky-300">
+                                                            {d.monto_cup.toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                            <TableFooter>
+                                                <TableRow>
+                                                    <TableCell className="text-xs font-bold">Total</TableCell>
+                                                    <TableCell className="text-right text-xs font-bold">${Number(calculos.mensajero_total_usd ?? 0).toFixed(2)}</TableCell>
+                                                    <TableCell className="text-right text-xs font-bold text-sky-700 dark:text-sky-300">
+                                                        {Number(calculos.mensajero_total_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                                    </TableCell>
+                                                </TableRow>
+                                            </TableFooter>
+                                        </Table>
                                     </div>
                                 </DialogContent>
                             </Dialog>
