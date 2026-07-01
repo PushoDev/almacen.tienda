@@ -145,6 +145,13 @@ interface DetalleMoneda {
     operaciones_detalle: OperacionDetaile[];
 }
 
+interface ComisionPVItemShow {
+    venta_id: number;
+    comision_usd: number;
+    comision_cup: number;
+    fecha: string;
+}
+
 interface ComisionGestorItem {
     venta_id: number;
     monto: number;
@@ -265,6 +272,7 @@ interface Props extends PageProps {
     userRole?: string;
     comision_pv_total?: number;
     comision_gestor_total?: number;
+    comisiones_pv_detalles?: ComisionPVItemShow[];
     ganancia_agencia_total?: number;
     ventas_especiales_count?: number;
     ventas_especiales_total_usd?: number;
@@ -295,6 +303,7 @@ export default function Show({
     userRole = 'vendedor',
     comision_pv_total = 0,
     comision_gestor_total = 0,
+    comisiones_pv_detalles = [],
     ganancia_agencia_total = 0,
     ventas_especiales_count = 0,
     ventas_especiales_total_usd = 0,
@@ -318,6 +327,8 @@ export default function Show({
     const [showTransaccionesDialog, setShowTransaccionesDialog] = useState(false);
     const [showAnuladasDialog, setShowAnuladasDialog] = useState(false);
     const [showMensajeriaDialog, setShowMensajeriaDialog] = useState(false);
+    const [showComisionPVDialog, setShowComisionPVDialog] = useState(false);
+    const [showComisionGestorDialog, setShowComisionGestorDialog] = useState(false);
     const [selectedVentaDetails, setSelectedVentaDetails] = useState<{
         show: boolean;
         ventaId: number | null;
@@ -330,8 +341,8 @@ export default function Show({
     };
 
     const getOperacionesPorVenta = (ventaId: number) => {
-        const todasOperaciones = (calculos.detalles ?? []).flatMap((d) => d.operaciones_detalle ?? []);
-        return todasOperaciones.filter((op) => String(op.venta_id) === String(ventaId));
+        const todasOperaciones = (cierre.detalles ?? []).flatMap((d: any) => d.operaciones_detalle ?? []);
+        return todasOperaciones.filter((op: any) => String(op.venta_id) === String(ventaId));
     };
 
     const operacionSeleccionada = selectedVentaDetails.ventaId ? getOperacionesPorVenta(selectedVentaDetails.ventaId) : [];
@@ -1318,7 +1329,14 @@ export default function Show({
                                 <p className="text-xl font-black text-blue-700 dark:text-blue-300">
                                     ${Number(comision_pv_total).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </p>
-                                <p className="text-muted-foreground mt-1 text-xs">Sin gestor</p>
+                                <p className="mt-0.5 text-xs text-blue-500 dark:text-blue-400">
+                                    {Number(comisiones_pv_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                </p>
+                                {comisiones_pv_detalles.length > 0 && (
+                                    <button onClick={() => setShowComisionPVDialog(true)} className="mt-1 text-xs text-blue-600 underline hover:text-blue-800 dark:text-blue-400">
+                                        Ver detalles
+                                    </button>
+                                )}
                             </div>
 
                             {/* Comisión Gestor — todos los roles */}
@@ -1327,7 +1345,14 @@ export default function Show({
                                 <p className="text-xl font-black text-purple-700 dark:text-purple-300">
                                     ${Number(comision_gestor_total).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </p>
-                                <p className="text-muted-foreground mt-1 text-xs">Con gestor</p>
+                                <p className="mt-0.5 text-xs text-purple-500 dark:text-purple-400">
+                                    {Number(comisiones_gestor_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                </p>
+                                {comisionesGestorDetalles.length > 0 && (
+                                    <button onClick={() => setShowComisionGestorDialog(true)} className="mt-1 text-xs text-purple-600 underline hover:text-purple-800 dark:text-purple-400">
+                                        Ver detalles
+                                    </button>
+                                )}
                             </div>
 
                             {/* Ganancia Agencia — solo admin */}
@@ -1500,6 +1525,110 @@ export default function Show({
                             </div>
                         )}
 
+                        {/* Dialog detalles Comisión PV */}
+                        {comisiones_pv_detalles.length > 0 && (
+                            <Dialog open={showComisionPVDialog} onOpenChange={setShowComisionPVDialog}>
+                                <DialogContent className="sm:max-w-md">
+                                    <DialogHeader>
+                                        <DialogTitle className="text-blue-700 dark:text-blue-300">
+                                            Comisiones P.V. del Turno
+                                        </DialogTitle>
+                                        <DialogDescription>
+                                            Total: <strong>${Number(comision_pv_total).toFixed(2)} USD</strong>
+                                            {' '}≈ <strong>{Number(comisiones_pv_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong>
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="max-h-[60vh] overflow-y-auto pr-1">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead className="text-xs">Venta</TableHead>
+                                                    <TableHead className="text-right text-xs">USD</TableHead>
+                                                    <TableHead className="text-right text-xs">CUP</TableHead>
+                                                    <TableHead className="text-right text-xs">Fecha</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {comisiones_pv_detalles.map((d) => (
+                                                    <TableRow key={d.venta_id}>
+                                                        <TableCell className="text-xs font-medium">#{d.venta_id}</TableCell>
+                                                        <TableCell className="text-right text-xs">${d.comision_usd.toFixed(2)}</TableCell>
+                                                        <TableCell className="text-right text-xs font-semibold text-blue-700 dark:text-blue-300">
+                                                            {d.comision_cup.toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                                        </TableCell>
+                                                        <TableCell className="text-right text-xs text-muted-foreground">{d.fecha}</TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                            <TableFooter>
+                                                <TableRow>
+                                                    <TableCell className="text-xs font-bold">Total</TableCell>
+                                                    <TableCell className="text-right text-xs font-bold">${Number(comision_pv_total).toFixed(2)}</TableCell>
+                                                    <TableCell className="text-right text-xs font-bold text-blue-700 dark:text-blue-300">
+                                                        {Number(comisiones_pv_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                                    </TableCell>
+                                                    <TableCell />
+                                                </TableRow>
+                                            </TableFooter>
+                                        </Table>
+                                    </div>
+                                </DialogContent>
+                            </Dialog>
+                        )}
+
+                        {/* Dialog detalles Comisión Gestor */}
+                        {comisionesGestorDetalles.length > 0 && (
+                            <Dialog open={showComisionGestorDialog} onOpenChange={setShowComisionGestorDialog}>
+                                <DialogContent className="sm:max-w-md">
+                                    <DialogHeader>
+                                        <DialogTitle className="text-purple-700 dark:text-purple-300">
+                                            Comisiones Gestor del Turno
+                                        </DialogTitle>
+                                        <DialogDescription>
+                                            Total: <strong>${Number(comision_gestor_total).toFixed(2)} USD</strong>
+                                            {' '}≈ <strong>{Number(comisiones_gestor_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong>
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="max-h-[60vh] overflow-y-auto pr-1">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead className="text-xs">Venta</TableHead>
+                                                    <TableHead className="text-right text-xs">USD</TableHead>
+                                                    <TableHead className="text-right text-xs">CUP</TableHead>
+                                                    <TableHead className="text-xs">Cuenta</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {comisionesGestorDetalles.map((d) => (
+                                                    <TableRow key={d.venta_id}>
+                                                        <TableCell className="text-xs font-medium">#{d.venta_id}</TableCell>
+                                                        <TableCell className="text-right text-xs">${d.monto_usd.toFixed(2)}</TableCell>
+                                                        <TableCell className="text-right text-xs font-semibold text-purple-700 dark:text-purple-300">
+                                                            {d.moneda_codigo === 'CUP'
+                                                                ? d.monto.toLocaleString('es-ES', { minimumFractionDigits: 2 })
+                                                                : '—'}
+                                                        </TableCell>
+                                                        <TableCell className="text-xs text-muted-foreground">{d.cuenta_nombre}</TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                            <TableFooter>
+                                                <TableRow>
+                                                    <TableCell className="text-xs font-bold">Total</TableCell>
+                                                    <TableCell className="text-right text-xs font-bold">${Number(comision_gestor_total).toFixed(2)}</TableCell>
+                                                    <TableCell className="text-right text-xs font-bold text-purple-700 dark:text-purple-300">
+                                                        {Number(comisiones_gestor_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                                    </TableCell>
+                                                    <TableCell />
+                                                </TableRow>
+                                            </TableFooter>
+                                        </Table>
+                                    </div>
+                                </DialogContent>
+                            </Dialog>
+                        )}
+
                         {/* Dialog detalle ventas anuladas */}
                         {ventas_anuladas_count > 0 && (
                             <Dialog open={showAnuladasDialog} onOpenChange={setShowAnuladasDialog}>
@@ -1660,6 +1789,33 @@ export default function Show({
                                             )}
                                         </div>
                                     ))}
+                                    {(() => {
+                                        const mensajeroItem = mensajero_detalles.find(
+                                            (d) => d.venta_id === selectedVentaDetails.ventaId,
+                                        );
+                                        if (!mensajeroItem) return null;
+                                        return (
+                                            <div className="rounded-md border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
+                                                <p className="mb-2 text-xs font-semibold uppercase text-blue-700 dark:text-blue-300">
+                                                    Mensajería
+                                                </p>
+                                                <div className="flex items-center justify-between text-sm">
+                                                    <span className="text-muted-foreground">Mensajería</span>
+                                                    <div className="text-right font-mono">
+                                                        <span className="font-semibold text-blue-600">
+                                                            {Number(mensajeroItem.monto_cup).toLocaleString('es-ES', {
+                                                                minimumFractionDigits: 2,
+                                                            })}{' '}
+                                                            CUP
+                                                        </span>
+                                                        <span className="text-muted-foreground ml-2 text-xs">
+                                                            ≈ ${Number(mensajeroItem.monto_usd).toFixed(2)}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
                                     <div className="rounded-md bg-green-50 p-3 dark:bg-green-900/20">
                                         <div className="flex justify-between">
                                             <span className="font-semibold">Total Venta:</span>

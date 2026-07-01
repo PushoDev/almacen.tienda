@@ -225,11 +225,12 @@ class CierreCajaController extends Controller
                 'comisiones_gestor_total' => $calculos['comisiones_gestor_total'] ?? 0,
                 'comisiones_gestor_detalles' => $calculos['comisiones_gestor_detalles'] ?? [],
                 // Nuevos: comisiones y ganancia agencia
-                'comision_pv_total'     => $calculos['comision_pv_total'] ?? 0,
-                'comision_gestor_total' => $calculos['comision_gestor_total'] ?? 0,
-                'ganancia_agencia_total'=> $calculos['ganancia_agencia_total'] ?? 0,
+                'comision_pv_total'       => $calculos['comision_pv_total'] ?? 0,
+                'comision_gestor_total'   => $calculos['comision_gestor_total'] ?? 0,
+                'comisiones_pv_detalles'  => $calculos['comisiones_pv_detalles'] ?? [],
+                'ganancia_agencia_total'  => $calculos['ganancia_agencia_total'] ?? 0,
                 // Resumen financiero
-                'ventas_brutas_usd'     => $calculos['ventas_brutas_usd'] ?? 0,
+                'ventas_brutas_usd'       => $calculos['ventas_brutas_usd'] ?? 0,
                 'comisiones_pv_cup'     => $calculos['comisiones_pv_cup'] ?? 0,
                 'comisiones_gestor_cup' => $calculos['comisiones_gestor_cup'] ?? 0,
                 'comisiones_total_cup'  => $calculos['comisiones_total_cup'] ?? 0,
@@ -428,11 +429,21 @@ class CierreCajaController extends Controller
         ]);
 
         // Calcular comisiones y ganancia desde las ventas del turno del cierre
-        $comisionPVTotal = \App\Models\Venta::where('user_id', $cierre->user_id)
+        $comisionesPVVentasCierre = \App\Models\Venta::where('user_id', $cierre->user_id)
             ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
             ->where('estado', 'completada')
             ->where('es_venta_gestor', false)
-            ->sum('total_comision');
+            ->where('total_comision', '>', 0)
+            ->get(['id', 'total_comision', 'comision_tasa', 'created_at']);
+
+        $comisionPVTotal = $comisionesPVVentasCierre->sum(fn($v) => (float) $v->total_comision);
+
+        $comisionesPVDetallesCierre = $comisionesPVVentasCierre->map(fn($v) => [
+            'venta_id'    => $v->id,
+            'comision_usd'=> round((float) $v->total_comision, 2),
+            'comision_cup'=> round((float) $v->total_comision * (float) $v->comision_tasa, 2),
+            'fecha'       => $v->created_at->format('Y-m-d H:i'),
+        ])->values()->all();
 
         $comisionGestorTotal = \App\Models\Venta::where('user_id', $cierre->user_id)
             ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
@@ -579,11 +590,12 @@ class CierreCajaController extends Controller
         $showPayload = [
             'cierre'                => $cierre,
             'userRole'              => $currentUser->role ?? 'vendedor',
-            'comision_pv_total'     => round((float) $comisionPVTotal, 2),
-            'comision_gestor_total' => round((float) $comisionGestorTotal, 2),
-            'ganancia_agencia_total'=> round($gananciaAgenciaTotal, 2),
+            'comision_pv_total'       => round((float) $comisionPVTotal, 2),
+            'comision_gestor_total'   => round((float) $comisionGestorTotal, 2),
+            'comisiones_pv_detalles'  => $comisionesPVDetallesCierre,
+            'ganancia_agencia_total'  => round($gananciaAgenciaTotal, 2),
             // Resumen financiero
-            'ventas_brutas_usd'     => round((float) $ventasBrutasUSD, 2),
+            'ventas_brutas_usd'       => round((float) $ventasBrutasUSD, 2),
             'comisiones_pv_cup'     => round((float) $comisionesPVCUP, 2),
             'comisiones_gestor_cup' => round($comisionesGestorCUPTotal, 2),
             'comisiones_total_cup'  => $comisionesTotalCUP,
@@ -1112,11 +1124,21 @@ class CierreCajaController extends Controller
         $ventasEspecialesImpactoUSD = round($ventasEspecialesTotalUSD - $ventasEspecialesCostoUSD, 2);
 
         // --- COMISIÓN PUNTO DE VENTA (ventas sin gestor) ---
-        $comisionPVTotal = Venta::where('user_id', $user->id)
+        $comisionesPVVentas = Venta::where('user_id', $user->id)
             ->where('created_at', '>=', $inicioTurno)
             ->where('estado', 'completada')
             ->where('es_venta_gestor', false)
-            ->sum('total_comision');
+            ->where('total_comision', '>', 0)
+            ->get(['id', 'total_comision', 'comision_tasa', 'created_at']);
+
+        $comisionPVTotal = $comisionesPVVentas->sum(fn($v) => (float) $v->total_comision);
+
+        $comisionesPVDetalles = $comisionesPVVentas->map(fn($v) => [
+            'venta_id'    => $v->id,
+            'comision_usd'=> round((float) $v->total_comision, 2),
+            'comision_cup'=> round((float) $v->total_comision * (float) $v->comision_tasa, 2),
+            'fecha'       => $v->created_at->format('Y-m-d H:i'),
+        ])->values()->all();
 
         // --- COMISIÓN GESTOR (ventas con gestor, en USD) ---
         $comisionGestorTotal = Venta::where('user_id', $user->id)
@@ -1253,9 +1275,10 @@ class CierreCajaController extends Controller
             'comisiones_gestor_total' => round($comisionesGestorTotalUSD, 2),
             'comisiones_gestor_detalles' => $comisionesGestorDetalles,
             // Nuevos: comisiones y ganancia agencia
-            'comision_pv_total'    => round((float) $comisionPVTotal, 2),
-            'comision_gestor_total'=> round((float) $comisionGestorTotal, 2),
-            'ganancia_agencia_total' => round($gananciaAgenciaTotal, 2),
+            'comision_pv_total'       => round((float) $comisionPVTotal, 2),
+            'comision_gestor_total'   => round((float) $comisionGestorTotal, 2),
+            'comisiones_pv_detalles'  => $comisionesPVDetalles,
+            'ganancia_agencia_total'  => round($gananciaAgenciaTotal, 2),
             // Resumen financiero del turno
             'ventas_brutas_usd'      => round((float) $ventasBrutasUSD, 2),
             'comisiones_pv_cup'      => round((float) $comisionesPVCUP, 2),
