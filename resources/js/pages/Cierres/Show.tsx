@@ -278,6 +278,10 @@ interface Props extends PageProps {
     mensajero_total_cup?: number;
     mensajero_count?: number;
     mensajero_detalles?: MensajeroDetalleItemShow[];
+    ventas_brutas_usd?: number;
+    comisiones_pv_cup?: number;
+    comisiones_gestor_cup?: number;
+    comisiones_total_cup?: number;
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -304,6 +308,10 @@ export default function Show({
     mensajero_total_cup = 0,
     mensajero_count = 0,
     mensajero_detalles = [],
+    ventas_brutas_usd = 0,
+    comisiones_pv_cup = 0,
+    comisiones_gestor_cup = 0,
+    comisiones_total_cup = 0,
 }: Props) {
     const canViewEspecialesCostImpact = userRole === 'admin' || userRole === 'moderador';
 
@@ -1345,6 +1353,48 @@ export default function Show({
                                             Impacto: ${Number(ventas_especiales_impacto_usd).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
                                         </p>
                                     )}
+                                </div>
+                            )}
+
+                            {/* Resumen Financiero del Turno */}
+                            {ventas_brutas_usd > 0 && (
+                                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-950">
+                                    <p className="text-muted-foreground mb-2 text-xs font-bold uppercase">Resumen Financiero del Turno</p>
+                                    <div className="space-y-1.5 text-xs">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-emerald-700 dark:text-emerald-400">Ventas brutas</span>
+                                            <span className="font-semibold text-emerald-800 dark:text-emerald-200">
+                                                ${Number(ventas_brutas_usd).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
+                                            </span>
+                                        </div>
+                                        {comisiones_total_cup > 0 && (
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-amber-600 dark:text-amber-400">
+                                                    Comisiones
+                                                    {comisiones_pv_cup > 0 && comisiones_gestor_cup > 0
+                                                        ? ' (PV + Gestor)'
+                                                        : comisiones_gestor_cup > 0 ? ' (Gestor)' : ' (PV)'}
+                                                </span>
+                                                <span className="font-semibold text-amber-700 dark:text-amber-300">
+                                                    −{Number(comisiones_total_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                </span>
+                                            </div>
+                                        )}
+                                        {mensajero_total_cup > 0 && (
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-sky-600 dark:text-sky-400">Mensajería</span>
+                                                <span className="font-semibold text-sky-700 dark:text-sky-300">
+                                                    −{Number(mensajero_total_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                </span>
+                                            </div>
+                                        )}
+                                        <div className="mt-1.5 flex items-center justify-between border-t border-emerald-200 pt-1.5 dark:border-emerald-700">
+                                            <span className="font-bold text-emerald-800 dark:text-emerald-200">Ganancia neta agencia</span>
+                                            <span className="font-black text-emerald-700 dark:text-emerald-300">
+                                                ${Number(ganancia_agencia_total).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
+                                            </span>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
 
