@@ -47,6 +47,7 @@ class Venta extends Model
         'mensajero_moneda_id',
         'mensajero_monto_original',
         'mensajero_tasa_entrada',
+        'mensajero_monto_final_cup',
         // COMISIÓN VENDEDOR
         'comision_cuenta_id',
         'comision_tasa',
@@ -67,6 +68,7 @@ class Venta extends Model
         'es_venta_especial'   => 'boolean',
         'decision_notificada' => 'boolean',
         'mensajero_monto'          => 'decimal:2',
+        'mensajero_monto_final_cup'=> 'decimal:2',
         'mensajero_tasa'           => 'decimal:4',
         'mensajero_monto_original' => 'decimal:4',
         'mensajero_tasa_entrada'   => 'decimal:4',
