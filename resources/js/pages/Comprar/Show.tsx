@@ -43,6 +43,7 @@ interface Producto {
     marca_producto: string | null;
     modelo_producto: string | null;
     capacidad_producto: string | null;
+    color_producto: string | null;
     codigo_producto: string;
     pivot: ProductoPivot;
     almacen: Almacen;
@@ -185,7 +186,12 @@ export default function CompraShow({ compra, productos, success }: CompraShowPro
                                                     • Capacidad: <span className="font-medium">{p.capacidad_producto}</span>
                                                 </div>
                                             )}
-                                            {!p.marca_producto && !p.modelo_producto && !p.capacidad_producto && (
+                                            {p.color_producto && (
+                                                <div>
+                                                    • Color: <span className="font-medium">{p.color_producto}</span>
+                                                </div>
+                                            )}
+                                            {!p.marca_producto && !p.modelo_producto && !p.capacidad_producto && !p.color_producto && (
                                                 <span className="text-muted-foreground">Sin specs</span>
                                             )}
                                         </TableCell>

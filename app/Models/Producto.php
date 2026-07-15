@@ -20,6 +20,7 @@ class Producto extends Model
         'marca_producto',
         'modelo_producto',
         'capacidad_producto',
+        'color_producto',
         'codigo_producto',
         'barcode_image',
         'categoria_id',

@@ -84,6 +84,7 @@ interface Producto {
     marca_producto: string;
     modelo_producto?: string;
     capacidad_producto?: string;
+    color_producto?: string;
     categoria_nombre: string;
     precio_compra_producto: number;
     stock_disponible: number;
@@ -1144,6 +1145,14 @@ export default function PuntoVentaOficial({
                                                                             </span>
                                                                         </div>
                                                                     )}
+                                                                    {producto.color_producto && (
+                                                                        <div className="text-muted-foreground flex gap-1">
+                                                                            <span className="font-semibold">Color:</span>
+                                                                            <span className="text-foreground truncate">
+                                                                                {producto.color_producto}
+                                                                            </span>
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                                 {codigosDisponibles.length > 1 && (
                                                                     <div className="mt-3 space-y-1">
@@ -1648,6 +1657,10 @@ export default function PuntoVentaOficial({
                                             <div className="space-y-1">
                                                 <p className="text-muted-foreground text-xs tracking-wider uppercase">Capacidad</p>
                                                 <p className="font-medium">{productoVistaRapida.capacidad_producto || 'N/A'}</p>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-muted-foreground text-xs tracking-wider uppercase">Color</p>
+                                                <p className="font-medium">{productoVistaRapida.color_producto || 'N/A'}</p>
                                             </div>
                                             <div className="space-y-1">
                                                 <p className="text-muted-foreground text-xs tracking-wider uppercase">Stock</p>

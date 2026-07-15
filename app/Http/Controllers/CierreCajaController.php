@@ -754,6 +754,9 @@ class CierreCajaController extends Controller
                     $capacidad = $det->producto && $det->producto->capacidad_producto
                         ? trim($det->producto->capacidad_producto)
                         : '';
+                    $color = $det->producto && $det->producto->color_producto
+                        ? trim($det->producto->color_producto)
+                        : '';
                     $categoria = $det->producto && $det->producto->categoria
                         ? trim($det->producto->categoria->nombre_categoria)
                         : '';
@@ -769,6 +772,7 @@ class CierreCajaController extends Controller
                         'marca' => $marca,
                         'modelo' => $modelo,
                         'capacidad' => $capacidad,
+                        'color' => $color,
                         'categoria' => $categoria,
                         'precio_unitario' => $precioVenta,
                         'total' => $subtotal,
@@ -895,6 +899,7 @@ class CierreCajaController extends Controller
                     $marca = $producto ? $producto->marca_producto : '';
                     $modelo = $producto ? $producto->modelo_producto : '';
                     $capacidad = $producto ? $producto->capacidad_producto : '';
+                    $color = $producto ? $producto->color_producto : '';
                     $codigoProducto = $producto ? $producto->codigo_producto : '';
                     $imagen = $producto ? $producto->imagen_url : '';
                     $categoria = $producto && $producto->categoria ? $producto->categoria->nombre_categoria : '';
@@ -911,6 +916,7 @@ class CierreCajaController extends Controller
                             'marca' => $marca,
                             'modelo' => $modelo,
                             'capacidad' => $capacidad,
+                            'color' => $color,
                             'codigo' => $codigoProducto,
                             'imagen_url' => $imagen,
                             'categoria' => $categoria,

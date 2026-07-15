@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -257,6 +257,10 @@ const ConversionTransferencia: React.FC<ConversionTransferenciaProps> = ({ data,
 // ------------------------------------
 export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, proveedores, monedasActivas }: Props) {
     const [alert, setAlert] = useState<AlertState>({ show: false, message: '', type: 'success' });
+    const [gastoOrigenSearch, setGastoOrigenSearch] = useState('');
+    const [ingresoDestinoSearch, setIngresoDestinoSearch] = useState('');
+    const [transferOrigenSearch, setTransferOrigenSearch] = useState('');
+    const [transferDestinoSearch, setTransferDestinoSearch] = useState('');
 
     const showToast = (message: string, type: 'success' | 'error') => {
         setAlert({ show: true, message, type });
@@ -543,38 +547,28 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
         return '';
     };
 
-    /**
-     * Renderiza las opciones de selector, excluyendo la entidad seleccionada en el lado opuesto (solo para Transferencia).
-     */
-    const renderSelectOptions = (tipoEntidad: EntidadTipo, exclusionId: string = '', exclusionTipo: string = '', cuentasList: Cuenta[] = cuentasOrigen) => {
+    const getEntidadItems = (
+        tipoEntidad: EntidadTipo,
+        exclusionId: string = '',
+        exclusionTipo: string = '',
+        cuentasList: Cuenta[] = cuentasOrigen,
+    ): Array<{ id: string; label: string }> => {
         if (tipoEntidad === 'cuenta') {
             return cuentasList
                 .filter((c) => !(exclusionId === String(c.id) && exclusionTipo === 'cuenta'))
-                .map((cuenta) => (
-                    <SelectItem key={`c-${cuenta.id}`} value={String(cuenta.id)}>
-                        {getEntidadInfo(cuenta.id, 'cuenta')}
-                    </SelectItem>
-                ));
+                .map((c) => ({ id: String(c.id), label: getEntidadInfo(c.id, 'cuenta') }));
         }
         if (tipoEntidad === 'cliente') {
             return clientes
                 .filter((cl) => !(exclusionId === String(cl.id) && exclusionTipo === 'cliente'))
-                .map((cliente) => (
-                    <SelectItem key={`cl-${cliente.id}`} value={String(cliente.id)}>
-                        {getEntidadInfo(cliente.id, 'cliente')}
-                    </SelectItem>
-                ));
+                .map((cl) => ({ id: String(cl.id), label: getEntidadInfo(cl.id, 'cliente') }));
         }
         if (tipoEntidad === 'proveedor') {
             return proveedores
                 .filter((p) => !(exclusionId === String(p.id) && exclusionTipo === 'proveedor'))
-                .map((proveedor) => (
-                    <SelectItem key={`p-${proveedor.id}`} value={String(proveedor.id)}>
-                        {getEntidadInfo(proveedor.id, 'proveedor')}
-                    </SelectItem>
-                ));
+                .map((p) => ({ id: String(p.id), label: getEntidadInfo(p.id, 'proveedor') }));
         }
-        return null;
+        return [];
     };
 
     return (
@@ -608,6 +602,7 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                                     value={gastoData.origen_tipo || 'cuenta'}
                                     onValueChange={(value: string) => {
                                         if (value === 'cuenta' || value === 'cliente') {
+                                            setGastoOrigenSearch('');
                                             setGastoData({
                                                 ...gastoData,
                                                 origen_tipo: value as EntidadTipo,
@@ -633,17 +628,40 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                                 <Label htmlFor="origen_id_gasto">
                                     Entidad de Origen ({gastoData.origen_tipo === 'cuenta' ? 'Cuenta' : 'Cliente'})
                                 </Label>
-                                <Select
-                                    onValueChange={(value) => handleEntidadChange(value, gastoData.origen_tipo, 'origen', setGastoData)}
-                                    value={gastoData.origen_id}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue
-                                            placeholder={`Seleccione ${gastoData.origen_tipo === 'cuenta' ? 'la cuenta' : 'el cliente'} de donde sale el dinero`}
-                                        />
-                                    </SelectTrigger>
-                                    <SelectContent>{renderSelectOptions(gastoData.origen_tipo)}</SelectContent>
-                                </Select>
+                                {(() => {
+                                    const items = getEntidadItems(gastoData.origen_tipo);
+                                    const filtered = !gastoOrigenSearch
+                                        ? items
+                                        : items.filter((i) => i.label.toLowerCase().includes(gastoOrigenSearch.toLowerCase()));
+                                    return (
+                                        <Combobox
+                                            value={gastoData.origen_id || null}
+                                            onValueChange={(val) => {
+                                                if (val) handleEntidadChange(val, gastoData.origen_tipo, 'origen', setGastoData);
+                                                else setGastoData({ ...gastoData, origen_id: '', moneda: '', tasa_cambio_aplicada: '' });
+                                            }}
+                                            onInputValueChange={setGastoOrigenSearch}
+                                            itemToStringLabel={(id: string) => getEntidadItems(gastoData.origen_tipo).find((i) => i.id === id)?.label ?? ''}
+                                        >
+                                            <ComboboxInput
+                                                id="origen_id_gasto"
+                                                className="w-full"
+                                                placeholder={`Buscar ${gastoData.origen_tipo === 'cuenta' ? 'cuenta' : 'cliente'}...`}
+                                                showClear
+                                            />
+                                            <ComboboxContent>
+                                                <ComboboxList>
+                                                    {filtered.map((item) => (
+                                                        <ComboboxItem key={item.id} value={item.id}>{item.label}</ComboboxItem>
+                                                    ))}
+                                                    {filtered.length === 0 && (
+                                                        <div className="py-2 text-center text-sm text-muted-foreground">Sin resultados</div>
+                                                    )}
+                                                </ComboboxList>
+                                            </ComboboxContent>
+                                        </Combobox>
+                                    );
+                                })()}
                                 {gastoErrors.origen_id && <p className="mt-1 text-sm text-red-500">{gastoErrors.origen_id}</p>}
                             </div>
 
@@ -708,6 +726,7 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                                     value={ingresoData.destino_tipo || 'cuenta'}
                                     onValueChange={(value: string) => {
                                         if (value === 'cuenta' || value === 'cliente' || value === 'proveedor') {
+                                            setIngresoDestinoSearch('');
                                             setIngresoData({
                                                 ...ingresoData,
                                                 destino_tipo: value as EntidadTipo,
@@ -742,23 +761,42 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                                           : 'Proveedor'}
                                     )
                                 </Label>
-                                <Select
-                                    onValueChange={(value) => handleEntidadChange(value, ingresoData.destino_tipo, 'destino', setIngresoData)}
-                                    value={ingresoData.destino_id}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue
-                                            placeholder={`Seleccione ${
-                                                ingresoData.destino_tipo === 'cuenta'
-                                                    ? 'la cuenta'
-                                                    : ingresoData.destino_tipo === 'cliente'
-                                                      ? 'el cliente'
-                                                      : 'el proveedor'
-                                            } donde entra el dinero`}
-                                        />
-                                    </SelectTrigger>
-                                    <SelectContent>{renderSelectOptions(ingresoData.destino_tipo)}</SelectContent>
-                                </Select>
+                                {(() => {
+                                    const items = getEntidadItems(ingresoData.destino_tipo);
+                                    const filtered = !ingresoDestinoSearch
+                                        ? items
+                                        : items.filter((i) => i.label.toLowerCase().includes(ingresoDestinoSearch.toLowerCase()));
+                                    const placeholderTipo =
+                                        ingresoData.destino_tipo === 'cuenta' ? 'cuenta' : ingresoData.destino_tipo === 'cliente' ? 'cliente' : 'proveedor';
+                                    return (
+                                        <Combobox
+                                            value={ingresoData.destino_id || null}
+                                            onValueChange={(val) => {
+                                                if (val) handleEntidadChange(val, ingresoData.destino_tipo, 'destino', setIngresoData);
+                                                else setIngresoData({ ...ingresoData, destino_id: '', moneda: '', tasa_cambio_aplicada: '' });
+                                            }}
+                                            onInputValueChange={setIngresoDestinoSearch}
+                                            itemToStringLabel={(id: string) => getEntidadItems(ingresoData.destino_tipo).find((i) => i.id === id)?.label ?? ''}
+                                        >
+                                            <ComboboxInput
+                                                id="destino_id_ingreso"
+                                                className="w-full"
+                                                placeholder={`Buscar ${placeholderTipo}...`}
+                                                showClear
+                                            />
+                                            <ComboboxContent>
+                                                <ComboboxList>
+                                                    {filtered.map((item) => (
+                                                        <ComboboxItem key={item.id} value={item.id}>{item.label}</ComboboxItem>
+                                                    ))}
+                                                    {filtered.length === 0 && (
+                                                        <div className="py-2 text-center text-sm text-muted-foreground">Sin resultados</div>
+                                                    )}
+                                                </ComboboxList>
+                                            </ComboboxContent>
+                                        </Combobox>
+                                    );
+                                })()}
                                 {ingresoErrors.destino_id && <p className="mt-1 text-sm text-red-500">{ingresoErrors.destino_id}</p>}
                             </div>
 
@@ -824,6 +862,7 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                                     value={transferData.origen_tipo || 'cuenta'}
                                     onValueChange={(value: string) => {
                                         if (value === 'cuenta' || value === 'cliente') {
+                                            setTransferOrigenSearch('');
                                             setTransferData({
                                                 ...transferData,
                                                 origen_tipo: value as EntidadTipo,
@@ -849,23 +888,43 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                                     <Label htmlFor="origen_id_transfer">
                                         Entidad de Origen ({transferData.origen_tipo === 'cuenta' ? 'Cuenta' : 'Cliente'})
                                     </Label>
-                                    <Select
-                                        onValueChange={(value) => handleEntidadChange(value, transferData.origen_tipo, 'origen', setTransferData)}
-                                        value={transferData.origen_id}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue
-                                                placeholder={`Seleccione ${transferData.origen_tipo === 'cuenta' ? 'cuenta' : 'cliente'} de origen`}
-                                            />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {renderSelectOptions(
-                                                transferData.origen_tipo,
-                                                transferData.destino_tipo === transferData.origen_tipo ? transferData.destino_id : '',
-                                                transferData.destino_tipo,
-                                            )}
-                                        </SelectContent>
-                                    </Select>
+                                    {(() => {
+                                        const excId = transferData.destino_tipo === transferData.origen_tipo ? transferData.destino_id : '';
+                                        const items = getEntidadItems(transferData.origen_tipo, excId, transferData.destino_tipo);
+                                        const filtered = !transferOrigenSearch
+                                            ? items
+                                            : items.filter((i) => i.label.toLowerCase().includes(transferOrigenSearch.toLowerCase()));
+                                        return (
+                                            <Combobox
+                                                value={transferData.origen_id || null}
+                                                onValueChange={(val) => {
+                                                    if (val) handleEntidadChange(val, transferData.origen_tipo, 'origen', setTransferData);
+                                                    else setTransferData({ ...transferData, origen_id: '', moneda: '', tasa_cambio_aplicada: '' });
+                                                }}
+                                                onInputValueChange={setTransferOrigenSearch}
+                                                itemToStringLabel={(id: string) =>
+                                                    getEntidadItems(transferData.origen_tipo, excId, transferData.destino_tipo).find((i) => i.id === id)?.label ?? ''
+                                                }
+                                            >
+                                                <ComboboxInput
+                                                    id="origen_id_transfer"
+                                                    className="w-full"
+                                                    placeholder={`Buscar ${transferData.origen_tipo === 'cuenta' ? 'cuenta' : 'cliente'} de origen...`}
+                                                    showClear
+                                                />
+                                                <ComboboxContent>
+                                                    <ComboboxList>
+                                                        {filtered.map((item) => (
+                                                            <ComboboxItem key={item.id} value={item.id}>{item.label}</ComboboxItem>
+                                                        ))}
+                                                        {filtered.length === 0 && (
+                                                            <div className="py-2 text-center text-sm text-muted-foreground">Sin resultados</div>
+                                                        )}
+                                                    </ComboboxList>
+                                                </ComboboxContent>
+                                            </Combobox>
+                                        );
+                                    })()}
                                     {transferErrors.origen_id && <p className="mt-1 text-sm text-red-500">{transferErrors.origen_id}</p>}
                                 </div>
                             </div>
@@ -879,6 +938,7 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                                     value={transferData.destino_tipo || 'cuenta'}
                                     onValueChange={(value: string) => {
                                         if (value === 'cuenta' || value === 'cliente' || value === 'proveedor') {
+                                            setTransferDestinoSearch('');
                                             setTransferData({
                                                 ...transferData,
                                                 destino_tipo: value as EntidadTipo,
@@ -910,30 +970,46 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                                               : 'Proveedor'}
                                         )
                                     </Label>
-                                    <Select
-                                        onValueChange={(value) => handleEntidadChange(value, transferData.destino_tipo, 'destino', setTransferData)}
-                                        value={transferData.destino_id}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue
-                                                placeholder={`Seleccione ${
-                                                    transferData.destino_tipo === 'cuenta'
-                                                        ? 'cuenta'
-                                                        : transferData.destino_tipo === 'cliente'
-                                                          ? 'cliente'
-                                                          : 'proveedor'
-                                                } de destino`}
-                                            />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {renderSelectOptions(
-                                                transferData.destino_tipo,
-                                                transferData.origen_tipo === transferData.destino_tipo ? transferData.origen_id : '',
-                                                transferData.origen_tipo,
-                                                transferData.destino_tipo === 'cuenta' ? cuentasDestino : cuentasOrigen,
-                                            )}
-                                        </SelectContent>
-                                    </Select>
+                                    {(() => {
+                                        const excId = transferData.origen_tipo === transferData.destino_tipo ? transferData.origen_id : '';
+                                        const cuentasList = transferData.destino_tipo === 'cuenta' ? cuentasDestino : cuentasOrigen;
+                                        const items = getEntidadItems(transferData.destino_tipo, excId, transferData.origen_tipo, cuentasList);
+                                        const filtered = !transferDestinoSearch
+                                            ? items
+                                            : items.filter((i) => i.label.toLowerCase().includes(transferDestinoSearch.toLowerCase()));
+                                        const placeholderTipo =
+                                            transferData.destino_tipo === 'cuenta' ? 'cuenta' : transferData.destino_tipo === 'cliente' ? 'cliente' : 'proveedor';
+                                        return (
+                                            <Combobox
+                                                value={transferData.destino_id || null}
+                                                onValueChange={(val) => {
+                                                    if (val) handleEntidadChange(val, transferData.destino_tipo, 'destino', setTransferData);
+                                                    else setTransferData({ ...transferData, destino_id: '' });
+                                                }}
+                                                onInputValueChange={setTransferDestinoSearch}
+                                                itemToStringLabel={(id: string) =>
+                                                    getEntidadItems(transferData.destino_tipo, excId, transferData.origen_tipo, cuentasList).find((i) => i.id === id)?.label ?? ''
+                                                }
+                                            >
+                                                <ComboboxInput
+                                                    id="destino_id_transfer"
+                                                    className="w-full"
+                                                    placeholder={`Buscar ${placeholderTipo} de destino...`}
+                                                    showClear
+                                                />
+                                                <ComboboxContent>
+                                                    <ComboboxList>
+                                                        {filtered.map((item) => (
+                                                            <ComboboxItem key={item.id} value={item.id}>{item.label}</ComboboxItem>
+                                                        ))}
+                                                        {filtered.length === 0 && (
+                                                            <div className="py-2 text-center text-sm text-muted-foreground">Sin resultados</div>
+                                                        )}
+                                                    </ComboboxList>
+                                                </ComboboxContent>
+                                            </Combobox>
+                                        );
+                                    })()}
                                     {transferErrors.destino_id && <p className="mt-1 text-sm text-red-500">{transferErrors.destino_id}</p>}
                                 </div>
                             </div>

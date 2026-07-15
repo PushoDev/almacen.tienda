@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollProgress } from '@/components/ui/scroll';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
 import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, BreadcrumbItem, Movimiento, ProductoPorAlmacenDetalleRef } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
@@ -72,6 +72,7 @@ interface ProductoConStock extends ProductoPorAlmacenDetalleRef {
     marca?: string;
     modelo?: string;
     capacidad?: string;
+    color?: string;
     codigo?: string;
     codigos_adicionales?: string[];
     categoria?: string;
@@ -119,6 +120,8 @@ export default function MovimientosPage({
     const [productosEmisor, setProductosEmisor] = useState<ProductoConStock[]>([]);
     const [almacenOrigenId, setAlmacenOrigenId] = useState<string>('');
     const [almacenDestinoId, setAlmacenDestinoId] = useState<string>('');
+    const [origenSearch, setOrigenSearch] = useState('');
+    const [destinoSearch, setDestinoSearch] = useState('');
     const [loading, setLoading] = useState(false);
     const [selectedMovimiento, setSelectedMovimiento] = useState<MovimientoWithDetails | null>(null);
     const [productosRecibidos, setProductosRecibidos] = useState<{ [key: string]: number }>({});
@@ -176,7 +179,12 @@ export default function MovimientosPage({
 
     const almacenesDestino = almacenOrigenId ? almacenes.filter((a) => a.id !== parseInt(almacenOrigenId)) : almacenes;
 
-    const handleAlmacenOrigenChange = (value: string) => {
+    const handleAlmacenOrigenChange = (value: string | null) => {
+        if (!value) {
+            setAlmacenOrigenId('');
+            setProductosEmisor([]);
+            return;
+        }
         console.log('[Movimientos] Cambiando almacén origen a:', value);
         setAlmacenOrigenId(value);
         const almacenId = parseInt(value);
@@ -428,35 +436,57 @@ export default function MovimientosPage({
                                 {/* Almacén Origen */}
                                 <div className="flex flex-col space-y-1.5">
                                     <Label htmlFor="almacen_origen">Almacén Origen</Label>
-                                    <Select onValueChange={handleAlmacenOrigenChange} value={almacenOrigenId}>
-                                        <SelectTrigger id="almacen_origen">
-                                            <SelectValue placeholder="Selecciona el almacén origen..." />
-                                        </SelectTrigger>
-                                        <SelectContent position="popper">
-                                            {almacenesOrigen.map((almacen) => (
-                                                <SelectItem key={almacen.id} value={almacen.id.toString()}>
-                                                    {almacen.nombre_almacen}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                    <Combobox
+                                        value={almacenOrigenId || null}
+                                        onValueChange={handleAlmacenOrigenChange}
+                                        onInputValueChange={setOrigenSearch}
+                                        itemToStringLabel={(id: string) => almacenes.find(a => a.id.toString() === id)?.nombre_almacen ?? ''}
+                                    >
+                                        <ComboboxInput id="almacen_origen" className="w-full" placeholder="Buscar almacén origen..." showClear />
+                                        <ComboboxContent>
+                                            <ComboboxList>
+                                                {almacenesOrigen
+                                                    .filter(a => !origenSearch || a.nombre_almacen.toLowerCase().includes(origenSearch.toLowerCase()))
+                                                    .map(almacen => (
+                                                        <ComboboxItem key={almacen.id} value={almacen.id.toString()}>
+                                                            {almacen.nombre_almacen}
+                                                        </ComboboxItem>
+                                                    ))
+                                                }
+                                                {almacenesOrigen.filter(a => !origenSearch || a.nombre_almacen.toLowerCase().includes(origenSearch.toLowerCase())).length === 0 && (
+                                                    <div className="py-2 text-center text-sm text-muted-foreground">Sin resultados</div>
+                                                )}
+                                            </ComboboxList>
+                                        </ComboboxContent>
+                                    </Combobox>
                                 </div>
 
                                 {/* Almacén Destino */}
                                 <div className="flex flex-col space-y-1.5">
                                     <Label htmlFor="almacen_destino">Almacén Destino</Label>
-                                    <Select onValueChange={(value) => setAlmacenDestinoId(value)} value={almacenDestinoId}>
-                                        <SelectTrigger id="almacen_destino">
-                                            <SelectValue placeholder="Selecciona el almacén destino..." />
-                                        </SelectTrigger>
-                                        <SelectContent position="popper">
-                                            {almacenesDestino.map((almacen) => (
-                                                <SelectItem key={almacen.id} value={almacen.id.toString()}>
-                                                    {almacen.nombre_almacen}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                    <Combobox
+                                        value={almacenDestinoId || null}
+                                        onValueChange={(val) => setAlmacenDestinoId(val ?? '')}
+                                        onInputValueChange={setDestinoSearch}
+                                        itemToStringLabel={(id: string) => almacenes.find(a => a.id.toString() === id)?.nombre_almacen ?? ''}
+                                    >
+                                        <ComboboxInput id="almacen_destino" className="w-full" placeholder="Buscar almacén destino..." showClear />
+                                        <ComboboxContent>
+                                            <ComboboxList>
+                                                {almacenesDestino
+                                                    .filter(a => !destinoSearch || a.nombre_almacen.toLowerCase().includes(destinoSearch.toLowerCase()))
+                                                    .map(almacen => (
+                                                        <ComboboxItem key={almacen.id} value={almacen.id.toString()}>
+                                                            {almacen.nombre_almacen}
+                                                        </ComboboxItem>
+                                                    ))
+                                                }
+                                                {almacenesDestino.filter(a => !destinoSearch || a.nombre_almacen.toLowerCase().includes(destinoSearch.toLowerCase())).length === 0 && (
+                                                    <div className="py-2 text-center text-sm text-muted-foreground">Sin resultados</div>
+                                                )}
+                                            </ComboboxList>
+                                        </ComboboxContent>
+                                    </Combobox>
                                 </div>
                             </div>
                         </form>
@@ -487,6 +517,7 @@ export default function MovimientosPage({
                                                 <th className="px-4 py-3 text-left font-semibold">Producto</th>
                                                 <th className="px-4 py-3 text-left font-semibold">Modelo</th>
                                                 <th className="px-4 py-3 text-left font-semibold">Capacidad</th>
+                                                <th className="px-4 py-3 text-left font-semibold">Color</th>
                                                 <th className="px-4 py-3 text-left font-semibold">Categoría</th>
                                                 <th className="px-4 py-3 text-center font-semibold">Disponible</th>
                                                 <th className="px-4 py-3 text-center font-semibold">En Tránsito</th>
@@ -517,6 +548,7 @@ export default function MovimientosPage({
                                                     </td>
                                                     <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{producto.modelo}</td>
                                                     <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{producto.capacidad || 'N/A'}</td>
+                                                    <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{producto.color || 'N/A'}</td>
                                                     <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{producto.categoria}</td>
                                                     <td className="px-4 py-2 text-center">
                                                         <span className="font-bold text-green-600 dark:text-green-400">
@@ -967,6 +999,10 @@ export default function MovimientosPage({
                                         <div>
                                             <p className="font-medium text-gray-500">Capacidad</p>
                                             <p className="font-semibold text-gray-900">{selectedProductDetails.capacidad || 'N/A'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-gray-500">Color</p>
+                                            <p className="font-semibold text-gray-900">{selectedProductDetails.color || 'N/A'}</p>
                                         </div>
                                         <div>
                                             <p className="font-medium text-gray-500">Stock Disponible</p>

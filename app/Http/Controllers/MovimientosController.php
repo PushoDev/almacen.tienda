@@ -99,6 +99,7 @@ class MovimientosController extends Controller
                 'productos.marca_producto',
                 'productos.modelo_producto',
                 'productos.capacidad_producto',
+                'productos.color_producto',
                 'productos.codigo_producto',
                 'productos.imagen_producto', // Necesario para el accessor
                 'productos.categoria_id', // Necesario para la relación
@@ -114,6 +115,7 @@ class MovimientosController extends Controller
                     'marca' => $producto->marca_producto,
                     'modelo' => $producto->modelo_producto,
                     'capacidad' => $producto->capacidad_producto,
+                    'color' => $producto->color_producto,
                     'codigo' => $producto->codigo_producto,
                     'codigos_adicionales' => $producto->codigos->pluck('codigo_barras')->toArray(),
                     'categoria' => $producto->categoria ? $producto->categoria->nombre_categoria : 'N/A',

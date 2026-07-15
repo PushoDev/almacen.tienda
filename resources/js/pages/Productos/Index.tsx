@@ -710,6 +710,7 @@ export default function ProductosPage({
                                 <TableHead className="whitespace-nowrap">Marca</TableHead>
                                 <TableHead className="whitespace-nowrap">Modelo</TableHead>
                                 <TableHead className="whitespace-nowrap">Capacidad</TableHead>
+                                <TableHead className="whitespace-nowrap">Color</TableHead>
                                 <TableHead className="whitespace-nowrap">Código</TableHead>
                                 <TableHead className="whitespace-nowrap">Categoría</TableHead>
                                 {canViewSensitiveData && (
@@ -728,7 +729,7 @@ export default function ProductosPage({
                         <TableBody>
                             {productosData.map((producto) => {
                                 const isStockBajo = producto.stock_bajo;
-                                const productoCompleto = `${producto.nombre_producto}\nMarca: ${producto.marca_producto || 'Sin marca'}\nModelo: ${producto.modelo_producto || 'N/A'}\nCapacidad: ${producto.capacidad_producto || '-'}\nCategoría: ${producto.categoria}\nCódigo: ${producto.codigo_producto}`;
+                                const productoCompleto = `${producto.nombre_producto}\nMarca: ${producto.marca_producto || 'Sin marca'}\nModelo: ${producto.modelo_producto || 'N/A'}\nCapacidad: ${producto.capacidad_producto || '-'}\nColor: ${producto.color_producto || '-'}\nCategoría: ${producto.categoria}\nCódigo: ${producto.codigo_producto}`;
 
                                 return (
                                     <TableRow
@@ -753,7 +754,7 @@ export default function ProductosPage({
                                                         {producto.marca_producto || 'Sin marca'} - {producto.modelo_producto || 'N/A'}
                                                     </p>
                                                     <p className="text-muted-foreground text-xs">
-                                                        {producto.capacidad_producto || '-'} | {producto.categoria}
+                                                        {producto.capacidad_producto || '-'}{producto.color_producto ? ` · ${producto.color_producto}` : ''} | {producto.categoria}
                                                     </p>
                                                     <p className="text-muted-foreground mt-1 font-mono text-xs">{producto.codigo_producto}</p>
                                                 </TooltipContent>
@@ -766,6 +767,7 @@ export default function ProductosPage({
                                         </TableCell>
                                         <TableCell className="text-xs">{producto.modelo_producto?.substring(0, 12) || 'N/A'}</TableCell>
                                         <TableCell className="text-xs">{producto.capacidad_producto?.substring(0, 8) || '-'}</TableCell>
+                                        <TableCell className="text-xs">{producto.color_producto?.substring(0, 10) || '-'}</TableCell>
                                         <TableCell>
                                             <span className="font-mono text-[10px]">{producto.codigo_producto?.substring(0, 10)}</span>
                                         </TableCell>

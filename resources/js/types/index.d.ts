@@ -151,6 +151,7 @@ export interface ProductoProps {
     marca_producto: string;
     modelo_producto?: string;
     capacidad_producto?: string;
+    color_producto?: string;
     codigo_producto: string;
     categoria: string;
     categoria_id: number;
@@ -480,6 +481,8 @@ export interface VendedorProductoProps {
     codigo_producto?: string | null;
     // Adds
     marca_producto: string;
+    capacidad_producto?: string | null;
+    color_producto?: string | null;
     categoria: string;
     precio_compra_producto: number;
     precio_venta_producto: number;

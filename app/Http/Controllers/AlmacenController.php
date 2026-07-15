@@ -94,6 +94,7 @@ class AlmacenController extends Controller
                 'marca' => $item->marca_producto,
                 'modelo' => $item->modelo_producto,
                 'capacidad' => $item->capacidad_producto,
+                'color' => $item->color_producto,
                 'codigo' => $item->codigo_producto,
                 'categoria' => $item->categoria,
                 'imagen_url' => $imagenUrl,

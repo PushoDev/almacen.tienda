@@ -150,6 +150,10 @@ export default function ShowPageProductos({ producto, precio_venta }: { producto
                                             <p className="text-muted-foreground text-sm">Capacidad</p>
                                             <p className="font-medium">{producto.capacidad_producto || 'No especificada'}</p>
                                         </div>
+                                        <div>
+                                            <p className="text-muted-foreground text-sm">Color</p>
+                                            <p className="font-medium">{producto.color_producto || 'No especificado'}</p>
+                                        </div>
                                     </div>
 
                                     {/* Columna 2 */}
