@@ -31,6 +31,7 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
@@ -2837,11 +2838,6 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                             <thead className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                                 <tr>
                                     <th className="px-4 py-3 text-left font-semibold">Producto</th>
-                                    <th className="px-4 py-3 text-left font-semibold">Marca</th>
-                                    <th className="px-4 py-3 text-left font-semibold">Modelo</th>
-                                    <th className="px-4 py-3 text-left font-semibold">Capacidad</th>
-                                    <th className="px-4 py-3 text-left font-semibold">Color</th>
-                                    <th className="px-4 py-3 text-left font-semibold">Categoría</th>
                                     <th className="px-4 py-3 text-center font-semibold">Cantidad</th>
                                     <th className="px-4 py-3 text-left font-semibold">Precio Unitario</th>
                                     {userRole !== 'vendedor' && <th className="px-4 py-3 text-left font-semibold">Costo Unitario</th>}
@@ -2854,29 +2850,37 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                 {currentVenta.items.map((item, index) => (
                                     <tr key={index} className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50">
                                         <td className="px-4 py-2">
-                                            <div className="flex items-center gap-3">
-                                                <img
-                                                    src={item.producto.imagen_url || 'https://via.placeholder.com/40'}
-                                                    alt={item.producto.nombre}
-                                                    className="h-10 w-10 rounded-md object-cover"
-                                                />
-                                                <div>
-                                                    <p className="font-semibold text-gray-800 dark:text-gray-200">{item.producto.nombre}</p>
-                                                    {item.producto.codigo && <p className="text-xs text-gray-500">{item.producto.codigo}</p>}
-                                                </div>
-                                            </div>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <div className="flex cursor-default items-center gap-3">
+                                                        <img
+                                                            src={item.producto.imagen_url || 'https://via.placeholder.com/40'}
+                                                            alt={item.producto.nombre}
+                                                            className="h-10 w-10 rounded-md object-cover"
+                                                        />
+                                                        <div>
+                                                            <p className="font-semibold text-gray-800 dark:text-gray-200">{item.producto.nombre}</p>
+                                                            {item.producto.codigo && <p className="text-xs text-gray-500">{item.producto.codigo}</p>}
+                                                        </div>
+                                                    </div>
+                                                </TooltipTrigger>
+                                                <TooltipContent side="right" className="w-56 p-3 text-left">
+                                                    <p className="mb-1 font-semibold">{item.producto.nombre}</p>
+                                                    <p className="text-muted-foreground text-xs">{item.producto.marca} · {item.producto.modelo || 'N/A'}</p>
+                                                    {(item.producto.capacidad || item.producto.color) && (
+                                                        <p className="text-muted-foreground text-xs">{item.producto.capacidad || '—'} · {item.producto.color || '—'}</p>
+                                                    )}
+                                                    <p className="text-muted-foreground mt-1 text-xs">{item.producto.categoria}</p>
+                                                    {item.producto.codigo && <p className="text-muted-foreground mt-1 font-mono text-xs">{item.producto.codigo}</p>}
+                                                </TooltipContent>
+                                            </Tooltip>
                                         </td>
-                                        <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{item.producto.marca}</td>
-                                        <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{item.producto.modelo || 'N/A'}</td>
-                                        <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{item.producto.capacidad || 'N/A'}</td>
-                                        <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{item.producto.color || 'N/A'}</td>
-                                        <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{item.producto.categoria}</td>
                                         <td className="px-4 py-2 text-center">
                                             <span className="font-semibold">{item.cantidad}</span>
                                         </td>
                                         <td className="px-4 py-2">{formatCurrency(item.precio_venta, simboloMonedaPrincipal)}</td>
                                         {userRole !== 'vendedor' && (
-                                            <td className="px-4 py-2 text-red-600">{formatCurrency(item.costo_unitario, simboloMonedaPrincipal)}</td>
+                                            <td className="px-4 py-2 text-muted-foreground">{formatCurrency(item.costo_unitario, simboloMonedaPrincipal)}</td>
                                         )}
                                         {userRole !== 'vendedor' && (
                                             <td className="px-4 py-2 text-green-600">{formatCurrency(item.ganancia, simboloMonedaPrincipal)}</td>
@@ -2888,41 +2892,41 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                     </tr>
                                 ))}
                             </tbody>
-                            <tfoot className="bg-sidebar-accent">
-                                <tr>
-                                    <td colSpan={userRole === 'vendedor' ? 8 : 10} className="px-4 py-3 text-right font-semibold text-white">
+                            <tfoot className="border-t-2 border-border">
+                                <tr className="bg-card">
+                                    <td colSpan={userRole === 'vendedor' ? 4 : 6} className="px-4 py-3 text-right font-semibold text-foreground">
                                         Total Venta:
                                     </td>
-                                    <td className="px-4 py-3 text-center text-lg font-semibold text-white">
+                                    <td className="px-4 py-3 text-right text-lg font-bold text-foreground">
                                         {formatCurrency(currentVenta.total, simboloMonedaPrincipal)}
                                     </td>
                                 </tr>
                                 {userRole !== 'vendedor' && (
-                                    <tr className="bg-green-50 dark:bg-green-900/20">
-                                        <td colSpan={10} className="px-4 py-3 text-right font-semibold text-green-800 dark:text-green-400">
+                                    <tr className="bg-card border-t border-border">
+                                        <td colSpan={6} className="px-4 py-2.5 text-right text-sm font-medium text-muted-foreground">
                                             Ganancia Total:
                                         </td>
-                                        <td className="px-4 py-3 text-center text-lg font-semibold text-green-800 dark:text-green-400">
+                                        <td className="px-4 py-2.5 text-right font-semibold text-green-500">
                                             {formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}
                                         </td>
                                     </tr>
                                 )}
                                 {currentVenta.total_comision > 0 && (
-                                    <tr className="bg-orange-50 dark:bg-orange-900/20">
-                                        <td colSpan={userRole === 'vendedor' ? 8 : 10} className="px-4 py-3 text-right font-semibold text-orange-700 dark:text-orange-400">
+                                    <tr className="bg-card border-t border-border">
+                                        <td colSpan={userRole === 'vendedor' ? 4 : 6} className="px-4 py-2.5 text-right text-sm font-medium text-muted-foreground">
                                             Comisión Vendedor:
                                         </td>
-                                        <td className="px-4 py-3 text-center text-lg font-semibold text-orange-700 dark:text-orange-400">
+                                        <td className="px-4 py-2.5 text-right font-semibold text-orange-500">
                                             {formatCurrency(currentVenta.total_comision, simboloMonedaPrincipal)}
                                         </td>
                                     </tr>
                                 )}
                                 {userRole !== 'vendedor' && (
-                                    <tr className="bg-blue-50 dark:bg-blue-900/20">
-                                        <td colSpan={10} className="px-4 py-3 text-right font-semibold text-blue-700 dark:text-blue-400">
+                                    <tr className="bg-card border-t border-border">
+                                        <td colSpan={6} className="px-4 py-2.5 text-right text-sm font-medium text-muted-foreground">
                                             Ganancia Agencia:
                                         </td>
-                                        <td className="px-4 py-3 text-center text-lg font-semibold text-blue-700 dark:text-blue-400">
+                                        <td className="px-4 py-2.5 text-right font-semibold text-indigo-400">
                                             {formatCurrency(currentVenta.ganancia_agencia, simboloMonedaPrincipal)}
                                         </td>
                                     </tr>
