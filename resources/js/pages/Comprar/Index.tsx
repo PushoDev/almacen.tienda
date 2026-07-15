@@ -71,6 +71,7 @@ export interface ProductoComprarProps {
     marca?: string;
     modelo?: string;
     capacidad?: string;
+    color?: string;
     categoria: string;
     codigo: string;
     codigo_barras?: string;
@@ -180,6 +181,7 @@ export default function ComprarPage() {
         marca: '',
         modelo: '',
         capacidad: '',
+        color: '',
         categoria: '',
         codigo: '',
         cantidad: 0,
@@ -318,6 +320,7 @@ export default function ComprarPage() {
             marca: '',
             modelo: '',
             capacidad: '',
+            color: '',
             categoria: '',
             codigo: '',
             cantidad: 0,
@@ -345,6 +348,7 @@ export default function ComprarPage() {
             marca: tempFormData.marca,
             modelo: tempFormData.modelo,
             capacidad: tempFormData.capacidad,
+            color: tempFormData.color,
             categoria: tempFormData.categoria,
             codigo: nuevoCodigo,
             cantidad: tempFormData.cantidad,
@@ -374,6 +378,7 @@ export default function ComprarPage() {
                 marca: productoParaEditar.marca || '',
                 modelo: productoParaEditar.modelo || '',
                 capacidad: productoParaEditar.capacidad || '',
+                color: productoParaEditar.color || '',
                 categoria: productoParaEditar.categoria,
                 codigo: productoParaEditar.codigo,
                 cantidad: productoParaEditar.cantidad,
@@ -406,6 +411,7 @@ export default function ComprarPage() {
                           marca: tempFormData.marca,
                           modelo: tempFormData.modelo,
                           capacidad: tempFormData.capacidad,
+                          color: tempFormData.color,
                           categoria: tempFormData.categoria,
                           codigo: tempFormData.codigo,
                           cantidad: tempFormData.cantidad,
@@ -1495,6 +1501,17 @@ export default function ComprarPage() {
                                     onChange={handleTempInputChange}
                                 />
                             </div>
+
+                            <div className="grid w-full max-w-sm items-center gap-1">
+                                <Label htmlFor="color_producto">Color</Label>
+                                <Input
+                                    type="text"
+                                    name="color"
+                                    placeholder="Ej: Negro, Rojo, Azul"
+                                    value={tempFormData.color}
+                                    onChange={handleTempInputChange}
+                                />
+                            </div>
                             {/* Categorias */}
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="categorias">Categoría *</Label>
@@ -1567,6 +1584,7 @@ export default function ComprarPage() {
                                 <TableHead>Marca</TableHead>
                                 <TableHead>Modelo</TableHead>
                                 <TableHead>Capacidad</TableHead>
+                                <TableHead>Color</TableHead>
                                 <TableHead>Almacén</TableHead>
                                 <TableHead>Categoria</TableHead>
                                 <TableHead>Código</TableHead>
@@ -1585,6 +1603,7 @@ export default function ComprarPage() {
                                         <TableCell>{p.marca || 'N/A'}</TableCell>
                                         <TableCell>{p.modelo || 'N/A'}</TableCell>
                                         <TableCell>{p.capacidad || 'N/A'}</TableCell>
+                                        <TableCell>{p.color || 'N/A'}</TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-2">
                                                 {almacen ? (
@@ -1679,6 +1698,17 @@ export default function ComprarPage() {
                                                                             id="edit-capacidad"
                                                                             name="capacidad"
                                                                             value={tempFormData.capacidad}
+                                                                            onChange={handleTempInputChange}
+                                                                        />
+                                                                    </div>
+
+                                                                    <div className="sm:col-span-2">
+                                                                        <Label htmlFor="edit-color">Color</Label>
+                                                                        <Input
+                                                                            id="edit-color"
+                                                                            name="color"
+                                                                            placeholder="Ej: Negro, Rojo, Azul"
+                                                                            value={tempFormData.color}
                                                                             onChange={handleTempInputChange}
                                                                         />
                                                                     </div>

@@ -80,6 +80,7 @@ class Almacen extends Model
                 'productos.marca_producto',
                 'productos.modelo_producto',
                 'productos.capacidad_producto',
+                'productos.color_producto',
                 'productos.codigo_producto',
                 'productos.imagen_producto',
                 'categorias.nombre_categoria as categoria',
@@ -91,6 +92,7 @@ class Almacen extends Model
                 'productos.marca_producto',
                 'productos.modelo_producto',
                 'productos.capacidad_producto',
+                'productos.color_producto',
                 'productos.codigo_producto',
                 'productos.imagen_producto',
                 'categorias.nombre_categoria'

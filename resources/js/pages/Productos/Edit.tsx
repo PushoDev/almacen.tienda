@@ -28,6 +28,7 @@ export default function EditarProductosPage({ producto, categorias }: { producto
         marca_producto: producto.marca_producto || '',
         modelo_producto: producto.modelo_producto || '',
         capacidad_producto: producto.capacidad_producto || '',
+        color_producto: producto.color_producto || '',
         codigo_producto: producto.codigo_producto || '',
         categoria_id: producto.categoria_id.toString(),
         precio_compra_producto: producto.precio_compra_producto,
@@ -194,6 +195,18 @@ export default function EditarProductosPage({ producto, categorias }: { producto
                                         className="mt-1"
                                     />
                                     <InputError message={errors.capacidad_producto} />
+                                </div>
+
+                                <div>
+                                    <Label htmlFor="color_producto">Color del Producto</Label>
+                                    <Input
+                                        id="color_producto"
+                                        value={data.color_producto}
+                                        onChange={(e) => setData('color_producto', e.target.value)}
+                                        placeholder="Ej: Negro, Rojo, Azul, etc."
+                                        className="mt-1"
+                                    />
+                                    <InputError message={errors.color_producto} />
                                 </div>
                             </div>
 

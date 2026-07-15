@@ -83,6 +83,7 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
             $marca          = !empty($row['marca'])     ? $row['marca']     : null;
             $modelo         = !empty($row['modelo'])    ? $row['modelo']    : null;
             $capacidad      = !empty($row['capacidad']) ? $row['capacidad'] : null;
+            $color          = !empty($row['color'])     ? $row['color']     : null;
             $cantidad       = $this->normalizarCantidad($row['cantidad'] ?? null);
 
             // Búsqueda correcta con NULL: where('col', null) no funciona en SQL
@@ -108,6 +109,7 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
                     'marca_producto'          => $marca,
                     'modelo_producto'         => $modelo,
                     'capacidad_producto'      => $capacidad,
+                    'color_producto'          => $color,
                     'categoria_id'            => $categoriaId,
                     'precio_compra_producto'  => $precio,
                     'imagen_producto'         => 'productos/producto-default.png',
@@ -261,6 +263,7 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
             'marca'           => 'sometimes|nullable|string|max:255',
             'modelo'          => 'sometimes|nullable|string|max:255',
             'capacidad'       => 'sometimes|nullable|string|max:255',
+            'color'           => 'sometimes|nullable|string|max:100',
             'precio_compra'   => 'sometimes|nullable',
             'cantidad'        => 'sometimes|nullable',
             'codigo_barras'   => 'sometimes|nullable|string|max:255',
@@ -269,7 +272,7 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
 
     public function prepareForValidation($data, $index)
     {
-        foreach (['nombre_producto', 'categoria', 'marca', 'modelo', 'capacidad'] as $field) {
+        foreach (['nombre_producto', 'categoria', 'marca', 'modelo', 'capacidad', 'color'] as $field) {
             if (array_key_exists($field, $data) && !is_null($data[$field])) {
                 $data[$field] = trim((string) $data[$field]) ?: null;
             }

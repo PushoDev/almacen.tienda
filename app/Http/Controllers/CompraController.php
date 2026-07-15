@@ -187,6 +187,7 @@ class CompraController extends Controller
             'productos.*.marca' => 'nullable|string|max:255',
             'productos.*.modelo' => 'nullable|string|max:255',
             'productos.*.capacidad' => 'nullable|string|max:255',
+            'productos.*.color' => 'nullable|string|max:100',
             'productos.*.categoria' => 'required|string|max:255',
             'productos.*.codigo' => 'nullable|string|max:255',
             'productos.*.codigo_barras' => 'nullable|string|max:255',
@@ -332,6 +333,7 @@ class CompraController extends Controller
                     'marca_producto' => $item['marca'] ?? null,
                     'modelo_producto' => $item['modelo'] ?? null,
                     'capacidad_producto' => $item['capacidad'] ?? null,
+                    'color_producto' => $item['color'] ?? null,
                     'categoria_id' => $categoria->id,
                     'precio_compra_producto' => $item['precio'],
                     'imagen_producto' => $producto->imagen_producto ?? 'productos/producto-default.png',
@@ -427,6 +429,7 @@ class CompraController extends Controller
                     'marca_producto' => $producto->marca_producto,
                     'modelo_producto' => $producto->modelo_producto,
                     'capacidad_producto' => $producto->capacidad_producto,
+                    'color_producto' => $producto->color_producto,
                     'codigo_producto' => $producto->codigo_producto,
                     'categoria' => $categoria->nombre_categoria,
                     'pivot' => [

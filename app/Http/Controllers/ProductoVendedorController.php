@@ -64,6 +64,7 @@ class ProductoVendedorController extends Controller
                     'marca_producto'       => $producto->marca_producto,
                     'modelo_producto'      => $producto->modelo_producto,
                     'capacidad_producto'   => $producto->capacidad_producto,
+                    'color_producto'       => $producto->color_producto,
                     'categoria'            => $producto->categoria->nombre_categoria ?? 'Sin categoría',
                     'imagen_producto'      => $producto->imagen_producto,
                     'precio_compra'        => in_array($user->role, ['admin', 'moderador']) ? $producto->precio_compra_producto : null,
@@ -269,6 +270,7 @@ class ProductoVendedorController extends Controller
                     'marca'        => $producto->marca_producto,
                     'modelo'       => $producto->modelo_producto,
                     'capacidad'    => $producto->capacidad_producto,
+                    'color'        => $producto->color_producto,
                     'precio_compra' => round((float) $producto->precio_compra_producto, 2),
                 ],
                 'almacen' => [

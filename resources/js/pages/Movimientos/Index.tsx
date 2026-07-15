@@ -72,6 +72,7 @@ interface ProductoConStock extends ProductoPorAlmacenDetalleRef {
     marca?: string;
     modelo?: string;
     capacidad?: string;
+    color?: string;
     codigo?: string;
     codigos_adicionales?: string[];
     categoria?: string;
@@ -487,6 +488,7 @@ export default function MovimientosPage({
                                                 <th className="px-4 py-3 text-left font-semibold">Producto</th>
                                                 <th className="px-4 py-3 text-left font-semibold">Modelo</th>
                                                 <th className="px-4 py-3 text-left font-semibold">Capacidad</th>
+                                                <th className="px-4 py-3 text-left font-semibold">Color</th>
                                                 <th className="px-4 py-3 text-left font-semibold">Categoría</th>
                                                 <th className="px-4 py-3 text-center font-semibold">Disponible</th>
                                                 <th className="px-4 py-3 text-center font-semibold">En Tránsito</th>
@@ -517,6 +519,7 @@ export default function MovimientosPage({
                                                     </td>
                                                     <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{producto.modelo}</td>
                                                     <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{producto.capacidad || 'N/A'}</td>
+                                                    <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{producto.color || 'N/A'}</td>
                                                     <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{producto.categoria}</td>
                                                     <td className="px-4 py-2 text-center">
                                                         <span className="font-bold text-green-600 dark:text-green-400">
@@ -967,6 +970,10 @@ export default function MovimientosPage({
                                         <div>
                                             <p className="font-medium text-gray-500">Capacidad</p>
                                             <p className="font-semibold text-gray-900">{selectedProductDetails.capacidad || 'N/A'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-gray-500">Color</p>
+                                            <p className="font-semibold text-gray-900">{selectedProductDetails.color || 'N/A'}</p>
                                         </div>
                                         <div>
                                             <p className="font-medium text-gray-500">Stock Disponible</p>

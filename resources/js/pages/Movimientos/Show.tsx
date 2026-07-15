@@ -315,6 +315,7 @@ export default function MovimientoShow() {
                                     <TableHead className="font-semibold">Marca</TableHead>
                                     <TableHead className="font-semibold">Modelo</TableHead>
                                     <TableHead className="font-semibold">Capacidad</TableHead>
+                                    <TableHead className="font-semibold">Color</TableHead>
                                     <TableHead className="text-center font-semibold">Solicitada</TableHead>
                                     <TableHead className="text-center font-semibold">Enviada</TableHead>
                                     <TableHead className="text-center font-semibold">Recibida</TableHead>
@@ -334,6 +335,7 @@ export default function MovimientoShow() {
                                             <TableCell className="text-muted-foreground">{detalle.producto?.marca_producto}</TableCell>
                                             <TableCell className="text-muted-foreground">{detalle.producto?.modelo_producto}</TableCell>
                                             <TableCell className="text-muted-foreground">{detalle.producto?.capacidad_producto || 'N/A'}</TableCell>
+                                            <TableCell className="text-muted-foreground">{detalle.producto?.color_producto || 'N/A'}</TableCell>
                                             <TableCell className="text-center font-medium">{detalle.cantidad_solicitada}</TableCell>
                                             <TableCell className="text-center font-medium">{detalle.cantidad_despachada}</TableCell>
                                             <TableCell className="text-center font-medium">{detalle.cantidad_recibida ?? '-'}</TableCell>

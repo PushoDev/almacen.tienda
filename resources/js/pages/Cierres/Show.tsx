@@ -80,6 +80,7 @@ interface ProductItem {
     marca: string;
     modelo: string;
     capacidad: string;
+    color: string;
     categoria: string;
     precio_unitario: number;
     total: number;
@@ -133,6 +134,7 @@ interface DetalleMoneda {
             marca: string;
             modelo: string;
             capacidad: string;
+            color: string;
             codigo: string;
             imagen_url: string;
             categoria: string;
@@ -435,6 +437,7 @@ export default function Show({
         marca: string;
         modelo: string;
         capacidad: string;
+        color: string;
         codigo: string;
         imagen_url: string;
         categoria: string;
@@ -449,6 +452,7 @@ export default function Show({
         marca: p.marca || '',
         modelo: p.modelo || '',
         capacidad: p.capacidad || '',
+        color: p.color || '',
         codigo: p.codigo || '',
         imagen_url: p.imagen_url || '',
         categoria: p.categoria || '',
@@ -695,6 +699,7 @@ export default function Show({
                                         <th className="px-4 py-3 text-left font-semibold">Marca</th>
                                         <th className="px-4 py-3 text-left font-semibold">Modelo</th>
                                         <th className="px-4 py-3 text-left font-semibold">Capacidad</th>
+                                        <th className="px-4 py-3 text-left font-semibold">Color</th>
                                         <th className="px-4 py-3 text-left font-semibold">Categoría</th>
                                         <th className="px-4 py-3 text-center font-semibold">Cantidad</th>
                                         <th className="px-4 py-3 text-right font-semibold">Precio Unit</th>
@@ -731,6 +736,7 @@ export default function Show({
                                                 <td className="text-muted-foreground px-4 py-2">{linea.marca}</td>
                                                 <td className="text-muted-foreground px-4 py-2">{linea.modelo}</td>
                                                 <td className="text-muted-foreground px-4 py-2">{linea.capacidad || 'N/A'}</td>
+                                                <td className="text-muted-foreground px-4 py-2">{linea.color || 'N/A'}</td>
                                                 <td className="text-muted-foreground px-4 py-2">{linea.categoria}</td>
                                                 <td className="px-4 py-2 text-center">
                                                     <span className="text-primary font-bold">{linea.cantidad}</span>
@@ -916,6 +922,9 @@ export default function Show({
                                                                                                                     <th className="px-2 py-1 text-left font-semibold">
                                                                                                                         Capacidad
                                                                                                                     </th>
+                                                                                                                    <th className="px-2 py-1 text-left font-semibold">
+                                                                                                                        Color
+                                                                                                                    </th>
                                                                                                                     <th className="px-2 py-1 text-center font-semibold">
                                                                                                                         Cant
                                                                                                                     </th>
@@ -950,6 +959,10 @@ export default function Show({
                                                                                                                             </td>
                                                                                                                             <td className="text-muted-foreground px-2 py-1">
                                                                                                                                 {prod.capacidad ||
+                                                                                                                                    '-'}
+                                                                                                                            </td>
+                                                                                                                            <td className="text-muted-foreground px-2 py-1">
+                                                                                                                                {prod.color ||
                                                                                                                                     '-'}
                                                                                                                             </td>
                                                                                                                             <td className="px-2 py-1 text-center">

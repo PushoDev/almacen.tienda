@@ -39,6 +39,7 @@ interface Producto {
     marca_producto: string;
     modelo_producto?: string;
     capacidad_producto?: string;
+    color_producto?: string;
     categoria: string;
     precio_compra: number;
     stock_almacen: number;
@@ -83,7 +84,7 @@ interface PrecioActual {
 
 interface HistorialData {
     success: boolean;
-    producto: { id: number; nombre: string; marca: string; modelo?: string; capacidad?: string; precio_compra: number };
+    producto: { id: number; nombre: string; marca: string; modelo?: string; capacidad?: string; color?: string; precio_compra: number };
     almacen: { id: number; nombre: string };
     precio_actual: PrecioActual | null;
     historial: HistorialItem[];
@@ -516,6 +517,12 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                                                             <span className="font-medium">{producto.capacidad_producto}</span>
                                                                         </>
                                                                     )}
+                                                                    {producto.color_producto && (
+                                                                        <>
+                                                                            <span className="text-muted-foreground">Color:</span>
+                                                                            <span className="font-medium">{producto.color_producto}</span>
+                                                                        </>
+                                                                    )}
                                                                     <span className="text-muted-foreground">Categoría:</span>
                                                                     <span className="font-medium">{producto.categoria}</span>
                                                                     {canViewSensitiveData && (
@@ -825,6 +832,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                             <Badge variant="outline">{historialData.producto.marca}</Badge>
                                             {historialData.producto.modelo && <span>Modelo: {historialData.producto.modelo}</span>}
                                             {historialData.producto.capacidad && <span>• {historialData.producto.capacidad}</span>}
+                                            {historialData.producto.color && <span>• {historialData.producto.color}</span>}
                                         </div>
                                         <div className="flex flex-wrap items-center gap-4 pt-2">
                                             <span className="flex items-center gap-2 text-sm">

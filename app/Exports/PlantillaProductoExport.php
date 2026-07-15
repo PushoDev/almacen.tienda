@@ -17,11 +17,11 @@ class PlantillaProductoExport implements FromArray, WithEvents, WithTitle
 
     // Filas de ejemplo (se cuentan desde la fila 2, después del encabezado)
     private const EXAMPLE_ROWS = [
-        ['Cable HDMI 2.0',       'Cables y Conectores', 'Anker',    'A8740',      '2 metros', 45.00,  10, '7501234567890'],
-        ['Mouse Inalámbrico',    'Periféricos',          'Logitech', 'M185',       '',         125.50,  5, ''],
-        ['Teclado Mecánico USB', 'Periféricos',          'Redragon', 'K552',       '',          89.99,  3, '7891234500001'],
-        ['Memoria USB 32GB',     'Almacenamiento',       'Kingston', 'DT50',       '32GB',      55.00, 15, ''],
-        ['Disco Duro Externo',   'Almacenamiento',       'Seagate',  'Backup Plus','1TB',      350.00,  2, '7501098765432'],
+        ['Cable HDMI 2.0',       'Cables y Conectores', 'Anker',    'A8740',      '2 metros', 'Negro',  45.00,  10, '7501234567890'],
+        ['Mouse Inalámbrico',    'Periféricos',          'Logitech', 'M185',       '',         'Gris',  125.50,  5, ''],
+        ['Teclado Mecánico USB', 'Periféricos',          'Redragon', 'K552',       '',         '',       89.99,  3, '7891234500001'],
+        ['Memoria USB 32GB',     'Almacenamiento',       'Kingston', 'DT50',       '32GB',     'Azul',   55.00, 15, ''],
+        ['Disco Duro Externo',   'Almacenamiento',       'Seagate',  'Backup Plus','1TB',      '',      350.00,  2, '7501098765432'],
     ];
 
     public function array(): array
@@ -33,6 +33,7 @@ class PlantillaProductoExport implements FromArray, WithEvents, WithTitle
                 'marca',
                 'modelo',
                 'capacidad',
+                'color',
                 'precio_compra',
                 'cantidad',
                 'codigo_barras',
@@ -74,14 +75,14 @@ class PlantillaProductoExport implements FromArray, WithEvents, WithTitle
                 ];
 
                 $sheet->getStyle('A1')->applyFromArray($requiredStyle);
-                $sheet->getStyle('F1')->applyFromArray($requiredStyle);
-                foreach (['B1', 'C1', 'D1', 'E1', 'G1', 'H1'] as $cell) {
+                $sheet->getStyle('G1')->applyFromArray($requiredStyle);
+                foreach (['B1', 'C1', 'D1', 'E1', 'F1', 'H1', 'I1'] as $cell) {
                     $sheet->getStyle($cell)->applyFromArray($optionalStyle);
                 }
 
                 // ── Filas de ejemplo: fondo verde claro ──────────────────────
                 $lastExampleRow = 1 + $examples;
-                $sheet->getStyle("A2:H{$lastExampleRow}")->applyFromArray([
+                $sheet->getStyle("A2:I{$lastExampleRow}")->applyFromArray([
                     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'E8F5E9']],
                     'font' => ['italic' => true, 'color' => ['rgb' => '2D6A4F']],
                     'borders' => [
@@ -90,16 +91,16 @@ class PlantillaProductoExport implements FromArray, WithEvents, WithTitle
                 ]);
 
                 // ── Formatos de columna ───────────────────────────────────────
-                // precio_compra: número con decimales
-                $sheet->getStyle("F2:F{$maxRow}")
+                // precio_compra: número con decimales (columna G tras insertar color)
+                $sheet->getStyle("G2:G{$maxRow}")
                     ->getNumberFormat()->setFormatCode('#,##0.00');
 
                 // cantidad: entero
-                $sheet->getStyle("G2:G{$maxRow}")
+                $sheet->getStyle("H2:H{$maxRow}")
                     ->getNumberFormat()->setFormatCode('0');
 
                 // codigo_barras: texto puro (evita notación científica)
-                $sheet->getStyle("H2:H{$maxRow}")
+                $sheet->getStyle("I2:I{$maxRow}")
                     ->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_TEXT);
 
                 // ── Anchos de columna ─────────────────────────────────────────
@@ -108,9 +109,10 @@ class PlantillaProductoExport implements FromArray, WithEvents, WithTitle
                 $sheet->getColumnDimension('C')->setWidth(18);
                 $sheet->getColumnDimension('D')->setWidth(18);
                 $sheet->getColumnDimension('E')->setWidth(16);
-                $sheet->getColumnDimension('F')->setWidth(16);
-                $sheet->getColumnDimension('G')->setWidth(12);
-                $sheet->getColumnDimension('H')->setWidth(24);
+                $sheet->getColumnDimension('F')->setWidth(16); // color
+                $sheet->getColumnDimension('G')->setWidth(16); // precio_compra
+                $sheet->getColumnDimension('H')->setWidth(12); // cantidad
+                $sheet->getColumnDimension('I')->setWidth(24); // codigo_barras
 
                 $sheet->getRowDimension(1)->setRowHeight(28);
 
@@ -120,7 +122,7 @@ class PlantillaProductoExport implements FromArray, WithEvents, WithTitle
                 // ── Borde sutil en el área de datos vacía ────────────────────
                 $dataStart = $lastExampleRow + 1;
                 if ($dataStart <= $maxRow) {
-                    $sheet->getStyle("A{$dataStart}:H{$maxRow}")->applyFromArray([
+                    $sheet->getStyle("A{$dataStart}:I{$maxRow}")->applyFromArray([
                         'borders' => [
                             'allBorders' => ['borderStyle' => Border::BORDER_HAIR, 'color' => ['rgb' => 'DDDDDD']],
                         ],
@@ -134,9 +136,10 @@ class PlantillaProductoExport implements FromArray, WithEvents, WithTitle
                     'C1' => "Opcional\nMarca del producto.\nEjemplo: Anker, Samsung",
                     'D1' => "Opcional\nModelo del producto.\nEjemplo: A8740",
                     'E1' => "Opcional\nCapacidad o especificación.\nEjemplo: 256GB, 2 metros",
-                    'F1' => "OBLIGATORIO\nPrecio de compra (solo números).\nEjemplo: 45.00 o 125.50\nNo usar símbolos como \$ o Q.",
-                    'G1' => "Opcional\nCantidad en inventario.\nSi se deja vacío se asigna 0.\nEjemplo: 10",
-                    'H1' => "Opcional\nCódigo de barras.\nEjemplo: 7501234567890",
+                    'F1' => "Opcional\nColor del producto.\nEjemplo: Negro, Rojo, Azul",
+                    'G1' => "OBLIGATORIO\nPrecio de compra (solo números).\nEjemplo: 45.00 o 125.50\nNo usar símbolos como \$ o Q.",
+                    'H1' => "Opcional\nCantidad en inventario.\nSi se deja vacío se asigna 0.\nEjemplo: 10",
+                    'I1' => "Opcional\nCódigo de barras.\nEjemplo: 7501234567890",
                 ];
 
                 foreach ($comentarios as $celda => $texto) {
