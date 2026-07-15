@@ -158,12 +158,26 @@ class CompraController extends Controller
             ->with('moneda')
             ->get();
 
+        $comprasRecientes = Compra::with(['proveedor', 'cliente'])
+            ->latest()
+            ->take(15)
+            ->get()
+            ->map(fn($c) => [
+                'id'           => $c->id,
+                'fecha_compra' => $c->fecha_compra,
+                'total_compra' => $c->total_compra,
+                'tipo_compra'  => $c->tipo_compra,
+                'proveedor'    => $c->proveedor?->nombre_proveedor,
+                'cliente'      => $c->cliente?->nombre_cliente,
+            ]);
+
         return Inertia::render('Comprar/Index', [
-            'cuentas' => $cuentasUSD,
-            'almacenes' => Almacen::all(),
-            'proveedores' => Proveedor::all(),
-            'categorias' => Categoria::all(),
-            'clientes' => Cliente::where('tipo_cliente', 'fisico')->get(),
+            'cuentas'           => $cuentasUSD,
+            'almacenes'         => Almacen::all(),
+            'proveedores'       => Proveedor::all(),
+            'categorias'        => Categoria::all(),
+            'clientes'          => Cliente::where('tipo_cliente', 'fisico')->get(),
+            'compras_recientes' => $comprasRecientes,
         ]);
     }
 
@@ -454,6 +468,55 @@ class CompraController extends Controller
             DB::rollBack();
             return back()->withErrors(['error' => 'Error al procesar la compra: ' . $e->getMessage()]);
         }
+    }
+
+    /**
+     * Muestra el detalle de una compra existente.
+     */
+    public function show(Compra $comprar)
+    {
+        $comprar->load(['proveedor', 'cliente']);
+
+        $productos = $comprar->productos()
+            ->withPivot('cantidad', 'precio', 'almacen_id')
+            ->get()
+            ->map(function ($producto) {
+                $almacen = $producto->pivot->almacen_id
+                    ? Almacen::find($producto->pivot->almacen_id)
+                    : null;
+
+                return [
+                    'nombre_producto'    => $producto->nombre_producto,
+                    'marca_producto'     => $producto->marca_producto,
+                    'modelo_producto'    => $producto->modelo_producto,
+                    'capacidad_producto' => $producto->capacidad_producto,
+                    'color_producto'     => $producto->color_producto,
+                    'codigo_producto'    => $producto->codigo_producto,
+                    'pivot' => [
+                        'cantidad' => $producto->pivot->cantidad,
+                        'precio'   => $producto->pivot->precio,
+                    ],
+                    'almacen' => [
+                        'nombre_almacen' => $almacen?->nombre_almacen ?? 'N/A',
+                    ],
+                ];
+            });
+
+        return Inertia::render('Comprar/Show', [
+            'compra' => [
+                'id'           => $comprar->id,
+                'fecha_compra' => $comprar->fecha_compra,
+                'total_compra' => (float) $comprar->total_compra,
+                'tipo_compra'  => $comprar->tipo_compra,
+                'proveedor'    => $comprar->proveedor
+                    ? ['id' => $comprar->proveedor->id, 'nombre_proveedor' => $comprar->proveedor->nombre_proveedor]
+                    : null,
+                'cliente'      => $comprar->cliente
+                    ? ['id' => $comprar->cliente->id, 'nombre_cliente' => $comprar->cliente->nombre_cliente]
+                    : null,
+            ],
+            'productos' => $productos,
+        ]);
     }
 
     /**

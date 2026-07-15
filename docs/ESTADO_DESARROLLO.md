@@ -137,6 +137,7 @@
 - [ ] Validar que `anularVenta` desde estado `rechazada` no revierta el stock dos veces (el stock ya fue revertido por `rechazarSolicitudEspecial`). Verificar si la UI expone ese botón para ventas rechazadas.
 - [ ] El commando `/reporte` del bot no filtra por almacén del usuario — devuelve todos los almacenes. Considerar filtro para admins con almacenes asignados.
 - [ ] Ecommerce: vista pública del catálogo está en desarrollo, no vinculada al POS.
+- [ ] **Reportes** — Revisar que todas las sub-rutas de `/reportes/*` funcionen y devuelvan datos correctos (productos-mas-comprados, compras-por-periodo, balance-gastos-mensuales, inventario-por-almacen, inventario-detallado-por-almacen, reporte-stock-bajo, valor-inventario, productos-mas-vendidos, ventas-por-periodo, ventas-por-vendedor, reporte-ganancias, rastreo-operaciones, historial-precios, historial-costo-precio, movimientos-financieros).
 
 ---
 
@@ -199,6 +200,8 @@ resources/js/pages/Empleados/Edit.tsx
 
 | Fecha | Cambio |
 |---|---|
+| 2026-07-15 | `color_producto` añadido a tabla/tooltip en Productos, Movimientos, Compras y todas las vistas donde aparecía el producto |
+| 2026-07-15 | `CompraController::show()` implementado — historial de compras recientes en `Comprar/Index`, vista detalle `Comprar/Show`. Fix: parámetro renombrado a `$comprar` para que el route model binding de `{comprar}` funcione correctamente |
 | 2026-07-01 | Snapshot de mensajero en cierre_cajas, resumen financiero turno, desglose comisiones PV/Gestor |
 | 2026-06-28 | `mensajero_monto_final_cup` editable, TasasFlotante global, validaciones mensajero en aprobar |
 | 2026-06-25 | Mensajero multi-moneda en POS (selector moneda + tasa + equivalente USD) |

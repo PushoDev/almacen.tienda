@@ -28,7 +28,7 @@ import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, Tabl
 import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
 import { AlmacenProps, CategoriasProps, ClienteProps, CuentaNegocioProps, ProveedorClienteProps, type BreadcrumbItem } from '@/types';
-import { Head, useForm, usePage } from '@inertiajs/react';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { format } from 'date-fns';
 import {
@@ -60,6 +60,15 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/in
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
+
+interface CompraReciente {
+    id: number;
+    fecha_compra: string;
+    total_compra: number;
+    tipo_compra: 'pago_cash' | 'deuda_proveedor';
+    proveedor: string | null;
+    cliente: string | null;
+}
 
 // =================================================================
 // 🚨 ATRIBUTOS DE PRODUCTO ACTUALIZADOS EN TYPESCRIPT
@@ -142,6 +151,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 export default function ComprarPage() {
     const { props } = usePage();
     const { errors } = props;
+    const comprasRecientes: CompraReciente[] = (props as any).compras_recientes ?? [];
     const [almacens, setAlmacens] = useState<AlmacenProps[]>([]);
     const [proveedoresList, setProveedoresList] = useState<ProveedorClienteProps[]>([]);
     const [clientesList, setClientesList] = useState<ProveedorClienteProps[]>([]);
@@ -2514,6 +2524,68 @@ export default function ComprarPage() {
                 <Dialog open={isCrearProveedorDialogOpen} onOpenChange={setIsCrearProveedorDialogOpen}>
                     <CrearProveedorDialogContent />
                 </Dialog>
+
+                {/* HISTORIAL DE COMPRAS */}
+                {comprasRecientes.length > 0 && (
+                    <Card className="mt-4">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-base">
+                                <ShoppingBasket className="h-5 w-5 text-amber-500" />
+                                Historial de Compras Recientes
+                            </CardTitle>
+                            <CardDescription>Últimas {comprasRecientes.length} compras registradas</CardDescription>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="bg-gray-100 dark:bg-gray-800">
+                                        <TableHead>#</TableHead>
+                                        <TableHead>Fecha</TableHead>
+                                        <TableHead>Proveedor / Cliente</TableHead>
+                                        <TableHead>Tipo</TableHead>
+                                        <TableHead className="text-right">Total</TableHead>
+                                        <TableHead className="text-center">Acciones</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {comprasRecientes.map((compra) => (
+                                        <TableRow key={compra.id}>
+                                            <TableCell className="font-mono text-xs text-gray-500">
+                                                #{String(compra.id).padStart(6, '0')}
+                                            </TableCell>
+                                            <TableCell className="text-sm">
+                                                {new Date(compra.fecha_compra).toLocaleDateString('es-MX', {
+                                                    day: '2-digit',
+                                                    month: 'short',
+                                                    year: 'numeric',
+                                                })}
+                                            </TableCell>
+                                            <TableCell className="font-medium">
+                                                {compra.proveedor ?? compra.cliente ?? 'Sin registro'}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant={compra.tipo_compra === 'deuda_proveedor' ? 'destructive' : 'default'}>
+                                                    {compra.tipo_compra === 'deuda_proveedor' ? 'Crédito' : 'Contado'}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-right font-bold text-emerald-600">
+                                                ${compra.total_compra.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                <Link href={`/comprar/${compra.id}`}>
+                                                    <Button size="sm" variant="outline" className="gap-1">
+                                                        <Info className="h-3 w-3" />
+                                                        Ver detalle
+                                                    </Button>
+                                                </Link>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                )}
 
                 <Toaster position="top-center" />
             </div>
