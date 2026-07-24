@@ -79,9 +79,9 @@ class CuentaController extends Controller
         $validated = $request->validate([
             'nombre_cuenta' => ['required', 'string', 'max:255', 'unique:cuentas,nombre_cuenta'],
             'tipo' => ['required', 'in:tarjeta,efectivo,otro'],
-            'saldo_cuenta' => ['nullable', 'numeric', 'min:0'],
+            'saldo_cuenta' => ['nullable', 'numeric'],
             'moneda_id' => ['required', 'exists:monedas,id'], // Cambiamos tipo_moneda por moneda_id
-            'deuda' => ['nullable', 'numeric', 'min:0'],
+            'deuda' => ['nullable', 'numeric'],
             'tipo_cuenta' => ['required', 'in:permanentes,temporales,deudas'],
             'estado' => ['required', 'in:activa,inactiva'],
             'notas_cuenta' => ['nullable', 'string'],
@@ -206,9 +206,9 @@ class CuentaController extends Controller
                 'unique:cuentas,nombre_cuenta,' . $cuenta->id,
             ],
             'tipo' => ['required', 'in:tarjeta,efectivo,otro'],
-            'saldo_cuenta' => ['nullable', 'numeric', 'min:0'],
+            'saldo_cuenta' => ['nullable', 'numeric'],
             'moneda_id' => ['required', 'exists:monedas,id'], // Cambiamos tipo_moneda por moneda_id
-            'deuda' => ['nullable', 'numeric', 'min:0'],
+            'deuda' => ['nullable', 'numeric'],
             'tipo_cuenta' => ['required', 'in:permanentes,temporales,deudas'],
             'estado' => ['required', 'in:activa,inactiva'],
             'notas_cuenta' => ['nullable', 'string'],

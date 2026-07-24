@@ -15,7 +15,6 @@ use Illuminate\Support\Facades\Log;
 class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChunkReading
 {
     private $almacenId;
-    private $categorias = [];
     private $estadisticas = [
         'productos_creados'      => 0,
         'productos_actualizados' => 0,
@@ -30,8 +29,6 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
         if (!Almacen::find($almacenId)) {
             throw new \Exception("El almacén con ID {$almacenId} no existe.");
         }
-
-        $this->categorias = Categoria::pluck('id', 'nombre_categoria')->toArray();
     }
 
     public function model(array $row)
@@ -66,18 +63,11 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
             // Categoría: opcional, default "Sin Categoría"
             $categoriaNombre = !empty($row['categoria']) ? $row['categoria'] : 'Sin Categoría';
 
-            if (isset($this->categorias[$categoriaNombre])) {
-                $categoriaId = $this->categorias[$categoriaNombre];
-            } else {
-                $categoria = Categoria::create([
-                    'nombre_categoria'    => $categoriaNombre,
-                    'descripcion_categoria' => 'Importado desde Excel',
-                    'activar_categoria'   => true,
-                ]);
-                $categoriaId = $categoria->id;
-                $this->categorias[$categoriaNombre] = $categoriaId;
-                Log::info("Categoría creada: {$categoriaNombre}");
-            }
+            $categoria = Categoria::firstOrCreate(
+                ['nombre_categoria' => $categoriaNombre],
+                ['descripcion_categoria' => 'Importado desde Excel', 'activar_categoria' => true]
+            );
+            $categoriaId = $categoria->id;
 
             $nombreProducto = $row['nombre_producto'];
             $marca          = !empty($row['marca'])     ? $row['marca']     : null;
@@ -99,6 +89,18 @@ class ProductoImport implements ToModel, WithHeadingRow, WithValidation, WithChu
                 $query->whereNull('modelo_producto');
             } else {
                 $query->where('modelo_producto', $modelo);
+            }
+
+            if (is_null($capacidad)) {
+                $query->whereNull('capacidad_producto');
+            } else {
+                $query->where('capacidad_producto', $capacidad);
+            }
+
+            if (is_null($color)) {
+                $query->whereNull('color_producto');
+            } else {
+                $query->where('color_producto', $color);
             }
 
             $producto = $query->first();
