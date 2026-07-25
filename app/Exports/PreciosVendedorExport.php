@@ -43,6 +43,10 @@ class PreciosVendedorExport implements
                 'productos.id as producto_id',
                 'productos.nombre_producto',
                 'categorias.nombre_categoria',
+                'productos.marca_producto',
+                'productos.modelo_producto',
+                'productos.capacidad_producto',
+                'productos.color_producto',
                 'almacen_producto.cantidad as stock',
                 'producto_vendedors.precio_venta',
                 'producto_vendedors.comision'
@@ -53,6 +57,10 @@ class PreciosVendedorExport implements
                 $row->producto_id,
                 $row->nombre_producto,
                 $row->nombre_categoria ?? 'Sin categoría',
+                $row->marca_producto ?? '',
+                $row->modelo_producto ?? '',
+                $row->capacidad_producto ?? '',
+                $row->color_producto ?? '',
                 (int) $row->stock,
                 $row->precio_venta !== null ? (float) $row->precio_venta : null,
                 $row->comision !== null ? (float) $row->comision : null,
@@ -63,7 +71,7 @@ class PreciosVendedorExport implements
 
     public function headings(): array
     {
-        return ['ID', 'Producto', 'Categoría', 'Stock', 'Precio Venta', 'Comisión'];
+        return ['ID', 'Producto', 'Categoría', 'Marca', 'Modelo', 'Capacidad', 'Color', 'Stock', 'Precio Venta', 'Comisión'];
     }
 
     public function styles(Worksheet $sheet)
@@ -85,10 +93,10 @@ class PreciosVendedorExport implements
                     'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
                     'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '93c5fd']]],
                 ];
-                $sheet->getStyle('A1:F1')->applyFromArray($headerStyle);
+                $sheet->getStyle('A1:J1')->applyFromArray($headerStyle);
                 $sheet->getRowDimension(1)->setRowHeight(24);
 
-                // --- Columnas protegidas (ID, Producto, Categoría, Stock) ---
+                // --- Columnas protegidas (ID, Producto, Categoría, Marca, Modelo, Capacidad, Color, Stock) ---
                 $protectedStyle = [
                     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'f1f5f9']],
                     'font' => ['color' => ['rgb' => '64748b']],
@@ -96,10 +104,10 @@ class PreciosVendedorExport implements
                 ];
 
                 if ($lastRow > 1) {
-                    $sheet->getStyle("A2:D{$lastRow}")->applyFromArray($protectedStyle);
+                    $sheet->getStyle("A2:H{$lastRow}")->applyFromArray($protectedStyle);
 
                     // Stock: alineado al centro con formato entero
-                    $sheet->getStyle("D2:D{$lastRow}")->applyFromArray([
+                    $sheet->getStyle("H2:H{$lastRow}")->applyFromArray([
                         'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
                         'numberFormat' => ['formatCode' => '#,##0'],
                     ]);
@@ -112,10 +120,10 @@ class PreciosVendedorExport implements
                         'alignment' => ['horizontal' => Alignment::HORIZONTAL_RIGHT],
                         'numberFormat' => ['formatCode' => '#,##0.00'],
                     ];
-                    $sheet->getStyle("E2:F{$lastRow}")->applyFromArray($editableStyle);
+                    $sheet->getStyle("I2:J{$lastRow}")->applyFromArray($editableStyle);
 
                     // Bordes para todas las filas de datos
-                    $sheet->getStyle("A2:F{$lastRow}")->applyFromArray([
+                    $sheet->getStyle("A2:J{$lastRow}")->applyFromArray([
                         'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'e2e8f0']]],
                     ]);
 
@@ -127,29 +135,33 @@ class PreciosVendedorExport implements
                 $sheet->getColumnDimension('A')->setWidth(8);   // ID
                 $sheet->getColumnDimension('B')->setWidth(35);  // Producto
                 $sheet->getColumnDimension('C')->setWidth(20);  // Categoría
-                $sheet->getColumnDimension('D')->setWidth(10);  // Stock
-                $sheet->getColumnDimension('E')->setWidth(16);  // Precio Venta
-                $sheet->getColumnDimension('F')->setWidth(14);  // Comisión
+                $sheet->getColumnDimension('D')->setWidth(18);  // Marca
+                $sheet->getColumnDimension('E')->setWidth(18);  // Modelo
+                $sheet->getColumnDimension('F')->setWidth(16);  // Capacidad
+                $sheet->getColumnDimension('G')->setWidth(14);  // Color
+                $sheet->getColumnDimension('H')->setWidth(10);  // Stock
+                $sheet->getColumnDimension('I')->setWidth(16);  // Precio Venta
+                $sheet->getColumnDimension('J')->setWidth(14);  // Comisión
 
-                // --- Proteger la hoja: solo E y F editables ---
+                // --- Proteger la hoja: solo I y J editables ---
                 $sheet->getProtection()->setSheet(true);
                 $sheet->getProtection()->setPassword('almacen_precios');
 
                 // Encabezado también bloqueado
-                $sheet->getStyle('A1:F1')->getProtection()->setLocked(Protection::PROTECTION_PROTECTED);
+                $sheet->getStyle('A1:J1')->getProtection()->setLocked(Protection::PROTECTION_PROTECTED);
 
-                // Nota de ayuda en la celda G1
-                $sheet->setCellValue('G1', '⚠ Solo edite Precio Venta (E) y Comisión (F). Deje en blanco para no modificar.');
-                $sheet->getStyle('G1')->applyFromArray([
+                // Nota de ayuda en la celda K1
+                $sheet->setCellValue('K1', '⚠ Solo edite Precio Venta (I) y Comisión (J). Deje en blanco para no modificar.');
+                $sheet->getStyle('K1')->applyFromArray([
                     'font' => ['italic' => true, 'color' => ['rgb' => 'dc2626'], 'size' => 9],
                     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'fef2f2']],
                 ]);
-                $sheet->getColumnDimension('G')->setWidth(65);
+                $sheet->getColumnDimension('K')->setWidth(70);
 
                 // Almacen ID en celda oculta para referencia
-                $sheet->setCellValue('H1', $this->almacenId);
-                $sheet->getColumnDimension('H')->setVisible(false);
-                $sheet->getStyle('H1')->getProtection()->setLocked(Protection::PROTECTION_PROTECTED);
+                $sheet->setCellValue('L1', $this->almacenId);
+                $sheet->getColumnDimension('L')->setVisible(false);
+                $sheet->getStyle('L1')->getProtection()->setLocked(Protection::PROTECTION_PROTECTED);
             },
         ];
     }

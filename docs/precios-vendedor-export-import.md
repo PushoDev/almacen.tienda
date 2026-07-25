@@ -1,7 +1,7 @@
 # Precios por Vendedor — Export/Import Excel + Mejoras UI
 
-**Fecha:** 2026-05-24  
-**Rama:** `arreglar-cuentas-proveedor-clientes`
+**Fecha:** 2026-07-24  
+**Rama:** `feature/bot-telegram`
 
 ---
 
@@ -94,24 +94,31 @@ Route::post('/disponibles/almacen/{almacen}/importar', [..., 'importExcel']);
 #### Estructura del Excel exportado
 | Col | Nombre       | Estado        | Notas                          |
 |-----|--------------|---------------|--------------------------------|
-| A   | ID           | Oculta y bloqueada | Clave para el import      |
+| A   | ID           | Bloqueada     | Clave para el import           |
 | B   | Producto     | Bloqueada     | Solo lectura                   |
 | C   | Categoría    | Bloqueada     | Solo lectura                   |
-| D   | Precio Venta | **Editable**  | Fondo amarillo. Puede estar vacío |
-| E   | Comisión     | **Editable**  | Fondo amarillo. Puede estar vacío |
-| F   | (nota)       | Solo lectura  | Instrucciones de uso           |
-| G   | almacen_id   | Oculta        | Para validación futura         |
+| D   | **Marca**    | Bloqueada     | Solo lectura (nueva)           |
+| E   | **Modelo**   | Bloqueada     | Solo lectura (nueva)           |
+| F   | **Capacidad**| Bloqueada     | Solo lectura (nueva)           |
+| G   | **Color**    | Bloqueada     | Solo lectura (nueva)           |
+| H   | Stock        | Bloqueada     | Solo lectura                   |
+| I   | Precio Venta | **Editable**  | Fondo amarillo. Puede estar vacío |
+| J   | Comisión     | **Editable**  | Fondo amarillo. Puede estar vacío |
+| K   | (nota)       | Solo lectura  | Instrucciones de uso           |
+| L   | almacen_id   | Oculta        | Para validación futura         |
 
 - Hoja protegida con contraseña: `almacen_precios`
 - Si ya tiene precio en el sistema, se exporta con ese valor (editable)
 
 #### Lógica del import
 - Identifica producto por **columna A (ID)** — nunca por nombre
-- Celdas vacías en D y E → se ignoran (no sobreescribe)
+- Celdas vacías en I y J → se ignoran (no sobreescribe)
 - Celdas con valor → actualiza y registra en `PrecioHistorial` si el precio cambió
 - `accion` en historial: `'Importación Excel - Almacén ID X'`
 - Devuelve: `actualizados`, `omitidos`, `errores[]`
 - Si hubo actualizaciones → la página se recarga automáticamente en 2 segundos
+
+> ⚠️ **Actualización 2026-07-24**: Se agregaron 4 columnas informativas entre Categoría y Stock: **Marca (D)**, **Modelo (E)**, **Capacidad (F)**, **Color (G)**. Precio Venta se desplazó a columna **I** y Comisión a columna **J**.
 
 #### Permisos
 - Admin y Moderador → pueden exportar/importar cualquier almacén
