@@ -6,6 +6,11 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'verified'])->group(
     function () {
+        // Detección y fusión de productos duplicados (DEBE ir ANTES del resource)
+        Route::get('/listado-productos/duplicados', [ProductoController::class, 'duplicados'])->name('productos.duplicados');
+        Route::post('/listado-productos/normalizar-duplicados', [ProductoController::class, 'normalizarDuplicados'])->name('productos.normalizar');
+        Route::post('/listado-productos/fusionar-duplicados', [ProductoController::class, 'fusionarDuplicados'])->name('productos.fusionar');
+
         Route::resource('listado-productos', ProductoController::class)->parameters([
             'listado-productos' => 'producto',
         ])->names([

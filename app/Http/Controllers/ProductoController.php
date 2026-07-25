@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Producto;
+use App\Models\ProductoCodigo;
+use App\Models\AlmacenProducto;
 use App\Models\Categoria;
 use App\Models\Almacen;
 use App\Models\HistorialPrecioCosto;
@@ -606,5 +608,200 @@ class ProductoController extends Controller
         // Redirigir a import con el almacén en el request
         $request->merge(['almacen_id' => $almacenId]);
         return $this->import($request);
+    }
+
+    /**
+     * Detectar productos duplicados agrupados por nombre, marca, modelo
+     */
+    public function duplicados()
+    {
+        $duplicados = Producto::selectRaw("
+            COUNT(*) as total,
+            GROUP_CONCAT(id ORDER BY id) as ids,
+            nombre_producto,
+            marca_producto,
+            modelo_producto,
+            TRIM(REPLACE(REPLACE(REPLACE(capacidad_producto, UNHEX('C2B4'), ''), UNHEX('C2A8'), ''), '\"', '')) as capacidad_limpia,
+            color_producto
+        ")
+            ->whereNotNull('nombre_producto')
+            ->groupBy('nombre_producto', 'marca_producto', 'modelo_producto', 'capacidad_limpia', 'color_producto')
+            ->having('total', '>', 1)
+            ->get();
+
+        $grupos = $duplicados->map(function ($grupo) {
+            $ids = explode(',', $grupo->ids);
+            $productos = Producto::with('almacenes', 'codigos', 'categoria')
+                ->whereIn('id', $ids)
+                ->get()
+                ->map(fn($p) => [
+                    'id' => $p->id,
+                    'nombre' => $p->nombre_producto,
+                    'marca' => $p->marca_producto,
+                    'modelo' => $p->modelo_producto,
+                    'capacidad' => $p->capacidad_producto,
+                    'color' => $p->color_producto,
+                    'codigo' => $p->codigo_producto,
+                    'precio_compra' => (float) $p->precio_compra_producto,
+                    'cantidad_total' => $p->cantidad_total,
+                    'categoria' => $p->categoria?->nombre_categoria,
+                    'categoria_id' => $p->categoria_id,
+                    'almacenes' => $p->almacenes->map(fn($a) => [
+                        'id' => $a->id,
+                        'nombre' => $a->nombre_almacen,
+                        'cantidad' => $a->pivot->cantidad,
+                    ]),
+                    'codigos_barras' => $p->codigos->map(fn($c) => $c->codigo_barras)->values(),
+                ]);
+
+            $cantidadTotal = $productos->sum('cantidad_total');
+            $precioPromedioPonderado = $cantidadTotal > 0
+                ? $productos->sum(fn($p) => $p['precio_compra'] * $p['cantidad_total']) / $cantidadTotal
+                : $productos->avg('precio_compra');
+
+            // Detectar campos que varían entre los productos del grupo
+            $camposVariables = [];
+            $camposRevisar = [
+                'capacidad' => fn($p) => $p['capacidad'],
+                'categoria_id' => fn($p) => $p['categoria_id'],
+            ];
+            foreach ($camposRevisar as $nombre => $extractor) {
+                $valores = $productos->map($extractor)->filter()->unique()->values();
+                if ($valores->count() > 1) {
+                    $camposVariables[] = [
+                        'campo' => $nombre,
+                        'valores' => $valores->toArray(),
+                        'valor_sugerido' => $valores->groupBy(fn($v) => $v)->sortByDesc(fn($g) => $g->count())->keys()->first(),
+                    ];
+                }
+            }
+
+            return [
+                'clave' => trim("{$grupo->nombre_producto} {$grupo->marca_producto} {$grupo->modelo_producto}") . ($grupo->capacidad_limpia ? " ({$grupo->capacidad_limpia})" : '') . ($grupo->color_producto ? " - {$grupo->color_producto}" : ''),
+                'productos' => $productos,
+                'cantidad_total' => $cantidadTotal,
+                'precio_promedio' => round($precioPromedioPonderado, 2),
+                'campos_variables' => $camposVariables,
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'total_grupos' => $grupos->count(),
+            'grupos' => $grupos,
+        ]);
+    }
+
+    /**
+     * Normalizar valores canónicos de un grupo de productos (sin fusionar)
+     */
+    public function normalizarDuplicados(Request $request)
+    {
+        $request->validate([
+            'productos_ids' => 'required|array|min:1',
+            'productos_ids.*' => 'exists:productos,id',
+            'valores_canonicos' => 'required|array',
+        ]);
+
+        $camposPermitidos = ['capacidad_producto', 'categoria_id'];
+        $actualizar = array_intersect_key($request->valores_canonicos, array_flip($camposPermitidos));
+
+        if (empty($actualizar)) {
+            return response()->json(['success' => false, 'message' => 'No hay campos válidos para normalizar'], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            Producto::whereIn('id', $request->productos_ids)->update($actualizar);
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Valores normalizados correctamente en ' . count($request->productos_ids) . ' productos.',
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => 'Error al normalizar: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Normalizar + fusionar productos duplicados en uno solo
+     */
+    public function fusionarDuplicados(Request $request)
+    {
+        $request->validate([
+            'producto_conservar_id' => 'required|exists:productos,id',
+            'productos_eliminar_ids' => 'required|array|min:1',
+            'productos_eliminar_ids.*' => 'exists:productos,id|different:producto_conservar_id',
+            'valores_canonicos' => 'sometimes|array',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $conservar = Producto::with('almacenes', 'codigos')->findOrFail($request->producto_conservar_id);
+
+            // 0. Aplicar valores canónicos si se enviaron
+            $camposPermitidos = ['capacidad_producto', 'categoria_id'];
+            $actualizar = array_intersect_key($request->valores_canonicos ?? [], array_flip($camposPermitidos));
+            if (!empty($actualizar)) {
+                $todosIds = array_merge([$conservar->id], $request->productos_eliminar_ids);
+                Producto::whereIn('id', $todosIds)->update($actualizar);
+                $conservar->refresh();
+            }
+
+            foreach ($request->productos_eliminar_ids as $eliminarId) {
+                $eliminar = Producto::with('almacenes', 'codigos')->find($eliminarId);
+                if (!$eliminar) continue;
+
+                // 1. Sumar cantidades en almacen_producto
+                foreach ($eliminar->almacenes as $almacen) {
+                    $pivotExistente = AlmacenProducto::where('almacen_id', $almacen->id)
+                        ->where('producto_id', $conservar->id)
+                        ->first();
+
+                    if ($pivotExistente) {
+                        $pivotExistente->increment('cantidad', $almacen->pivot->cantidad);
+                    } else {
+                        AlmacenProducto::create([
+                            'almacen_id' => $almacen->id,
+                            'producto_id' => $conservar->id,
+                            'cantidad' => $almacen->pivot->cantidad,
+                        ]);
+                    }
+                }
+
+                // 2. Transferir códigos de barras únicos
+                foreach ($eliminar->codigos as $codigo) {
+                    $existe = ProductoCodigo::where('producto_id', $conservar->id)
+                        ->where('codigo_barras', $codigo->codigo_barras)
+                        ->exists();
+
+                    if (!$existe) {
+                        $codigo->update(['producto_id' => $conservar->id]);
+                    }
+                }
+
+                // 3. Eliminar relaciones y el producto
+                $eliminar->almacenes()->detach();
+                $eliminar->codigos()->delete();
+                $eliminar->delete();
+            }
+
+            // 4. Recalcular precio promedio ponderado final
+            $conservar->refresh();
+            $totalCantidad = $conservar->cantidad_total ?? 0;
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Fusión completada. Producto conservado: ID ' . $conservar->id . ' — ' . $totalCantidad . ' unidades totales.',
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error al fusionar duplicados: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Error al fusionar: ' . $e->getMessage()], 500);
+        }
     }
 }
