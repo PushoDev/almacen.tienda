@@ -296,6 +296,7 @@ interface ProductosPageProps {
     sort?: ProductosSort;
     canViewStockStats?: boolean;
     canViewSensitiveData?: boolean;
+    total_importe_global?: number;
 }
 
 const defaultPaginator = {
@@ -314,6 +315,7 @@ export default function ProductosPage({
     sort = { field: 'nombre_producto', direction: 'asc' },
     canViewStockStats = false,
     canViewSensitiveData = false,
+    total_importe_global = 0,
 }: ProductosPageProps) {
     // Estados para gestión de stock
     const [searchTerm, setSearchTerm] = useState(filters.search || '');
@@ -893,8 +895,13 @@ export default function ProductosPage({
                         </TableBody>
                         <TableFooter>
                             <TableRow>
-                                <TableCell colSpan={canViewSensitiveData ? 7 : 6} className="bg-sidebar-accent font-semibold">
-                                    Total {soloStockBajo && 'con Stock Bajo'}
+                                <TableCell colSpan={8} className="bg-sidebar-accent font-semibold">
+                                    Total General
+                                    {canViewSensitiveData && (
+                                        <span className="ml-2 font-bold text-green-600 dark:text-green-400">
+                                            ${total_importe_global.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </span>
+                                    )}
                                 </TableCell>
                                 <TableCell className="bg-sidebar-accent text-center font-bold">
                                     {productosData.reduce((sum, p) => sum + p.cantidad_total, 0)}
