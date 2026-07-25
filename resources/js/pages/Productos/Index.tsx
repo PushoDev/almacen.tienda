@@ -28,6 +28,7 @@ import {
     Eye,
     FileText,
     Filter,
+    GitMerge,
     Package,
     Package2,
     RefreshCw,
@@ -327,6 +328,18 @@ export default function ProductosPage({
     const [almacenExportId, setAlmacenExportId] = useState<number>(1);
     const [showImportModal, setShowImportModal] = useState(false);
 
+    // Estados para duplicados
+    const [showDuplicadosModal, setShowDuplicadosModal] = useState(false);
+    const [duplicados, setDuplicados] = useState<any[]>([]);
+    const [loadingDuplicados, setLoadingDuplicados] = useState(false);
+    const [gruposExpandidos, setGruposExpandidos] = useState<Record<number, boolean>>({});
+    // Estado para Modal 2 (normalización + fusión)
+    const [grupoActivo, setGrupoActivo] = useState<any>(null);
+    const [showFusionModal, setShowFusionModal] = useState(false);
+    const [conservarId, setConservarId] = useState<number | null>(null);
+    const [valoresCanonicos, setValoresCanonicos] = useState<Record<string, any>>({});
+    const [procesando, setProcesando] = useState(false);
+
     // Calcular estadísticas
     const productosData = productos.data || [];
     const productosConStockBajo = productosData.filter((p) => p.stock_bajo);
@@ -459,6 +472,114 @@ export default function ProductosPage({
         link.click();
         document.body.removeChild(link);
         toast.info('Descargando plantilla Excel...');
+    };
+
+    // Cargar duplicados
+    const cargarDuplicados = async () => {
+        setLoadingDuplicados(true);
+        setShowDuplicadosModal(true);
+        try {
+            const response = await fetch(route('productos.duplicados'));
+            const data = await response.json();
+            if (data.success) {
+                setDuplicados(data.grupos);
+            } else {
+                toast.error('Error al cargar duplicados');
+            }
+        } catch {
+            toast.error('Error de conexión al cargar duplicados');
+        } finally {
+            setLoadingDuplicados(false);
+        }
+    };
+
+    // Abrir Modal 2 para normalizar/fusionar un grupo
+    const abrirFusion = (grupo: any) => {
+        const mejor = grupo.productos?.reduce((a: any, b: any) => a.cantidad_total > b.cantidad_total ? a : b);
+        setGrupoActivo(grupo);
+        setConservarId(mejor?.id || grupo.productos?.[0]?.id);
+        const iniciales: Record<string, any> = {};
+        (grupo.campos_variables || []).forEach((cv: any) => {
+            iniciales[cv.campo] = cv.valor_sugerido;
+        });
+        setValoresCanonicos(iniciales);
+        setShowFusionModal(true);
+    };
+
+    // Solo normalizar (sin fusionar)
+    const handleNormalizar = async () => {
+        const grupo = grupoActivo;
+        if (!grupo || !Object.keys(valoresCanonicos).length) {
+            toast.error('No hay campos para normalizar');
+            return;
+        }
+        setProcesando(true);
+        try {
+            const response = await fetch(route('productos.normalizar'), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                },
+                body: JSON.stringify({
+                    productos_ids: grupo.productos.map((p: any) => p.id),
+                    valores_canonicos: valoresCanonicos,
+                }),
+            });
+            const data = await response.json();
+            if (data.success) {
+                toast.success(data.message);
+                setShowFusionModal(false);
+                cargarDuplicados();
+            } else {
+                toast.error(data.message || 'Error al normalizar');
+            }
+        } catch {
+            toast.error('Error de conexión al normalizar');
+        } finally {
+            setProcesando(false);
+        }
+    };
+
+    // Normalizar + Fusionar
+    const handleFusionar = async () => {
+        const grupo = grupoActivo;
+        if (!grupo || !conservarId) return;
+        setProcesando(true);
+        try {
+            const eliminarIds = grupo.productos
+                .filter((p: any) => p.id !== conservarId)
+                .map((p: any) => p.id);
+
+            const response = await fetch(route('productos.fusionar'), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                },
+                body: JSON.stringify({
+                    producto_conservar_id: conservarId,
+                    productos_eliminar_ids: eliminarIds,
+                    valores_canonicos: valoresCanonicos,
+                }),
+            });
+            const data = await response.json();
+            if (data.success) {
+                toast.success(data.message);
+                setShowFusionModal(false);
+                cargarDuplicados();
+            } else {
+                toast.error(data.message || 'Error al fusionar');
+            }
+        } catch {
+            toast.error('Error de conexión al fusionar');
+        } finally {
+            setProcesando(false);
+        }
+    };
+
+    const toggleGrupo = (index: number) => {
+        setGruposExpandidos(prev => ({ ...prev, [index]: !prev[index] }));
     };
 
     // Aplicar filtros
@@ -698,6 +819,20 @@ export default function ProductosPage({
                             </Button>
                         </TooltipTrigger>
                         <TooltipContent>Importar productos</TooltipContent>
+                    </Tooltip>
+
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8 cursor-pointer bg-amber-500 hover:bg-amber-600"
+                                onClick={cargarDuplicados}
+                            >
+                                <GitMerge size={16} />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Limpiar duplicados</TooltipContent>
                     </Tooltip>
                 </div>
 
@@ -943,6 +1078,219 @@ export default function ProductosPage({
 
                 {/* Modal de Importación */}
                 <ImportModal isOpen={showImportModal} onClose={() => setShowImportModal(false)} onImport={handleImport} almacenes={almacenes} />
+
+                {/* Modal 1 - Exploración de duplicados */}
+                {showDuplicadosModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                        <div className="mx-4 w-full max-w-4xl rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
+                            <div className="mb-4 flex items-center justify-between">
+                                <h2 className="text-xl font-bold text-gray-900 dark:text-white">🧹 Limpiar productos duplicados</h2>
+                                <Button variant="ghost" size="sm" className="cursor-pointer" onClick={() => setShowDuplicadosModal(false)}>✕</Button>
+                            </div>
+
+                            {loadingDuplicados ? (
+                                <div className="flex items-center justify-center py-12">
+                                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></div>
+                                    <span className="ml-3 text-gray-600">Analizando productos...</span>
+                                </div>
+                            ) : duplicados.length === 0 ? (
+                                <div className="py-12 text-center text-gray-500">
+                                    <Package size={48} className="mx-auto mb-3 text-green-400" />
+                                    <p className="text-lg font-semibold text-green-600">No hay productos duplicados</p>
+                                    <p className="mt-1 text-sm">Todos los productos están correctamente organizados.</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+                                        Se encontraron <strong>{duplicados.length}</strong> grupos de productos duplicados.
+                                        Expande cada grupo para ver los detalles.
+                                    </p>
+
+                                    <div className="max-h-96 space-y-2 overflow-y-auto">
+                                        {duplicados.map((grupo, index) => {
+                                            const estaExpandido = gruposExpandidos[index] ?? false;
+
+                                            return (
+                                                <div key={index} className="rounded-lg border border-gray-200 dark:border-gray-700">
+                                                    <button
+                                                        className="flex w-full cursor-pointer items-center justify-between px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                                                        onClick={() => toggleGrupo(index)}
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-sm font-medium text-gray-900 dark:text-white">{estaExpandido ? '▼' : '▶'}</span>
+                                                            <span className="font-medium text-gray-900 dark:text-white">{grupo.clave || 'Producto'}</span>
+                                                            <Badge variant="outline" className="ml-2">{grupo.productos?.length || 0} productos</Badge>
+                                                            <Badge variant="secondary" className="text-xs">{grupo.cantidad_total} unds</Badge>
+                                                        </div>
+                                                        <span className="text-sm font-bold text-green-600">${grupo.precio_promedio?.toFixed(2)}</span>
+                                                    </button>
+
+                                                    {estaExpandido && (
+                                                        <div className="border-t border-gray-200 px-4 py-3 dark:border-gray-700">
+                                                            {grupo.productos?.map((prod: any) => (
+                                                                <div key={prod.id} className="mb-2 flex items-center justify-between rounded bg-gray-50 px-3 py-2 dark:bg-gray-700/30">
+                                                                    <div className="text-sm">
+                                                                        <span className="font-mono text-xs text-gray-500">ID {prod.id}</span>
+                                                                        <span className="ml-2 font-medium">${prod.precio_compra?.toFixed(2)}</span>
+                                                                        <span className="ml-2 text-gray-500">— {prod.cantidad_total} unds</span>
+                                                                        {prod.categoria && <Badge variant="outline" className="ml-2 text-[10px]">{prod.categoria}</Badge>}
+                                                                        {prod.codigo && <span className="ml-2 font-mono text-[10px] text-gray-400">{prod.codigo}</span>}
+                                                                    </div>
+                                                                    <div className="flex flex-wrap gap-1">
+                                                                        {prod.almacenes?.map((a: any) => (
+                                                                            <Badge key={a.id} variant="secondary" className="text-[10px]">
+                                                                                {a.nombre}: {a.cantidad}
+                                                                            </Badge>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+
+                                                            {(grupo.campos_variables?.length || 0) > 0 && (
+                                                                <div className="mb-2 rounded bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
+                                                                    ⚠️ Campos que varían: {grupo.campos_variables.map((cv: any) =>
+                                                                        `${cv.campo} (${cv.valores.join(', ')})`
+                                                                    ).join(' | ')}
+                                                                </div>
+                                                            )}
+
+                                                            <div className="mt-2 flex justify-end">
+                                                                <Button
+                                                                    size="sm"
+                                                                    className="cursor-pointer gap-1 bg-amber-600 text-xs hover:bg-amber-700"
+                                                                    onClick={() => abrirFusion(grupo)}
+                                                                >
+                                                                    <GitMerge size={12} />
+                                                                    Normalizar y Fusionar
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </>
+                            )}
+
+                            <div className="mt-4 flex justify-end">
+                                <Button variant="outline" className="cursor-pointer" onClick={() => setShowDuplicadosModal(false)}>
+                                    Cerrar
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Modal 2 - Normalización + Fusión */}
+                {showFusionModal && grupoActivo && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                        <div className="mx-4 w-full max-w-3xl rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
+                            <div className="mb-4 flex items-center justify-between">
+                                <h2 className="text-lg font-bold text-gray-900 dark:text-white">🔧 Normalizar y fusionar</h2>
+                                <Button variant="ghost" size="sm" className="cursor-pointer" onClick={() => setShowFusionModal(false)}>✕</Button>
+                            </div>
+
+                            <p className="mb-4 text-sm font-medium text-gray-700 dark:text-gray-300">{grupoActivo.clave}</p>
+
+                            {/* Selector de producto a conservar */}
+                            <div className="mb-4">
+                                <label className="mb-1 block text-xs font-semibold text-gray-600 dark:text-gray-400">Conservar producto</label>
+                                <select
+                                    value={conservarId || ''}
+                                    onChange={(e) => setConservarId(Number(e.target.value))}
+                                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                >
+                                    {grupoActivo.productos?.map((prod: any) => (
+                                        <option key={prod.id} value={prod.id}>
+                                            ID {prod.id} — ${prod.precio_compra?.toFixed(2)} — {prod.cantidad_total} unds {prod.almacenes?.length ? `(${prod.almacenes.map((a: any) => `${a.nombre}: ${a.cantidad}`).join(', ')})` : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Campos variables con inputs */}
+                            {(grupoActivo.campos_variables?.length || 0) > 0 && (
+                                <div className="mb-4 space-y-3">
+                                    <p className="text-xs font-semibold text-gray-600 dark:text-gray-400">Campos a normalizar (color y precio no se modifican):</p>
+                                    {grupoActivo.campos_variables.map((cv: any) => (
+                                        <div key={cv.campo} className="flex items-center gap-3">
+                                            <label className="w-28 text-xs font-medium capitalize text-gray-700 dark:text-gray-300">
+                                                {cv.campo.replace('_producto', '').replace('_id', '')}
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={valoresCanonicos[cv.campo] || ''}
+                                                onChange={(e) => setValoresCanonicos(prev => ({ ...prev, [cv.campo]: e.target.value }))}
+                                                placeholder={cv.valor_sugerido || ''}
+                                                className="flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                            />
+                                            <span className="text-[10px] text-gray-400">Actual: {cv.valores.join(', ')}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Resumen de cantidades */}
+                            <div className="mb-4 rounded-lg bg-gray-50 p-3 dark:bg-gray-700/30">
+                                <p className="mb-1 text-xs font-semibold text-gray-600 dark:text-gray-400">Distribución actual en almacenes:</p>
+                                <div className="max-h-24 space-y-0.5 overflow-y-auto text-xs text-gray-700 dark:text-gray-300">
+                                    {grupoActivo.productos?.map((prod: any) => (
+                                        <div key={prod.id} className="flex items-center gap-2">
+                                            <span className="font-mono text-[10px] text-gray-400">ID {prod.id}</span>
+                                            <span className="font-medium">${prod.precio_compra?.toFixed(2)}</span>
+                                            <span>→</span>
+                                            {prod.almacenes?.map((a: any) => (
+                                                <Badge key={a.id} variant="secondary" className="text-[10px]">
+                                                    {a.nombre}: {a.cantidad}
+                                                </Badge>
+                                            ))}
+                                            {(!prod.almacenes || prod.almacenes.length === 0) && (
+                                                <span className="text-gray-400">sin stock</span>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="mt-2 border-t border-gray-200 pt-2 text-xs font-bold dark:border-gray-600">
+                                    Total: {grupoActivo.cantidad_total} unds — Precio promedio: ${grupoActivo.precio_promedio?.toFixed(2)}
+                                </div>
+                            </div>
+
+                            {/* Botones */}
+                            <div className="flex justify-end gap-2">
+                                <Button variant="outline" className="cursor-pointer" onClick={() => setShowFusionModal(false)} disabled={procesando}>
+                                    Cancelar
+                                </Button>
+                                {Object.keys(valoresCanonicos).length > 0 && (
+                                    <Button
+                                        variant="outline"
+                                        className="cursor-pointer gap-1 border-blue-500 text-blue-600 hover:bg-blue-50"
+                                        onClick={handleNormalizar}
+                                        disabled={procesando}
+                                    >
+                                        {procesando ? (
+                                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"></div>
+                                        ) : (
+                                            'Solo normalizar'
+                                        )}
+                                    </Button>
+                                )}
+                                <Button
+                                    className="cursor-pointer gap-1 bg-green-600 hover:bg-green-700"
+                                    onClick={handleFusionar}
+                                    disabled={procesando}
+                                >
+                                    {procesando ? (
+                                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                                    ) : (
+                                        <GitMerge size={14} />
+                                    )}
+                                    Normalizar y Fusionar
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 <Toaster position="top-center" />
             </div>

@@ -33,7 +33,7 @@
 | **F3** | Mover config cuenta mensajero de `Almacenes/Edit` a `Empleados/Edit` | Media |
 | **F4** | `ganancia_real_total` muestra 0 en algunos casos — separar cálculo correctamente | Media |
 | **F5** | Selector de paginación (10/15/25/50/100) en listado de productos | Baja |
-| **F6** | Herramienta de detección y fusión de productos duplicados con promedio de precios | Media |
+| **F6** | Herramienta de detección y fusión de productos duplicados con promedio de precios | Alta |
 
 ---
 
