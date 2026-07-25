@@ -112,6 +112,11 @@ class ProductoController extends Controller
         $canViewStockStats = in_array($user->role, ['admin', 'moderador']);
         $canViewSensitiveData = in_array($user->role, ['admin', 'moderador']);
 
+        // Valor total del inventario global (todos los productos, sin filtros)
+        $totalImporteGlobal = DB::table('almacen_producto')
+            ->join('productos', 'productos.id', '=', 'almacen_producto.producto_id')
+            ->sum(DB::raw('productos.precio_compra_producto * almacen_producto.cantidad'));
+
         return Inertia::render('Productos/Index', [
             'productos' => $paginatedProducts,
             'almacenes' => Almacen::select('id', 'nombre_almacen')->get(),
@@ -120,6 +125,7 @@ class ProductoController extends Controller
             'sort' => ['field' => $sortField, 'direction' => $sortDirection],
             'canViewStockStats' => $canViewStockStats,
             'canViewSensitiveData' => $canViewSensitiveData,
+            'total_importe_global' => (float) $totalImporteGlobal,
         ]);
     }
 

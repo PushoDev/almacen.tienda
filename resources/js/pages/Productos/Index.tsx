@@ -296,6 +296,7 @@ interface ProductosPageProps {
     sort?: ProductosSort;
     canViewStockStats?: boolean;
     canViewSensitiveData?: boolean;
+    total_importe_global?: number;
 }
 
 const defaultPaginator = {
@@ -314,6 +315,7 @@ export default function ProductosPage({
     sort = { field: 'nombre_producto', direction: 'asc' },
     canViewStockStats = false,
     canViewSensitiveData = false,
+    total_importe_global = 0,
 }: ProductosPageProps) {
     // Estados para gestión de stock
     const [searchTerm, setSearchTerm] = useState(filters.search || '');
@@ -893,18 +895,27 @@ export default function ProductosPage({
                         </TableBody>
                         <TableFooter>
                             <TableRow>
-                                <TableCell colSpan={canViewSensitiveData ? 7 : 6} className="bg-sidebar-accent font-semibold">
-                                    Total {soloStockBajo && 'con Stock Bajo'}
+                                <TableCell className="bg-sidebar-accent font-semibold">
+                                    Total General
                                 </TableCell>
-                                <TableCell className="bg-sidebar-accent text-center font-bold">
+                                {canViewSensitiveData && (
+                                    <TableCell className="bg-sidebar-accent text-left font-bold text-green-600 dark:text-green-400">
+                                        ${total_importe_global.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </TableCell>
+                                )}
+                                <TableCell colSpan={canViewSensitiveData ? 2 : 1} className="bg-sidebar-accent"></TableCell>
+                                {/* <TableCell className="bg-sidebar-accent text-center font-bold">
                                     {productosData.reduce((sum, p) => sum + p.cantidad_total, 0)}
+                                </TableCell> */}
+                                <TableCell className="bg-sidebar-accent text-center font-bold">
+                                    Total Paginado:
                                 </TableCell>
                                 {canViewSensitiveData && (
                                     <TableCell className="bg-sidebar-accent text-right font-bold">
                                         ${productosData.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0).toFixed(2)}
                                     </TableCell>
                                 )}
-                                <TableCell className="bg-sidebar-accent"></TableCell>
+                                <TableCell colSpan={canViewSensitiveData ? 2 : 1} className="bg-sidebar-accent"></TableCell>
                                 <TableCell className="bg-sidebar-accent text-right">{productosData.length} prod.</TableCell>
                             </TableRow>
                         </TableFooter>

@@ -1,6 +1,58 @@
 # Documentación — almacen.tienda
 
-> Índice central de toda la documentación del proyecto. Empieza aquí.
+> **ERP multi-almacén** · POS · Logística · Finanzas multi-moneda (USD/CUP/MLC)
+> Laravel 12 · React 19 · Inertia v2 · Tailwind v4 · TypeScript 5.9
+
+---
+
+## Session Checkpoint
+
+| Campo | Valor |
+|---|---|
+| Rama activa | `feature/bot-telegram` |
+| Última sesión | 2026-07-25 — DB reemplazada con `docs/backup/u706356131_gestion.sql` |
+| Estado general | 12/12 módulos estables, 5 bugs conocidos, 4 features pendientes |
+| Próximo paso | Verificar funcionamiento post-import (login, listados, rutas) |
+
+### Bugs activos
+
+| ID | Método | Descripción | Archivo |
+|---|---|---|---|
+| **B1** | `guardarDistribucion` | Devuelve `saldo_actual` pero el campo real es `saldo_cuenta` | `VentaController:~L1759` |
+| **B2** | `aprobarVenta` / `anularVenta` | Falta guardia XOR `&& !$venta->es_venta_gestor` → doble débito potencial | `VentaController` |
+| **B3** | `procesarVenta` | `foreach ($pagos)` sin `?? []` → crash si frontend envía `pagos: null` | `VentaController:~L803` |
+| **B4** | `AlmacenController@edit` | Selector cuenta mensajero mezcla USD/CUP/MLC → puede romper lógica | `AlmacenController` |
+| **B5** | Config mensajero | Está en `Almacenes/Edit`, debería estar en `Empleados/Edit` | UX |
+
+### Features pendientes
+
+| ID | Descripción | Prioridad |
+|---|---|---|
+| **F1** | Selector XOR visual `[PV] / [Gestor]` en panel de distribución | Alta |
+| **F2** | Display mensajero multi-moneda completo (soporte cualquier moneda, no solo USD/CUP) | Media |
+| **F3** | Mover config cuenta mensajero de `Almacenes/Edit` a `Empleados/Edit` | Media |
+| **F4** | `ganancia_real_total` muestra 0 en algunos casos — separar cálculo correctamente | Media |
+
+---
+
+## Snapshot del proyecto
+
+| Métrica | Valor |
+|---|---|
+| Backend | PHP 8.2, Laravel 12 |
+| Frontend | React 19, Inertia v2, Vite 7, Tailwind v4 |
+| Modelos | 38 |
+| Controladores | 35 |
+| Migraciones | 91 |
+| Páginas frontend | ~96 (16 reportes, 8 auth/settings, 72 operacionales) |
+| Middlewares | 7 |
+| Notificaciones | 7 (4 encoladas) |
+| Comandos artisan | 4 |
+| Servicios | 2 (`DashboardStatsService`, `NotificationService`) |
+| Exports/Imports Excel | 3 exports, 2 imports |
+| Roles | `admin` / `moderador` / `vendedor` |
+| Monedas | USD (base), CUP, MLC |
+| Paquetes clave | `spatie/laravel-permission`, `inertiajs/inertia-laravel`, `irazasyed/telegram-bot-sdk`, `maatwebsite/excel`, `milon/barcode`, `barryvdh/laravel-dompdf` |
 
 ---
 
@@ -43,8 +95,9 @@
 
 ### Base de Datos
 | Documento | Contenido |
-|---|---|
+|---|---|---|
 | [base-de-datos.md](base-de-datos.md) | Tablas principales, campos clave y relaciones |
+| [backup/](./backup/) | Backups: local (`backup_20260725_*`) y dump remoto importado (`u706356131_gestion.sql`) |
 
 ### Productos
 | Documento | Contenido |
@@ -77,3 +130,52 @@
 - **Financiero al aprobar**: saldos de cuentas y deudas de clientes solo se mueven al aprobar.
 - **Mensajero es pass-through**: nunca incluir en cálculos de comisión ni cambiarios.
 - **XOR comisión**: gestor Y vendedor son mutuamente excluyentes por venta.
+
+---
+
+## Comandos rápidos
+
+```bash
+php artisan migrate              # aplicar migraciones
+php artisan migrate:status       # ver estado de cada migración
+php artisan test                 # ejecutar tests (Pest)
+php artisan route:list           # listar todas las rutas
+php artisan config:clear         # limpiar caché de configuración
+php artisan cache:clear          # limpiar caché de aplicación
+composer dump-autoload           # regenerar autoload después de crear clase
+
+npm run dev                      # frontend con hot reload (Vite)
+npm run build                    # build de producción
+npm run typecheck                # validar tipos TypeScript
+npm run lint                     # corregir estilo de código
+npm run format                   # formatear código con Prettier
+```
+
+---
+
+## Archivos clave por módulo
+
+| Módulo | Controlador | Modelos | Páginas frontend |
+|---|---|---|---|
+| **Ventas POS** | `app/Http/Controllers/VentaController.php` (2053 L) | `Venta`, `VentaDetalle`, `PagoVenta`, `DestinatarioVenta` | `Vendor/Index`, `Vendor/Show`, `Vendor/Listado` |
+| **Cierres** | `CierreCajaController.php` (1691 L) | `CierreCaja` | `Cierres/Index`, `Cierres/Create`, `Cierres/Show` |
+| **Compras** | `CompraController.php` (791 L) | `Compra`, `CompraProducto`, `CompraPago` | `Comprar/Index`, `Comprar/Show` |
+| **Productos** | `ProductoController.php` (604 L) | `Producto`, `ProductoCodigo`, `Categoria` | `Productos/Index`, `Productos/Show`, `Productos/Edit` |
+| **Precios vendedor** | `ProductoVendedorController.php` (421 L) | `ProductoVendedor`, `PrecioHistorial` | `Productos/Vendor/*` (4 páginas) |
+| **Movimientos stock** | `MovimientosController.php` (584 L) | `Movimiento`, `MovimientoDetalle`, `MovimientoSeguimiento` | `Movimientos/Index`, `Movimientos/Show` |
+| **Finanzas** | `TransaccionController.php` (1235 L) | `MovimientoFinanciero`, `Cuenta`, `Moneda`, `TransaccionCuenta` | `Transacciones/*` (7 páginas) |
+| **Reportes** | `ReporteController.php` (847 L) | — | `Reportes/Report/*` (16 vistas) |
+| **Telegram Bot** | `TelegramWebhookController.php` (497 L) | — | `routes/api.php` (webhook) |
+| **Dashboard** | `AdminController.php` (545 L) | `TasaCambio`, `TasaCambioMLC`, `HistorialTasaCambio` | `dashboard.tsx` |
+| **Logística** | `LogisticaController.php` (25 L) | — (usa `DashboardStatsService`) | `Logistica/*` (7 páginas) |
+| **Usuarios** | `UserController.php`, `UserAlmacenController.php` | `User`, `UserAlmacen` | `Empleados/*` (4 páginas) |
+
+---
+
+## Al iniciar una nueva sesión
+
+1. Leer este `INDEX.md` (sesión checkpoint + snapshot)
+2. Leer `ESTADO_DESARROLLO.md` (bugs y features actualizados)
+3. Leer `context.md` si se necesita contexto general
+4. Continuar desde el **Próximo paso** en Session Checkpoint
+5. Al terminar, actualizar **Session Checkpoint** y `ESTADO_DESARROLLO.md`
