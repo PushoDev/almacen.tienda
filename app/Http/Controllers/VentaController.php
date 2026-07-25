@@ -185,22 +185,7 @@ class VentaController extends Controller
                 ];
             });
 
-        $sinPrecio = $productos->filter(fn($p) => !$p['tiene_precio']);
-
-        if ($sinPrecio->isNotEmpty()) {
-            return response()->json([
-                'error'               => 'almacen_incompleto',
-                'message'             => 'Este almacén tiene productos sin precio de venta. Deben asignarse precios a todos los productos antes de poder vender.',
-                'productos_sin_precio' => $sinPrecio->map(fn($p) => [
-                    'id'     => $p['id'],
-                    'nombre' => $p['nombre_producto'],
-                    'marca'  => $p['marca_producto'],
-                    'modelo' => $p['modelo_producto'],
-                ])->values(),
-            ], 422);
-        }
-
-        return response()->json($productos->values());
+        return response()->json($productos->filter(fn($p) => $p['tiene_precio'])->values());
     }
 
     /**

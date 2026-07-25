@@ -261,16 +261,14 @@ export default function PuntoVentaOficial({
                     cantidad: Number(codigo.cantidad) || 0,
                 })),
             }));
+            if (productosProcesados.length === 0) {
+                toast.info('No hay productos con precio disponible en este almacén');
+            }
             setProductos(productosProcesados);
         } catch (error: unknown) {
             console.error('Error al cargar productos:', error);
-            if (axios.isAxiosError(error) && error.response?.status === 422 && error.response?.data?.error === 'almacen_incompleto') {
-                const sinPrecio: { id: number }[] = error.response.data.productos_sin_precio || [];
-                toast.warning(`${sinPrecio.length} producto(s) sin precio — asigna precios a todos para poder vender.`);
-            } else if (axios.isAxiosError(error) && error.response?.status === 403) {
+            if (axios.isAxiosError(error) && error.response?.status === 403) {
                 toast.error('No tienes acceso a este almacén');
-            } else {
-                toast.error('Error al cargar productos');
             }
             setProductos([]);
         }
@@ -1219,7 +1217,9 @@ export default function PuntoVentaOficial({
                                                 <p className="text-muted-foreground text-sm">
                                                     {busqueda
                                                         ? 'No hay productos que coincidan con la búsqueda'
-                                                        : 'Selecciona un almacén para ver productos'}
+                                                        : almacenSeleccionado && productos.length === 0
+                                                            ? 'No hay productos con precio disponible en este almacén'
+                                                            : 'Selecciona un almacén para ver productos'}
                                                 </p>
                                                 {busqueda && (
                                                     <Button variant="link" onClick={limpiarBusqueda} className="mt-2">
