@@ -18,7 +18,7 @@ class UserController extends Controller
     {
         $empleados = User::with('almacenes', 'cuentas')->get();
         $almacenes = Almacen::all();
-        $cuentas = Cuenta::all();
+        $cuentas = Cuenta::where('tipo_cuenta', 'permanentes')->get();
 
         return Inertia::render('Empleados/Index', [
             'empleados' => $empleados,
@@ -33,7 +33,7 @@ class UserController extends Controller
     public function create()
     {
         $almacenes = Almacen::all();
-        $cuentas = Cuenta::all();
+        $cuentas = Cuenta::where('tipo_cuenta', 'permanentes')->get();
         return Inertia::render('Empleados/Create', [
             'almacenes' => $almacenes,
             'cuentas' => $cuentas,
@@ -97,7 +97,7 @@ class UserController extends Controller
     {
         $empleado = User::with('almacenes', 'cuentas')->findOrFail($id);
         $almacenes = Almacen::all();
-        $cuentas = Cuenta::all();
+        $cuentas = Cuenta::where('tipo_cuenta', 'permanentes')->get();
 
         return Inertia::render('Empleados/Edit', [
             'empleado' => $empleado,
