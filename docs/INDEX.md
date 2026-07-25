@@ -32,6 +32,7 @@
 | **F2** | Display mensajero multi-moneda completo (soporte cualquier moneda, no solo USD/CUP) | Media |
 | **F3** | Mover config cuenta mensajero de `Almacenes/Edit` a `Empleados/Edit` | Media |
 | **F4** | `ganancia_real_total` muestra 0 en algunos casos — separar cálculo correctamente | Media |
+| **F5** | Selector de paginación (10/15/25/50/100) en listado de productos | Baja |
 
 ---
 
