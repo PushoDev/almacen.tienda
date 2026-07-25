@@ -557,7 +557,7 @@ export default function ProductosPage({
                                     <DollarSign className="h-4 w-4 text-green-500" />
                                 </div>
                                 <p className="mt-1 text-2xl font-bold text-green-600 dark:text-green-400">
-                                    ${valorTotalInventario.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    ${total_importe_global.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </p>
                             </div>
                         )}
