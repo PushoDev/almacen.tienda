@@ -10,9 +10,9 @@
 | Campo | Valor |
 |---|---|
 | Rama activa | `feature/bot-telegram` |
-| Última sesión | 2026-07-25 — DB reemplazada con `docs/backup/u706356131_gestion.sql` |
-| Estado general | 12/12 módulos estables, 5 bugs conocidos, 4 features pendientes |
-| Próximo paso | Verificar funcionamiento post-import (login, listados, rutas) |
+| Última sesión | 2026-07-25 — Footer productos: importe global, reorganización de celdas. Widget #2 corregido a valor global |
+| Estado general | 12/12 módulos estables, 5 bugs conocidos, 5 features pendientes |
+| Próximo paso | Selector de paginación (10/15/25/50/100) en listado de productos [F5] |
 
 ### Bugs activos
 
@@ -33,6 +33,7 @@
 | **F3** | Mover config cuenta mensajero de `Almacenes/Edit` a `Empleados/Edit` | Media |
 | **F4** | `ganancia_real_total` muestra 0 en algunos casos — separar cálculo correctamente | Media |
 | **F5** | Selector de paginación (10/15/25/50/100) en listado de productos | Baja |
+| **F6** | Herramienta de detección y fusión de productos duplicados con promedio de precios | Media |
 
 ---
 
