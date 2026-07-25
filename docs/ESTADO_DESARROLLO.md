@@ -1,7 +1,7 @@
 # Estado del Desarrollo — almacen.tienda
 
 > **Actualizar este archivo cada vez que se resuelva un bug, se complete una feature o aparezca algo nuevo.**
-> Fecha de última actualización: 2026-07-15
+> Fecha de última actualización: 2026-07-24
 
 ---
 
@@ -202,6 +202,7 @@ resources/js/pages/Empleados/Edit.tsx
 |---|---|
 | 2026-07-15 | `color_producto` añadido a tabla/tooltip en Productos, Movimientos, Compras y todas las vistas donde aparecía el producto |
 | 2026-07-15 | `CompraController::show()` implementado — historial de compras recientes en `Comprar/Index`, vista detalle `Comprar/Show`. Fix: parámetro renombrado a `$comprar` para que el route model binding de `{comprar}` funcione correctamente |
+| 2026-07-24 | Columnas **Marca, Modelo, Capacidad, Color** agregadas al Excel de export/import de precios (`PreciosVendedorExport`, `PreciosVendedorImport`). `UserController`: filtrado de cuentas para empleados solo `permanentes` |
 | 2026-07-01 | Snapshot de mensajero en cierre_cajas, resumen financiero turno, desglose comisiones PV/Gestor |
 | 2026-06-28 | `mensajero_monto_final_cup` editable, TasasFlotante global, validaciones mensajero en aprobar |
 | 2026-06-25 | Mensajero multi-moneda en POS (selector moneda + tasa + equivalente USD) |

@@ -30,8 +30,8 @@ class PreciosVendedorImport implements ToCollection, WithStartRow
     {
         foreach ($rows as $index => $row) {
             $productoId  = isset($row[0]) ? (int) $row[0] : null;
-            $precioVenta = isset($row[4]) && $row[4] !== '' && $row[4] !== null ? (float) $row[4] : null;
-            $comision    = isset($row[5]) && $row[5] !== '' && $row[5] !== null ? (float) $row[5] : null;
+            $precioVenta = isset($row[8]) && $row[8] !== '' && $row[8] !== null ? (float) $row[8] : null;
+            $comision    = isset($row[9]) && $row[9] !== '' && $row[9] !== null ? (float) $row[9] : null;
 
             if ($precioVenta === null && $comision === null) {
                 $this->omitidos++;
