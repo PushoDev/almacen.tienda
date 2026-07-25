@@ -895,27 +895,23 @@ export default function ProductosPage({
                         </TableBody>
                         <TableFooter>
                             <TableRow>
-                                <TableCell className="bg-sidebar-accent font-semibold">
+                                <TableCell colSpan={8} className="bg-sidebar-accent font-semibold">
                                     Total General
+                                    {canViewSensitiveData && (
+                                        <span className="ml-2 font-bold text-green-600 dark:text-green-400">
+                                            ${total_importe_global.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </span>
+                                    )}
                                 </TableCell>
-                                {canViewSensitiveData && (
-                                    <TableCell className="bg-sidebar-accent text-left font-bold text-green-600 dark:text-green-400">
-                                        ${total_importe_global.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </TableCell>
-                                )}
-                                <TableCell colSpan={canViewSensitiveData ? 2 : 1} className="bg-sidebar-accent"></TableCell>
-                                {/* <TableCell className="bg-sidebar-accent text-center font-bold">
-                                    {productosData.reduce((sum, p) => sum + p.cantidad_total, 0)}
-                                </TableCell> */}
                                 <TableCell className="bg-sidebar-accent text-center font-bold">
-                                    Total Paginado:
+                                    {productosData.reduce((sum, p) => sum + p.cantidad_total, 0)}
                                 </TableCell>
                                 {canViewSensitiveData && (
                                     <TableCell className="bg-sidebar-accent text-right font-bold">
                                         ${productosData.reduce((sum, p) => sum + p.precio_compra_producto * p.cantidad_total, 0).toFixed(2)}
                                     </TableCell>
                                 )}
-                                <TableCell colSpan={canViewSensitiveData ? 2 : 1} className="bg-sidebar-accent"></TableCell>
+                                <TableCell className="bg-sidebar-accent"></TableCell>
                                 <TableCell className="bg-sidebar-accent text-right">{productosData.length} prod.</TableCell>
                             </TableRow>
                         </TableFooter>
