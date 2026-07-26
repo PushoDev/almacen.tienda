@@ -8,17 +8,12 @@ import {
     AlertTriangle,
     ChartPie,
     CheckCircle,
-    Coffee,
     DollarSign,
     Handshake,
     Landmark,
     Package,
     PackageOpen,
     PiggyBank,
-    PlaneIcon,
-    PlaneTakeoffIcon,
-    SquareCheckBig,
-    SquareCheckIcon,
     TrendingDown,
     TrendingUp,
     Truck,
@@ -57,7 +52,6 @@ export default function LogisticaPage({
     productosTop,
     comprasPorProveedor,
     productosPorAlmacen,
-    balances,
     canViewFinance = true,
     resumenCuentas,
     resumenClientes,
@@ -87,52 +81,70 @@ export default function LogisticaPage({
                 <Separator className="col-span-4" />
 
                 <div className="grid auto-rows-min gap-4 md:grid-cols-4">
-                    {/* Cantidades por monedas - Solo si tiene permisos */}
-                    {canViewFinance && balances && balances.length > 0 && (
+                    {/* Capitales Financieros */}
+                    {canViewFinance && (
                         <>
-                            {balances.map((balance, index) => {
-                                // Assign colors dynamically based on index or specific codes if desired
-                                const colors = [
-                                    { bg: 'bg-emerald-500', text: 'text-emerald-500', badge: 'text-emerald-400' },
-                                    { bg: 'bg-amber-500', text: 'text-amber-500', badge: 'text-amber-400' },
-                                    { bg: 'bg-indigo-500', text: 'text-indigo-500', badge: 'text-indigo-400' },
-                                    { bg: 'bg-blue-500', text: 'text-blue-500', badge: 'text-blue-400' },
-                                    { bg: 'bg-rose-500', text: 'text-rose-500', badge: 'text-rose-400' },
-                                    { bg: 'bg-purple-500', text: 'text-purple-500', badge: 'text-purple-400' },
-                                ];
+                            <Card className="@container/card border-emerald-500/30">
+                                <CardHeader className="pb-2">
+                                    <CardDescription className="text-xs font-medium uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                                        Capital Financiero
+                                    </CardDescription>
+                                    <CardTitle className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                                        {((resumenCuentas?.total_saldo ?? 0) + (resumenClientes?.balance_neto ?? 0) + (resumenProveedores?.balance_neto ?? 0) + (resumenProductos?.total_importe_global ?? 0)) === 0
+                                            ? '0.00'
+                                            : ((resumenCuentas?.total_saldo ?? 0) + (resumenClientes?.balance_neto ?? 0) + (resumenProveedores?.balance_neto ?? 0) + (resumenProductos?.total_importe_global ?? 0)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                        }
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <p className="text-xs text-muted-foreground">Capital Financiero (CUP → USD)</p>
+                                </CardContent>
+                            </Card>
 
-                                // Cycle through colors if more currencies than defined colors
-                                const color = colors[index % colors.length];
+                            <Card className="@container/card border-amber-500/30">
+                                <CardHeader className="pb-2">
+                                    <CardDescription className="text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                                        Capital USD
+                                    </CardDescription>
+                                    <CardTitle className="text-3xl font-bold text-amber-600 dark:text-amber-400 tabular-nums">
+                                        {((resumenClientes?.balance_neto ?? 0) + (resumenProveedores?.balance_neto ?? 0) + (resumenProductos?.total_importe_global ?? 0) + (resumenCuentas?.por_tipo?.['temporales'] ?? 0) + (resumenCuentas?.por_moneda_perm?.['USD']?.equivalente ?? 0)) === 0
+                                            ? '0.00'
+                                            : ((resumenClientes?.balance_neto ?? 0) + (resumenProveedores?.balance_neto ?? 0) + (resumenProductos?.total_importe_global ?? 0) + (resumenCuentas?.por_tipo?.['temporales'] ?? 0) + (resumenCuentas?.por_moneda_perm?.['USD']?.equivalente ?? 0)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                        }
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <p className="text-xs text-muted-foreground">Capital en Dólares Americanos</p>
+                                </CardContent>
+                            </Card>
 
-                                return (
-                                    <Card key={balance.codigo} className="@container/card">
-                                        <CardHeader className="relative">
-                                            <div className={`rounded-lg ${color.bg} px-2 py-1 text-sm text-white shadow-lg`}>
-                                                {balance.nombre} ({balance.codigo})
-                                            </div>
-                                            <CardDescription className={color.text}>{balance.nombre}</CardDescription>
-                                            <CardTitle className={`text-2xl font-semibold ${color.text} tabular-nums @[250px]/card:text-3xl`}>
-                                                {balance.simbolo}{' '}
-                                                <span className="text-4xl">{Number(balance.saldo).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                            </CardTitle>
-                                            <div className="absolute top-4 right-4">
-                                                <Badge variant="outline" className={`flex gap-1 rounded-lg text-xs ${color.badge}`}>
-                                                    <Coffee className="size-3" />
-                                                    Rate:{' '}
-                                                    {Number(balance.tasa).toLocaleString('es-ES', {
-                                                        minimumFractionDigits: 2,
-                                                        maximumFractionDigits: 2,
-                                                    })}
-                                                </Badge>
-                                            </div>
-                                        </CardHeader>
-                                        <CardFooter className="flex-col items-start gap-1 text-sm">
-                                            <div className="line-clamp-1 flex gap-2 font-medium">Total {balance.codigo}</div>
-                                            <div className="text-muted-foreground">Monto en las Cuentas</div>
-                                        </CardFooter>
-                                    </Card>
-                                );
-                            })}
+                            <Card className="@container/card border-indigo-500/30">
+                                <CardHeader className="pb-2">
+                                    <CardDescription className="text-xs font-medium uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                                        Capital CUP
+                                    </CardDescription>
+                                    <CardTitle className="text-3xl font-bold text-indigo-600 dark:text-indigo-400 tabular-nums">
+                                        25,000,000.00
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <p className="text-xs text-muted-foreground">Capital en Pesos Cubanos</p>
+                                </CardContent>
+                            </Card>
+
+                            <Card className="@container/card border-blue-500/30">
+                                <CardHeader className="pb-2">
+                                    <CardDescription className="text-xs font-medium uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                                        Capital EUR
+                                    </CardDescription>
+                                    <CardTitle className="text-3xl font-bold text-blue-600 dark:text-blue-400 tabular-nums">
+                                        120,000.00
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <p className="text-xs text-muted-foreground">Capital en Euros</p>
+                                </CardContent>
+                            </Card>
                         </>
                     )}
 
@@ -552,92 +564,6 @@ export default function LogisticaPage({
                         </Card>
                     )}
 
-                    <Separator className="col-span-full my-4" />
-                    {/* Productos */}
-                    <Card className="@container/card">
-                        <CardHeader className="relative">
-                            <CardDescription>Productos</CardDescription>
-                            <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                                <span className="text-4xl">{totalProductos}</span>
-                            </CardTitle>
-                            <div className="absolute top-4 right-4">
-                                <Badge variant="outline" className="flex gap-1 rounded-lg text-xs text-amber-600">
-                                    <PackageOpen className="size-3" />
-                                    {totalUnidades} Unidades
-                                </Badge>
-                            </div>
-                        </CardHeader>
-                        <CardFooter className="flex-col items-start gap-1 text-sm">
-                            <div className="line-clamp-1 flex gap-2 font-medium">
-                                Todos los Producto <Package className="size-4" />
-                            </div>
-                            <div className="text-muted-foreground">Todos distribuidos en los almacenes</div>
-                        </CardFooter>
-                    </Card>
-                    {/* Proveedores */}
-                    <Card className="@container/card">
-                        <CardHeader className="relative">
-                            <CardDescription>Proveedores</CardDescription>
-                            <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                                <span className="text-4xl">{totalProveedores}</span>
-                            </CardTitle>
-                            <div className="absolute top-4 right-4">
-                                <Badge variant="outline" className="flex gap-1 rounded-lg text-xs">
-                                    <PlaneTakeoffIcon className="size-3" />
-                                    {totalProveedores}
-                                </Badge>
-                            </div>
-                        </CardHeader>
-                        <CardFooter className="flex-col items-start gap-1 text-sm">
-                            <div className="line-clamp-1 flex gap-2 font-medium">
-                                Todos Adquiridos <PlaneIcon className="size-4" />
-                            </div>
-                            <div className="text-muted-foreground">Adquirir Productos</div>
-                        </CardFooter>
-                    </Card>
-                    {/* Clientes */}
-                    <Card className="@container/card">
-                        <CardHeader className="relative">
-                            <CardDescription>Clientes</CardDescription>
-                            <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                                <span className="text-4xl">{totalClientes}</span>
-                            </CardTitle>
-                            <div className="absolute top-4 right-4">
-                                <Badge variant="outline" className="flex gap-1 rounded-lg text-xs">
-                                    <Handshake className="size-3" />
-                                    +12.5%
-                                </Badge>
-                            </div>
-                        </CardHeader>
-                        <CardFooter className="flex-col items-start gap-1 text-sm">
-                            <div className="line-clamp-1 flex gap-2 font-medium">
-                                Strong user retention <Handshake className="size-4" />
-                            </div>
-                            <div className="text-muted-foreground">Engagement exceed targets</div>
-                        </CardFooter>
-                    </Card>
-                    {/* Categorias */}
-                    <Card className="@container/card">
-                        <CardHeader className="relative">
-                            <CardDescription>Categorias</CardDescription>
-                            <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                                {' '}
-                                <span className="text-4xl">{totalCategorias}</span>
-                            </CardTitle>
-                            <div className="absolute top-4 right-4">
-                                <Badge variant="outline" className="flex gap-1 rounded-lg text-xs text-emerald-500">
-                                    <SquareCheckBig className="size-3" />
-                                    {categoriasActivas}
-                                </Badge>
-                            </div>
-                        </CardHeader>
-                        <CardFooter className="flex-col items-start gap-1 text-sm">
-                            <div className="line-clamp-1 flex gap-2 font-medium">
-                                Steady performance <SquareCheckIcon className="size-4" />
-                            </div>
-                            <div className="text-muted-foreground">Meets growth projections</div>
-                        </CardFooter>
-                    </Card>
                     <Separator className="col-span-full my-4" />
                     {/* Chartjs - Only if authorized */}
                     {canViewFinance && (

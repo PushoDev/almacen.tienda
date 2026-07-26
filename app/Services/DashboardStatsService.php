@@ -11,6 +11,7 @@ use InvalidArgumentException;
 
 class DashboardStatsService
 {
+    private const STOCK_BAJO_THRESHOLD = 5;
     /**
      * Obtiene las estadísticas del dashboard logístico según el rol.
      */
@@ -350,10 +351,21 @@ class DashboardStatsService
             ->count('productos.categoria_id');
     }
 
+    private function getMonedaPrincipal(): array
+    {
+        $moneda = DB::table('monedas')->where('principal', true)->first();
+
+        if (!$moneda) {
+            $moneda = DB::table('monedas')->where('estado', true)->first();
+        }
+
+        return $moneda
+            ? ['simbolo' => $moneda->simbolo_moneda, 'codigo' => $moneda->codigo_moneda]
+            : ['simbolo' => '$', 'codigo' => 'USD'];
+    }
+
     private function getResumenCuentas(): array
     {
-        $monedaPrincipal = DB::table('monedas')->where('principal', true)->first();
-
         $cuentas = DB::table('cuentas')
             ->leftJoin('monedas', 'cuentas.moneda_id', '=', 'monedas.id')
             ->whereIn('cuentas.tipo_cuenta', ['permanentes', 'temporales'])
@@ -421,10 +433,7 @@ class DashboardStatsService
             'cuentas_inactivas' => $conteoEstado['inactiva'] ?? 0,
             'cuentas_con_deuda' => $cuentasConDeuda,
             'cuentas_deuda_saldo' => round($deudaSaldoEquivalente, 2),
-            'moneda_principal' => $monedaPrincipal ? [
-                'simbolo' => $monedaPrincipal->simbolo_moneda,
-                'codigo' => $monedaPrincipal->codigo_moneda,
-            ] : ['simbolo' => '$', 'codigo' => 'USD'],
+            'moneda_principal' => $this->getMonedaPrincipal(),
             'por_tipo' => collect($porTipo)->map(fn ($v) => round($v, 2))->toArray(),
             'conteo_tipo' => $conteoTipo,
             'por_estado' => collect($porEstado)->map(fn ($v, $k) => [
@@ -445,30 +454,39 @@ class DashboardStatsService
 
     private function getResumenPorMonedaPerm(): array
     {
-        $monedas = DB::table('monedas')->where('estado', true)->get();
+        $cuentas = DB::table('cuentas')
+            ->leftJoin('monedas', 'cuentas.moneda_id', '=', 'monedas.id')
+            ->where('cuentas.tipo_cuenta', 'permanentes')
+            ->select('cuentas.*', 'monedas.tasa_cambio', 'monedas.codigo_moneda', 'monedas.simbolo_moneda')
+            ->get();
+
         $result = [];
-
-        foreach ($monedas as $moneda) {
-            $tasa = (float) ($moneda->tasa_cambio ?? 1);
-            $cuentasPerm = DB::table('cuentas')
-                ->where('moneda_id', $moneda->id)
-                ->where('tipo_cuenta', 'permanentes')
-                ->get();
-
-            if ($cuentasPerm->isEmpty()) continue;
-
-            $original = (float) $cuentasPerm->sum('saldo_cuenta');
+        foreach ($cuentas as $c) {
+            $codigo = $c->codigo_moneda ?? 'N/A';
+            $simbolo = $c->simbolo_moneda ?? '$';
+            $tasa = (float) ($c->tasa_cambio ?? 1);
+            $original = (float) ($c->saldo_cuenta ?? 0);
             $equivalente = $tasa > 0 ? $original / $tasa : 0;
 
-            $result[$moneda->codigo_moneda] = [
-                'original' => round($original, 2),
-                'equivalente' => round($equivalente, 2),
-                'cantidad' => $cuentasPerm->count(),
-                'simbolo' => $moneda->simbolo_moneda,
-            ];
+            if (!isset($result[$codigo])) {
+                $result[$codigo] = [
+                    'original' => 0,
+                    'equivalente' => 0,
+                    'cantidad' => 0,
+                    'simbolo' => $simbolo,
+                ];
+            }
+            $result[$codigo]['original'] += $original;
+            $result[$codigo]['equivalente'] += $equivalente;
+            $result[$codigo]['cantidad']++;
         }
 
-        return $result;
+        return collect($result)->map(fn ($v) => [
+            'original' => round($v['original'], 2),
+            'equivalente' => round($v['equivalente'], 2),
+            'cantidad' => $v['cantidad'],
+            'simbolo' => $v['simbolo'],
+        ])->toArray();
     }
 
     private function getResumenClientes(): array
@@ -536,8 +554,8 @@ class DashboardStatsService
             ->get();
 
         $sinStock = $productosConStock->filter(fn ($p) => (int) $p->cantidad_total === 0);
-        $stockBajo = $productosConStock->filter(fn ($p) => (int) $p->cantidad_total > 0 && (int) $p->cantidad_total < 5);
-        $conStock = $productosConStock->filter(fn ($p) => (int) $p->cantidad_total >= 5);
+        $stockBajo = $productosConStock->filter(fn ($p) => (int) $p->cantidad_total > 0 && (int) $p->cantidad_total < self::STOCK_BAJO_THRESHOLD);
+        $conStock = $productosConStock->filter(fn ($p) => (int) $p->cantidad_total >= self::STOCK_BAJO_THRESHOLD);
 
         // Productos sin ningun registro en almacen_producto (totalmente huerfanos)
         $idsConStock = $productosConStock->pluck('id')->toArray();
