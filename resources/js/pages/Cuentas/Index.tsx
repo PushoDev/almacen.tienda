@@ -168,6 +168,19 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
         }, 0);
     }, [cuentasFiltradas]);
 
+    const filtradoPorMoneda = useMemo(() => {
+        const map: Record<string, { original: number; simbolo: string; cantidad: number }> = {};
+        cuentasFiltradas.forEach((c) => {
+            const codigo = c.moneda?.codigo_moneda || 'N/A';
+            if (!map[codigo]) {
+                map[codigo] = { original: 0, simbolo: c.moneda?.simbolo_moneda || '$', cantidad: 0 };
+            }
+            map[codigo].original += c.saldo_cuenta ?? 0;
+            map[codigo].cantidad++;
+        });
+        return map;
+    }, [cuentasFiltradas]);
+
     const infoDeudas = useMemo(() => {
         let total = 0;
         let cantidad = 0;
@@ -361,15 +374,30 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                             </div>
                         </div>
                         {hasFilters && (
-                            <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
-                                <span className="text-muted-foreground text-xs">Filtros activos:</span>
-                                {filtroTipo && <FilterBadge label={`Tipo: ${tipoStyles[filtroTipo]?.label || filtroTipo}`} onClear={() => setFiltroTipo('')} />}
-                                {filtroMoneda && <FilterBadge label={`Moneda: ${filtroMoneda}`} onClear={() => setFiltroMoneda('')} />}
-                                {filtroEstado && <FilterBadge label={`Estado: ${filtroEstado}`} onClear={() => setFiltroEstado('')} />}
-                                {filtroDeudas && <FilterBadge label="Deudas" onClear={() => setFiltroDeudas(false)} />}
-                                {busqueda && <FilterBadge label={`Buscar: "${busqueda}"`} onClear={() => setBusqueda('')} />}
-                                <Button variant="ghost" size="sm" onClick={limpiarFiltros} className="h-7 text-xs">Limpiar todos</Button>
-                            </div>
+                            <>
+                                <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
+                                    <span className="text-muted-foreground text-xs">Filtros activos:</span>
+                                    {filtroTipo && <FilterBadge label={`Tipo: ${tipoStyles[filtroTipo]?.label || filtroTipo}`} onClear={() => setFiltroTipo('')} />}
+                                    {filtroMoneda && <FilterBadge label={`Moneda: ${filtroMoneda}`} onClear={() => setFiltroMoneda('')} />}
+                                    {filtroEstado && <FilterBadge label={`Estado: ${filtroEstado}`} onClear={() => setFiltroEstado('')} />}
+                                    {filtroDeudas && <FilterBadge label="Deudas" onClear={() => setFiltroDeudas(false)} />}
+                                    {busqueda && <FilterBadge label={`Buscar: "${busqueda}"`} onClear={() => setBusqueda('')} />}
+                                    <Button variant="ghost" size="sm" onClick={limpiarFiltros} className="h-7 text-xs">Limpiar todos</Button>
+                                </div>
+                                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                                    <span className="font-medium text-foreground/80">{cuentasFiltradas.length} cuentas filtradas</span>
+                                    <span className="text-muted-foreground/30">|</span>
+                                    {Object.entries(filtradoPorMoneda).map(([codigo, info]) => (
+                                        <span key={codigo}>
+                                            {codigo}: {info.simbolo}{info.original.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </span>
+                                    ))}
+                                    <span className="text-muted-foreground/30">|</span>
+                                    <span className="font-semibold text-foreground">
+                                        Eq. {simbolo}{totalFiltrado.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                </div>
+                            </>
                         )}
                     </CardHeader>
                 </Card>
