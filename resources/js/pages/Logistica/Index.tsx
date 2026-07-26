@@ -5,6 +5,7 @@ import AppLayout from '@/layouts/app-layout';
 import { LogisticaProps, type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import {
+    AlertTriangle,
     ChartPie,
     CheckCircle,
     Coffee,
@@ -61,6 +62,7 @@ export default function LogisticaPage({
     resumenCuentas,
     resumenClientes,
     resumenProveedores,
+    resumenProductos,
 }: LogisticaProps) {
     // Vista Cliente
     return (
@@ -405,6 +407,91 @@ export default function LogisticaPage({
                                                 </div>
                                                 <p className={`text-2xl font-bold ${styles.text}`}>
                                                     $: {data.saldo.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </p>
+                                                <div className="mt-3 flex items-center gap-3">
+                                                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+                                                        <div className={`h-full rounded-full transition-all duration-500 ${styles.bar}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                                                    </div>
+                                                    <span className="text-xs font-medium tabular-nums text-muted-foreground">{pct.toFixed(0)}%</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* Resumen de Productos */}
+                    {canViewFinance && resumenProductos && (
+                        <Card className="col-span-full">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Package className="size-5 text-cyan-500" />
+                                    Resumen de Productos
+                                </CardTitle>
+                                <CardDescription>Distribución general de todos los productos del sistema</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                {/* Row 1: KPIs */}
+                                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                                    <div className="rounded-lg border border-cyan-500/20 bg-cyan-50/50 p-4 dark:bg-cyan-900/20">
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-sm font-medium text-cyan-600 dark:text-cyan-400">Total Productos</p>
+                                            <Package className="h-5 w-5 text-cyan-500" />
+                                        </div>
+                                        <p className="mt-1 text-2xl font-bold text-cyan-900 dark:text-cyan-200">{resumenProductos.total_productos}</p>
+                                        <p className="text-xs text-cyan-500 dark:text-cyan-400">Productos registrados</p>
+                                    </div>
+                                    <div className="rounded-lg border border-slate-500/20 bg-slate-50/50 p-4 dark:bg-slate-900/20">
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Unidades</p>
+                                            <PackageOpen className="h-5 w-5 text-slate-500" />
+                                        </div>
+                                        <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-200">{resumenProductos.total_unidades.toLocaleString('es-ES')}</p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">Stock agregado</p>
+                                    </div>
+                                    <div className="rounded-lg border border-green-500/20 bg-green-50/50 p-4 dark:bg-green-900/20">
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-sm font-medium text-green-600 dark:text-green-400">Valor Total</p>
+                                            <DollarSign className="h-5 w-5 text-green-500" />
+                                        </div>
+                                        <p className="mt-1 text-2xl font-bold text-green-900 dark:text-green-200">
+                                            $: {resumenProductos.total_importe_global.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </p>
+                                        <p className="text-xs text-green-500 dark:text-green-400">Costo total del inventario</p>
+                                    </div>
+                                    <div className="rounded-lg border border-amber-500/20 bg-amber-50/50 p-4 dark:bg-amber-900/20">
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-sm font-medium text-amber-600 dark:text-amber-400">Stock Bajo</p>
+                                            <AlertTriangle className="h-5 w-5 text-amber-500" />
+                                        </div>
+                                        <p className="mt-1 text-2xl font-bold text-amber-900 dark:text-amber-200">{resumenProductos.productos_stock_bajo}</p>
+                                        <p className="text-xs text-amber-500 dark:text-amber-400">
+                                            $: {resumenProductos.valor_stock_bajo.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Row 2: Barras por stock */}
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                                    {(['con_stock', 'stock_bajo', 'sin_stock'] as const).map((grupo) => {
+                                        const data = resumenProductos.por_stock[grupo];
+                                        const total = resumenProductos.total_productos;
+                                        const pct = total > 0 ? (data.cantidad / total) * 100 : 0;
+                                        const styles = grupo === 'con_stock'
+                                            ? { bg: 'bg-emerald-50 dark:bg-emerald-950/20', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-800', bar: 'bg-emerald-500', label: 'Con Stock' }
+                                            : grupo === 'stock_bajo'
+                                                ? { bg: 'bg-amber-50 dark:bg-amber-950/20', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-200 dark:border-amber-800', bar: 'bg-amber-500', label: 'Stock Bajo' }
+                                                : { bg: 'bg-gray-50 dark:bg-gray-800/40', text: 'text-gray-600 dark:text-gray-400', border: 'border-gray-200 dark:border-gray-700', bar: 'bg-gray-400', label: 'Sin Stock' };
+                                        return (
+                                            <div key={grupo} className={`rounded-lg border p-4 shadow-sm ${styles.border} ${styles.bg}`}>
+                                                <div className="mb-2 flex items-center justify-between">
+                                                    <span className={`text-sm font-semibold ${styles.text}`}>{styles.label}</span>
+                                                    <Badge variant="outline" className={`${styles.text} ${styles.border} text-xs`}>{data.cantidad} {data.cantidad === 1 ? 'producto' : 'productos'}</Badge>
+                                                </div>
+                                                <p className={`text-2xl font-bold ${styles.text}`}>
+                                                    {data.unidades.toLocaleString('es-ES')} {data.unidades === 1 ? 'unidad' : 'unidades'}
                                                 </p>
                                                 <div className="mt-3 flex items-center gap-3">
                                                     <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">

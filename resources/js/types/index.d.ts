@@ -451,6 +451,16 @@ export interface LogisticaProps {
         balance_neto: number;
         por_estado: Record<string, { cantidad: number; saldo: number }>;
     } | null;
+
+    // Resumen de Productos
+    resumenProductos?: {
+        total_productos: number;
+        total_unidades: number;
+        total_importe_global: number;
+        productos_stock_bajo: number;
+        valor_stock_bajo: number;
+        por_stock: Record<string, { cantidad: number; unidades: number }>;
+    } | null;
 }
 
 // Interface para Productos por Almacén (Detalles)

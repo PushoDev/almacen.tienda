@@ -52,6 +52,7 @@ class DashboardStatsService
         $resumenCuentas = $canViewFinance ? $this->getResumenCuentas() : null;
         $resumenClientes = $canViewFinance ? $this->getResumenClientes() : null;
         $resumenProveedores = $canViewFinance ? $this->getResumenProveedores() : null;
+        $resumenProductos = $canViewFinance ? $this->getResumenProductos() : null;
 
         return [
             'canViewFinance' => $canViewFinance,
@@ -81,6 +82,7 @@ class DashboardStatsService
             'resumenCuentas' => $resumenCuentas,
             'resumenClientes' => $resumenClientes,
             'resumenProveedores' => $resumenProveedores,
+            'resumenProductos' => $resumenProductos,
         ];
     }
 
@@ -486,6 +488,52 @@ class DashboardStatsService
                 'fondo' => ['cantidad' => $conFondo->count(), 'saldo' => round($totalFondo, 2)],
                 'deuda' => ['cantidad' => $conDeuda->count(), 'saldo' => round(abs($totalDeuda), 2)],
                 'neutro' => ['cantidad' => $neutro->count(), 'saldo' => 0],
+            ],
+        ];
+    }
+
+    private function getResumenProductos(): array
+    {
+        $totalProductos = (int) DB::table('productos')->count();
+
+        $totalUnidades = (int) DB::table('almacen_producto')->sum('cantidad');
+
+        $totalImporteGlobal = (float) DB::table('almacen_producto')
+            ->join('productos', 'productos.id', '=', 'almacen_producto.producto_id')
+            ->sum(DB::raw('productos.precio_compra_producto * almacen_producto.cantidad'));
+
+        $productosConStock = DB::table('almacen_producto')
+            ->join('productos', 'productos.id', '=', 'almacen_producto.producto_id')
+            ->select('productos.id', 'productos.precio_compra_producto', DB::raw('SUM(almacen_producto.cantidad) as cantidad_total'))
+            ->groupBy('productos.id', 'productos.precio_compra_producto')
+            ->get();
+
+        $sinStock = $productosConStock->filter(fn ($p) => (int) $p->cantidad_total === 0);
+        $stockBajo = $productosConStock->filter(fn ($p) => (int) $p->cantidad_total > 0 && (int) $p->cantidad_total < 5);
+        $conStock = $productosConStock->filter(fn ($p) => (int) $p->cantidad_total >= 5);
+
+        // Productos sin ningun registro en almacen_producto (totalmente huerfanos)
+        $idsConStock = $productosConStock->pluck('id')->toArray();
+        $productosSinRegistro = (int) DB::table('productos')
+            ->whereNotIn('id', $idsConStock)
+            ->count();
+        $sinStockCount = $sinStock->count() + $productosSinRegistro;
+
+        $unidadesConStock = (int) $conStock->sum('cantidad_total');
+        $unidadesStockBajo = (int) $stockBajo->sum('cantidad_total');
+
+        $valorStockBajo = $stockBajo->sum(fn ($p) => (float) $p->precio_compra_producto * (int) $p->cantidad_total);
+
+        return [
+            'total_productos' => $totalProductos,
+            'total_unidades' => $totalUnidades,
+            'total_importe_global' => round($totalImporteGlobal, 2),
+            'productos_stock_bajo' => $stockBajo->count(),
+            'valor_stock_bajo' => round((float) $valorStockBajo, 2),
+            'por_stock' => [
+                'con_stock' => ['cantidad' => $conStock->count(), 'unidades' => $unidadesConStock],
+                'stock_bajo' => ['cantidad' => $stockBajo->count(), 'unidades' => $unidadesStockBajo],
+                'sin_stock' => ['cantidad' => $sinStockCount, 'unidades' => 0],
             ],
         ];
     }
