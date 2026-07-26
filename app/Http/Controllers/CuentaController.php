@@ -15,9 +15,61 @@ class CuentaController extends Controller
      */
     public function index()
     {
-        $cuentas = in_array(auth()->user()->role, ['admin', 'moderador'])
+        $user = auth()->user();
+        $cuentas = in_array($user->role, ['admin', 'moderador'])
             ? Cuenta::with('moneda')->get()
-            : auth()->user()->cuentas()->with('moneda')->get(); // Cargar la relación con moneda y filtrar por usuario si es vendedor
+            : $user->cuentas()->with('moneda')->get();
+
+        $monedaPrincipal = Moneda::where('principal', true)
+            ->select('id', 'nombre_moneda', 'codigo_moneda', 'simbolo_moneda', 'tasa_cambio', 'principal')
+            ->first();
+
+        $totalSaldo = 0;
+        $resumenPorTipo = [];
+        $resumenPorMoneda = [];
+        $resumenPorEstado = [];
+        $conteoEstado = [];
+
+        foreach ($cuentas as $cuenta) {
+            $tasa = $cuenta->moneda?->tasa_cambio ?: 1;
+            $equiv = $tasa > 0 ? (float) ($cuenta->saldo_cuenta ?? 0) / $tasa : 0;
+            $totalSaldo += $equiv;
+
+            $resumenPorTipo[$cuenta->tipo_cuenta] = ($resumenPorTipo[$cuenta->tipo_cuenta] ?? 0) + $equiv;
+
+            $codigo = $cuenta->moneda?->codigo_moneda ?: 'N/A';
+            if (!isset($resumenPorMoneda[$codigo])) {
+                $resumenPorMoneda[$codigo] = [
+                    'original' => 0,
+                    'equivalente' => 0,
+                    'cantidad' => 0,
+                    'simbolo' => $cuenta->moneda?->simbolo_moneda ?? '$',
+                ];
+            }
+            $resumenPorMoneda[$codigo]['original'] += (float) $cuenta->saldo_cuenta;
+            $resumenPorMoneda[$codigo]['equivalente'] += $equiv;
+            $resumenPorMoneda[$codigo]['cantidad']++;
+
+            $resumenPorEstado[$cuenta->estado] = ($resumenPorEstado[$cuenta->estado] ?? 0) + $equiv;
+            $conteoEstado[$cuenta->estado] = ($conteoEstado[$cuenta->estado] ?? 0) + 1;
+        }
+
+        $resumen = [
+            'total_saldo' => round($totalSaldo, 2),
+            'por_tipo' => collect($resumenPorTipo)->map(fn ($v) => round($v, 2))->toArray(),
+            'por_moneda' => collect($resumenPorMoneda)->map(fn ($v) => [
+                'original' => round($v['original'], 2),
+                'equivalente' => round($v['equivalente'], 2),
+                'cantidad' => $v['cantidad'],
+                'simbolo' => $v['simbolo'],
+            ])->toArray(),
+            'por_estado' => collect($resumenPorEstado)->map(fn ($v, $k) => [
+                'saldo' => round($v, 2),
+                'cantidad' => $conteoEstado[$k] ?? 0,
+            ])->toArray(),
+            'cuentas_activas' => $conteoEstado['activa'] ?? 0,
+            'cuentas_inactivas' => $conteoEstado['inactiva'] ?? 0,
+        ];
 
         return Inertia::render('Cuentas/Index', [
             'cuentas' => $cuentas->map(function ($cuenta) {
@@ -43,9 +95,8 @@ class CuentaController extends Controller
                     'updated_at' => $cuenta->updated_at->format('Y-m-d H:i:s'),
                 ];
             }),
-            'monedaPrincipal' => Moneda::where('principal', true)
-                ->select('id', 'nombre_moneda', 'codigo_moneda', 'simbolo_moneda', 'tasa_cambio', 'principal')
-                ->first(),
+            'monedaPrincipal' => $monedaPrincipal,
+            'resumen' => $resumen,
         ]);
     }
 
