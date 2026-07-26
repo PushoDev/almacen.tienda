@@ -77,6 +77,7 @@ interface ResumenData {
     total_saldo: number;
     por_tipo: Record<string, number>;
     por_moneda: Record<string, ResumenPorMonedaItem>;
+    por_moneda_perm: Record<string, ResumenPorMonedaItem>;
     por_estado: Record<string, ResumenPorEstadoItem>;
     cuentas_activas: number;
     cuentas_inactivas: number;
@@ -313,10 +314,10 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                     </div>
                 </div>
 
-                {/* Row 3: Desglose por Moneda */}
-                {resumen?.por_moneda && Object.keys(resumen.por_moneda).length > 0 && (
+                {/* Row 3: Desglose por Moneda (solo cuentas permanentes) */}
+                {resumen?.por_moneda_perm && Object.keys(resumen.por_moneda_perm).length > 0 && (
                     <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-                        {Object.entries(resumen.por_moneda).map(([codigo, info]) => {
+                        {Object.entries(resumen.por_moneda_perm).map(([codigo, info]) => {
                             const active = filtroMoneda === codigo;
                             return (
                                 <div key={codigo} onClick={() => toggleMoneda(codigo)}
