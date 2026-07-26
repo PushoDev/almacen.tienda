@@ -49,6 +49,10 @@ class DashboardStatsService
         $deudaPendientes = $canViewFinance ? $this->countDeudaPendientes() : 0;
         $deudaPendientesSaldo = $canViewFinance ? $this->sumDeudaPendientesSaldo() : 0.0;
 
+        $resumenCuentas = $canViewFinance ? $this->getResumenCuentas() : null;
+        $resumenClientes = $canViewFinance ? $this->getResumenClientes() : null;
+        $resumenProveedores = $canViewFinance ? $this->getResumenProveedores() : null;
+
         return [
             'canViewFinance' => $canViewFinance,
             'totalCategorias' => $totalCategorias,
@@ -74,6 +78,9 @@ class DashboardStatsService
             'productosTop' => $canViewFinance ? $this->getProductosTop() : [],
             'comprasPorProveedor' => $canViewFinance ? $this->getComprasPorProveedor() : [],
             'productosPorAlmacen' => $canViewFinance ? $this->getProductosPorAlmacen() : [],
+            'resumenCuentas' => $resumenCuentas,
+            'resumenClientes' => $resumenClientes,
+            'resumenProveedores' => $resumenProveedores,
         ];
     }
 
@@ -339,6 +346,145 @@ class DashboardStatsService
             ->where('producto_vendedors.user_id', $userId)
             ->distinct('productos.categoria_id')
             ->count('productos.categoria_id');
+    }
+
+    private function getResumenCuentas(): array
+    {
+        $monedaPrincipal = DB::table('monedas')->where('principal', true)->first();
+
+        $cuentas = DB::table('cuentas')
+            ->leftJoin('monedas', 'cuentas.moneda_id', '=', 'monedas.id')
+            ->whereIn('cuentas.tipo_cuenta', ['permanentes', 'temporales'])
+            ->select('cuentas.*', 'monedas.tasa_cambio', 'monedas.codigo_moneda', 'monedas.simbolo_moneda')
+            ->get();
+
+        $todas = DB::table('cuentas')
+            ->leftJoin('monedas', 'cuentas.moneda_id', '=', 'monedas.id')
+            ->select('cuentas.*', 'monedas.tasa_cambio', 'monedas.codigo_moneda', 'monedas.simbolo_moneda')
+            ->get();
+
+        $totalSaldo = 0;
+        $porTipo = [];
+        $conteoTipo = [];
+        $porEstado = [];
+        $conteoEstado = [];
+        $cuentasConDeuda = 0;
+
+        foreach ($cuentas as $c) {
+            $tasa = $c->tasa_cambio ?? 1;
+            $equiv = $tasa > 0 ? (float) ($c->saldo_cuenta ?? 0) / (float) $tasa : 0;
+            $totalSaldo += $equiv;
+
+            $porTipo[$c->tipo_cuenta] = ($porTipo[$c->tipo_cuenta] ?? 0) + $equiv;
+            $conteoTipo[$c->tipo_cuenta] = ($conteoTipo[$c->tipo_cuenta] ?? 0) + 1;
+        }
+
+        foreach ($todas as $c) {
+            $tasa = $c->tasa_cambio ?? 1;
+            $equiv = $tasa > 0 ? (float) ($c->saldo_cuenta ?? 0) / (float) $tasa : 0;
+
+            $porEstado[$c->estado] = ($porEstado[$c->estado] ?? 0) + $equiv;
+            $conteoEstado[$c->estado] = ($conteoEstado[$c->estado] ?? 0) + 1;
+
+            if ((float) ($c->saldo_cuenta ?? 0) < 0) {
+                $cuentasConDeuda++;
+            }
+        }
+
+        return [
+            'total_saldo' => round($totalSaldo, 2),
+            'total_cuentas' => $todas->count(),
+            'cuentas_activas' => $conteoEstado['activa'] ?? 0,
+            'cuentas_inactivas' => $conteoEstado['inactiva'] ?? 0,
+            'cuentas_con_deuda' => $cuentasConDeuda,
+            'moneda_principal' => $monedaPrincipal ? [
+                'simbolo' => $monedaPrincipal->simbolo_moneda,
+                'codigo' => $monedaPrincipal->codigo_moneda,
+            ] : ['simbolo' => '$', 'codigo' => 'USD'],
+            'por_tipo' => collect($porTipo)->map(fn ($v) => round($v, 2))->toArray(),
+            'conteo_tipo' => $conteoTipo,
+            'por_estado' => collect($porEstado)->map(fn ($v, $k) => [
+                'saldo' => round($v, 2),
+                'cantidad' => $conteoEstado[$k] ?? 0,
+            ])->toArray(),
+            'por_moneda_perm' => $this->getResumenPorMonedaPerm(),
+        ];
+    }
+
+    private function getResumenPorMonedaPerm(): array
+    {
+        $monedas = DB::table('monedas')->where('estado', true)->get();
+        $result = [];
+
+        foreach ($monedas as $moneda) {
+            $tasa = (float) ($moneda->tasa_cambio ?? 1);
+            $cuentasPerm = DB::table('cuentas')
+                ->where('moneda_id', $moneda->id)
+                ->where('tipo_cuenta', 'permanentes')
+                ->get();
+
+            if ($cuentasPerm->isEmpty()) continue;
+
+            $original = (float) $cuentasPerm->sum('saldo_cuenta');
+            $equivalente = $tasa > 0 ? $original / $tasa : 0;
+
+            $result[$moneda->codigo_moneda] = [
+                'original' => round($original, 2),
+                'equivalente' => round($equivalente, 2),
+                'cantidad' => $cuentasPerm->count(),
+                'simbolo' => $moneda->simbolo_moneda,
+            ];
+        }
+
+        return $result;
+    }
+
+    private function getResumenClientes(): array
+    {
+        $clientes = DB::table('clientes')->get();
+
+        $conFondo = $clientes->where('deuda_pago_cliente', '>', 0);
+        $conDeuda = $clientes->where('deuda_pago_cliente', '<', 0);
+        $neutro = $clientes->filter(fn ($c) => is_null($c->deuda_pago_cliente) || (float) $c->deuda_pago_cliente === 0.0);
+
+        $totalFondo = (float) $conFondo->sum('deuda_pago_cliente');
+        $totalDeuda = (float) $conDeuda->sum('deuda_pago_cliente');
+
+        return [
+            'total_clientes' => $clientes->count(),
+            'total_fondo' => round($totalFondo, 2),
+            'total_deuda' => round(abs($totalDeuda), 2),
+            'balance_neto' => round($totalFondo + $totalDeuda, 2),
+            'por_estado' => [
+                'fondo' => ['cantidad' => $conFondo->count(), 'saldo' => round($totalFondo, 2)],
+                'deuda' => ['cantidad' => $conDeuda->count(), 'saldo' => round(abs($totalDeuda), 2)],
+                'neutro' => ['cantidad' => $neutro->count(), 'saldo' => 0],
+            ],
+        ];
+    }
+
+    private function getResumenProveedores(): array
+    {
+        $proveedores = DB::table('proveedors')->get();
+
+        $conFondo = $proveedores->where('saldo_proveedor', '>', 0);
+        $conDeuda = $proveedores->where('saldo_proveedor', '<', 0);
+        $neutro = $proveedores->filter(fn ($p) => is_null($p->saldo_proveedor) || (float) $p->saldo_proveedor === 0.0);
+
+        $totalFondo = (float) $conFondo->sum('saldo_proveedor');
+        $totalDeuda = (float) $conDeuda->sum('saldo_proveedor');
+
+        return [
+            'total_proveedores' => $proveedores->count(),
+            'total_fondo' => round($totalFondo, 2),
+            'total_deuda' => round(abs($totalDeuda), 2),
+            'balance_neto' => round($totalFondo + $totalDeuda, 2),
+            'por_estado' => [
+                'fondo' => ['cantidad' => $conFondo->count(), 'saldo' => round($totalFondo, 2)],
+                'deuda' => ['cantidad' => $conDeuda->count(), 'saldo' => round(abs($totalDeuda), 2)],
+                'neutro' => ['cantidad' => $neutro->count(), 'saldo' => 0],
+            ],
+        ];
     }
 }
 
