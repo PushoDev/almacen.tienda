@@ -106,7 +106,7 @@ cancelada           → stock devuelto
 - Vendedores solo ven sus cuentas asignadas (tabla `user_cuentas`).
 - Modificar saldo requiere rol admin + contraseña de seguridad hardcoded (`glorietashop`).
 - **Index rediseñado** (`resources/js/pages/Cuentas/Index.tsx`):
-  - 3 filas de widgets interactivos: KPIs (total eq., activas/inactivas), desglose por tipo con barras de porcentaje, desglose por moneda.
+  - 3 filas de widgets interactivos: KPIs (total eq., activas/inactivas), desglose por tipo con barras de porcentaje por cantidad de cuentas, desglose por moneda.
   - Todos los widgets son clickeables y filtran la tabla al hacer clic.
   - Filtro combinado: tipo + moneda + estado + deudas (por saldo negativo) + búsqueda.
   - Resumen de filtros activos con badges removibles y línea de totales por moneda.
@@ -128,6 +128,13 @@ Tipos: `fisico`, `asociado`.
 - `deuda_pago_cliente`: saldo acumulado pendiente de pago.
 - Pueden ser fuente de pagos en compras (descuenta su deuda).
 - Pueden recibir pagos de ventas (acumula deuda en lugar de ir a cuenta).
+- **Index rediseñado** (`resources/js/pages/Clientes/Index.tsx`):
+  - Row 1: 4 KPIs clickeables (Total Clientes → limpia filtros, Fondo Total → filtra fondo, Deuda Total → filtra deuda, Balance Neto → informativo).
+  - Row 2: 3 barras de estado (Con Fondo / En Deuda / Neutro) con badge, monto, barra de progreso y % sobre total. Toggle al clickear.
+  - Paginación con ventana (delta=2 + ellipsis).
+  - Filtros combinados: `filtroEstado` + `filtroTipo` + `busqueda`, badge activo + botón "Limpiar filtro".
+  - Datos precalculados en backend via `$resumen` (`ClienteController@index`).
+- **Backend** (`ClienteController@index`): precalcula `$resumen` con `total_clientes`, `total_fondo`, `total_deuda`, `balance_neto`, `por_estado`.
 
 ### Movimiento de Stock (`movimientos`)
 Traslados entre almacenes.

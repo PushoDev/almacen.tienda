@@ -418,6 +418,50 @@ export interface LogisticaProps {
 
     // Permissions
     canViewFinance?: boolean;
+
+    // Resumen de Cuentas (incorporado desde CuentaController)
+    resumenCuentas?: {
+        total_saldo: number;
+        total_cuentas: number;
+        cuentas_activas: number;
+        cuentas_inactivas: number;
+        cuentas_con_deuda: number;
+        cuentas_deuda_saldo: number;
+        moneda_principal: { simbolo: string; codigo: string };
+        por_tipo: Record<string, number>;
+        conteo_tipo: Record<string, number>;
+        por_estado: Record<string, { saldo: number; cantidad: number }>;
+        por_moneda_perm: Record<string, { original: number; equivalente: number; cantidad: number; simbolo: string }>;
+        por_tipo_moneda: Record<string, Record<string, { original: number; equivalente: number; cantidad: number; simbolo: string }>>;
+    } | null;
+
+    // Resumen de Clientes
+    resumenClientes?: {
+        total_clientes: number;
+        total_fondo: number;
+        total_deuda: number;
+        balance_neto: number;
+        por_estado: Record<string, { cantidad: number; saldo: number }>;
+    } | null;
+
+    // Resumen de Proveedores
+    resumenProveedores?: {
+        total_proveedores: number;
+        total_fondo: number;
+        total_deuda: number;
+        balance_neto: number;
+        por_estado: Record<string, { cantidad: number; saldo: number }>;
+    } | null;
+
+    // Resumen de Productos
+    resumenProductos?: {
+        total_productos: number;
+        total_unidades: number;
+        total_importe_global: number;
+        productos_stock_bajo: number;
+        valor_stock_bajo: number;
+        por_stock: Record<string, { cantidad: number; unidades: number }>;
+    } | null;
 }
 
 // Interface para Productos por Almacén (Detalles)

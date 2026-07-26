@@ -36,7 +36,7 @@ const allNavItems: NavItem[] = [
         roles: ['admin', 'moderador', 'vendedor'],
     },
     {
-        title: 'Logistica General',
+        title: 'Resumen Financiero',
         href: '/logistica',
         icon: ChartNoAxesCombinedIcon,
         roles: ['admin'],
