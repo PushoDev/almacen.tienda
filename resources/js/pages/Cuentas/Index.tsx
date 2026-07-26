@@ -238,7 +238,7 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                             <Wallet className="h-5 w-5 text-blue-500" />
                         </div>
                         <p className="mt-1 text-2xl font-bold text-blue-900 dark:text-blue-200">
-                            {simbolo}{(resumen?.total_saldo ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {simbolo}: {(resumen?.total_saldo ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </p>
                         <p className="text-xs text-blue-500 dark:text-blue-400">En {monedaPrincipal?.codigo_moneda || 'moneda principal'}</p>
                     </div>
@@ -258,7 +258,7 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                             <CreditCard className="h-5 w-5 text-emerald-500" />
                         </div>
                         <p className="mt-1 text-2xl font-bold text-emerald-900 dark:text-emerald-200">{resumen?.cuentas_activas ?? cuentas.filter((c) => c.estado === 'activa').length}</p>
-                        <p className="text-xs text-emerald-500 dark:text-emerald-400">{simbolo}{(resumen?.por_estado?.activa?.saldo ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} en moneda principal</p>
+                        <p className="text-xs text-emerald-500 dark:text-emerald-400">{simbolo}: {(resumen?.por_estado?.activa?.saldo ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} en moneda principal</p>
                     </div>
 
                     <div onClick={() => toggleEstado('inactiva')} className={`cursor-pointer rounded-lg border p-4 shadow-sm transition-all hover:shadow-md ${filtroEstado === 'inactiva' ? 'border-gray-500 bg-gray-100 dark:bg-gray-800/60' : 'border-gray-500/20 bg-gray-50/50 dark:bg-gray-800/20'}`}>
@@ -267,7 +267,7 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                             <CreditCard className="h-5 w-5 text-gray-500" />
                         </div>
                         <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-200">{resumen?.cuentas_inactivas ?? cuentas.filter((c) => c.estado === 'inactiva').length}</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{simbolo}{(resumen?.por_estado?.inactiva?.saldo ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} en moneda principal</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{simbolo}: {(resumen?.por_estado?.inactiva?.saldo ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} en moneda principal</p>
                     </div>
                 </div>
 
@@ -286,7 +286,7 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                     <span className={`text-sm font-semibold ${s.text}`}>{s.label}</span>
                                     <Badge variant="outline" className={`${s.text} ${s.border} text-xs`}>{count} cuentas</Badge>
                                 </div>
-                                <p className={`text-2xl font-bold ${s.text}`}>{saldo < 0 ? '-' : ''}{simbolo}{Math.abs(saldo).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                <p className={`text-2xl font-bold ${s.text}`}>{saldo < 0 ? '-' : ''}{simbolo}: {Math.abs(saldo).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                 <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
                                     <div className={`h-full rounded-full transition-all duration-500 ${s.bar}`} style={{ width: `${Math.min(pct, 100)}%` }} />
                                 </div>
@@ -302,7 +302,7 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                             <Badge variant="outline" className={`${tipoStyles.deudas.text} ${tipoStyles.deudas.border} text-xs`}>{infoDeudas.cantidad} cuentas</Badge>
                         </div>
                         <p className={`text-2xl font-bold ${tipoStyles.deudas.text}`}>
-                            {simbolo}{infoDeudas.totalEnPrincipal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {simbolo}: {infoDeudas.totalEnPrincipal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </p>
                         <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
                             <div className={`h-full rounded-full transition-all duration-500 ${tipoStyles.deudas.bar}`}
@@ -327,9 +327,9 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                         <Badge variant="secondary" className="text-xs">{info.cantidad} {info.cantidad === 1 ? 'cuenta' : 'cuentas'}</Badge>
                                     </div>
                                     <p className={`text-xl font-bold ${active ? 'text-violet-900 dark:text-violet-100' : 'text-violet-800 dark:text-violet-200'}`}>
-                                        {info.simbolo}{info.original.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+{info.simbolo}: {info.original.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </p>
-                                    <p className="text-xs text-muted-foreground">Eq. {simbolo}{info.equivalente.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                    <p className="text-xs text-muted-foreground">Eq. {simbolo}: {info.equivalente.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                 </div>
                             );
                         })}
@@ -390,12 +390,12 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                     <span className="text-muted-foreground/30">|</span>
                                     {Object.entries(filtradoPorMoneda).map(([codigo, info]) => (
                                         <span key={codigo}>
-                                            {codigo}: {info.simbolo}{info.original.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            {codigo}: {info.simbolo}: {info.original.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                         </span>
                                     ))}
                                     <span className="text-muted-foreground/30">|</span>
                                     <span className="font-semibold text-foreground">
-                                        Eq. {simbolo}{totalFiltrado.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        Eq. {simbolo}: {totalFiltrado.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </span>
                                 </div>
                             </>
@@ -542,7 +542,7 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                 <TableRow>
                                     <TableCell colSpan={2} className="font-medium">Total de cuentas filtradas</TableCell>
                                     <TableCell className="font-medium">{cuentasFiltradas.length}</TableCell>
-                                    <TableCell colSpan={2} className="font-medium text-right text-emerald-600">{simbolo}{totalFiltrado.toFixed(2)}</TableCell>
+                                    <TableCell colSpan={2} className="font-medium text-right text-emerald-600">{simbolo}: {totalFiltrado.toFixed(2)}</TableCell>
                                     {!isVendedor && <TableCell />}
                                 </TableRow>
                             </TableFooter>
