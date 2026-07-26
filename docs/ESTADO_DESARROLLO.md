@@ -1,7 +1,7 @@
 # Estado del Desarrollo — almacen.tienda
 
 > **Actualizar este archivo cada vez que se resuelva un bug, se complete una feature o aparezca algo nuevo.**
-> Fecha de última actualización: 2026-07-25
+> Fecha de última actualización: 2026-07-26
 
 ---
 
@@ -205,7 +205,8 @@ resources/js/pages/Empleados/Edit.tsx
 ## 🔄 Historial de cambios recientes
 
 | Fecha | Cambio |
-|---|---|
+|---|---|---|
+| 2026-07-26 | **Cuentas Index — Row 3 ahora filtra solo permanentes**: nuevo `por_moneda_perm` en backend. Formato moneda con `": "` en toda la vista (ej. `$: 305.834,63`). Bug detectado: moneda USD (id=1) eliminada de DB — 79 cuentas huérfanas agrupadas como 'N/A'. |
 | 2026-07-26 | **Cuentas Index rediseñado** — 3 filas de widgets interactivos clickeables (KPIs, desglose por tipo con barras, desglose por moneda). Filtros combinados + resumen de saldos por moneda. Deudas detectadas desde `saldo_cuenta < 0`. Bugfixes: filtro "all" roto, opción "Deudas" ausente en dropdown, acciones ocultas en móvil, paginación con páginas duplicadas. Backend: bloque `$resumen` precalculado en `CuentaController@index`. |
 | 2026-07-25 | **F6** — Herramienta detección/fusión de duplicados: 2 modales, normalización unicode capacidad, suma cantidades + promedio precios |
 | 2026-07-15 | `color_producto` añadido a tabla/tooltip en Productos, Movimientos, Compras y todas las vistas donde aparecía el producto |

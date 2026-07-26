@@ -10,7 +10,7 @@
 | Campo | Valor |
 |---|---|
 | Rama activa | `feature/bot-telegram` |
-| Última sesión | 2026-07-26 — **Cuentas Index rediseñado**: 3 filas de widgets interactivos clickeables con filtrado por tipo/moneda/estado/deudas. Deudas computadas desde `saldo_cuenta < 0`. Bugfixes: filtro "all", opción "Deudas" ausente, acciones ocultas en móvil, paginación duplicada. Resumen de filtros con desglose por moneda. Backend: `$resumen` precalculado en `CuentaController@index`. |
+| Última sesión | 2026-07-26 — **Cuentas Index**: Row 3 (Desglose por Moneda) ahora solo filtra cuentas **permanentes** via `por_moneda_perm`. Formato moneda cambiado a `": "` (ej. `$: 305.834,63`). Bug detectado: moneda USD (id=1) eliminada de DB — 79 cuentas huérfanas agrupadas como 'N/A'. |
 | Estado general | 12/12 módulos estables, 5 bugs conocidos, 4 features pendientes |
 | Próximo paso | Probar F6 (detección/fusión duplicados), luego F5 (selector paginación) |
 
