@@ -90,9 +90,9 @@ export default function LogisticaPage({
                                         Capital Financiero
                                     </CardDescription>
                                     <CardTitle className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
-                                        {(resumenCuentas?.total_saldo ?? 0) === 0
+                                        {((resumenCuentas?.total_saldo ?? 0) + (resumenClientes?.balance_neto ?? 0)) === 0
                                             ? '0.00'
-                                            : (resumenCuentas?.total_saldo ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                            : ((resumenCuentas?.total_saldo ?? 0) + (resumenClientes?.balance_neto ?? 0)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                                         }
                                     </CardTitle>
                                 </CardHeader>
