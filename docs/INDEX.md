@@ -10,9 +10,9 @@
 | Campo | Valor |
 |---|---|
 | Rama activa | `feature/bot-telegram` |
-| Última sesión | 2026-07-26 — **Clientes Index**: rediseñado con Row 1 (4 KPIs clickeables + backend $resumen), Row 2 (3 barras de estado con % sobre total), paginación ventana, filtroEstado. **Cuentas Row 2**: barras ahora reflejan % por cantidad de cuentas (no por saldo). |
+| Última sesión | 2026-07-26 — **Logística**: página rediseñada como dashboard de resúmenes con 4 cards informativos (Cuentas, Clientes, Proveedores, Productos). Eliminados widgets placeholder (Productos/Proveedores/Clientes/Categorias con texto en inglés), animaciones (`CountingNumber`, `CursorFollow`), y `ComprasVentasCharts` mock. Backend: `getResumenPorMonedaPerm()` fix (acumulación por codigo_moneda en vez de sobrescritura), `getMonedaPrincipal()` extraído como método reutilizable, `STOCK_BAJO_THRESHOLD=5` como constante. |
 | Estado general | 12/12 módulos estables, 5 bugs conocidos, 4 features pendientes |
-| Próximo paso | — |
+| Próximo paso | Seguir refinando la página de Logística o atender bugs activos |
 
 ### Bugs activos
 
@@ -50,7 +50,7 @@
 | Middlewares | 7 |
 | Notificaciones | 7 (4 encoladas) |
 | Comandos artisan | 4 |
-| Servicios | 2 (`DashboardStatsService`, `NotificationService`) |
+| Servicios | 2 (`DashboardStatsService` — 8+ métodos públicos/privados para resúmenes, `NotificationService`) |
 | Exports/Imports Excel | 3 exports, 2 imports |
 | Roles | `admin` / `moderador` / `vendedor` |
 | Monedas | USD (base), CUP, MLC |
@@ -100,6 +100,11 @@
 |---|---|---|
 | [base-de-datos.md](base-de-datos.md) | Tablas principales, campos clave y relaciones |
 | [backup/](./backup/) | Backups: local (`backup_20260725_*`) y dump remoto importado (`u706356131_gestion.sql`) |
+
+### Logística
+| Documento | Contenido |
+|---|---|
+| [context.md](context.md) | Sección `Página de Logística` y `DashboardStatsService` con detalle de cada método y cards |
 
 ### Productos
 | Documento | Contenido |
@@ -169,7 +174,7 @@ npm run format                   # formatear código con Prettier
 | **Reportes** | `ReporteController.php` (847 L) | — | `Reportes/Report/*` (16 vistas) |
 | **Telegram Bot** | `TelegramWebhookController.php` (497 L) | — | `routes/api.php` (webhook) |
 | **Dashboard** | `AdminController.php` (545 L) | `TasaCambio`, `TasaCambioMLC`, `HistorialTasaCambio` | `dashboard.tsx` |
-| **Logística** | `LogisticaController.php` (25 L) | — (usa `DashboardStatsService`) | `Logistica/*` (7 páginas) |
+| **Logística** | `LogisticaController.php` (25 L) | — (usa `DashboardStatsService`) | `Logistica/Index.tsx` (675 L) — página única tipo dashboard |
 | **Usuarios** | `UserController.php`, `UserAlmacenController.php` | `User`, `UserAlmacen` | `Empleados/*` (4 páginas) |
 
 ---

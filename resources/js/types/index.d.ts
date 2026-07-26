@@ -462,6 +462,7 @@ export interface LogisticaProps {
         valor_stock_bajo: number;
         por_stock: Record<string, { cantidad: number; unidades: number }>;
     } | null;
+
 }
 
 // Interface para Productos por Almacén (Detalles)

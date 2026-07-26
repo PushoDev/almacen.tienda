@@ -297,11 +297,69 @@ Prefijo: `/api/tienda` — sin autenticación, throttle: 60 req/min.
 
 ---
 
+## Página de Logística (`Logistica/Index.tsx`)
+
+La página de Logística es un **dashboard informativo** tipo KPI dashboard con cards de resumen:
+
+### Cards actuales (solo visibles para admin/moderador):
+
+1. **Resumen de Cuentas** — 4 Rows:
+   - **Row 1** (4 KPIs): Total Equivalente (en moneda principal), Total Cuentas, Activas, Inactivas
+   - **Row 2** (3 barras): Permanentes/Temporales (saldo equivalente + % del total + barra), Con Deuda (cuentas con saldo < 0, saldo absoluto)
+   - **Row 3**: Desglose por Moneda (solo cuentas permanentes) con original + equivalente + cantidad
+   - **Row 4**: Desglose por Tipo+Moneda (Efectivo/Tarjeta × moneda)
+
+2. **Resumen de Clientes** — 2 Rows:
+   - **Row 1**: 4 KPIs (Total Clientes, Fondo Total, Deuda Total, Balance Neto)
+   - **Row 2**: 3 barras (Con Fondo / En Deuda / Neutro) con cantidad, saldo, barra % y % sobre total
+
+3. **Resumen de Proveedores** — 2 Rows (misma estructura que Clientes)
+
+4. **Resumen de Productos** — 2 Rows:
+   - **Row 1**: 4 KPIs (Total Productos, Total Unidades, Valor Total (costo), Stock Bajo cantidad + valor)
+   - **Row 2**: 3 barras (Con Stock / Stock Bajo / Sin Stock) con cantidad productos + unidades + barra %
+
+### Cards comunes (visibles a todos los roles):
+- Balances por moneda (cards individuales)
+- Charts inferiores: Gastos Mensuales, Productos Mas Comprados, Compras por Proveedor, Productos por Almacén
+- PlaceholderPatterns al final
+
+### Lo que NO tiene (eliminado):
+- `CountingNumber`, `CursorFollow`/`CursorProvider` (animaciones innecesarias)
+- `ComprasVentasCharts` (mock)
+- 4 widgets placeholder: Productos, Proveedores, Clientes, Categorias (contenido genérico en inglés)
+- Card "Resumen de Inventario a la Venta" (intentado y retirado)
+
+---
+
+## DashboardStatsService
+
+| Método | Propósito | Retorna |
+|---|---|---|
+| `getLogisticaStats(User)` | Punto de entrada: orquesta todas las queries según rol | Array completo de KPIs + resúmenes |
+| `getPeriodKpis(User, periodo)` | KPIs de ventas/compras por período (diario/semanal/mensual) | `ventas` + `compras` (admin) |
+| `getResumenCuentas()` | Datos agregados de todas las cuentas | `total_saldo`, `por_tipo`, `por_moneda_perm`, `por_estado`, `por_tipo_moneda`, `cuentas_con_deuda`, `cuentas_deuda_saldo`, `moneda_principal` |
+| `getResumenClientes()` | Datos agregados de clientes | `total_clientes`, `total_fondo`, `total_deuda`, `balance_neto`, `por_estado` |
+| `getResumenProveedores()` | Datos agregados de proveedores | `total_proveedores`, `total_fondo`, `total_deuda`, `balance_neto`, `por_estado` |
+| `getResumenProductos()` | Datos agregados de productos | `total_productos`, `total_unidades`, `total_importe_global`, `productos_stock_bajo`, `valor_stock_bajo`, `por_stock` |
+| `getResumenPorMonedaPerm()` | Saldo de cuentas permanentes agrupado por moneda | `[codigo => {original, equivalente, cantidad, simbolo}]` |
+| `getMonedaPrincipal()` | Moneda principal del sistema (fallback primera activa, último `$/USD`) | `['simbolo', 'codigo']` |
+| `getBalancesPorMoneda()` | Saldo de todas las monedas activas | `[{codigo, nombre, simbolo, saldo, tasa, principal}]` |
+| Métodos privados auxiliares | `countCategorias()`, `countProductos()`, `sumUnidadesProductos()`, `calculateInversionTotal()`, `countCuentas()`, etc. | KPIs individuales |
+
+### Detalles técnicos clave:
+- `getResumenPorMonedaPerm()` usa **LEFT JOIN** directo a `monedas` y acumula por `codigo_moneda` (fix: CUP con id=2 y id=5 se sumaban, no sobrescribían)
+- `cuentas_deuda_saldo`: suma absoluta del saldo equivalente de cuentas con `saldo_cuenta < 0`
+- `STOCK_BAJO_THRESHOLD = 5`: constante de clase usada en `getResumenProductos()` para clasificar stock bajo
+- `getMonedaPrincipal()`: método reutilizable que busca `principal=true` en monedas, fallback a primera activa, último fallback `['simbolo' => '$', 'codigo' => 'USD']`
+
+---
+
 ## Servicios
 
-| Servicio | Función |
+| Servicio | Funciones Clave |
 |---|---|
-| `DashboardStatsService` | Calcula KPIs de ventas/compras por período (diario, semanal, mensual) |
+| `DashboardStatsService` | `getLogisticaStats()`, `getPeriodKpis()`, `getResumenCuentas()`, `getResumenClientes()`, `getResumenProveedores()`, `getResumenProductos()`, `getResumenPorMonedaPerm()`, `getMonedaPrincipal()`, y todos los KPIs auxiliares (counters, sums, etc.) |
 | `NotificationService` | Determina destinatarios de notificaciones según contexto del movimiento/cierre |
 
 ---
@@ -309,4 +367,4 @@ Prefijo: `/api/tienda` — sin autenticación, throttle: 60 req/min.
 ## Branch Actual
 
 `feature/bot-telegram` — Trabajo activo en integración del bot de Telegram.
-Últimos cambios en Cuentas: Row 3 filtra solo permanentes, formato moneda con `": "`.
+Últimos cambios: **Dashboard Logística** convertido en panel de resúmenes con 4 cards (Cuentas, Clientes, Proveedores, Productos). Eliminados widgets mock y placeholders. Fixes en `getResumenPorMonedaPerm()` (acumulación por codigo_moneda), extracción de `getMonedaPrincipal()`, constante `STOCK_BAJO_THRESHOLD`. Formato moneda consistente con `toLocaleString('es-ES')`.

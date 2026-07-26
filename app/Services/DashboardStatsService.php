@@ -351,14 +351,21 @@ class DashboardStatsService
             ->count('productos.categoria_id');
     }
 
-    private function getResumenCuentas(): array
+    private function getMonedaPrincipal(): array
     {
-        $monedaPrincipal = DB::table('monedas')->where('principal', true)->first();
+        $moneda = DB::table('monedas')->where('principal', true)->first();
 
-        if (!$monedaPrincipal) {
-            $monedaPrincipal = DB::table('monedas')->where('estado', true)->first();
+        if (!$moneda) {
+            $moneda = DB::table('monedas')->where('estado', true)->first();
         }
 
+        return $moneda
+            ? ['simbolo' => $moneda->simbolo_moneda, 'codigo' => $moneda->codigo_moneda]
+            : ['simbolo' => '$', 'codigo' => 'USD'];
+    }
+
+    private function getResumenCuentas(): array
+    {
         $cuentas = DB::table('cuentas')
             ->leftJoin('monedas', 'cuentas.moneda_id', '=', 'monedas.id')
             ->whereIn('cuentas.tipo_cuenta', ['permanentes', 'temporales'])
@@ -426,10 +433,7 @@ class DashboardStatsService
             'cuentas_inactivas' => $conteoEstado['inactiva'] ?? 0,
             'cuentas_con_deuda' => $cuentasConDeuda,
             'cuentas_deuda_saldo' => round($deudaSaldoEquivalente, 2),
-            'moneda_principal' => $monedaPrincipal ? [
-                'simbolo' => $monedaPrincipal->simbolo_moneda,
-                'codigo' => $monedaPrincipal->codigo_moneda,
-            ] : ['simbolo' => '$', 'codigo' => 'USD'],
+            'moneda_principal' => $this->getMonedaPrincipal(),
             'por_tipo' => collect($porTipo)->map(fn ($v) => round($v, 2))->toArray(),
             'conteo_tipo' => $conteoTipo,
             'por_estado' => collect($porEstado)->map(fn ($v, $k) => [
