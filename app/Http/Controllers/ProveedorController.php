@@ -16,8 +16,29 @@ class ProveedorController extends Controller
      */
     public function index()
     {
+        $proveedores = Proveedor::all();
+
+        $totalFondo = $proveedores->where('saldo_proveedor', '>', 0)->sum('saldo_proveedor');
+        $totalDeuda = $proveedores->where('saldo_proveedor', '<', 0)->sum('saldo_proveedor');
+        $conDeuda = $proveedores->where('saldo_proveedor', '<', 0)->count();
+        $conFondo = $proveedores->where('saldo_proveedor', '>', 0)->count();
+        $neutro = $proveedores->filter(fn ($p) => is_null($p->saldo_proveedor) || (float) $p->saldo_proveedor === 0.0)->count();
+
+        $resumen = [
+            'total_proveedores' => $proveedores->count(),
+            'total_fondo' => round((float) $totalFondo, 2),
+            'total_deuda' => round(abs((float) $totalDeuda), 2),
+            'balance_neto' => round((float) $totalFondo + (float) $totalDeuda, 2),
+            'por_estado' => [
+                'fondo' => ['cantidad' => $conFondo, 'saldo' => round((float) $totalFondo, 2)],
+                'deuda' => ['cantidad' => $conDeuda, 'saldo' => round(abs((float) $totalDeuda), 2)],
+                'neutro' => ['cantidad' => $neutro, 'saldo' => 0],
+            ],
+        ];
+
         return Inertia::render('Proveedores/index', [
-            'proveedores' => Proveedor::all(),
+            'proveedores' => $proveedores,
+            'resumen' => $resumen,
         ]);
     }
 

@@ -112,6 +112,14 @@ export interface ProveedorProps {
     updated_at?: string;
 }
 
+export interface ResumenProveedorData {
+    total_proveedores: number;
+    total_fondo: number;
+    total_deuda: number;
+    balance_neto: number;
+    por_estado: Record<string, { cantidad: number; saldo: number }>;
+}
+
 // Interface para Proveedor/Cliente combinado (para el select de compra)
 export interface ProveedorClienteProps {
     id: number;
@@ -226,6 +234,14 @@ export interface ClienteProps {
     ciudad_cliente?: string | null;
     created_at: string;
     updated_at: string;
+}
+
+export interface ResumenClienteData {
+    total_clientes: number;
+    total_fondo: number;
+    total_deuda: number;
+    balance_neto: number;
+    por_estado: Record<string, { cantidad: number; saldo: number }>;
 }
 
 // Otras Interfaces
