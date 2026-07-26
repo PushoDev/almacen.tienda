@@ -215,11 +215,7 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
         </Badge>
     );
 
-    const maxTipo = Math.max(
-        ...TIPOS.map((t) => Math.abs(resumen?.por_tipo?.[t] ?? 0)),
-        infoDeudas.totalEnPrincipal,
-        1
-    );
+    const totalCuentas = cuentas.length;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -276,8 +272,8 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                     {TIPOS.map((tipo) => {
                         const s = tipoStyles[tipo];
                         const saldo = resumen?.por_tipo?.[tipo] ?? 0;
-                        const pct = maxTipo > 0 ? (Math.abs(saldo) / maxTipo) * 100 : 0;
                         const count = cuentas.filter((c) => c.tipo_cuenta === tipo).length;
+                        const pct = totalCuentas > 0 ? (count / totalCuentas) * 100 : 0;
                         const active = filtroTipo === tipo;
                         return (
                             <div key={tipo} onClick={() => toggleTipo(tipo)}
@@ -290,7 +286,7 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                 <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
                                     <div className={`h-full rounded-full transition-all duration-500 ${s.bar}`} style={{ width: `${Math.min(pct, 100)}%` }} />
                                 </div>
-                                <p className="mt-1 text-right text-xs text-muted-foreground">{pct.toFixed(0)}% del mayor tipo</p>
+                                <p className="mt-1 text-right text-xs text-muted-foreground">{pct.toFixed(0)}% del total</p>
                             </div>
                         );
                     })}
@@ -306,10 +302,10 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                         </p>
                         <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
                             <div className={`h-full rounded-full transition-all duration-500 ${tipoStyles.deudas.bar}`}
-                                style={{ width: `${Math.min(maxTipo > 0 ? (infoDeudas.totalEnPrincipal / maxTipo) * 100 : 0, 100)}%` }} />
+                                style={{ width: `${Math.min(totalCuentas > 0 ? (infoDeudas.cantidad / totalCuentas) * 100 : 0, 100)}%` }} />
                         </div>
                         <p className="mt-1 text-right text-xs text-muted-foreground">
-                            {maxTipo > 0 ? ((infoDeudas.totalEnPrincipal / maxTipo) * 100).toFixed(0) : 0}% del mayor tipo
+                            {totalCuentas > 0 ? ((infoDeudas.cantidad / totalCuentas) * 100).toFixed(0) : 0}% del total
                         </p>
                     </div>
                 </div>
