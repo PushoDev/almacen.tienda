@@ -10,9 +10,9 @@
 | Campo | Valor |
 |---|---|
 | Rama activa | `feature/bot-telegram` |
-| Última sesión | 2026-07-25 — Footer productos: importe global, reorganización de celdas. Widget #2 corregido a valor global |
-| Estado general | 12/12 módulos estables, 5 bugs conocidos, 5 features pendientes |
-| Próximo paso | Selector de paginación (10/15/25/50/100) en listado de productos [F5] |
+| Última sesión | 2026-07-25 — Footer: importe global, reorg celdas. Widget #2 valor global. F6 duplicados: 2 modales, agrupación (nombre+marca+modelo+capacidad_normalizada+color), normalización unicode capacidad, fusión con suma cantidades + promedio precios |
+| Estado general | 12/12 módulos estables, 5 bugs conocidos, 4 features pendientes |
+| Próximo paso | Probar F6 (detección/fusión duplicados), luego F5 (selector paginación) |
 
 ### Bugs activos
 
@@ -33,7 +33,7 @@
 | **F3** | Mover config cuenta mensajero de `Almacenes/Edit` a `Empleados/Edit` | Media |
 | **F4** | `ganancia_real_total` muestra 0 en algunos casos — separar cálculo correctamente | Media |
 | **F5** | Selector de paginación (10/15/25/50/100) en listado de productos | Baja |
-| **F6** | Herramienta de detección y fusión de productos duplicados con promedio de precios | Alta |
+| ~~**F6**~~ | ~~Herramienta de detección y fusión de productos duplicados con promedio de precios~~ | ~~Alta~~ ✅ 2026-07-25 |
 
 ---
 
@@ -162,7 +162,7 @@ npm run format                   # formatear código con Prettier
 | **Ventas POS** | `app/Http/Controllers/VentaController.php` (2053 L) | `Venta`, `VentaDetalle`, `PagoVenta`, `DestinatarioVenta` | `Vendor/Index`, `Vendor/Show`, `Vendor/Listado` |
 | **Cierres** | `CierreCajaController.php` (1691 L) | `CierreCaja` | `Cierres/Index`, `Cierres/Create`, `Cierres/Show` |
 | **Compras** | `CompraController.php` (791 L) | `Compra`, `CompraProducto`, `CompraPago` | `Comprar/Index`, `Comprar/Show` |
-| **Productos** | `ProductoController.php` (604 L) | `Producto`, `ProductoCodigo`, `Categoria` | `Productos/Index`, `Productos/Show`, `Productos/Edit` |
+| **Productos** | `ProductoController.php` (807 L) | `Producto`, `ProductoCodigo`, `Categoria` | `Productos/Index`, `Productos/Show`, `Productos/Edit` |
 | **Precios vendedor** | `ProductoVendedorController.php` (421 L) | `ProductoVendedor`, `PrecioHistorial` | `Productos/Vendor/*` (4 páginas) |
 | **Movimientos stock** | `MovimientosController.php` (584 L) | `Movimiento`, `MovimientoDetalle`, `MovimientoSeguimiento` | `Movimientos/Index`, `Movimientos/Show` |
 | **Finanzas** | `TransaccionController.php` (1235 L) | `MovimientoFinanciero`, `Cuenta`, `Moneda`, `TransaccionCuenta` | `Transacciones/*` (7 páginas) |

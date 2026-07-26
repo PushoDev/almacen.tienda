@@ -1,6 +1,7 @@
-# Pendiente: Herramienta de detección y fusión de productos duplicados
+# Herramienta de detección y fusión de productos duplicados — ✅ IMPLEMENTADA
 
 > **Prioridad: Alta** — Herramienta independiente (no afecta la importación) para escanear la BD, detectar productos duplicados y fusionarlos manualmente con promedio de precios.
+> **Implementada el 2026-07-25**
 
 ---
 
@@ -8,29 +9,48 @@
 
 ### `GET /listado-productos/duplicados` — Detectar duplicados
 
-Agrupa productos por `(nombre_producto, marca_producto, modelo_producto)` y devuelve los que tienen `COUNT > 1`.
+Agrupa productos por `(nombre_producto, marca_producto, modelo_producto, capacidad_normalizada, color_producto)` y devuelve los que tienen `COUNT > 1`.
 
-**Nuevo:** Cada grupo incluye `campos_variables` — lista de campos que difieren entre los productos del grupo (excluyendo `color` y `precio_compra`), con los valores únicos encontrados.
+**Normalización de capacidad:** Se limpian los caracteres unicode `U+00B4 (´)` y `U+00A8 (¨)` y `"` mediante `REPLACE(capacidad_producto, UNHEX('C2B4'), '')` y `UNHEX('C2A8')` en SQL. Así `26"`, `26´´`, `26¨` se normalizan a `26` y se agrupan juntos, pero `16"` y `20"` quedan en grupos distintos.
+
+Cada grupo incluye `campos_variables` — lista de campos que difieren entre los productos del grupo (excluyendo `color` y `precio_compra`), con los valores únicos encontrados y un `valor_sugerido` (el más frecuente).
 
 Respuesta:
 ```json
 {
   "success": true,
-  "total_grupos": 12,
+  "total_grupos": 2,
   "grupos": [
     {
-      "clave": "BICICLETA REYAN NIAGARA HOMBRE",
-      "cantidad_total": 26,
+      "clave": "BICICLETA REYAN NIAGARA HOMBRE (26)",
+      "cantidad_total": 15,
       "precio_promedio": 151.50,
       "productos": [...],
       "campos_variables": [
-        { "campo": "capacidad_producto", "valores": ["26\"", "26´´", "26¨"] },
-        { "campo": "categoria", "valores": ["TRANSPORTE", "TRASPORTE"] }
+        { "campo": "capacidad", "valores": ["26\"", "26´´", "26¨"], "valor_sugerido": "26\"" },
+        { "campo": "categoria_id", "valores": [5, 6], "valor_sugerido": 5 }
       ]
     }
   ]
 }
 ```
+
+### `POST /listado-productos/normalizar-duplicados` — Solo normalizar
+
+Request:
+```json
+{
+  "productos_ids": [501, 530, 553],
+  "valores_canonicos": {
+    "capacidad_producto": "26\"",
+    "categoria_id": 5
+  }
+}
+```
+
+Lógica:
+1. Actualizar `valores_canonicos` en TODOS los productos indicados
+2. Todo dentro de `DB::transaction()`
 
 ### `POST /listado-productos/fusionar-duplicados` — Normalizar y Fusionar
 
