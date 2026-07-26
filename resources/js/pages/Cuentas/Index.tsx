@@ -82,7 +82,7 @@ interface ResumenData {
     cuentas_inactivas: number;
 }
 
-const TIPOS = ['permanentes', 'temporales', 'deudas'] as const;
+const TIPOS = ['permanentes', 'temporales'] as const;
 const tipoStyles: Record<string, { label: string; bg: string; text: string; border: string; bar: string }> = {
     permanentes: { label: 'Permanentes', bg: 'bg-emerald-50 dark:bg-emerald-950/20', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-800', bar: 'bg-emerald-500' },
     temporales: { label: 'Temporales', bg: 'bg-amber-50 dark:bg-amber-950/20', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-200 dark:border-amber-800', bar: 'bg-amber-500' },
@@ -106,6 +106,7 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
     const [filtroTipo, setFiltroTipo] = useState('');
     const [filtroMoneda, setFiltroMoneda] = useState('');
     const [filtroEstado, setFiltroEstado] = useState('');
+    const [filtroDeudas, setFiltroDeudas] = useState(false);
     const [busqueda, setBusqueda] = useState('');
     const [paginaActual, setPaginaActual] = useState(1);
 
@@ -113,6 +114,7 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
         setFiltroTipo('');
         setFiltroMoneda('');
         setFiltroEstado('');
+        setFiltroDeudas(false);
         setBusqueda('');
         setPaginaActual(1);
     };
@@ -129,18 +131,23 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
         setFiltroMoneda((p) => (p === v ? '' : v));
         setPaginaActual(1);
     };
+    const toggleDeudas = () => {
+        setFiltroDeudas((p) => !p);
+        setPaginaActual(1);
+    };
 
     const cuentasFiltradas = useMemo(() => {
         return cuentas.filter((c) => {
             const tipoOk = !filtroTipo || c.tipo_cuenta === filtroTipo;
             const monOk = !filtroMoneda || c.moneda?.codigo_moneda === filtroMoneda;
             const estOk = !filtroEstado || c.estado === filtroEstado;
+            const deudasOk = !filtroDeudas || (c.saldo_cuenta ?? 0) < 0;
             const busqOk = !busqueda
                 || c.nombre_cuenta.toLowerCase().includes(busqueda.toLowerCase())
                 || c.moneda?.codigo_moneda.toLowerCase().includes(busqueda.toLowerCase());
-            return tipoOk && monOk && estOk && busqOk;
+            return tipoOk && monOk && estOk && deudasOk && busqOk;
         });
-    }, [cuentas, filtroTipo, filtroMoneda, filtroEstado, busqueda]);
+    }, [cuentas, filtroTipo, filtroMoneda, filtroEstado, filtroDeudas, busqueda]);
 
     const elementosPorPagina = 10;
     const totalPaginas = Math.ceil(cuentasFiltradas.length / elementosPorPagina);
@@ -161,7 +168,20 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
         }, 0);
     }, [cuentasFiltradas]);
 
-    const hasFilters = !!(filtroTipo || filtroMoneda || filtroEstado || busqueda);
+    const infoDeudas = useMemo(() => {
+        let total = 0;
+        let cantidad = 0;
+        cuentas.forEach((c) => {
+            if ((c.saldo_cuenta ?? 0) < 0) {
+                const tasa = c.moneda?.tasa_cambio || 1;
+                total += tasa > 0 ? (c.saldo_cuenta ?? 0) / tasa : 0;
+                cantidad++;
+            }
+        });
+        return { totalEnPrincipal: Math.abs(total), cantidad };
+    }, [cuentas]);
+
+    const hasFilters = !!(filtroTipo || filtroMoneda || filtroEstado || filtroDeudas || busqueda);
 
     const paginas = useMemo((): (number | 'ellipsis')[] => {
         if (totalPaginas <= 7) return Array.from({ length: totalPaginas }, (_, i) => i + 1);
@@ -181,7 +201,11 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
         </Badge>
     );
 
-    const maxTipo = Math.max(...TIPOS.map((t) => Math.abs(resumen?.por_tipo?.[t] ?? 0)), 1);
+    const maxTipo = Math.max(
+        ...TIPOS.map((t) => Math.abs(resumen?.por_tipo?.[t] ?? 0)),
+        infoDeudas.totalEnPrincipal,
+        1
+    );
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -256,6 +280,24 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                             </div>
                         );
                     })}
+                    {/* Deudas card - computada desde saldo negativo */}
+                    <div onClick={toggleDeudas}
+                        className={`cursor-pointer rounded-lg border p-4 shadow-sm transition-all hover:shadow-md ${tipoStyles.deudas.border} ${tipoStyles.deudas.bg} ${filtroDeudas ? 'ring-2 ring-offset-1 ring-current' : ''}`}>
+                        <div className="mb-2 flex items-center justify-between">
+                            <span className={`text-sm font-semibold ${tipoStyles.deudas.text}`}>Deudas</span>
+                            <Badge variant="outline" className={`${tipoStyles.deudas.text} ${tipoStyles.deudas.border} text-xs`}>{infoDeudas.cantidad} cuentas</Badge>
+                        </div>
+                        <p className={`text-2xl font-bold ${tipoStyles.deudas.text}`}>
+                            {simbolo}{infoDeudas.totalEnPrincipal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+                            <div className={`h-full rounded-full transition-all duration-500 ${tipoStyles.deudas.bar}`}
+                                style={{ width: `${Math.min(maxTipo > 0 ? (infoDeudas.totalEnPrincipal / maxTipo) * 100 : 0, 100)}%` }} />
+                        </div>
+                        <p className="mt-1 text-right text-xs text-muted-foreground">
+                            {maxTipo > 0 ? ((infoDeudas.totalEnPrincipal / maxTipo) * 100).toFixed(0) : 0}% del mayor tipo
+                        </p>
+                    </div>
                 </div>
 
                 {/* Row 3: Desglose por Moneda */}
@@ -300,7 +342,6 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                         <SelectItem value="all">Todos los tipos</SelectItem>
                                         <SelectItem value="permanentes">Permanentes</SelectItem>
                                         <SelectItem value="temporales">Temporales</SelectItem>
-                                        <SelectItem value="deudas">Deudas</SelectItem>
                                     </SelectContent>
                                 </Select>
                                 <Select value={filtroMoneda || 'all'} onValueChange={(v) => { setFiltroMoneda(v === 'all' ? '' : v); setPaginaActual(1); }}>
@@ -325,6 +366,7 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                 {filtroTipo && <FilterBadge label={`Tipo: ${tipoStyles[filtroTipo]?.label || filtroTipo}`} onClear={() => setFiltroTipo('')} />}
                                 {filtroMoneda && <FilterBadge label={`Moneda: ${filtroMoneda}`} onClear={() => setFiltroMoneda('')} />}
                                 {filtroEstado && <FilterBadge label={`Estado: ${filtroEstado}`} onClear={() => setFiltroEstado('')} />}
+                                {filtroDeudas && <FilterBadge label="Deudas" onClear={() => setFiltroDeudas(false)} />}
                                 {busqueda && <FilterBadge label={`Buscar: "${busqueda}"`} onClear={() => setBusqueda('')} />}
                                 <Button variant="ghost" size="sm" onClick={limpiarFiltros} className="h-7 text-xs">Limpiar todos</Button>
                             </div>
