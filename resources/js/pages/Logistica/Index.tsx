@@ -107,7 +107,10 @@ export default function LogisticaPage({
                                         Capital USD
                                     </CardDescription>
                                     <CardTitle className="text-3xl font-bold text-amber-600 dark:text-amber-400 tabular-nums">
-                                        850,000.00
+                                        {((resumenClientes?.balance_neto ?? 0) + (resumenProveedores?.balance_neto ?? 0) + (resumenProductos?.total_importe_global ?? 0) + (resumenCuentas?.por_tipo?.['temporales'] ?? 0) + (resumenCuentas?.por_moneda_perm?.['USD']?.equivalente ?? 0)) === 0
+                                            ? '0.00'
+                                            : ((resumenClientes?.balance_neto ?? 0) + (resumenProveedores?.balance_neto ?? 0) + (resumenProductos?.total_importe_global ?? 0) + (resumenCuentas?.por_tipo?.['temporales'] ?? 0) + (resumenCuentas?.por_moneda_perm?.['USD']?.equivalente ?? 0)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                        }
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent>
