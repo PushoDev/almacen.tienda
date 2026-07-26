@@ -17,8 +17,27 @@ class ClienteController extends Controller
     {
         $clientes = Cliente::all();
 
+        $totalFondo = $clientes->where('deuda_pago_cliente', '>', 0)->sum('deuda_pago_cliente');
+        $totalDeuda = $clientes->where('deuda_pago_cliente', '<', 0)->sum('deuda_pago_cliente');
+        $conDeuda = $clientes->where('deuda_pago_cliente', '<', 0)->count();
+        $conFondo = $clientes->where('deuda_pago_cliente', '>', 0)->count();
+        $neutro = $clientes->filter(fn ($c) => is_null($c->deuda_pago_cliente) || (float) $c->deuda_pago_cliente === 0.0)->count();
+
+        $resumen = [
+            'total_clientes' => $clientes->count(),
+            'total_fondo' => round((float) $totalFondo, 2),
+            'total_deuda' => round(abs((float) $totalDeuda), 2),
+            'balance_neto' => round((float) $totalFondo + (float) $totalDeuda, 2),
+            'por_estado' => [
+                'fondo' => ['cantidad' => $conFondo, 'saldo' => round((float) $totalFondo, 2)],
+                'deuda' => ['cantidad' => $conDeuda, 'saldo' => round(abs((float) $totalDeuda), 2)],
+                'neutro' => ['cantidad' => $neutro, 'saldo' => 0],
+            ],
+        ];
+
         return Inertia::render('Clientes/Index', [
             'clientes' => $clientes,
+            'resumen' => $resumen,
         ]);
     }
 

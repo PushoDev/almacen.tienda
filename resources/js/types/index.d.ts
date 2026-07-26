@@ -236,6 +236,14 @@ export interface ClienteProps {
     updated_at: string;
 }
 
+export interface ResumenClienteData {
+    total_clientes: number;
+    total_fondo: number;
+    total_deuda: number;
+    balance_neto: number;
+    por_estado: Record<string, { cantidad: number; saldo: number }>;
+}
+
 // Otras Interfaces
 // Interface para el formulario de Comprar Productos
 export interface ProductoComprarProps {

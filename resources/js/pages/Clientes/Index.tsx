@@ -28,7 +28,7 @@ import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
-import { ClienteProps, type BreadcrumbItem, type PageProps } from '@/types';
+import { ClienteProps, ResumenClienteData, type BreadcrumbItem, type PageProps } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     AlertCircle,
@@ -38,6 +38,7 @@ import {
     Edit3,
     Eye,
     FileText,
+    Filter,
     HandHeart,
     Home,
     Lock,
@@ -52,6 +53,7 @@ import {
     User,
     UserRoundPlus,
     Users,
+    X,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast, Toaster } from 'sonner';
@@ -67,7 +69,14 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function ClientesPage({ clientes }: { clientes: ClienteProps[] }) {
+const ESTADOS = ['fondo', 'deuda', 'neutro'] as const;
+const estadoStyles: Record<string, { label: string; bg: string; text: string; border: string; bar: string; icon: React.ElementType }> = {
+    fondo: { label: 'Con Fondo', bg: 'bg-emerald-50 dark:bg-emerald-950/20', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-800', bar: 'bg-emerald-500', icon: TrendingUp },
+    deuda: { label: 'En Deuda', bg: 'bg-red-50 dark:bg-red-950/20', text: 'text-red-700 dark:text-red-300', border: 'border-red-200 dark:border-red-800', bar: 'bg-red-500', icon: TrendingDown },
+    neutro: { label: 'Neutro', bg: 'bg-gray-50 dark:bg-gray-800/40', text: 'text-gray-600 dark:text-gray-400', border: 'border-gray-200 dark:border-gray-700', bar: 'bg-gray-400', icon: CheckCircle },
+};
+
+export default function ClientesPage({ clientes, resumen }: { clientes: ClienteProps[]; resumen: ResumenClienteData }) {
     const { props } = usePage<PageProps>();
     const isAdmin = props.auth?.user?.role === 'admin';
 
@@ -131,32 +140,23 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
     // Estados para filtros y búsqueda
     const [filtroTipo, setFiltroTipo] = useState<string>('');
     const [busqueda, setBusqueda] = useState<string>('');
+    const [filtroEstado, setFiltroEstado] = useState<string | null>(null);
     const [paginaActual, setPaginaActual] = useState(1);
     const elementosPorPagina = 10;
 
-    const metricas = useMemo(() => {
-        const totalClientes = clientes.length;
-        const clientesFisicos = clientes.filter((c) => c.tipo_cliente === 'fisico').length;
-        const clientesAsociados = clientes.filter((c) => c.tipo_cliente === 'asociado').length;
+    const hasFilters = filtroTipo !== '' || busqueda !== '' || filtroEstado !== null;
 
-        const fondoTotal = clientes.reduce((sum, cliente) => {
-            const saldo = Number(cliente.deuda_pago_cliente);
-            return sum + (saldo > 0 ? saldo : 0);
-        }, 0);
+    const limpiarFiltros = () => {
+        setFiltroTipo('');
+        setBusqueda('');
+        setFiltroEstado(null);
+        setPaginaActual(1);
+    };
 
-        const deudaTotal = clientes.reduce((sum, cliente) => {
-            const saldo = Number(cliente.deuda_pago_cliente);
-            return sum + (saldo < 0 ? Math.abs(saldo) : 0);
-        }, 0);
-
-        return {
-            totalClientes,
-            clientesFisicos,
-            clientesAsociados,
-            fondoTotal,
-            deudaTotal,
-        };
-    }, [clientes]);
+    const toggleEstado = (estado: string | null) => {
+        setFiltroEstado((prev) => (prev === estado ? null : estado));
+        setPaginaActual(1);
+    };
 
     const clientesFiltrados = useMemo(() => {
         return clientes.filter((cliente) => {
@@ -167,14 +167,33 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                 cliente.telefono_cliente?.toLowerCase().includes(busqueda.toLowerCase()) ||
                 cliente.ciudad_cliente?.toLowerCase().includes(busqueda.toLowerCase());
 
-            return coincideTipo && coincideBusqueda;
-        });
-    }, [clientes, filtroTipo, busqueda]);
+            let coincideEstado = true;
+            if (filtroEstado === 'fondo') coincideEstado = (cliente.deuda_pago_cliente ?? 0) > 0;
+            else if (filtroEstado === 'deuda') coincideEstado = (cliente.deuda_pago_cliente ?? 0) < 0;
+            else if (filtroEstado === 'neutro') coincideEstado = (cliente.deuda_pago_cliente ?? 0) === 0;
 
-    const indiceUltimoElemento = paginaActual * elementosPorPagina;
-    const indicePrimerElemento = indiceUltimoElemento - elementosPorPagina;
-    const clientesAmostrar = clientesFiltrados.slice(indicePrimerElemento, indiceUltimoElemento);
+            return coincideTipo && coincideBusqueda && coincideEstado;
+        });
+    }, [clientes, filtroTipo, busqueda, filtroEstado]);
+
+    // Paginación con ventana
     const totalPaginas = Math.ceil(clientesFiltrados.length / elementosPorPagina);
+    const paginas = useMemo(() => {
+        const arr: (number | string)[] = [];
+        const delta = 2;
+        const izquierda = Math.max(1, paginaActual - delta);
+        const derecha = Math.min(totalPaginas, paginaActual + delta);
+        if (izquierda > 1) arr.push(1);
+        if (izquierda > 2) arr.push('...');
+        for (let i = izquierda; i <= derecha; i++) arr.push(i);
+        if (derecha < totalPaginas - 1) arr.push('...');
+        if (derecha < totalPaginas) arr.push(totalPaginas);
+        return arr;
+    }, [paginaActual, totalPaginas]);
+    const clientesAmostrar = useMemo(
+        () => clientesFiltrados.slice(0, paginaActual * elementosPorPagina),
+        [clientesFiltrados, paginaActual]
+    ).slice(-elementosPorPagina);
 
     const getEstadoFinanciero = (saldo: number | null) => {
         if (saldo === null || saldo === undefined) {
@@ -229,40 +248,47 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                         />
                     </div>
 
-                    {/* Widgets de Métricas */}
+                    {/* Row 1 — KPIs clickeables */}
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-                        <Card className="relative overflow-hidden">
+                        <Card
+                            className="relative cursor-pointer overflow-hidden transition-shadow hover:shadow-lg"
+                            onClick={limpiarFiltros}
+                        >
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                 <CardTitle className="text-sm font-medium">Total Clientes</CardTitle>
                                 <Users className="text-muted-foreground h-4 w-4" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold">{metricas.totalClientes}</div>
-                                <p className="text-muted-foreground text-xs">
-                                    {metricas.clientesFisicos} físicos • {metricas.clientesAsociados} asociados
-                                </p>
+                                <div className="text-2xl font-bold">{resumen.total_clientes}</div>
+                                <p className="text-muted-foreground text-xs">Clientes registrados</p>
                             </CardContent>
                         </Card>
 
-                        <Card className="relative overflow-hidden">
+                        <Card
+                            className="relative cursor-pointer overflow-hidden transition-shadow hover:shadow-lg"
+                            onClick={() => toggleEstado('fondo')}
+                        >
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                 <CardTitle className="text-sm font-medium">Fondo Total</CardTitle>
                                 <TrendingUp className="h-4 w-4 text-green-500" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold text-green-600">{formatearMoneda(metricas.fondoTotal)}</div>
-                                <p className="text-muted-foreground text-xs">Fondos disponibles con clientes</p>
+                                <div className="text-2xl font-bold text-green-600">{formatearMoneda(resumen.total_fondo)}</div>
+                                <p className="text-muted-foreground text-xs">Saldo a favor empresa</p>
                             </CardContent>
                         </Card>
 
-                        <Card className="relative overflow-hidden">
+                        <Card
+                            className="relative cursor-pointer overflow-hidden transition-shadow hover:shadow-lg"
+                            onClick={() => toggleEstado('deuda')}
+                        >
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                 <CardTitle className="text-sm font-medium">Deuda Total</CardTitle>
                                 <TrendingDown className="h-4 w-4 text-red-500" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold text-red-600">{formatearMoneda(metricas.deudaTotal)}</div>
-                                <p className="text-muted-foreground text-xs">Deudas pendientes con clientes</p>
+                                <div className="text-2xl font-bold text-red-600">{formatearMoneda(resumen.total_deuda)}</div>
+                                <p className="text-muted-foreground text-xs">Deuda pendiente</p>
                             </CardContent>
                         </Card>
 
@@ -274,24 +300,59 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                             <CardContent>
                                 <div
                                     className={`text-2xl font-bold ${
-                                        metricas.fondoTotal > metricas.deudaTotal
-                                            ? 'text-green-600'
-                                            : metricas.deudaTotal > metricas.fondoTotal
-                                              ? 'text-red-600'
-                                              : 'text-gray-600'
+                                        resumen.balance_neto >= 0 ? 'text-green-600' : 'text-red-600'
                                     }`}
                                 >
-                                    {formatearMoneda(metricas.fondoTotal - metricas.deudaTotal)}
+                                    {formatearMoneda(resumen.balance_neto)}
                                 </div>
                                 <p className="text-muted-foreground text-xs">
-                                    {metricas.fondoTotal > metricas.deudaTotal
-                                        ? 'A favor empresa'
-                                        : metricas.deudaTotal > metricas.fondoTotal
-                                          ? 'A favor clientes'
-                                          : 'Equilibrado'}
+                                    {resumen.balance_neto >= 0 ? 'A favor empresa' : 'A favor clientes'}
                                 </p>
                             </CardContent>
                         </Card>
+                    </div>
+
+                    {/* Row 2 — Barras de estado */}
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                        {ESTADOS.map((estado) => {
+                            const data = resumen.por_estado[estado];
+                            const total = resumen.total_clientes;
+                            const pct = total > 0 ? ((data.cantidad / total) * 100).toFixed(0) : '0';
+                            const st = estadoStyles[estado];
+                            const Icon = st.icon;
+                            const activo = filtroEstado === estado;
+                            return (
+                                <Card
+                                    key={estado}
+                                    className={`relative cursor-pointer overflow-hidden transition-all hover:shadow-lg ${st.border} ${st.bg} ${activo ? 'ring-2 ring-offset-1 ring-current' : ''}`}
+                                    onClick={() => toggleEstado(estado)}
+                                >
+                                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                        <CardTitle className="text-sm font-medium">{st.label}</CardTitle>
+                                        <Badge variant="outline" className={`${st.text} ${st.border} text-xs`}>
+                                            {data.cantidad} {data.cantidad === 1 ? 'cliente' : 'clientes'}
+                                        </Badge>
+                                    </CardHeader>
+                                    <CardContent className="space-y-3">
+                                        <p className={`text-2xl font-bold ${st.text}`}>
+                                            {formatearMoneda(data.saldo)}
+                                        </p>
+                                        <div className="flex items-center gap-3">
+                                            <Icon size={16} className={st.text} />
+                                            <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+                                                <div
+                                                    className={`h-full rounded-full transition-all duration-500 ${st.bar}`}
+                                                    style={{ width: `${Math.min(Number(pct), 100)}%` }}
+                                                />
+                                            </div>
+                                            <span className="text-xs font-medium tabular-nums text-muted-foreground">
+                                                {pct}%
+                                            </span>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            );
+                        })}
                     </div>
 
                     <Separator />
@@ -313,6 +374,28 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                             className="pl-10"
                                         />
                                     </div>
+
+                                    {hasFilters && (
+                                        <div className="flex items-center gap-2">
+                                            <Badge variant="secondary" className="h-9 gap-1 px-3 text-sm">
+                                                <Filter size={14} />
+                                                {filtroEstado
+                                                    ? `${filtroEstado === 'fondo' ? 'Con Fondo' : filtroEstado === 'deuda' ? 'En Deuda' : 'Neutro'}`
+                                                    : filtroTipo
+                                                      ? `Tipo: ${filtroTipo}`
+                                                      : 'Buscando...'}
+                                            </Badge>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={limpiarFiltros}
+                                                className="h-9 cursor-pointer"
+                                            >
+                                                <X size={14} className="mr-1" />
+                                                Limpiar filtro
+                                            </Button>
+                                        </div>
+                                    )}
 
                                     <Tooltip>
                                         <TooltipTrigger asChild>
@@ -378,15 +461,20 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                         </CardContent>
                     </Card>
 
-                    {/* Tabla de Clientes */}
+                     {/* Tabla de Clientes */}
                     <Card>
                         <CardHeader>
                             <CardTitle>Lista de Clientes</CardTitle>
                             <CardDescription>
                                 {clientesFiltrados.length} cliente{clientesFiltrados.length !== 1 ? 's' : ''} encontrado
                                 {clientesFiltrados.length !== 1 ? 's' : ''}
-                                {busqueda && ` para "${busqueda}"`}
-                                {filtroTipo && ` (tipo: ${filtroTipo === 'asociado' ? 'asociado' : 'físico'})`}
+                                {hasFilters && (
+                                    <>
+                                        {filtroEstado && ` (${filtroEstado === 'fondo' ? 'Con Fondo' : filtroEstado === 'deuda' ? 'En Deuda' : 'Neutro'})`}
+                                        {busqueda && ` para "${busqueda}"`}
+                                        {filtroTipo && ` — tipo: ${filtroTipo}`}
+                                    </>
+                                )}
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -602,12 +690,13 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                 </Table>
                             </ScrollArea>
 
-                            {/* Paginación */}
+                            {/* Paginación con ventana */}
                             {totalPaginas > 1 && (
                                 <div className="flex items-center justify-between">
                                     <div className="text-muted-foreground text-sm">
-                                        {(paginaActual - 1) * elementosPorPagina + 1} -{' '}
-                                        {Math.min(paginaActual * elementosPorPagina, clientesFiltrados.length)} de {clientesFiltrados.length} clientes
+                                        {clientesFiltrados.length > 0
+                                            ? `${(paginaActual - 1) * elementosPorPagina + 1} - ${Math.min(paginaActual * elementosPorPagina, clientesFiltrados.length)} de ${clientesFiltrados.length}`
+                                            : '0 resultados'}
                                     </div>
                                     <Pagination>
                                         <PaginationContent>
@@ -617,21 +706,22 @@ export default function ClientesPage({ clientes }: { clientes: ClienteProps[] })
                                                     className={paginaActual === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
                                                 />
                                             </PaginationItem>
-                                            {Array.from({ length: totalPaginas }, (_, i) => i + 1).map((pagina) => (
-                                                <PaginationItem key={pagina}>
-                                                    <PaginationLink
-                                                        isActive={paginaActual === pagina}
-                                                        onClick={() => setPaginaActual(pagina)}
-                                                        className="cursor-pointer"
-                                                    >
-                                                        {pagina}
-                                                    </PaginationLink>
-                                                </PaginationItem>
-                                            ))}
-                                            {totalPaginas > 5 && paginaActual < totalPaginas - 2 && (
-                                                <PaginationItem>
-                                                    <PaginationEllipsis />
-                                                </PaginationItem>
+                                            {paginas.map((pagina, idx) =>
+                                                typeof pagina === 'string' ? (
+                                                    <PaginationItem key={`ellipsis-${idx}`}>
+                                                        <PaginationEllipsis />
+                                                    </PaginationItem>
+                                                ) : (
+                                                    <PaginationItem key={pagina}>
+                                                        <PaginationLink
+                                                            isActive={paginaActual === pagina}
+                                                            onClick={() => setPaginaActual(pagina)}
+                                                            className="cursor-pointer"
+                                                        >
+                                                            {pagina}
+                                                        </PaginationLink>
+                                                    </PaginationItem>
+                                                )
                                             )}
                                             <PaginationItem>
                                                 <PaginationNext
