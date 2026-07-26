@@ -432,6 +432,7 @@ export interface LogisticaProps {
         conteo_tipo: Record<string, number>;
         por_estado: Record<string, { saldo: number; cantidad: number }>;
         por_moneda_perm: Record<string, { original: number; equivalente: number; cantidad: number; simbolo: string }>;
+        por_tipo_moneda: Record<string, Record<string, { original: number; equivalente: number; cantidad: number; simbolo: string }>>;
     } | null;
 
     // Resumen de Clientes

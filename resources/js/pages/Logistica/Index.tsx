@@ -248,6 +248,51 @@ export default function LogisticaPage({
                                         </div>
                                     </>
                                 )}
+
+                                {/* Row 4: Desglose por Tipo + Moneda (Efectivo / Tarjeta) */}
+                                {resumenCuentas.por_tipo_moneda && Object.keys(resumenCuentas.por_tipo_moneda).length > 0 && (
+                                    <>
+                                        <Separator />
+                                        <div>
+                                            <h4 className="mb-3 text-sm font-medium text-muted-foreground">Desglose por Tipo de Cuenta y Moneda</h4>
+                                            <div className="grid gap-6 md:grid-cols-2">
+                                                {(['efectivo', 'tarjeta'] as const).map((tipo) => {
+                                                    const monedas = resumenCuentas.por_tipo_moneda[tipo];
+                                                    if (!monedas || Object.keys(monedas).length === 0) return null;
+                                                    const tipoStyles = tipo === 'efectivo'
+                                                        ? { bg: 'bg-emerald-50 dark:bg-emerald-950/20', border: 'border-emerald-200 dark:border-emerald-800', text: 'text-emerald-700 dark:text-emerald-300', icon: '💰' }
+                                                        : { bg: 'bg-blue-50 dark:bg-blue-950/20', border: 'border-blue-200 dark:border-blue-800', text: 'text-blue-700 dark:text-blue-300', icon: '💳' };
+                                                    return (
+                                                        <div key={tipo} className={`rounded-lg border p-4 ${tipoStyles.border} ${tipoStyles.bg}`}>
+                                                            <div className="mb-3 flex items-center gap-2">
+                                                                <span className="text-lg">{tipoStyles.icon}</span>
+                                                                <span className={`text-sm font-semibold uppercase ${tipoStyles.text}`}>{tipo}</span>
+                                                            </div>
+                                                            <div className="space-y-2">
+                                                                {Object.entries(monedas).map(([codigo, info]) => (
+                                                                    <div key={codigo} className="flex items-center justify-between rounded-md bg-white/60 p-3 dark:bg-gray-800/40">
+                                                                        <div className="flex flex-col">
+                                                                            <span className="text-xs font-medium text-muted-foreground">{codigo}</span>
+                                                                            <span className="text-sm font-semibold">
+                                                                                {info.simbolo}: {info.original.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                                            </span>
+                                                                        </div>
+                                                                        <div className="text-right">
+                                                                            <Badge variant="outline" className="text-xs">{info.cantidad} {info.cantidad === 1 ? 'cuenta' : 'cuentas'}</Badge>
+                                                                            <p className="mt-0.5 text-xs text-muted-foreground">
+                                                                                Eq. {info.equivalente.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
                             </CardContent>
                         </Card>
                     )}

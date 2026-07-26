@@ -372,6 +372,7 @@ class DashboardStatsService
         $conteoEstado = [];
         $cuentasConDeuda = 0;
         $deudaSaldoEquivalente = 0;
+        $porTipoMoneda = [];
 
         foreach ($cuentas as $c) {
             $tasa = $c->tasa_cambio ?? 1;
@@ -393,6 +394,24 @@ class DashboardStatsService
                 $cuentasConDeuda++;
                 $deudaSaldoEquivalente += abs($equiv);
             }
+
+            $tipoCuenta = $c->tipo ?? 'otro';
+            $codigoMoneda = $c->codigo_moneda ?? 'N/A';
+            $simboloMoneda = $c->simbolo_moneda ?? '$';
+            if (!isset($porTipoMoneda[$tipoCuenta])) {
+                $porTipoMoneda[$tipoCuenta] = [];
+            }
+            if (!isset($porTipoMoneda[$tipoCuenta][$codigoMoneda])) {
+                $porTipoMoneda[$tipoCuenta][$codigoMoneda] = [
+                    'original' => 0,
+                    'equivalente' => 0,
+                    'cantidad' => 0,
+                    'simbolo' => $simboloMoneda,
+                ];
+            }
+            $porTipoMoneda[$tipoCuenta][$codigoMoneda]['original'] += (float) ($c->saldo_cuenta ?? 0);
+            $porTipoMoneda[$tipoCuenta][$codigoMoneda]['equivalente'] += $equiv;
+            $porTipoMoneda[$tipoCuenta][$codigoMoneda]['cantidad']++;
         }
 
         return [
@@ -413,6 +432,14 @@ class DashboardStatsService
                 'cantidad' => $conteoEstado[$k] ?? 0,
             ])->toArray(),
             'por_moneda_perm' => $this->getResumenPorMonedaPerm(),
+            'por_tipo_moneda' => collect($porTipoMoneda)->map(fn ($monedas) => 
+                collect($monedas)->map(fn ($v) => [
+                    'original' => round($v['original'], 2),
+                    'equivalente' => round($v['equivalente'], 2),
+                    'cantidad' => $v['cantidad'],
+                    'simbolo' => $v['simbolo'],
+                ])->toArray()
+            )->toArray(),
         ];
     }
 
