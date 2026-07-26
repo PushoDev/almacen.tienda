@@ -105,6 +105,14 @@ cancelada           → stock devuelto
 - Moneda vinculada via `moneda_id`.
 - Vendedores solo ven sus cuentas asignadas (tabla `user_cuentas`).
 - Modificar saldo requiere rol admin + contraseña de seguridad hardcoded (`glorietashop`).
+- **Index rediseñado** (`resources/js/pages/Cuentas/Index.tsx`):
+  - 3 filas de widgets interactivos: KPIs (total eq., activas/inactivas), desglose por tipo con barras de porcentaje, desglose por moneda.
+  - Todos los widgets son clickeables y filtran la tabla al hacer clic.
+  - Filtro combinado: tipo + moneda + estado + deudas (por saldo negativo) + búsqueda.
+  - Resumen de filtros activos con badges removibles y línea de totales por moneda.
+  - Paginación con ventana de páginas.
+- **Backend** (`CuentaController@index`): precalcula `$resumen` (por_tipo, por_moneda, por_estado, total_saldo) y lo pasa a la vista Inertia.
+- **Deudas**: detectadas desde `saldo_cuenta < 0` (no desde `tipo_cuenta = 'deudas'`, que aún no está en uso).
 
 ### Moneda (`monedas`)
 - `codigo_moneda`: ej. `USD`, `CUP`, `MLC`.

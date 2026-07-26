@@ -206,6 +206,7 @@ resources/js/pages/Empleados/Edit.tsx
 
 | Fecha | Cambio |
 |---|---|
+| 2026-07-26 | **Cuentas Index rediseñado** — 3 filas de widgets interactivos clickeables (KPIs, desglose por tipo con barras, desglose por moneda). Filtros combinados + resumen de saldos por moneda. Deudas detectadas desde `saldo_cuenta < 0`. Bugfixes: filtro "all" roto, opción "Deudas" ausente en dropdown, acciones ocultas en móvil, paginación con páginas duplicadas. Backend: bloque `$resumen` precalculado en `CuentaController@index`. |
 | 2026-07-25 | **F6** — Herramienta detección/fusión de duplicados: 2 modales, normalización unicode capacidad, suma cantidades + promedio precios |
 | 2026-07-15 | `color_producto` añadido a tabla/tooltip en Productos, Movimientos, Compras y todas las vistas donde aparecía el producto |
 | 2026-07-15 | `CompraController::show()` implementado — historial de compras recientes en `Comprar/Index`, vista detalle `Comprar/Show`. Fix: parámetro renombrado a `$comprar` para que el route model binding de `{comprar}` funcione correctamente |

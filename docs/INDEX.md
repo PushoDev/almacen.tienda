@@ -10,7 +10,7 @@
 | Campo | Valor |
 |---|---|
 | Rama activa | `feature/bot-telegram` |
-| Última sesión | 2026-07-25 — Footer: importe global, reorg celdas. Widget #2 valor global. F6 duplicados: 2 modales, agrupación (nombre+marca+modelo+capacidad_normalizada+color), normalización unicode capacidad, fusión con suma cantidades + promedio precios |
+| Última sesión | 2026-07-26 — **Cuentas Index rediseñado**: 3 filas de widgets interactivos clickeables con filtrado por tipo/moneda/estado/deudas. Deudas computadas desde `saldo_cuenta < 0`. Bugfixes: filtro "all", opción "Deudas" ausente, acciones ocultas en móvil, paginación duplicada. Resumen de filtros con desglose por moneda. Backend: `$resumen` precalculado en `CuentaController@index`. |
 | Estado general | 12/12 módulos estables, 5 bugs conocidos, 4 features pendientes |
 | Próximo paso | Probar F6 (detección/fusión duplicados), luego F5 (selector paginación) |
 
