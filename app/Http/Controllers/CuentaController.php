@@ -27,6 +27,7 @@ class CuentaController extends Controller
         $totalSaldo = 0;
         $resumenPorTipo = [];
         $resumenPorMoneda = [];
+        $resumenPorMonedaPerm = [];
         $resumenPorEstado = [];
         $conteoEstado = [];
 
@@ -50,6 +51,20 @@ class CuentaController extends Controller
             $resumenPorMoneda[$codigo]['equivalente'] += $equiv;
             $resumenPorMoneda[$codigo]['cantidad']++;
 
+            if ($cuenta->tipo_cuenta === 'permanentes') {
+                if (!isset($resumenPorMonedaPerm[$codigo])) {
+                    $resumenPorMonedaPerm[$codigo] = [
+                        'original' => 0,
+                        'equivalente' => 0,
+                        'cantidad' => 0,
+                        'simbolo' => $cuenta->moneda?->simbolo_moneda ?? '$',
+                    ];
+                }
+                $resumenPorMonedaPerm[$codigo]['original'] += (float) $cuenta->saldo_cuenta;
+                $resumenPorMonedaPerm[$codigo]['equivalente'] += $equiv;
+                $resumenPorMonedaPerm[$codigo]['cantidad']++;
+            }
+
             $resumenPorEstado[$cuenta->estado] = ($resumenPorEstado[$cuenta->estado] ?? 0) + $equiv;
             $conteoEstado[$cuenta->estado] = ($conteoEstado[$cuenta->estado] ?? 0) + 1;
         }
@@ -58,6 +73,12 @@ class CuentaController extends Controller
             'total_saldo' => round($totalSaldo, 2),
             'por_tipo' => collect($resumenPorTipo)->map(fn ($v) => round($v, 2))->toArray(),
             'por_moneda' => collect($resumenPorMoneda)->map(fn ($v) => [
+                'original' => round($v['original'], 2),
+                'equivalente' => round($v['equivalente'], 2),
+                'cantidad' => $v['cantidad'],
+                'simbolo' => $v['simbolo'],
+            ])->toArray(),
+            'por_moneda_perm' => collect($resumenPorMonedaPerm)->map(fn ($v) => [
                 'original' => round($v['original'], 2),
                 'equivalente' => round($v['equivalente'], 2),
                 'cantidad' => $v['cantidad'],

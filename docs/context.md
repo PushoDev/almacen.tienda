@@ -105,6 +105,16 @@ cancelada           → stock devuelto
 - Moneda vinculada via `moneda_id`.
 - Vendedores solo ven sus cuentas asignadas (tabla `user_cuentas`).
 - Modificar saldo requiere rol admin + contraseña de seguridad hardcoded (`glorietashop`).
+- **Index rediseñado** (`resources/js/pages/Cuentas/Index.tsx`):
+  - 3 filas de widgets interactivos: KPIs (total eq., activas/inactivas), desglose por tipo con barras de porcentaje, desglose por moneda.
+  - Todos los widgets son clickeables y filtran la tabla al hacer clic.
+  - Filtro combinado: tipo + moneda + estado + deudas (por saldo negativo) + búsqueda.
+  - Resumen de filtros activos con badges removibles y línea de totales por moneda.
+  - Paginación con ventana de páginas.
+  - **Row 3** (Desglose por Moneda): solo muestra cuentas **permanentes** (nuevo `por_moneda_perm` en backend).
+  - Formato moneda: `": "` entre indicador y valor (ej. `$: 305.834,63`, `CUP: 5.444.544,38`).
+- **Backend** (`CuentaController@index`): precalcula `$resumen` (por_tipo, por_moneda, por_moneda_perm, por_estado, total_saldo) y lo pasa a la vista Inertia.
+- **Deudas**: detectadas desde `saldo_cuenta < 0` (no desde `tipo_cuenta = 'deudas'`, que aún no está en uso).
 
 ### Moneda (`monedas`)
 - `codigo_moneda`: ej. `USD`, `CUP`, `MLC`.
@@ -292,3 +302,4 @@ Prefijo: `/api/tienda` — sin autenticación, throttle: 60 req/min.
 ## Branch Actual
 
 `feature/bot-telegram` — Trabajo activo en integración del bot de Telegram.
+Últimos cambios en Cuentas: Row 3 filtra solo permanentes, formato moneda con `": "`.
