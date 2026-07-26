@@ -213,7 +213,7 @@ export default function LogisticaPage({
                                             <span className="text-sm font-semibold text-red-700 dark:text-red-300">Con Deuda</span>
                                             <Badge variant="outline" className="border-red-200 text-xs text-red-700 dark:border-red-800 dark:text-red-300">{resumenCuentas.cuentas_con_deuda} cuentas</Badge>
                                         </div>
-                                        <p className="text-2xl font-bold text-red-700 dark:text-red-300">{resumenCuentas.moneda_principal.simbolo}: 0.00</p>
+                                        <p className="text-2xl font-bold text-red-700 dark:text-red-300">{resumenCuentas.moneda_principal.simbolo}: {Math.abs(resumenCuentas.cuentas_deuda_saldo ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                         <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
                                             <div className={`h-full rounded-full bg-red-500 transition-all duration-500`} style={{ width: `${resumenCuentas.total_cuentas > 0 ? (resumenCuentas.cuentas_con_deuda / resumenCuentas.total_cuentas) * 100 : 0}%` }} />
                                         </div>

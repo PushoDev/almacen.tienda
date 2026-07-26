@@ -369,6 +369,7 @@ class DashboardStatsService
         $porEstado = [];
         $conteoEstado = [];
         $cuentasConDeuda = 0;
+        $deudaSaldoEquivalente = 0;
 
         foreach ($cuentas as $c) {
             $tasa = $c->tasa_cambio ?? 1;
@@ -388,6 +389,7 @@ class DashboardStatsService
 
             if ((float) ($c->saldo_cuenta ?? 0) < 0) {
                 $cuentasConDeuda++;
+                $deudaSaldoEquivalente += abs($equiv);
             }
         }
 
@@ -397,6 +399,7 @@ class DashboardStatsService
             'cuentas_activas' => $conteoEstado['activa'] ?? 0,
             'cuentas_inactivas' => $conteoEstado['inactiva'] ?? 0,
             'cuentas_con_deuda' => $cuentasConDeuda,
+            'cuentas_deuda_saldo' => round($deudaSaldoEquivalente, 2),
             'moneda_principal' => $monedaPrincipal ? [
                 'simbolo' => $monedaPrincipal->simbolo_moneda,
                 'codigo' => $monedaPrincipal->codigo_moneda,

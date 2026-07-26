@@ -426,6 +426,7 @@ export interface LogisticaProps {
         cuentas_activas: number;
         cuentas_inactivas: number;
         cuentas_con_deuda: number;
+        cuentas_deuda_saldo: number;
         moneda_principal: { simbolo: string; codigo: string };
         por_tipo: Record<string, number>;
         conteo_tipo: Record<string, number>;
