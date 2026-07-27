@@ -1,5 +1,9 @@
 # Contexto del Proyecto: almacen.tienda
 
+> **ERP / POS multi-almacén** para tienda física con soporte multi-moneda (USD/CUP/MLC), control de inventario, ventas, compras, logística de traslados, comisiones por vendedor, cierre de caja por turno, y bot de Telegram para aprobaciones y reportes.
+>
+> **Stack:** Laravel 12 · React 19 · Inertia v2 (SPA) · MySQL 8.4 · TailwindCSS 4 · TypeScript
+
 ## Visión General
 
 Sistema de gestión de inventario, punto de venta y logística multi-almacén diseñado para negocios que operan con **múltiples monedas** (USD, CUP, MLC) y varios puntos de venta simultáneos. Incluye control de comisiones por vendedor, gestión de mensajería, cierre de caja por turno y un bot de Telegram integrado para flujos de aprobación y reportes.

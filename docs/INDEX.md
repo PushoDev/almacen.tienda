@@ -10,9 +10,9 @@
 | Campo | Valor |
 |---|---|
 | Rama activa | `feature/bot-telegram` |
-| Última sesión | 2026-07-26 — **Logística**: 4 widgets Capital (Financiero, USD, CUP, EUR) con datos reales desde DB, iconos (`Landmark`, `DollarSign`, `Wallet`, `Euro`), `border-l-4` y `shadow-sm`. Capital Financiero suma: `total_saldo + balance_neto_clientes + balance_neto_proveedores + total_importe_global`. Capital USD suma: `balance_neto_clientes + balance_neto_proveedores + total_importe_global + temporales + USD_perm.equivalente`. Capital CUP/EUR usan `por_moneda_perm[].original`. Eliminados imports no usados (`Coffee`, `PlaneIcon`, `PlaneTakeoffIcon`, `SquareCheckBig`, `SquareCheckIcon`, `balances` prop). |
+| Última sesión | 2026-07-27 — **Tests + Migraciones**: Arregladas 6 migraciones con sintaxis MySQL-only para que funcionen en SQLite (entorno de tests). Envueltas en `getDriverName() === 'mysql'` o reemplazadas por SQL estándar. **27 tests pasando.** |
 | Estado general | 12/12 módulos estables, 5 bugs conocidos, 4 features pendientes |
-| Próximo paso | Seguir refinando la página de Logística o atender bugs activos |
+| Próximo paso | Escribir tests de lógica de negocio (módulo Productos primero) |
 
 ### Bugs activos
 

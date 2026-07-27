@@ -53,7 +53,7 @@ class MovimientosController extends Controller
      */
     public function index()
     {
-        $movimientos = Movimiento::with(['almacenOrigen', 'almacenDestino', 'usuario', 'detalles.producto.almacenes'])
+        $movimientos = Movimiento::with(['almacenOrigen', 'almacenDestino', 'usuario', 'detalles.producto.categoria', 'detalles.producto.almacenes'])
             ->orderBy('created_at', 'desc')
             ->paginate(10);
 

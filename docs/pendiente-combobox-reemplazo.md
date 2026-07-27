@@ -2,38 +2,58 @@
 
 > Reemplazar `<Select>` de shadcn/ui por `<Combobox>` de `@base-ui/react` (componente en `resources/js/components/ui/combobox.tsx`) en todas las páginas con listas dinámicas largas.
 
-## Patrón validado
+## Componente Combobox
 
-Ya implementado en:
-- `resources/js/pages/Movimientos/Index.tsx`
-- `resources/js/pages/Transacciones/layouts/Movimientos.tsx`
+- **Librería**: `@base-ui/react` v1.4.1
+- **Archivo**: `resources/js/components/ui/combobox.tsx` (278 líneas, 16 subcomponentes)
+- **Ya validado en**: `Movimientos/Index.tsx` y `Transacciones/layouts/Movimientos.tsx`
 
-### Cómo hacerlo
+## Patrón de conversión
 
-1. Cambiar import: `Select, SelectContent, SelectItem, SelectTrigger, SelectValue` → `Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList`
-2. Agregar estado de búsqueda: `const [xSearch, setXSearch] = useState('')`
-3. Filtrar la lista manualmente antes de renderizar
-4. Usar `onInputValueChange` para capturar el texto escrito
-5. Usar `itemToStringLabel` para mostrar el nombre cuando ya hay un valor seleccionado
-6. Manejar `onValueChange` con `string | null` (null cuando el usuario limpia con X)
+De Select:
+```tsx
+<Select value={x} onValueChange={setX}>
+  <SelectTrigger><SelectValue placeholder="..." /></SelectTrigger>
+  <SelectContent>
+    {items.map(i => <SelectItem key={i.id} value={i.id}>{i.nombre}</SelectItem>)}
+  </SelectContent>
+</Select>
+```
 
----
+A Combobox:
+```tsx
+const [xSearch, setXSearch] = useState('')
 
-## Alta prioridad
+<Combobox value={x} onValueChange={setX} onInputValueChange={setXSearch}
+  itemToStringLabel={(id) => items.find(i => i.id == id)?.nombre ?? ''}>
+  <ComboboxInput placeholder="..." showClear />
+  <ComboboxContent>
+    <ComboboxList>
+      {items.filter(i => !xSearch || i.nombre.toLowerCase().includes(xSearch.toLowerCase())).map(i => (
+        <ComboboxItem key={i.id} value={i.id}>{i.nombre}</ComboboxItem>
+      ))}
+    </ComboboxList>
+  </ComboboxContent>
+</Combobox>
+```
 
-| Archivo | Selectores a convertir |
-|---|---|
-| `Vendor/Index.tsx` | Cliente, almacén, productos, mensajero (POS) |
-| `Vendor/Show.tsx` | Mismos selectores que Index (edición de venta pendiente) |
-| `Vendor/Listado.tsx` | Filtros: almacén, cliente, vendedor |
-| `Comprar/Index.tsx` | Proveedor, cliente, productos, almacén |
-| `Almacenes/Show.tsx` | Usuarios asignados al almacén |
-| `Productos/Edit.tsx` | Categoría, proveedor |
-| `Productos/Vendor/Index.tsx` | Producto, almacén |
+## Prioridades
 
-## Media prioridad
+### HIGH — Listas dinámicas largas (con búsqueda)
 
-| Archivo | Selectores a convertir |
+| Archivo | Selectores a convertir | Observaciones |
+|---|---|---|
+| `Vendor/Index.tsx` | Cliente, almacén, productos, mensajero (POS) | Ya usa Combobox parcialmente en algunos selects |
+| `Vendor/Show.tsx` | Cliente, almacén, productos | Edición de venta pendiente |
+| `Vendor/Listado.tsx` | Filtros: almacén, cliente, vendedor | Filtros de búsqueda |
+| `Comprar/Index.tsx` | Proveedor, cliente, productos, almacén | Ya usa Combobox parcialmente |
+| `Almacenes/Show.tsx` | Usuarios asignados al almacén | Selector de usuarios |
+| `Productos/Edit.tsx` | Categoría, proveedor | Formulario de edición |
+| `Productos/Vendor/Index.tsx` | Producto, almacén | Asignación de precios |
+
+### MEDIUM — Con búsqueda útil
+
+| Archivo | Selectores |
 |---|---|
 | `Empleados/Create.tsx` | Almacén asignado |
 | `Empleados/Edit.tsx` | Almacén asignado |
@@ -42,7 +62,7 @@ Ya implementado en:
 | `Logistica/layout/ComprasVentas.tsx` | Filtro de almacén |
 | `Logistica/layout/ProductosPorAlmacen.tsx` | Filtro de almacén |
 
-## Baja prioridad (dejar como Select)
+### LOW — Dejar como Select
 
 Opciones estáticas o enumeraciones cortas — no vale la pena:
 - `Cuentas/Create.tsx`, `Edit.tsx`, `Index.tsx` — tipo de cuenta (CUP/USD/MLC)

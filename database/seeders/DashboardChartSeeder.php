@@ -44,6 +44,8 @@ class DashboardChartSeeder extends Seeder
       }
     }
 
-    $this->command->info('✅ Datos de prueba para el gráfico insertados correctamente!');
+    if ($this->command) {
+        $this->command->info('✅ Datos de prueba para el gráfico insertados correctamente!');
+    }
   }
 }
