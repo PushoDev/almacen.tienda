@@ -9,6 +9,7 @@ import {
     ChartPie,
     CheckCircle,
     DollarSign,
+    Euro,
     Handshake,
     Landmark,
     Package,
@@ -84,11 +85,16 @@ export default function LogisticaPage({
                     {/* Capitales Financieros */}
                     {canViewFinance && (
                         <>
-                            <Card className="@container/card border-emerald-500/30">
+                            <Card className="@container/card border-emerald-500/30 border-l-4 shadow-sm hover:shadow-md transition-shadow">
                                 <CardHeader className="pb-2">
-                                    <CardDescription className="text-xs font-medium uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                                        Capital Financiero
-                                    </CardDescription>
+                                    <div className="flex items-center justify-between">
+                                        <CardDescription className="text-xs font-medium uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                                            Capital Financiero
+                                        </CardDescription>
+                                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900/50">
+                                            <Landmark className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                        </div>
+                                    </div>
                                     <CardTitle className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
                                         {((resumenCuentas?.total_saldo ?? 0) + (resumenClientes?.balance_neto ?? 0) + (resumenProveedores?.balance_neto ?? 0) + (resumenProductos?.total_importe_global ?? 0)) === 0
                                             ? '0.00'
@@ -97,15 +103,20 @@ export default function LogisticaPage({
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent>
-                                    <p className="text-xs text-muted-foreground">Capital Financiero (CUP → USD)</p>
+                                    <p className="text-xs text-muted-foreground">Capital Financiero Total del Negocio</p>
                                 </CardContent>
                             </Card>
 
-                            <Card className="@container/card border-amber-500/30">
+                            <Card className="@container/card border-amber-500/30 border-l-4 shadow-sm hover:shadow-md transition-shadow">
                                 <CardHeader className="pb-2">
-                                    <CardDescription className="text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                                        Capital USD
-                                    </CardDescription>
+                                    <div className="flex items-center justify-between">
+                                        <CardDescription className="text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                                            Capital USD
+                                        </CardDescription>
+                                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/50">
+                                            <DollarSign className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                        </div>
+                                    </div>
                                     <CardTitle className="text-3xl font-bold text-amber-600 dark:text-amber-400 tabular-nums">
                                         {((resumenClientes?.balance_neto ?? 0) + (resumenProveedores?.balance_neto ?? 0) + (resumenProductos?.total_importe_global ?? 0) + (resumenCuentas?.por_tipo?.['temporales'] ?? 0) + (resumenCuentas?.por_moneda_perm?.['USD']?.equivalente ?? 0)) === 0
                                             ? '0.00'
@@ -118,31 +129,41 @@ export default function LogisticaPage({
                                 </CardContent>
                             </Card>
 
-                            <Card className="@container/card border-indigo-500/30">
+                            <Card className="@container/card border-indigo-500/30 border-l-4 shadow-sm hover:shadow-md transition-shadow">
                                 <CardHeader className="pb-2">
-                                    <CardDescription className="text-xs font-medium uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                                        Capital CUP
-                                    </CardDescription>
+                                    <div className="flex items-center justify-between">
+                                        <CardDescription className="text-xs font-medium uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                                            Capital CUP
+                                        </CardDescription>
+                                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-100 dark:bg-indigo-900/50">
+                                            <Wallet className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                                        </div>
+                                    </div>
                                     <CardTitle className="text-3xl font-bold text-indigo-600 dark:text-indigo-400 tabular-nums">
-                                        25,000,000.00
+                                        {resumenCuentas?.por_moneda_perm?.['CUP']?.original.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '0.00'}
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent>
-                                    <p className="text-xs text-muted-foreground">Capital en Pesos Cubanos</p>
+                                    <p className="text-xs text-muted-foreground">Capital en Pesos Cubanos (CUP)</p>
                                 </CardContent>
                             </Card>
 
-                            <Card className="@container/card border-blue-500/30">
+                            <Card className="@container/card border-blue-500/30 border-l-4 shadow-sm hover:shadow-md transition-shadow">
                                 <CardHeader className="pb-2">
-                                    <CardDescription className="text-xs font-medium uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                                        Capital EUR
-                                    </CardDescription>
+                                    <div className="flex items-center justify-between">
+                                        <CardDescription className="text-xs font-medium uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                                            Capital EUR
+                                        </CardDescription>
+                                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/50">
+                                            <Euro className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                        </div>
+                                    </div>
                                     <CardTitle className="text-3xl font-bold text-blue-600 dark:text-blue-400 tabular-nums">
-                                        120,000.00
+                                        {resumenCuentas?.por_moneda_perm?.['EUR']?.original.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '0.00'}
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent>
-                                    <p className="text-xs text-muted-foreground">Capital en Euros</p>
+                                    <p className="text-xs text-muted-foreground">Capital en Euros (EUR)</p>
                                 </CardContent>
                             </Card>
                         </>
