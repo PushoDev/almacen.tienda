@@ -6,26 +6,18 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, User, type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
-import { BookUser, Eye, EyeOff } from 'lucide-react';
-import { useState } from 'react';
+import { BookUser, Eye, EyeOff, Search, Store, University, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Resumen General',
-        href: '/dashboard',
-    },
-    {
-        title: 'Empleados',
-        href: '/empleados',
-    },
-    {
-        title: 'Editar Empleado',
-        href: '#',
-    },
+    { title: 'Resumen General', href: '/dashboard' },
+    { title: 'Empleados', href: '/empleados' },
+    { title: 'Editar Empleado', href: '#' },
 ];
 
 interface CuentaProps {
@@ -35,7 +27,6 @@ interface CuentaProps {
 }
 
 export default function EditEmpleadoPage({ empleado, almacenes, cuentas }: { empleado: User; almacenes: AlmacenProps[]; cuentas: CuentaProps[] }) {
-    // Manejo del formulario con useForm
     const { data, setData, put, errors, processing } = useForm({
         name: empleado.name,
         email: empleado.email,
@@ -45,11 +36,59 @@ export default function EditEmpleadoPage({ empleado, almacenes, cuentas }: { emp
         cuentas: empleado.cuentas?.map((cuenta) => cuenta.id) || [],
     });
     const [showPassword, setShowPassword] = useState(false);
+    const [searchAlmacen, setSearchAlmacen] = useState('');
+    const [searchCuenta, setSearchCuenta] = useState('');
 
-    // Función para enviar el formulario
+    const isVendedor = data.role !== 'admin' && data.role !== 'moderador';
+
+    const filteredAlmacenes = useMemo(
+        () =>
+            almacenes.filter((a) => a.nombre_almacen.toLowerCase().includes(searchAlmacen.toLowerCase())),
+        [almacenes, searchAlmacen],
+    );
+
+    const filteredCuentas = useMemo(
+        () =>
+            cuentas.filter(
+                (c) =>
+                    c.nombre_cuenta.toLowerCase().includes(searchCuenta.toLowerCase()) ||
+                    c.tipo_moneda.toLowerCase().includes(searchCuenta.toLowerCase()),
+            ),
+        [cuentas, searchCuenta],
+    );
+
+    const allAlmacenesFilteredSelected = useMemo(
+        () => filteredAlmacenes.length > 0 && filteredAlmacenes.every((a) => data.almacenes.includes(a.id)),
+        [filteredAlmacenes, data.almacenes],
+    );
+
+    const allCuentasFilteredSelected = useMemo(
+        () => filteredCuentas.length > 0 && filteredCuentas.every((c) => data.cuentas.includes(c.id)),
+        [filteredCuentas, data.cuentas],
+    );
+
+    const toggleSelectAllAlmacenes = () => {
+        if (allAlmacenesFilteredSelected) {
+            setData('almacenes', data.almacenes.filter((id) => !filteredAlmacenes.some((a) => a.id === id)));
+        } else {
+            const current = new Set(data.almacenes);
+            filteredAlmacenes.forEach((a) => current.add(a.id));
+            setData('almacenes', Array.from(current));
+        }
+    };
+
+    const toggleSelectAllCuentas = () => {
+        if (allCuentasFilteredSelected) {
+            setData('cuentas', data.cuentas.filter((id) => !filteredCuentas.some((c) => c.id === id)));
+        } else {
+            const current = new Set(data.cuentas);
+            filteredCuentas.forEach((c) => current.add(c.id));
+            setData('cuentas', Array.from(current));
+        }
+    };
+
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
-
         put(route('empleados.update', { id: empleado.id }), {
             onSuccess: () => {
                 toast.success('Empleado actualizado correctamente');
@@ -64,10 +103,8 @@ export default function EditEmpleadoPage({ empleado, almacenes, cuentas }: { emp
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Editar Empleado" />
             <div className="flex h-full flex-1 flex-col gap-6 rounded-xl p-4">
-                {/* Header */}
                 <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     <HeadingSmall title="Editar Empleado" description="Modifique los datos del empleado seleccionado" />
-                    {/* Ícono semitransparente */}
                     <BookUser
                         size={70}
                         color="#d6d3d1"
@@ -75,17 +112,14 @@ export default function EditEmpleadoPage({ empleado, almacenes, cuentas }: { emp
                     />
                 </div>
 
-                {/* Formulario de Edición */}
                 <form onSubmit={submit} className="space-y-6">
-                    <Card className="border-sidebar-border/70">
+                    <Card>
                         <CardHeader>
                             <CardTitle>Información del Empleado</CardTitle>
                             <CardDescription>Actualice datos principales y permisos de acceso.</CardDescription>
                         </CardHeader>
                         <CardContent className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                            {/* Columna 1 */}
                             <div className="space-y-4">
-                                {/* Campo Nombre del Empleado */}
                                 <div className="space-y-1">
                                     <Label htmlFor="name">Nombre del Empleado</Label>
                                     <Input
@@ -97,7 +131,6 @@ export default function EditEmpleadoPage({ empleado, almacenes, cuentas }: { emp
                                     <InputError message={errors.name} />
                                 </div>
 
-                                {/* Campo Email del Empleado */}
                                 <div className="space-y-1">
                                     <Label htmlFor="email">Email del Empleado</Label>
                                     <Input
@@ -110,7 +143,6 @@ export default function EditEmpleadoPage({ empleado, almacenes, cuentas }: { emp
                                     <InputError message={errors.email} />
                                 </div>
 
-                                {/* Campo Contraseña del Empleado */}
                                 <div className="space-y-1">
                                     <Label htmlFor="password">Contraseña</Label>
                                     <div className="relative">
@@ -137,16 +169,14 @@ export default function EditEmpleadoPage({ empleado, almacenes, cuentas }: { emp
                                 </div>
                             </div>
 
-                            {/* Columna 2 */}
                             <div className="space-y-4">
-                                {/* Campo Rol del Empleado */}
                                 <div className="space-y-1">
                                     <Label htmlFor="role">Rol del Empleado</Label>
                                     <Select
                                         value={data.role}
                                         onValueChange={(value) => setData('role', value as 'admin' | 'moderador' | 'vendedor')}
                                     >
-                                        <SelectTrigger className="border border-input">
+                                        <SelectTrigger>
                                             <SelectValue placeholder="Seleccione un rol" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -158,101 +188,204 @@ export default function EditEmpleadoPage({ empleado, almacenes, cuentas }: { emp
                                     <InputError message={errors.role} />
                                 </div>
 
-                                {/* Campo Almacenes Asignados (Oculto para Admin/Moderador) */}
-                                {data.role !== 'admin' && data.role !== 'moderador' && (
-                                    <div className="space-y-2">
-                                        <Label>Almacenes Asignados</Label>
-                                        <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                                            {almacenes.map((almacen) => (
-                                                <label
-                                                    key={almacen.id}
-                                                    htmlFor={`almacen-${almacen.id}`}
-                                                    className="flex items-center gap-2 rounded-lg border border-input bg-background px-3 py-2 text-sm hover:bg-accent"
-                                                >
-                                                    <Checkbox
-                                                        id={`almacen-${almacen.id}`}
-                                                        className="border border-input data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
-                                                        checked={data.almacenes.includes(almacen.id)}
-                                                        onCheckedChange={(checked) => {
-                                                            if (checked) {
-                                                                setData('almacenes', [...data.almacenes, almacen.id]);
-                                                            } else {
-                                                                setData(
-                                                                    'almacenes',
-                                                                    data.almacenes.filter((id) => id !== almacen.id),
-                                                                );
-                                                            }
-                                                        }}
-                                                    />
-                                                    <span className="truncate">{almacen.nombre_almacen}</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                        <InputError message={errors.almacenes} />
+                                {!isVendedor && (
+                                    <div className="rounded-lg bg-muted p-4 text-sm text-muted-foreground">
+                                        Los administradores y moderadores tienen acceso global. No requieren asignación de almacenes ni cuentas.
                                     </div>
                                 )}
                             </div>
                         </CardContent>
                     </Card>
 
-                    {/* Sección de Cuentas (Oculto para Admin/Moderador) */}
-                    {data.role !== 'admin' && data.role !== 'moderador' && (
-                        <Card className="border-sidebar-border/70">
-                            <CardHeader>
-                                <CardTitle>Cuentas Monetarias Asignadas</CardTitle>
-                                <CardDescription>Asigne las cuentas que el empleado podrá gestionar.</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                    {cuentas.length > 0 ? (
-                                        cuentas.map((cuenta) => (
-                                            <label
-                                                key={cuenta.id}
-                                                htmlFor={`cuenta-${cuenta.id}`}
-                                                className="flex items-center gap-3 rounded-lg border border-input bg-background p-3 hover:bg-accent"
+                    {isVendedor && (
+                        <>
+                            <Card>
+                                <CardHeader>
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <CardTitle>Almacenes Asignados</CardTitle>
+                                            <CardDescription>
+                                                Seleccione los almacenes que el empleado podrá gestionar.
+                                            </CardDescription>
+                                        </div>
+                                        <span className="shrink-0 rounded-full bg-secondary px-3 py-1 text-xs font-medium">
+                                            {data.almacenes.length}/{almacenes.length}
+                                        </span>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div className="relative">
+                                        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                        <Input
+                                            placeholder="Buscar almacén por nombre..."
+                                            value={searchAlmacen}
+                                            onChange={(e) => setSearchAlmacen(e.target.value)}
+                                            className="pl-8 pr-8"
+                                        />
+                                        {searchAlmacen && (
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => setSearchAlmacen('')}
+                                                className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2"
                                             >
-                                                <Checkbox
-                                                    id={`cuenta-${cuenta.id}`}
-                                                    className="border border-input data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
-                                                    checked={data.cuentas.includes(cuenta.id)}
-                                                    onCheckedChange={(checked) => {
-                                                        if (checked) {
-                                                            setData('cuentas', [...data.cuentas, cuenta.id]);
-                                                        } else {
-                                                            setData(
-                                                                'cuentas',
-                                                                data.cuentas.filter((id) => id !== cuenta.id),
-                                                            );
-                                                        }
-                                                    }}
-                                                />
-                                                <div className="min-w-0">
-                                                    <div className="truncate font-medium">{cuenta.nombre_cuenta}</div>
-                                                    <div className="text-xs text-muted-foreground">{cuenta.tipo_moneda}</div>
-                                                </div>
-                                            </label>
-                                        ))
-                                    ) : (
-                                        <div className="col-span-full text-center text-muted-foreground">No hay cuentas disponibles</div>
-                                    )}
-                                </div>
-                                <InputError message={errors.cuentas} />
-                            </CardContent>
-                            <CardFooter className="justify-end">
-                                <Button type="submit" disabled={processing} className="w-full md:w-auto">
-                                    {processing ? 'Actualizando...' : 'Actualizar Empleado'}
-                                </Button>
-                            </CardFooter>
-                        </Card>
+                                                <X size={14} />
+                                            </Button>
+                                        )}
+                                    </div>
+
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs text-muted-foreground">
+                                            {filteredAlmacenes.length === almacenes.length
+                                                ? 'Mostrando todos los almacenes'
+                                                : `Mostrando ${filteredAlmacenes.length} de ${almacenes.length}`}
+                                        </span>
+                                        {filteredAlmacenes.length > 0 && (
+                                            <Button type="button" variant="outline" size="sm" onClick={toggleSelectAllAlmacenes}>
+                                                {allAlmacenesFilteredSelected ? 'Desmarcar todos' : 'Marcar todos'}
+                                            </Button>
+                                        )}
+                                    </div>
+
+                                    <Separator />
+
+                                    <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border p-2">
+                                        {filteredAlmacenes.length > 0 ? (
+                                            filteredAlmacenes.map((almacen) => (
+                                                <label
+                                                    key={almacen.id}
+                                                    htmlFor={`almacen-${almacen.id}`}
+                                                    className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent"
+                                                >
+                                                    <Checkbox
+                                                        id={`almacen-${almacen.id}`}
+                                                        checked={data.almacenes.includes(almacen.id)}
+                                                        onCheckedChange={(checked) => {
+                                                            if (checked) {
+                                                                setData('almacenes', [...data.almacenes, almacen.id]);
+                                                            } else {
+                                                                setData('almacenes', data.almacenes.filter((id) => id !== almacen.id));
+                                                            }
+                                                        }}
+                                                    />
+                                                    <Store size={16} className="shrink-0 text-muted-foreground" />
+                                                    <span className="truncate">{almacen.nombre_almacen}</span>
+                                                </label>
+                                            ))
+                                        ) : (
+                                            <p className="py-8 text-center text-sm text-muted-foreground">
+                                                {searchAlmacen
+                                                    ? 'No hay almacenes que coincidan con la búsqueda'
+                                                    : 'No hay almacenes disponibles'}
+                                            </p>
+                                        )}
+                                    </div>
+                                    <InputError message={errors.almacenes} />
+                                </CardContent>
+                            </Card>
+
+                            <Card>
+                                <CardHeader>
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <CardTitle>Cuentas Monetarias Asignadas</CardTitle>
+                                            <CardDescription>
+                                                Seleccione las cuentas que el empleado podrá gestionar.
+                                            </CardDescription>
+                                        </div>
+                                        <span className="shrink-0 rounded-full bg-secondary px-3 py-1 text-xs font-medium">
+                                            {data.cuentas.length}/{cuentas.length}
+                                        </span>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div className="relative">
+                                        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                        <Input
+                                            placeholder="Buscar cuenta por nombre o moneda..."
+                                            value={searchCuenta}
+                                            onChange={(e) => setSearchCuenta(e.target.value)}
+                                            className="pl-8 pr-8"
+                                        />
+                                        {searchCuenta && (
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => setSearchCuenta('')}
+                                                className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2"
+                                            >
+                                                <X size={14} />
+                                            </Button>
+                                        )}
+                                    </div>
+
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs text-muted-foreground">
+                                            {filteredCuentas.length === cuentas.length
+                                                ? 'Mostrando todas las cuentas'
+                                                : `Mostrando ${filteredCuentas.length} de ${cuentas.length}`}
+                                        </span>
+                                        {filteredCuentas.length > 0 && (
+                                            <Button type="button" variant="outline" size="sm" onClick={toggleSelectAllCuentas}>
+                                                {allCuentasFilteredSelected ? 'Desmarcar todas' : 'Marcar todas'}
+                                            </Button>
+                                        )}
+                                    </div>
+
+                                    <Separator />
+
+                                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+                                        {filteredCuentas.length > 0 ? (
+                                            filteredCuentas.map((cuenta) => (
+                                                <label
+                                                    key={cuenta.id}
+                                                    htmlFor={`cuenta-${cuenta.id}`}
+                                                    className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-accent"
+                                                >
+                                                    <Checkbox
+                                                        id={`cuenta-${cuenta.id}`}
+                                                        checked={data.cuentas.includes(cuenta.id)}
+                                                        onCheckedChange={(checked) => {
+                                                            if (checked) {
+                                                                setData('cuentas', [...data.cuentas, cuenta.id]);
+                                                            } else {
+                                                                setData('cuentas', data.cuentas.filter((id) => id !== cuenta.id));
+                                                            }
+                                                        }}
+                                                    />
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <University size={14} className="shrink-0 text-muted-foreground" />
+                                                            <span className="truncate text-sm font-medium">{cuenta.nombre_cuenta}</span>
+                                                        </div>
+                                                        <div className="ml-6 text-xs text-muted-foreground">{cuenta.tipo_moneda}</div>
+                                                    </div>
+                                                </label>
+                                            ))
+                                        ) : (
+                                            <div className="col-span-full py-12 text-center text-muted-foreground">
+                                                <University size={32} className="mx-auto mb-2 opacity-30" />
+                                                <p className="text-sm">
+                                                    {searchCuenta
+                                                        ? 'No hay cuentas que coincidan con la búsqueda'
+                                                        : 'No hay cuentas disponibles'}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <InputError message={errors.cuentas} />
+                                </CardContent>
+                            </Card>
+                        </>
                     )}
 
-                    {data.role === 'admin' || data.role === 'moderador' ? (
-                        <div className="flex justify-end">
-                            <Button type="submit" disabled={processing} className="w-full md:w-auto">
-                                {processing ? 'Actualizando...' : 'Actualizar Empleado'}
-                            </Button>
-                        </div>
-                    ) : null}
+                    <div className="flex justify-end">
+                        <Button type="submit" disabled={processing} size="lg">
+                            {processing ? 'Actualizando...' : 'Actualizar Empleado'}
+                        </Button>
+                    </div>
                 </form>
             </div>
         </AppLayout>

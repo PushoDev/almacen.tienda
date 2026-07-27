@@ -62,7 +62,7 @@ class UserController extends Controller
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
             'role' => $validated['role'],
-            'telegram_chat_id' => $validated['telegram_chat_id'] ?? null,
+            'telegram_chat_id' => !empty($validated['telegram_chat_id']) ? $validated['telegram_chat_id'] : null,
         ]);
 
         // Asignar almacenes (solo si no es admin/moderador)
@@ -130,7 +130,7 @@ class UserController extends Controller
             'email' => $validated['email'],
             'role' => $validated['role'],
             'password' => $validated['password'] ? Hash::make($validated['password']) : $user->password,
-            'telegram_chat_id' => $validated['telegram_chat_id'] ?? null,
+            'telegram_chat_id' => !empty($validated['telegram_chat_id']) ? $validated['telegram_chat_id'] : null,
         ]);
 
         // Actualizar almacenes (solo si no es admin/moderador)
