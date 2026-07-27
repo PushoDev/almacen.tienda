@@ -10,9 +10,9 @@
 | Campo | Valor |
 |---|---|
 | Rama activa | `feature/bot-telegram` |
-| Última sesión | 2026-07-26 — **Logística**: página rediseñada como dashboard de resúmenes con 4 cards informativos (Cuentas, Clientes, Proveedores, Productos). Eliminados widgets placeholder (Productos/Proveedores/Clientes/Categorias con texto en inglés), animaciones (`CountingNumber`, `CursorFollow`), y `ComprasVentasCharts` mock. Backend: `getResumenPorMonedaPerm()` fix (acumulación por codigo_moneda en vez de sobrescritura), `getMonedaPrincipal()` extraído como método reutilizable, `STOCK_BAJO_THRESHOLD=5` como constante. |
+| Última sesión | 2026-07-27 — **Tests + Migraciones**: Arregladas 6 migraciones con sintaxis MySQL-only para que funcionen en SQLite (entorno de tests). Envueltas en `getDriverName() === 'mysql'` o reemplazadas por SQL estándar. **27 tests pasando.** |
 | Estado general | 12/12 módulos estables, 5 bugs conocidos, 4 features pendientes |
-| Próximo paso | Seguir refinando la página de Logística o atender bugs activos |
+| Próximo paso | Escribir tests de lógica de negocio (módulo Productos primero) |
 
 ### Bugs activos
 

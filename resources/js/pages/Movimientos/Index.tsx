@@ -15,11 +15,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
+import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink } from '@/components/ui/pagination';
 import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, BreadcrumbItem, Movimiento, ProductoPorAlmacenDetalleRef } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { AlertCircle, Caravan, CheckCircle2, Clock, Eye, ListCheck, Package, Search, Send, TrendingUp, XCircle } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { AlertCircle, Caravan, CheckCircle2, ChevronLeft, ChevronRight, Clock, Eye, ListCheck, Package, Search, Send, TrendingUp, XCircle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -45,8 +46,19 @@ interface MovimientoDetalle {
     created_at: string;
     updated_at: string;
     producto?: {
+        id: number;
         nombre_producto: string;
-        [key: string]: unknown;
+        marca_producto?: string;
+        modelo_producto?: string;
+        capacidad_producto?: string;
+        color_producto?: string;
+        codigo_producto?: string;
+        imagen_url?: string;
+        barcode_image_url?: string | null;
+        categoria?: {
+            id: number;
+            nombre_categoria: string;
+        };
     };
 }
 
@@ -599,39 +611,59 @@ export default function MovimientosPage({
                                 {/* Paginación Productos */}
                                 {totalPaginasProductos > 1 && (
                                     <div className="flex items-center justify-between">
-                                        <div className="text-sm text-gray-600">
+                                        <div className="text-sm text-muted-foreground">
                                             Mostrando {(paginaProductos - 1) * PRODUCTOS_POR_PAGINA + 1} a{' '}
                                             {Math.min(paginaProductos * PRODUCTOS_POR_PAGINA, productosEmisor.length)} de {productosEmisor.length}{' '}
                                             productos
                                         </div>
-                                        <div className="flex space-x-2">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                disabled={paginaProductos === 1}
-                                                onClick={() => setPaginaProductos((p) => Math.max(1, p - 1))}
-                                            >
-                                                «
-                                            </Button>
-                                            {Array.from({ length: totalPaginasProductos }, (_, i) => i + 1).map((p) => (
-                                                <Button
-                                                    key={p}
-                                                    variant={p === paginaProductos ? 'default' : 'outline'}
-                                                    size="sm"
-                                                    onClick={() => setPaginaProductos(p)}
-                                                >
-                                                    {p}
-                                                </Button>
-                                            ))}
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                disabled={paginaProductos === totalPaginasProductos}
-                                                onClick={() => setPaginaProductos((p) => Math.min(totalPaginasProductos, p + 1))}
-                                            >
-                                                »
-                                            </Button>
-                                        </div>
+                                        <Pagination className="w-auto mx-0">
+                                            <PaginationContent>
+                                                <PaginationItem>
+                                                    <PaginationLink
+                                                        href="#"
+                                                        onClick={(e) => { e.preventDefault(); if (paginaProductos > 1) setPaginaProductos(p => p - 1); }}
+                                                        className={paginaProductos === 1 ? 'pointer-events-none opacity-50' : ''}
+                                                    >
+                                                        <ChevronLeft className="h-4 w-4" />
+                                                    </PaginationLink>
+                                                </PaginationItem>
+                                                {Array.from({ length: totalPaginasProductos }, (_, i) => i + 1)
+                                                    .filter(p => {
+                                                        const delta = Math.abs(p - paginaProductos);
+                                                        return delta <= 2 || p === 1 || p === totalPaginasProductos;
+                                                    })
+                                                    .map((p, idx, arr) => {
+                                                        const showEllipsisBefore = idx > 0 && p - arr[idx - 1] > 1;
+                                                        return (
+                                                            <React.Fragment key={p}>
+                                                                {showEllipsisBefore && (
+                                                                    <PaginationItem>
+                                                                        <PaginationEllipsis />
+                                                                    </PaginationItem>
+                                                                )}
+                                                                <PaginationItem>
+                                                                    <PaginationLink
+                                                                        href="#"
+                                                                        isActive={p === paginaProductos}
+                                                                        onClick={(e) => { e.preventDefault(); setPaginaProductos(p); }}
+                                                                    >
+                                                                        {p}
+                                                                    </PaginationLink>
+                                                                </PaginationItem>
+                                                            </React.Fragment>
+                                                        );
+                                                    })}
+                                                <PaginationItem>
+                                                    <PaginationLink
+                                                        href="#"
+                                                        onClick={(e) => { e.preventDefault(); if (paginaProductos < totalPaginasProductos) setPaginaProductos(p => p + 1); }}
+                                                        className={paginaProductos === totalPaginasProductos ? 'pointer-events-none opacity-50' : ''}
+                                                    >
+                                                        <ChevronRight className="h-4 w-4" />
+                                                    </PaginationLink>
+                                                </PaginationItem>
+                                            </PaginationContent>
+                                        </Pagination>
                                     </div>
                                 )}
                             </div>
@@ -887,7 +919,7 @@ export default function MovimientosPage({
 
                 {/* AlertDialog - Recibir Movimiento */}
                 <AlertDialog open={showDialogs.recibir} onOpenChange={(open) => setShowDialogs({ ...showDialogs, recibir: open })}>
-                    <AlertDialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
+                    <AlertDialogContent className="max-h-[80vh] max-w-4xl overflow-y-auto">
                         <AlertDialogHeader>
                             <AlertDialogTitle>Registrar Recepción - Movimiento #{selectedMovimiento?.id}</AlertDialogTitle>
                             <AlertDialogDescription>
@@ -899,24 +931,43 @@ export default function MovimientosPage({
                             <table className="w-full border-collapse text-sm">
                                 <thead className="bg-sidebar-accent">
                                     <tr>
-                                        <th className="px-4 py-2 text-left font-semibold">Producto</th>
-                                        <th className="px-4 py-2 text-center font-semibold">Despachado</th>
-                                        <th className="px-4 py-2 text-center font-semibold">Recibido</th>
+                                        <th className="px-2 py-2 text-left font-semibold">Producto</th>
+                                        <th className="px-2 py-2 text-left font-semibold">Marca</th>
+                                        <th className="px-2 py-2 text-left font-semibold">Modelo</th>
+                                        <th className="px-2 py-2 text-left font-semibold">Cap.</th>
+                                        <th className="px-2 py-2 text-left font-semibold">Color</th>
+                                        <th className="px-2 py-2 text-left font-semibold">Categoría</th>
+                                        <th className="px-2 py-2 text-center font-semibold">Despachado</th>
+                                        <th className="px-2 py-2 text-center font-semibold">Recibido</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
                                     {selectedMovimiento?.detalles.map((detalle) => (
                                         <tr key={detalle.id} className="hover:bg-sidebar-accent">
-                                            <td className="px-4 py-3">{detalle.producto?.nombre_producto}</td>
-                                            <td className="px-4 py-3 text-center font-semibold">{detalle.cantidad_despachada}</td>
-                                            <td className="px-4 py-3">
+                                            <td className="px-2 py-2">
+                                                <div className="flex items-center gap-2">
+                                                    <img
+                                                        src={detalle.producto?.imagen_url || 'https://via.placeholder.com/32'}
+                                                        alt={detalle.producto?.nombre_producto}
+                                                        className="h-8 w-8 rounded object-cover"
+                                                    />
+                                                    <span className="font-medium">{detalle.producto?.nombre_producto}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-2 py-2 text-muted-foreground">{detalle.producto?.marca_producto || '—'}</td>
+                                            <td className="px-2 py-2 text-muted-foreground">{detalle.producto?.modelo_producto || '—'}</td>
+                                            <td className="px-2 py-2 text-muted-foreground">{detalle.producto?.capacidad_producto || '—'}</td>
+                                            <td className="px-2 py-2 text-muted-foreground">{detalle.producto?.color_producto || '—'}</td>
+                                            <td className="px-2 py-2 text-muted-foreground">{detalle.producto?.categoria?.nombre_categoria || '—'}</td>
+                                            <td className="px-2 py-2 text-center font-semibold">{detalle.cantidad_despachada}</td>
+                                            <td className="px-2 py-2">
                                                 <Input
                                                     type="number"
                                                     min="0"
                                                     max={detalle.cantidad_despachada}
                                                     value={productosRecibidos[detalle.producto_id] || 0}
                                                     onChange={(e) => handleCantidadRecibidaChange(detalle.producto_id, parseInt(e.target.value) || 0)}
-                                                    className="max-w-24"
+                                                    className="max-w-20 h-8 text-center"
                                                 />
                                             </td>
                                         </tr>

@@ -41,6 +41,10 @@ return new class extends Migration
 
     public function up(): void
     {
+        if (DB::connection()->getDriverName() !== 'mysql') {
+            return;
+        }
+
         // ── 1. Agregar puesto_por_user_id si no existe ──────────────────────────
         if (!Schema::hasColumn('producto_vendedors', 'puesto_por_user_id')) {
             Schema::table('producto_vendedors', function (Blueprint $table) {

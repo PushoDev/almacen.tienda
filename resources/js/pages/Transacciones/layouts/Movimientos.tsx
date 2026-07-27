@@ -100,23 +100,22 @@ interface TasaCambioProps {
     setData: any;
     errors: Record<string, string>;
     monedasActivas: Moneda[];
+    monedaForRate?: string;
 }
 
-const TasaCambioInput: React.FC<TasaCambioProps> = ({ data, setData, errors, monedasActivas }) => {
-    // Solo mostramos el campo si la moneda necesita conversión (no es USD)
-    const monedaSeleccionada = monedasActivas.find((m) => m.codigo_moneda === data.moneda);
+const TasaCambioInput: React.FC<TasaCambioProps> = ({ data, setData, errors, monedasActivas, monedaForRate }) => {
+    const monedaEfectiva = monedaForRate || data.moneda;
+    const monedaInfo = monedasActivas.find((m) => m.codigo_moneda === monedaEfectiva);
 
-    if (!monedaSeleccionada || data.moneda === 'USD') {
-        return null;
-    }
+    if (!monedaInfo) return null;
+    if (!monedaForRate && monedaEfectiva === 'USD') return null;
 
-    // ✅ CORRECCIÓN: Asegurar que tasa_cambio sea un número
     const tasaPorDefecto =
-        typeof monedaSeleccionada.tasa_cambio === 'number' ? monedaSeleccionada.tasa_cambio : Number(monedaSeleccionada.tasa_cambio) || 0;
+        typeof monedaInfo.tasa_cambio === 'number' ? monedaInfo.tasa_cambio : Number(monedaInfo.tasa_cambio) || 0;
 
     return (
         <div>
-            <Label htmlFor="tasa_cambio">Tasa de Cambio Aplicada (USD a {data.moneda})</Label>
+            <Label htmlFor="tasa_cambio">Tasa de Cambio (1 USD = ? {monedaEfectiva})</Label>
             <Input
                 type="number"
                 id="tasa_cambio"
@@ -126,7 +125,7 @@ const TasaCambioInput: React.FC<TasaCambioProps> = ({ data, setData, errors, mon
                 min="0.0001"
                 placeholder={`Tasa por defecto: ${tasaPorDefecto.toFixed(4)}`}
             />
-            <p className="mt-1 text-xs text-gray-500">Solo aplica para operaciones en {data.moneda}. La tasa se envía al backend.</p>
+            <p className="mt-1 text-xs text-gray-500">La tasa se envía al backend.</p>
             {errors.tasa_cambio_aplicada && <p className="mt-1 text-sm text-red-500">{errors.tasa_cambio_aplicada}</p>}
         </div>
     );
@@ -177,10 +176,11 @@ const ConversionTransferencia: React.FC<ConversionTransferenciaProps> = ({ data,
     let tasaDestinoUsar = 1;
 
     if (origenEsCuenta && destinoEsCuenta) {
-        // CUENTA → CUENTA: Dividir por tasa de la moneda destino
+        // CUENTA → CUENTA: Convertir origen → USD → destino
+        tasaOrigenUsar = Number(monedaOrigen.tasa_cambio) || 1;
         tasaDestinoUsar = Number(monedaDestino.tasa_cambio) || 1;
         tasaSistema = tasaDestinoUsar;
-        montoConvertido = tasaDestinoUsar > 0 ? montoOrigen / tasaDestinoUsar : 0;
+        montoConvertido = (tasaOrigenUsar > 0 && tasaDestinoUsar > 0) ? (montoOrigen / tasaOrigenUsar) * tasaDestinoUsar : 0;
     } else if (origenEsCuenta && !destinoEsCuenta) {
         // CUENTA → CLIENTE/PROVEEDOR: Convertir de moneda cuenta a USD
         tasaOrigenUsar = Number(monedaOrigen.tasa_cambio) || 1;
@@ -204,7 +204,8 @@ const ConversionTransferencia: React.FC<ConversionTransferenciaProps> = ({ data,
     if (tasaPersonalizada && tasaPersonalizada > 0) {
         tasaFinal = tasaPersonalizada;
         if (origenEsCuenta && destinoEsCuenta) {
-            montoFinal = montoOrigen / tasaPersonalizada;
+            const tasaOrigen = Number(monedaOrigen.tasa_cambio) || 1;
+            montoFinal = tasaOrigen > 0 ? (montoOrigen / tasaOrigen) * tasaPersonalizada : 0;
         } else if (origenEsCuenta && !destinoEsCuenta) {
             montoFinal = montoOrigen / tasaPersonalizada;
         } else if (!origenEsCuenta && destinoEsCuenta) {
@@ -394,9 +395,10 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                 let montoConvertido = 0;
 
                 if (origenEsCuenta && destinoEsCuenta) {
-                    // CUENTA → CUENTA: Dividir por tasa de la moneda destino
+                    // CUENTA → CUENTA: Convertir origen → USD → destino
+                    const tasaOrigen = Number(monedaOrigen.tasa_cambio) || 1;
                     tasaSistema = Number(monedaDestino.tasa_cambio) || 1;
-                    montoConvertido = tasaSistema > 0 ? montoOrigen / tasaSistema : 0;
+                    montoConvertido = (tasaOrigen > 0 && tasaSistema > 0) ? (montoOrigen / tasaOrigen) * tasaSistema : 0;
                 } else if (origenEsCuenta && !destinoEsCuenta) {
                     // CUENTA → CLIENTE/PROVEEDOR: Convertir de moneda cuenta a USD
                     tasaSistema = Number(monedaOrigen.tasa_cambio) || 1;
@@ -418,7 +420,8 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                 if (tasaPersonalizada && tasaPersonalizada > 0) {
                     tasaFinal = tasaPersonalizada;
                     if (origenEsCuenta && destinoEsCuenta) {
-                        montoFinal = montoOrigen / tasaPersonalizada;
+                        const tasaOrigen = Number(monedaOrigen.tasa_cambio) || 1;
+                        montoFinal = tasaOrigen > 0 ? (montoOrigen / tasaOrigen) * tasaPersonalizada : 0;
                     } else if (origenEsCuenta && !destinoEsCuenta) {
                         montoFinal = montoOrigen / tasaPersonalizada;
                     } else if (!origenEsCuenta && destinoEsCuenta) {
@@ -1059,7 +1062,7 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                             />
 
                             {/* ✅ CAMPO DE TASA DE CAMBIO EDITABLE PARA TRANSFERENCIAS */}
-                            <TasaCambioInput data={transferData} setData={setTransferData} errors={transferErrors} monedasActivas={monedasActivas} />
+                            <TasaCambioInput data={transferData} setData={setTransferData} errors={transferErrors} monedasActivas={monedasActivas} monedaForRate={transferData.moneda_destino} />
 
                             <div>
                                 <Label htmlFor="comentario_transferir">Comentario</Label>

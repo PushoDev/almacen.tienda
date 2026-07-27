@@ -12,7 +12,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        DB::statement("ALTER TABLE movimientos MODIFY estado ENUM('pendiente', 'pendiente_confirmacion', 'aprobado', 'en_transito', 'recibido_parcial', 'recibido_completo', 'rechazado', 'cancelado') DEFAULT 'pendiente'");
+        if (DB::connection()->getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE movimientos MODIFY estado ENUM('pendiente', 'pendiente_confirmacion', 'aprobado', 'en_transito', 'recibido_parcial', 'recibido_completo', 'rechazado', 'cancelado') DEFAULT 'pendiente'");
+        }
     }
 
     /**
@@ -20,6 +22,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        DB::statement("ALTER TABLE movimientos MODIFY estado ENUM('pendiente', 'aprobado', 'en_transito', 'recibido_parcial', 'recibido_completo', 'rechazado', 'cancelado') DEFAULT 'pendiente'");
+        if (DB::connection()->getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE movimientos MODIFY estado ENUM('pendiente', 'aprobado', 'en_transito', 'recibido_parcial', 'recibido_completo', 'rechazado', 'cancelado') DEFAULT 'pendiente'");
+        }
     }
 };

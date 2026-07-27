@@ -13,7 +13,7 @@ return new class extends Migration
     public function up(): void
     {
         // First, ensure all current negative values are corrected to 0
-        DB::statement('UPDATE almacen_producto SET cantidad = GREATEST(0, cantidad)');
+        DB::statement('UPDATE almacen_producto SET cantidad = CASE WHEN cantidad < 0 THEN 0 ELSE cantidad END');
     }
 
     /**

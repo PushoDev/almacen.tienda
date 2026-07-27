@@ -814,12 +814,16 @@ class TransaccionController extends Controller
 
         // Calcular monto convertido según el tipo de transferencia
         if ($origenEsCuenta && $destinoEsCuenta) {
-            // CUENTA → CUENTA: Dividir por tasa de la moneda destino (relativo a USD)
+            // CUENTA → CUENTA: Convertir origen → USD → destino
+            $tasaOrigen = $monedaOrigen->tasa_cambio;
             $tasaDestino = $tasaPersonalizada ?? $monedaDestino->tasa_cambio;
+            if ($tasaOrigen <= 0) {
+                throw new \Exception("La tasa de cambio para {$monedaOrigen->codigo_moneda} no es válida.");
+            }
             if ($tasaDestino <= 0) {
                 throw new \Exception("La tasa de cambio para {$monedaDestino->codigo_moneda} no es válida.");
             }
-            $montoConvertido = $montoOrigen / $tasaDestino;
+            $montoConvertido = ($montoOrigen / $tasaOrigen) * $tasaDestino;
         } elseif ($origenEsCuenta && !$destinoEsCuenta) {
             // CUENTA → CLIENTE/PROVEEDOR: Convertir de moneda cuenta a USD
             $tasaOrigen = $tasaPersonalizada ?? $monedaOrigen->tasa_cambio;
@@ -868,14 +872,14 @@ class TransaccionController extends Controller
      */
     private function obtenerTasaCambioFinal(Moneda $monedaOrigen, Moneda $monedaDestino, ?float $tasaPersonalizada, string $origenTipo, string $destinoTipo): float
     {
+        // Si hay tasa personalizada, usarla (va primero por si misma moneda con tasa distinta a 1, ej: USD→USD 1.10)
+        if ($tasaPersonalizada && $tasaPersonalizada > 0) {
+            return $tasaPersonalizada;
+        }
+
         // Si son la misma moneda y mismo tipo, tasa es 1.0
         if ($monedaOrigen->codigo_moneda === $monedaDestino->codigo_moneda && $origenTipo === $destinoTipo) {
             return 1.0;
-        }
-
-        // Si hay tasa personalizada, usarla
-        if ($tasaPersonalizada && $tasaPersonalizada > 0) {
-            return $tasaPersonalizada;
         }
 
         // Determinar qué tasa usar según el tipo de transferencia

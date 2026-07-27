@@ -1,5 +1,9 @@
 # Contexto del Proyecto: almacen.tienda
 
+> **ERP / POS multi-almacén** para tienda física con soporte multi-moneda (USD/CUP/MLC), control de inventario, ventas, compras, logística de traslados, comisiones por vendedor, cierre de caja por turno, y bot de Telegram para aprobaciones y reportes.
+>
+> **Stack:** Laravel 12 · React 19 · Inertia v2 (SPA) · MySQL 8.4 · TailwindCSS 4 · TypeScript
+
 ## Visión General
 
 Sistema de gestión de inventario, punto de venta y logística multi-almacén diseñado para negocios que operan con **múltiples monedas** (USD, CUP, MLC) y varios puntos de venta simultáneos. Incluye control de comisiones por vendedor, gestión de mensajería, cierre de caja por turno y un bot de Telegram integrado para flujos de aprobación y reportes.
@@ -301,7 +305,16 @@ Prefijo: `/api/tienda` — sin autenticación, throttle: 60 req/min.
 
 La página de Logística es un **dashboard informativo** tipo KPI dashboard con cards de resumen:
 
-### Cards actuales (solo visibles para admin/moderador):
+### Cards superiores — Capitales Financieros (4 widgets):
+
+1. **Capital Financiero** (verde, `Landmark` icon) — Suma de: `total_saldo` (cuentas eq. USD) + `balance_neto` (clientes) + `balance_neto` (proveedores) + `total_importe_global` (productos)
+2. **Capital USD** (ámbar, `DollarSign` icon) — Suma de: `balance_neto` (clientes) + `balance_neto` (proveedores) + `total_importe_global` (productos) + `por_tipo['temporales']` + `por_moneda_perm['USD'].equivalente`
+3. **Capital CUP** (índigo, `Wallet` icon) — `por_moneda_perm['CUP'].original` (saldo original en CUP)
+4. **Capital EUR** (azul, `Euro` icon) — `por_moneda_perm['EUR'].original` (saldo original en EUR)
+
+Cada card tiene: `border-l-4`, `shadow-sm hover:shadow-md`, icono en contenedor redondeado en esquina superior derecha.
+
+### Cards de resumen (solo visibles para admin/moderador):
 
 1. **Resumen de Cuentas** — 4 Rows:
    - **Row 1** (4 KPIs): Total Equivalente (en moneda principal), Total Cuentas, Activas, Inactivas
@@ -319,9 +332,7 @@ La página de Logística es un **dashboard informativo** tipo KPI dashboard con 
    - **Row 1**: 4 KPIs (Total Productos, Total Unidades, Valor Total (costo), Stock Bajo cantidad + valor)
    - **Row 2**: 3 barras (Con Stock / Stock Bajo / Sin Stock) con cantidad productos + unidades + barra %
 
-### Cards comunes (visibles a todos los roles):
-- Balances por moneda (cards individuales)
-- Charts inferiores: Gastos Mensuales, Productos Mas Comprados, Compras por Proveedor, Productos por Almacén
+### Charts inferiores (visibles a todos los roles):
 - PlaceholderPatterns al final
 
 ### Lo que NO tiene (eliminado):
