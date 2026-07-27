@@ -814,12 +814,16 @@ class TransaccionController extends Controller
 
         // Calcular monto convertido según el tipo de transferencia
         if ($origenEsCuenta && $destinoEsCuenta) {
-            // CUENTA → CUENTA: Dividir por tasa de la moneda destino (relativo a USD)
+            // CUENTA → CUENTA: Convertir origen → USD → destino
+            $tasaOrigen = $monedaOrigen->tasa_cambio;
             $tasaDestino = $tasaPersonalizada ?? $monedaDestino->tasa_cambio;
+            if ($tasaOrigen <= 0) {
+                throw new \Exception("La tasa de cambio para {$monedaOrigen->codigo_moneda} no es válida.");
+            }
             if ($tasaDestino <= 0) {
                 throw new \Exception("La tasa de cambio para {$monedaDestino->codigo_moneda} no es válida.");
             }
-            $montoConvertido = $montoOrigen / $tasaDestino;
+            $montoConvertido = ($montoOrigen / $tasaOrigen) * $tasaDestino;
         } elseif ($origenEsCuenta && !$destinoEsCuenta) {
             // CUENTA → CLIENTE/PROVEEDOR: Convertir de moneda cuenta a USD
             $tasaOrigen = $tasaPersonalizada ?? $monedaOrigen->tasa_cambio;

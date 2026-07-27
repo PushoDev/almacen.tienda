@@ -177,10 +177,11 @@ const ConversionTransferencia: React.FC<ConversionTransferenciaProps> = ({ data,
     let tasaDestinoUsar = 1;
 
     if (origenEsCuenta && destinoEsCuenta) {
-        // CUENTA → CUENTA: Dividir por tasa de la moneda destino
+        // CUENTA → CUENTA: Convertir origen → USD → destino
+        tasaOrigenUsar = Number(monedaOrigen.tasa_cambio) || 1;
         tasaDestinoUsar = Number(monedaDestino.tasa_cambio) || 1;
         tasaSistema = tasaDestinoUsar;
-        montoConvertido = tasaDestinoUsar > 0 ? montoOrigen / tasaDestinoUsar : 0;
+        montoConvertido = (tasaOrigenUsar > 0 && tasaDestinoUsar > 0) ? (montoOrigen / tasaOrigenUsar) * tasaDestinoUsar : 0;
     } else if (origenEsCuenta && !destinoEsCuenta) {
         // CUENTA → CLIENTE/PROVEEDOR: Convertir de moneda cuenta a USD
         tasaOrigenUsar = Number(monedaOrigen.tasa_cambio) || 1;
@@ -204,7 +205,8 @@ const ConversionTransferencia: React.FC<ConversionTransferenciaProps> = ({ data,
     if (tasaPersonalizada && tasaPersonalizada > 0) {
         tasaFinal = tasaPersonalizada;
         if (origenEsCuenta && destinoEsCuenta) {
-            montoFinal = montoOrigen / tasaPersonalizada;
+            const tasaOrigen = Number(monedaOrigen.tasa_cambio) || 1;
+            montoFinal = tasaOrigen > 0 ? (montoOrigen / tasaOrigen) * tasaPersonalizada : 0;
         } else if (origenEsCuenta && !destinoEsCuenta) {
             montoFinal = montoOrigen / tasaPersonalizada;
         } else if (!origenEsCuenta && destinoEsCuenta) {
@@ -394,9 +396,10 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                 let montoConvertido = 0;
 
                 if (origenEsCuenta && destinoEsCuenta) {
-                    // CUENTA → CUENTA: Dividir por tasa de la moneda destino
+                    // CUENTA → CUENTA: Convertir origen → USD → destino
+                    const tasaOrigen = Number(monedaOrigen.tasa_cambio) || 1;
                     tasaSistema = Number(monedaDestino.tasa_cambio) || 1;
-                    montoConvertido = tasaSistema > 0 ? montoOrigen / tasaSistema : 0;
+                    montoConvertido = (tasaOrigen > 0 && tasaSistema > 0) ? (montoOrigen / tasaOrigen) * tasaSistema : 0;
                 } else if (origenEsCuenta && !destinoEsCuenta) {
                     // CUENTA → CLIENTE/PROVEEDOR: Convertir de moneda cuenta a USD
                     tasaSistema = Number(monedaOrigen.tasa_cambio) || 1;
@@ -418,7 +421,8 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                 if (tasaPersonalizada && tasaPersonalizada > 0) {
                     tasaFinal = tasaPersonalizada;
                     if (origenEsCuenta && destinoEsCuenta) {
-                        montoFinal = montoOrigen / tasaPersonalizada;
+                        const tasaOrigen = Number(monedaOrigen.tasa_cambio) || 1;
+                        montoFinal = tasaOrigen > 0 ? (montoOrigen / tasaOrigen) * tasaPersonalizada : 0;
                     } else if (origenEsCuenta && !destinoEsCuenta) {
                         montoFinal = montoOrigen / tasaPersonalizada;
                     } else if (!origenEsCuenta && destinoEsCuenta) {
