@@ -124,11 +124,11 @@ export default function LogisticaPage({
                                         Capital CUP
                                     </CardDescription>
                                     <CardTitle className="text-3xl font-bold text-indigo-600 dark:text-indigo-400 tabular-nums">
-                                        25,000,000.00
+                                        {resumenCuentas?.por_moneda_perm?.['CUP']?.original.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '0.00'}
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent>
-                                    <p className="text-xs text-muted-foreground">Capital en Pesos Cubanos</p>
+                                    <p className="text-xs text-muted-foreground">Capital en Pesos Cubanos (CUP)</p>
                                 </CardContent>
                             </Card>
 
@@ -138,11 +138,11 @@ export default function LogisticaPage({
                                         Capital EUR
                                     </CardDescription>
                                     <CardTitle className="text-3xl font-bold text-blue-600 dark:text-blue-400 tabular-nums">
-                                        120,000.00
+                                        {resumenCuentas?.por_moneda_perm?.['EUR']?.original.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '0.00'}
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent>
-                                    <p className="text-xs text-muted-foreground">Capital en Euros</p>
+                                    <p className="text-xs text-muted-foreground">Capital en Euros (EUR)</p>
                                 </CardContent>
                             </Card>
                         </>
