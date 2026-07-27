@@ -301,7 +301,16 @@ Prefijo: `/api/tienda` — sin autenticación, throttle: 60 req/min.
 
 La página de Logística es un **dashboard informativo** tipo KPI dashboard con cards de resumen:
 
-### Cards actuales (solo visibles para admin/moderador):
+### Cards superiores — Capitales Financieros (4 widgets):
+
+1. **Capital Financiero** (verde, `Landmark` icon) — Suma de: `total_saldo` (cuentas eq. USD) + `balance_neto` (clientes) + `balance_neto` (proveedores) + `total_importe_global` (productos)
+2. **Capital USD** (ámbar, `DollarSign` icon) — Suma de: `balance_neto` (clientes) + `balance_neto` (proveedores) + `total_importe_global` (productos) + `por_tipo['temporales']` + `por_moneda_perm['USD'].equivalente`
+3. **Capital CUP** (índigo, `Wallet` icon) — `por_moneda_perm['CUP'].original` (saldo original en CUP)
+4. **Capital EUR** (azul, `Euro` icon) — `por_moneda_perm['EUR'].original` (saldo original en EUR)
+
+Cada card tiene: `border-l-4`, `shadow-sm hover:shadow-md`, icono en contenedor redondeado en esquina superior derecha.
+
+### Cards de resumen (solo visibles para admin/moderador):
 
 1. **Resumen de Cuentas** — 4 Rows:
    - **Row 1** (4 KPIs): Total Equivalente (en moneda principal), Total Cuentas, Activas, Inactivas
@@ -319,9 +328,7 @@ La página de Logística es un **dashboard informativo** tipo KPI dashboard con 
    - **Row 1**: 4 KPIs (Total Productos, Total Unidades, Valor Total (costo), Stock Bajo cantidad + valor)
    - **Row 2**: 3 barras (Con Stock / Stock Bajo / Sin Stock) con cantidad productos + unidades + barra %
 
-### Cards comunes (visibles a todos los roles):
-- Balances por moneda (cards individuales)
-- Charts inferiores: Gastos Mensuales, Productos Mas Comprados, Compras por Proveedor, Productos por Almacén
+### Charts inferiores (visibles a todos los roles):
 - PlaceholderPatterns al final
 
 ### Lo que NO tiene (eliminado):

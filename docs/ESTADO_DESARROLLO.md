@@ -205,7 +205,8 @@ resources/js/pages/Empleados/Edit.tsx
 ## 🔄 Historial de cambios recientes
 
 | Fecha | Cambio |
-|---|---|---|
+|:---:|---|
+| 2026-07-26 | **Logística — 4 widgets Capital con datos reales**: reemplazados los `balances` dinámicos por 4 cards fijos (Capital Financiero, USD, CUP, EUR). Capital Financiero suma `total_saldo + clientes.balance_neto + proveedores.balance_neto + productos.total_importe_global`. Capital USD suma `clientes.balance_neto + proveedores.balance_neto + productos.total_importe_global + temporales + USD_perm.equivalente`. Capital CUP/EUR usan `por_moneda_perm[].original`. Iconos (`Landmark`, `DollarSign`, `Wallet`, `Euro`), `border-l-4`, `shadow-sm hover:shadow-md`. Limpiados imports no usados y prop `balances`. |
 | 2026-07-26 | **Cuentas Index — Row 3 ahora filtra solo permanentes**: nuevo `por_moneda_perm` en backend. Formato moneda con `": "` en toda la vista (ej. `$: 305.834,63`). Bug detectado: moneda USD (id=1) eliminada de DB — 79 cuentas huérfanas agrupadas como 'N/A'. |
 | 2026-07-26 | **Cuentas Index rediseñado** — 3 filas de widgets interactivos clickeables (KPIs, desglose por tipo con barras, desglose por moneda). Filtros combinados + resumen de saldos por moneda. Deudas detectadas desde `saldo_cuenta < 0`. Bugfixes: filtro "all" roto, opción "Deudas" ausente en dropdown, acciones ocultas en móvil, paginación con páginas duplicadas. Backend: bloque `$resumen` precalculado en `CuentaController@index`. |
 | 2026-07-25 | **F6** — Herramienta detección/fusión de duplicados: 2 modales, normalización unicode capacidad, suma cantidades + promedio precios |

@@ -10,7 +10,7 @@
 | Campo | Valor |
 |---|---|
 | Rama activa | `feature/bot-telegram` |
-| Última sesión | 2026-07-26 — **Logística**: página rediseñada como dashboard de resúmenes con 4 cards informativos (Cuentas, Clientes, Proveedores, Productos). Eliminados widgets placeholder (Productos/Proveedores/Clientes/Categorias con texto en inglés), animaciones (`CountingNumber`, `CursorFollow`), y `ComprasVentasCharts` mock. Backend: `getResumenPorMonedaPerm()` fix (acumulación por codigo_moneda en vez de sobrescritura), `getMonedaPrincipal()` extraído como método reutilizable, `STOCK_BAJO_THRESHOLD=5` como constante. |
+| Última sesión | 2026-07-26 — **Logística**: 4 widgets Capital (Financiero, USD, CUP, EUR) con datos reales desde DB, iconos (`Landmark`, `DollarSign`, `Wallet`, `Euro`), `border-l-4` y `shadow-sm`. Capital Financiero suma: `total_saldo + balance_neto_clientes + balance_neto_proveedores + total_importe_global`. Capital USD suma: `balance_neto_clientes + balance_neto_proveedores + total_importe_global + temporales + USD_perm.equivalente`. Capital CUP/EUR usan `por_moneda_perm[].original`. Eliminados imports no usados (`Coffee`, `PlaneIcon`, `PlaneTakeoffIcon`, `SquareCheckBig`, `SquareCheckIcon`, `balances` prop). |
 | Estado general | 12/12 módulos estables, 5 bugs conocidos, 4 features pendientes |
 | Próximo paso | Seguir refinando la página de Logística o atender bugs activos |
 
