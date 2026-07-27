@@ -872,14 +872,14 @@ class TransaccionController extends Controller
      */
     private function obtenerTasaCambioFinal(Moneda $monedaOrigen, Moneda $monedaDestino, ?float $tasaPersonalizada, string $origenTipo, string $destinoTipo): float
     {
+        // Si hay tasa personalizada, usarla (va primero por si misma moneda con tasa distinta a 1, ej: USD→USD 1.10)
+        if ($tasaPersonalizada && $tasaPersonalizada > 0) {
+            return $tasaPersonalizada;
+        }
+
         // Si son la misma moneda y mismo tipo, tasa es 1.0
         if ($monedaOrigen->codigo_moneda === $monedaDestino->codigo_moneda && $origenTipo === $destinoTipo) {
             return 1.0;
-        }
-
-        // Si hay tasa personalizada, usarla
-        if ($tasaPersonalizada && $tasaPersonalizada > 0) {
-            return $tasaPersonalizada;
         }
 
         // Determinar qué tasa usar según el tipo de transferencia
