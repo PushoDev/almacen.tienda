@@ -1,6 +1,9 @@
 <?php
 
 use App\Http\Controllers\TransaccionController;
+use App\Http\Controllers\GastoController;
+use App\Http\Controllers\IngresoController;
+use App\Http\Controllers\TransferenciaController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'verified'])->group(
@@ -22,25 +25,29 @@ Route::middleware(['auth', 'verified'])->group(
             ->name('distribuir.costos.manual');
 
 
-        // --- RUTAS DE MOVIMIENTOS FINANCIEROS (NUEVAS) ---
+        // --- RUTAS DE MOVIMIENTOS FINANCIEROS INDEPENDIENTES ---
 
-        // Ruta para Gastos
-        Route::post('transacciones/gastar', [TransaccionController::class, 'gastar'])
+        // Gasto
+        Route::post('transacciones/gastar', [GastoController::class, 'store'])
             ->name('transacciones.gastar');
 
-        // Ruta para Ingreso
-        Route::post('transacciones/ingresar', [TransaccionController::class, 'ingresar'])
+        // Ingreso
+        Route::get('transacciones/ingreso/data', [IngresoController::class, 'formData'])
+            ->name('transacciones.ingreso.data');
+        Route::post('transacciones/ingresar', [IngresoController::class, 'store'])
             ->name('transacciones.ingresar');
 
-        // Ruta para Transferencia
-        Route::post('transacciones/transferir', [TransaccionController::class, 'transferir'])
+        // Transferencia
+        Route::get('transacciones/transferencia/data', [TransferenciaController::class, 'formData'])
+            ->name('transacciones.transferencia.data');
+        Route::post('transacciones/transferir', [TransferenciaController::class, 'store'])
             ->name('transacciones.transferir');
 
-        // ✅ NUEVA RUTA: Mostrar detalles de transacción
+        // ✅ Detalles de transacción
         Route::get('transacciones/{movimiento}', [TransaccionController::class, 'show'])
             ->name('transacciones.show');
 
-        // ✅ NUEVA RUTA: Gastos por Transportación
+        // ✅ Gastos por Transportación
         Route::post('transacciones/gasto-transportacion', [TransaccionController::class, 'gastoTransportacion'])
             ->name('transacciones.gasto-transportacion');
     }
