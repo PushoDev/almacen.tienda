@@ -363,20 +363,17 @@ class TransaccionController extends Controller
             'monto' => 'required|numeric|min:0.01',
             'moneda' => 'required|string|in:' . implode(',', $monedasValidas),
             'comentario' => 'nullable|string|max:255',
-            'tasa_cambio_aplicada' => 'nullable|numeric|min:0.0001',
         ]);
 
         DB::beginTransaction();
 
         try {
-            $tasaCambioAplicada = $this->resolveTasaCambio($request);
-
             $movimientoData = [
                 'user_id' => auth()->id(),
                 'tipo_movimiento_id' => 1,
                 'monto' => $request->monto,
                 'moneda' => $request->moneda,
-                'tasa_cambio_aplicada' => $tasaCambioAplicada,
+                'tasa_cambio_aplicada' => 1.0,
                 'descripcion' => $request->comentario,
                 'fecha_operacion' => now(),
                 'estado' => 'completado',
@@ -396,15 +393,16 @@ class TransaccionController extends Controller
                     if (!in_array($origen->id, $cuentasAsignadas)) {
                         throw new \Exception('No tiene permiso para operar con esta cuenta.');
                     }
+
+                    // Vendedor solo puede gastar desde cuentas personales
+                    if (($origen->tipo_titular ?? '__sin_asignar__') !== 'personal') {
+                        throw new \Exception('No puede realizar gastos desde una cuenta externa o sin asignar.');
+                    }
                 }
 
                 // ✅ Validar que la moneda de la cuenta coincida
                 if ($origen->moneda->codigo_moneda !== $request->moneda) {
                     throw new \Exception("La moneda de la cuenta ({$origen->moneda->codigo_moneda}) no coincide con la transacción ({$request->moneda}).");
-                }
-
-                if ($origen->saldo_cuenta < $request->monto) {
-                    throw new \Exception('Saldo insuficiente en la cuenta.');
                 }
 
                 // ✅ GUARDAR SALDOS ANTES Y DESPUÉS

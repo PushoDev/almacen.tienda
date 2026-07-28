@@ -124,7 +124,7 @@ export default function Transacciones({ compras, cuentasOrigen, cuentasDestino, 
 
                     {/* ✅ Pestaña Movimientos - Actualizada con proveedores */}
                     <TabsContent value="movimientos" className="space-y-4">
-                        <Movimientos cuentasOrigen={cuentasOrigen} cuentasDestino={cuentasDestino} clientes={clientes} proveedores={proveedores} monedasActivas={monedasActivas} />
+                        <Movimientos cuentasOrigen={cuentasOrigen} cuentasDestino={cuentasDestino} clientes={clientes} proveedores={proveedores} monedasActivas={monedasActivas} userRole={userRole} />
                     </TabsContent>
 
                     {/* ✅ Pestaña Distribuir Costos - Solo Admin y Moderador */}

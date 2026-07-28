@@ -43,6 +43,7 @@ interface Cuenta {
     saldo_cuenta: number;
     deuda: number;
     tipo_cuenta: string;
+    tipo_titular: string | null;
     estado: string;
     moneda_id: number;
     moneda: Moneda;
@@ -71,6 +72,7 @@ interface Props {
     clientes: Cliente[];
     proveedores: Proveedor[];
     monedasActivas: Moneda[];
+    userRole: string;
 }
 
 type EntidadTipo = 'cuenta' | 'cliente' | 'proveedor';
@@ -256,7 +258,7 @@ const ConversionTransferencia: React.FC<ConversionTransferenciaProps> = ({ data,
 // ------------------------------------
 // COMPONENTE PRINCIPAL (Movimientos) CORREGIDO
 // ------------------------------------
-export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, proveedores, monedasActivas }: Props) {
+export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, proveedores, monedasActivas, userRole }: Props) {
     const [alert, setAlert] = useState<AlertState>({ show: false, message: '', type: 'success' });
     const [gastoOrigenSearch, setGastoOrigenSearch] = useState('');
     const [ingresoDestinoSearch, setIngresoDestinoSearch] = useState('');
@@ -292,7 +294,6 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
     const handleGastoSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
-        // ✅ CORRECCIÓN: Enviar datos correctamente
         postGasto(route('transacciones.gastar'), {
             onSuccess: () => {
                 showToast('¡Gasto registrado con éxito!', 'success');
@@ -502,7 +503,6 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                     newData.origen_tipo = tipoEntidad;
                     newData.origen_id = value;
                     newData.moneda = selectedMoneda;
-                    newData.tasa_cambio_aplicada = initialTasa;
                 }
                 return newData;
             });
@@ -557,8 +557,17 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
         cuentasList: Cuenta[] = cuentasOrigen,
     ): Array<{ id: string; label: string }> => {
         if (tipoEntidad === 'cuenta') {
-            return cuentasList
-                .filter((c) => !(exclusionId === String(c.id) && exclusionTipo === 'cuenta'))
+            const cuentasFiltradas = cuentasList
+                .filter((c) => !(exclusionId === String(c.id) && exclusionTipo === 'cuenta'));
+
+            // Vendedor solo ve cuentas personales en gasto
+            if (userRole === 'vendedor') {
+                return cuentasFiltradas
+                    .filter((c) => c.tipo_titular === 'personal')
+                    .map((c) => ({ id: String(c.id), label: getEntidadInfo(c.id, 'cuenta') }));
+            }
+
+            return cuentasFiltradas
                 .map((c) => ({ id: String(c.id), label: getEntidadInfo(c.id, 'cuenta') }));
         }
         if (tipoEntidad === 'cliente') {
@@ -611,7 +620,6 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                                                 origen_tipo: value as EntidadTipo,
                                                 origen_id: '',
                                                 moneda: '',
-                                                tasa_cambio_aplicada: '',
                                             });
                                         }
                                     }}
@@ -641,7 +649,7 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                                             value={gastoData.origen_id || null}
                                             onValueChange={(val) => {
                                                 if (val) handleEntidadChange(val, gastoData.origen_tipo, 'origen', setGastoData);
-                                                else setGastoData({ ...gastoData, origen_id: '', moneda: '', tasa_cambio_aplicada: '' });
+                                                else setGastoData({ ...gastoData, origen_id: '', moneda: '' });
                                             }}
                                             onInputValueChange={setGastoOrigenSearch}
                                             itemToStringLabel={(id: string) => getEntidadItems(gastoData.origen_tipo).find((i) => i.id === id)?.label ?? ''}
@@ -693,9 +701,6 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                                 />
                                 {gastoErrors.monto && <p className="mt-1 text-sm text-red-500">{gastoErrors.monto}</p>}
                             </div>
-
-                            {/* ✅ Tasa de Cambio Condicional CORREGIDA */}
-                            <TasaCambioInput data={gastoData} setData={setGastoData} errors={gastoErrors} monedasActivas={monedasActivas} />
 
                             <div>
                                 <Label htmlFor="comentario_gasto">Comentario / Concepto</Label>
