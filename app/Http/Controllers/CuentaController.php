@@ -174,7 +174,7 @@ class CuentaController extends Controller
             'saldo_cuenta' => ['nullable', 'numeric'],
             'moneda_id' => ['required', 'exists:monedas,id'],
             'tipo_titular' => ['nullable', 'in:externa,personal'],
-            'tipo_cuenta' => ['required', 'in:permanentes,temporales'],
+            'tipo_cuenta' => ['required', 'in:permanentes'],
             'estado' => ['required', 'in:activa,inactiva'],
             'notas_cuenta' => ['nullable', 'string'],
         ]);
@@ -185,7 +185,7 @@ class CuentaController extends Controller
             'saldo_cuenta' => $validated['saldo_cuenta'] ?? 0.00,
             'moneda_id' => $validated['moneda_id'],
             'tipo_titular' => $validated['tipo_titular'],
-            'tipo_cuenta' => $validated['tipo_cuenta'],
+            'tipo_cuenta' => $validated['tipo_cuenta'] ?? 'permanentes',
             'estado' => $validated['estado'],
             'notas_cuenta' => $validated['notas_cuenta'],
         ]);
@@ -296,7 +296,7 @@ class CuentaController extends Controller
             'saldo_cuenta' => ['nullable', 'numeric'],
             'moneda_id' => ['required', 'exists:monedas,id'],
             'tipo_titular' => ['nullable', 'in:externa,personal'],
-            'tipo_cuenta' => ['required', 'in:permanentes,temporales'],
+            'tipo_cuenta' => ['required', 'in:permanentes'],
             'estado' => ['required', 'in:activa,inactiva'],
             'notas_cuenta' => ['nullable', 'string'],
         ]);
@@ -307,7 +307,7 @@ class CuentaController extends Controller
             'saldo_cuenta' => $saldoCambio ? $validated['saldo_cuenta'] : $cuenta->saldo_cuenta,
             'moneda_id' => $validated['moneda_id'],
             'tipo_titular' => $validated['tipo_titular'] ?? $cuenta->tipo_titular,
-            'tipo_cuenta' => $validated['tipo_cuenta'],
+            'tipo_cuenta' => $validated['tipo_cuenta'] ?? 'permanentes',
             'estado' => $validated['estado'],
             'notas_cuenta' => $validated['notas_cuenta'],
         ]);
