@@ -59,6 +59,7 @@ interface CuentaConMoneda extends CuentaProps {
     estado: string;
     moneda_id: number;
     moneda: MonedaInfo | null;
+    tipo_titular?: string | null;
 }
 
 interface ResumenPorMonedaItem {
@@ -409,7 +410,9 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                     <TableHead className="w-[250px] text-white">Cuenta</TableHead>
                                     <TableHead className="text-white">Moneda</TableHead>
                                     <TableHead className="text-white">Saldo</TableHead>
+                                    <TableHead className="text-white">Tipo Titular</TableHead>
                                     <TableHead className="text-white">Tipo</TableHead>
+                                    <TableHead className="text-white">Estado Financiero</TableHead>
                                     <TableHead className="text-white">Estado</TableHead>
                                     {!isVendedor && <TableHead className="text-right text-white">Acciones</TableHead>}
                                 </TableRow>
@@ -455,12 +458,36 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                             </div>
                                         </TableCell>
                                         <TableCell>
+                                            {cuenta.tipo_titular ? (
+                                                <Badge variant="outline" className={
+                                                    cuenta.tipo_titular === 'externa'
+                                                        ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300'
+                                                        : 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/20 dark:text-violet-300'
+                                                }>
+                                                    {cuenta.tipo_titular === 'externa' ? 'Externa' : 'Personal'}
+                                                </Badge>
+                                            ) : (
+                                                <span className="text-muted-foreground text-xs">—</span>
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
                                             <Badge variant="outline" className={
-                                                cuenta.tipo_cuenta === 'permanentes' ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300'
-                                                : cuenta.tipo_cuenta === 'temporales' ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300'
-                                                : 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300'
+                                                cuenta.tipo_cuenta === 'permanentes'
+                                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300'
+                                                    : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300'
                                             }>
-                                                {cuenta.tipo_cuenta.charAt(0).toUpperCase() + cuenta.tipo_cuenta.slice(1)}
+                                                {cuenta.tipo_cuenta === 'permanentes' ? 'Permanente' : 'Temporal'}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline" className={
+                                                (cuenta.saldo_cuenta ?? 0) > 0
+                                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300'
+                                                    : (cuenta.saldo_cuenta ?? 0) < 0
+                                                        ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300'
+                                                        : 'border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300'
+                                            }>
+                                                {(cuenta.saldo_cuenta ?? 0) > 0 ? 'Con Fondo' : (cuenta.saldo_cuenta ?? 0) < 0 ? 'En Deuda' : 'Neutro'}
                                             </Badge>
                                         </TableCell>
                                         <TableCell>
@@ -528,19 +555,19 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                 ))}
                                 {cuentasPagina.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="py-12 text-center text-muted-foreground">
+                                        <TableCell colSpan={8} className="py-12 text-center text-muted-foreground">
                                             {hasFilters ? 'No hay cuentas que coincidan con los filtros aplicados.' : 'No hay cuentas registradas.'}
                                         </TableCell>
                                     </TableRow>
                                 )}
                             </TableBody>
                             <TableFooter>
-                                <TableRow>
-                                    <TableCell colSpan={2} className="font-medium">Total de cuentas filtradas</TableCell>
-                                    <TableCell className="font-medium">{cuentasFiltradas.length}</TableCell>
-                                    <TableCell colSpan={2} className="font-medium text-right text-emerald-600">{simbolo}: {totalFiltrado.toFixed(2)}</TableCell>
-                                    {!isVendedor && <TableCell />}
-                                </TableRow>
+                                    <TableRow>
+                                        <TableCell colSpan={2} className="font-medium">Total de cuentas filtradas</TableCell>
+                                        <TableCell className="font-medium">{cuentasFiltradas.length}</TableCell>
+                                        <TableCell colSpan={4} className="font-medium text-right text-emerald-600">{simbolo}: {totalFiltrado.toFixed(2)}</TableCell>
+                                        {!isVendedor && <TableCell />}
+                                    </TableRow>
                             </TableFooter>
                         </Table>
                     </CardContent>

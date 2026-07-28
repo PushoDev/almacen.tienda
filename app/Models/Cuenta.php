@@ -14,27 +14,25 @@ class Cuenta extends Model
     protected $table = 'cuentas';
 
 
-    // Propiedades que pueden ser asignadas masivamente (ACTUALIZADO)
     protected $fillable = [
         'nombre_cuenta',
         'saldo_cuenta',
         'tipo_moneda',
-        'deuda',
         'tipo_cuenta',
         'moneda_id',
         'notas_cuenta',
         'tipo',
         'estado',
+        'tipo_titular',
     ];
 
-    // Casts para manejar tipos de datos específicos (ACTUALIZADO)
     protected $casts = [
         'saldo_cuenta' => 'double',
-        'deuda' => 'double',
         'estado' => 'string',
         'tipo_cuenta' => 'string',
         'tipo_moneda' => 'string',
         'tipo' => 'string',
+        'tipo_titular' => 'string',
     ];
 
     // Relacion con las monedas
