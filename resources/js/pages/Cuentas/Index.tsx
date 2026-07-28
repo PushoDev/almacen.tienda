@@ -30,7 +30,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import AppLayout from '@/layouts/app-layout';
 import { CuentaProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Coins, CreditCard, Edit3, Eye, Landmark, Plus, Search, Trash2, Wallet, X } from 'lucide-react';
+import { Banknote, Coins, CreditCard, Edit3, Eye, Globe, Landmark, Minus, Package, Plus, Search, Trash2, User, Wallet, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast, Toaster } from 'sonner';
 
@@ -84,13 +84,6 @@ interface ResumenData {
     cuentas_inactivas: number;
 }
 
-const TIPOS = ['permanentes', 'temporales'] as const;
-const tipoStyles: Record<string, { label: string; bg: string; text: string; border: string; bar: string }> = {
-    permanentes: { label: 'Permanentes', bg: 'bg-emerald-50 dark:bg-emerald-950/20', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-800', bar: 'bg-emerald-500' },
-    temporales: { label: 'Temporales', bg: 'bg-amber-50 dark:bg-amber-950/20', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-200 dark:border-amber-800', bar: 'bg-amber-500' },
-    deudas: { label: 'Deudas', bg: 'bg-red-50 dark:bg-red-950/20', text: 'text-red-700 dark:text-red-300', border: 'border-red-200 dark:border-red-800', bar: 'bg-red-500' },
-};
-
 export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cuentas: CuentaConMoneda[]; monedaPrincipal: MonedaInfo | null; resumen: ResumenData }) {
     const { props } = usePage();
     const isAdmin = props.auth?.user?.role === 'admin';
@@ -105,26 +98,20 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
         });
     };
 
-    const [filtroTipo, setFiltroTipo] = useState('');
     const [filtroMoneda, setFiltroMoneda] = useState('');
     const [filtroEstado, setFiltroEstado] = useState('');
-    const [filtroDeudas, setFiltroDeudas] = useState(false);
+    const [filtroTipoTitular, setFiltroTipoTitular] = useState('');
     const [busqueda, setBusqueda] = useState('');
     const [paginaActual, setPaginaActual] = useState(1);
 
     const limpiarFiltros = () => {
-        setFiltroTipo('');
         setFiltroMoneda('');
         setFiltroEstado('');
-        setFiltroDeudas(false);
+        setFiltroTipoTitular('');
         setBusqueda('');
         setPaginaActual(1);
     };
 
-    const toggleTipo = (v: string) => {
-        setFiltroTipo((p) => (p === v ? '' : v));
-        setPaginaActual(1);
-    };
     const toggleEstado = (v: string) => {
         setFiltroEstado((p) => (p === v ? '' : v));
         setPaginaActual(1);
@@ -133,23 +120,22 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
         setFiltroMoneda((p) => (p === v ? '' : v));
         setPaginaActual(1);
     };
-    const toggleDeudas = () => {
-        setFiltroDeudas((p) => !p);
+    const toggleTipoTitular = (v: string) => {
+        setFiltroTipoTitular((p) => (p === v ? '' : v));
         setPaginaActual(1);
     };
 
     const cuentasFiltradas = useMemo(() => {
         return cuentas.filter((c) => {
-            const tipoOk = !filtroTipo || c.tipo_cuenta === filtroTipo;
             const monOk = !filtroMoneda || c.moneda?.codigo_moneda === filtroMoneda;
             const estOk = !filtroEstado || c.estado === filtroEstado;
-            const deudasOk = !filtroDeudas || (c.saldo_cuenta ?? 0) < 0;
+            const tipoTitularOk = !filtroTipoTitular || (c.tipo_titular ?? '__sin_asignar__') === filtroTipoTitular;
             const busqOk = !busqueda
                 || c.nombre_cuenta.toLowerCase().includes(busqueda.toLowerCase())
                 || c.moneda?.codigo_moneda.toLowerCase().includes(busqueda.toLowerCase());
-            return tipoOk && monOk && estOk && deudasOk && busqOk;
+            return monOk && estOk && tipoTitularOk && busqOk;
         });
-    }, [cuentas, filtroTipo, filtroMoneda, filtroEstado, filtroDeudas, busqueda]);
+    }, [cuentas, filtroMoneda, filtroEstado, filtroTipoTitular, busqueda]);
 
     const elementosPorPagina = 10;
     const totalPaginas = Math.ceil(cuentasFiltradas.length / elementosPorPagina);
@@ -196,7 +182,28 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
         return { totalEnPrincipal: Math.abs(total), cantidad };
     }, [cuentas]);
 
-    const hasFilters = !!(filtroTipo || filtroMoneda || filtroEstado || filtroDeudas || busqueda);
+    const infoTipoTitular = useMemo(() => {
+        let extCant = 0, extTotal = 0;
+        let perCant = 0, perTotal = 0;
+        let sinCant = 0, sinTotal = 0;
+
+        cuentas.forEach((c) => {
+            const tasa = c.moneda?.tasa_cambio || 1;
+            const equiv = tasa > 0 ? (c.saldo_cuenta ?? 0) / tasa : 0;
+
+            if (c.tipo_titular === 'externa') { extCant++; extTotal += equiv; }
+            else if (c.tipo_titular === 'personal') { perCant++; perTotal += equiv; }
+            else { sinCant++; sinTotal += equiv; }
+        });
+
+        return {
+            externa: { cantidad: extCant, total: extTotal },
+            personal: { cantidad: perCant, total: perTotal },
+            sinAsignar: { cantidad: sinCant, total: sinTotal },
+        };
+    }, [cuentas]);
+
+    const hasFilters = !!(filtroMoneda || filtroEstado || filtroTipoTitular || busqueda);
 
     const paginas = useMemo((): (number | 'ellipsis')[] => {
         if (totalPaginas <= 7) return Array.from({ length: totalPaginas }, (_, i) => i + 1);
@@ -268,45 +275,62 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                     </div>
                 </div>
 
-                {/* Row 2: Desglose por Tipo */}
+                {/* Row 2: Desglose por Tipo Titular */}
                 <div className="grid gap-4 md:grid-cols-3">
-                    {TIPOS.map((tipo) => {
-                        const s = tipoStyles[tipo];
-                        const saldo = resumen?.por_tipo?.[tipo] ?? 0;
-                        const count = cuentas.filter((c) => c.tipo_cuenta === tipo).length;
-                        const pct = totalCuentas > 0 ? (count / totalCuentas) * 100 : 0;
-                        const active = filtroTipo === tipo;
-                        return (
-                            <div key={tipo} onClick={() => toggleTipo(tipo)}
-                                className={`cursor-pointer rounded-lg border p-4 shadow-sm transition-all hover:shadow-md ${s.border} ${s.bg} ${active ? 'ring-2 ring-offset-1 ring-current' : ''}`}>
-                                <div className="mb-2 flex items-center justify-between">
-                                    <span className={`text-sm font-semibold ${s.text}`}>{s.label}</span>
-                                    <Badge variant="outline" className={`${s.text} ${s.border} text-xs`}>{count} cuentas</Badge>
-                                </div>
-                                <p className={`text-2xl font-bold ${s.text}`}>{saldo < 0 ? '-' : ''}{simbolo}: {Math.abs(saldo).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                                <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-                                    <div className={`h-full rounded-full transition-all duration-500 ${s.bar}`} style={{ width: `${Math.min(pct, 100)}%` }} />
-                                </div>
-                                <p className="mt-1 text-right text-xs text-muted-foreground">{pct.toFixed(0)}% del total</p>
-                            </div>
-                        );
-                    })}
-                    {/* Deudas card - computada desde saldo negativo */}
-                    <div onClick={toggleDeudas}
-                        className={`cursor-pointer rounded-lg border p-4 shadow-sm transition-all hover:shadow-md ${tipoStyles.deudas.border} ${tipoStyles.deudas.bg} ${filtroDeudas ? 'ring-2 ring-offset-1 ring-current' : ''}`}>
+                    {/* Externa */}
+                    <div onClick={() => toggleTipoTitular('externa')}
+                        className={`cursor-pointer rounded-lg border p-4 shadow-sm transition-all hover:shadow-md ${filtroTipoTitular === 'externa' ? 'border-blue-500 bg-blue-100 dark:bg-blue-900/40 ring-2 ring-offset-1 ring-blue-500' : 'border-blue-500/20 bg-blue-50/50 dark:bg-blue-900/20'}`}>
                         <div className="mb-2 flex items-center justify-between">
-                            <span className={`text-sm font-semibold ${tipoStyles.deudas.text}`}>Deudas</span>
-                            <Badge variant="outline" className={`${tipoStyles.deudas.text} ${tipoStyles.deudas.border} text-xs`}>{infoDeudas.cantidad} cuentas</Badge>
+                             <span className="flex items-center gap-1.5 text-sm font-semibold text-blue-700 dark:text-blue-300"><Globe size={16} /> Externa</span>
+                             <Badge variant="outline" className="border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-300 text-xs">{infoTipoTitular.externa.cantidad} cuentas</Badge>
                         </div>
-                        <p className={`text-2xl font-bold ${tipoStyles.deudas.text}`}>
-                            {simbolo}: {infoDeudas.totalEnPrincipal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <p className="text-2xl font-bold text-blue-900 dark:text-blue-200">
+                            {simbolo}: {infoTipoTitular.externa.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </p>
                         <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-                            <div className={`h-full rounded-full transition-all duration-500 ${tipoStyles.deudas.bar}`}
-                                style={{ width: `${Math.min(totalCuentas > 0 ? (infoDeudas.cantidad / totalCuentas) * 100 : 0, 100)}%` }} />
+                            <div className="h-full rounded-full transition-all duration-500 bg-blue-500"
+                                style={{ width: `${Math.min(totalCuentas > 0 ? (infoTipoTitular.externa.cantidad / totalCuentas) * 100 : 0, 100)}%` }} />
                         </div>
                         <p className="mt-1 text-right text-xs text-muted-foreground">
-                            {totalCuentas > 0 ? ((infoDeudas.cantidad / totalCuentas) * 100).toFixed(0) : 0}% del total
+                            {totalCuentas > 0 ? ((infoTipoTitular.externa.cantidad / totalCuentas) * 100).toFixed(0) : 0}% del total
+                        </p>
+                    </div>
+
+                    {/* Personal */}
+                    <div onClick={() => toggleTipoTitular('personal')}
+                        className={`cursor-pointer rounded-lg border p-4 shadow-sm transition-all hover:shadow-md ${filtroTipoTitular === 'personal' ? 'border-violet-500 bg-violet-100 dark:bg-violet-900/40 ring-2 ring-offset-1 ring-violet-500' : 'border-violet-500/20 bg-violet-50/50 dark:bg-violet-900/20'}`}>
+                        <div className="mb-2 flex items-center justify-between">
+                             <span className="flex items-center gap-1.5 text-sm font-semibold text-violet-700 dark:text-violet-300"><User size={16} /> Personal</span>
+                             <Badge variant="outline" className="border-violet-200 text-violet-700 dark:border-violet-800 dark:text-violet-300 text-xs">{infoTipoTitular.personal.cantidad} cuentas</Badge>
+                        </div>
+                        <p className="text-2xl font-bold text-violet-900 dark:text-violet-200">
+                            {simbolo}: {infoTipoTitular.personal.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+                            <div className="h-full rounded-full transition-all duration-500 bg-violet-500"
+                                style={{ width: `${Math.min(totalCuentas > 0 ? (infoTipoTitular.personal.cantidad / totalCuentas) * 100 : 0, 100)}%` }} />
+                        </div>
+                        <p className="mt-1 text-right text-xs text-muted-foreground">
+                            {totalCuentas > 0 ? ((infoTipoTitular.personal.cantidad / totalCuentas) * 100).toFixed(0) : 0}% del total
+                        </p>
+                    </div>
+
+                    {/* Sin asignar */}
+                    <div onClick={() => toggleTipoTitular('__sin_asignar__')}
+                        className={`cursor-pointer rounded-lg border p-4 shadow-sm transition-all hover:shadow-md ${filtroTipoTitular === '__sin_asignar__' ? 'border-gray-500 bg-gray-100 dark:bg-gray-800/60 ring-2 ring-offset-1 ring-gray-500' : 'border-gray-500/20 bg-gray-50/50 dark:bg-gray-800/20'}`}>
+                        <div className="mb-2 flex items-center justify-between">
+                             <span className="flex items-center gap-1.5 text-sm font-semibold text-gray-700 dark:text-gray-300"><Minus size={16} /> Sin asignar</span>
+                             <Badge variant="outline" className="border-gray-200 text-gray-700 dark:border-gray-700 dark:text-gray-300 text-xs">{infoTipoTitular.sinAsignar.cantidad} cuentas</Badge>
+                        </div>
+                        <p className="text-2xl font-bold text-gray-900 dark:text-gray-200">
+                            {simbolo}: {infoTipoTitular.sinAsignar.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+                            <div className="h-full rounded-full transition-all duration-500 bg-gray-500"
+                                style={{ width: `${Math.min(totalCuentas > 0 ? (infoTipoTitular.sinAsignar.cantidad / totalCuentas) * 100 : 0, 100)}%` }} />
+                        </div>
+                        <p className="mt-1 text-right text-xs text-muted-foreground">
+                            {totalCuentas > 0 ? ((infoTipoTitular.sinAsignar.cantidad / totalCuentas) * 100).toFixed(0) : 0}% del total
                         </p>
                     </div>
                 </div>
@@ -347,14 +371,6 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                 />
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
-                                <Select value={filtroTipo || 'all'} onValueChange={(v) => { setFiltroTipo(v === 'all' ? '' : v); setPaginaActual(1); }}>
-                                    <SelectTrigger className="w-[150px]"><SelectValue placeholder="Tipo de cuenta" /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">Todos los tipos</SelectItem>
-                                        <SelectItem value="permanentes">Permanentes</SelectItem>
-                                        <SelectItem value="temporales">Temporales</SelectItem>
-                                    </SelectContent>
-                                </Select>
                                 <Select value={filtroMoneda || 'all'} onValueChange={(v) => { setFiltroMoneda(v === 'all' ? '' : v); setPaginaActual(1); }}>
                                     <SelectTrigger className="w-[180px]"><SelectValue placeholder="Todas las monedas" /></SelectTrigger>
                                     <SelectContent>
@@ -375,10 +391,9 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                             <>
                                 <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
                                     <span className="text-muted-foreground text-xs">Filtros activos:</span>
-                                    {filtroTipo && <FilterBadge label={`Tipo: ${tipoStyles[filtroTipo]?.label || filtroTipo}`} onClear={() => setFiltroTipo('')} />}
                                     {filtroMoneda && <FilterBadge label={`Moneda: ${filtroMoneda}`} onClear={() => setFiltroMoneda('')} />}
                                     {filtroEstado && <FilterBadge label={`Estado: ${filtroEstado}`} onClear={() => setFiltroEstado('')} />}
-                                    {filtroDeudas && <FilterBadge label="Deudas" onClear={() => setFiltroDeudas(false)} />}
+                                    {filtroTipoTitular && <FilterBadge label={`Titular: ${filtroTipoTitular === '__sin_asignar__' ? 'Sin asignar' : filtroTipoTitular.charAt(0).toUpperCase() + filtroTipoTitular.slice(1)}`} onClear={() => setFiltroTipoTitular('')} />}
                                     {busqueda && <FilterBadge label={`Buscar: "${busqueda}"`} onClear={() => setBusqueda('')} />}
                                     <Button variant="ghost" size="sm" onClick={limpiarFiltros} className="h-7 text-xs">Limpiar todos</Button>
                                 </div>
@@ -410,10 +425,8 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                     <TableHead className="w-[250px] text-white">Cuenta</TableHead>
                                     <TableHead className="text-white">Moneda</TableHead>
                                     <TableHead className="text-white">Saldo</TableHead>
+                                    <TableHead className="text-white">Tipo Activo</TableHead>
                                     <TableHead className="text-white">Tipo Titular</TableHead>
-                                    <TableHead className="text-white">Tipo</TableHead>
-                                    <TableHead className="text-white">Estado Financiero</TableHead>
-                                    <TableHead className="text-white">Estado</TableHead>
                                     {!isVendedor && <TableHead className="text-right text-white">Acciones</TableHead>}
                                 </TableRow>
                             </TableHeader>
@@ -423,10 +436,7 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                         <TableCell className="font-medium">
                                             <div className="flex items-center gap-3">
                                                 <div className="bg-primary/10 flex h-8 w-8 items-center justify-center rounded-full"><Landmark size={16} className="text-primary" /></div>
-                                                <div className="flex flex-col">
-                                                    <span className="font-semibold">{cuenta.nombre_cuenta}</span>
-                                                    <span className="text-muted-foreground text-xs capitalize">{cuenta.tipo}</span>
-                                                </div>
+                                                <span className="font-semibold">{cuenta.nombre_cuenta}</span>
                                             </div>
                                         </TableCell>
                                         <TableCell>
@@ -458,46 +468,28 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                             </div>
                                         </TableCell>
                                         <TableCell>
+                                            <Badge variant="outline" className={
+                                                cuenta.tipo === 'tarjeta'
+                                                    ? 'inline-flex items-center gap-1.5 border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-800 dark:bg-cyan-950/20 dark:text-cyan-300'
+                                                    : cuenta.tipo === 'efectivo'
+                                                        ? 'inline-flex items-center gap-1.5 border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300'
+                                                        : 'inline-flex items-center gap-1.5 border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300'
+                                            }>
+                                                {cuenta.tipo === 'tarjeta' ? <><CreditCard size={12} /> Tarjeta</> : cuenta.tipo === 'efectivo' ? <><Banknote size={12} /> Efectivo</> : <><Package size={12} /> Otro</>}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell>
                                             {cuenta.tipo_titular ? (
                                                 <Badge variant="outline" className={
                                                     cuenta.tipo_titular === 'externa'
-                                                        ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300'
-                                                        : 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/20 dark:text-violet-300'
+                                                        ? 'inline-flex items-center gap-1.5 border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300'
+                                                        : 'inline-flex items-center gap-1.5 border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/20 dark:text-violet-300'
                                                 }>
-                                                    {cuenta.tipo_titular === 'externa' ? 'Externa' : 'Personal'}
+                                                    {cuenta.tipo_titular === 'externa' ? <><Globe size={12} /> Externa</> : <><User size={12} /> Personal</>}
                                                 </Badge>
                                             ) : (
-                                                <span className="text-muted-foreground text-xs">—</span>
+                                                <span className="text-muted-foreground inline-flex items-center gap-1 text-xs"><Minus size={12} /> Sin asignar</span>
                                             )}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant="outline" className={
-                                                cuenta.tipo_cuenta === 'permanentes'
-                                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300'
-                                                    : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300'
-                                            }>
-                                                {cuenta.tipo_cuenta === 'permanentes' ? 'Permanente' : 'Temporal'}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant="outline" className={
-                                                (cuenta.saldo_cuenta ?? 0) > 0
-                                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300'
-                                                    : (cuenta.saldo_cuenta ?? 0) < 0
-                                                        ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300'
-                                                        : 'border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300'
-                                            }>
-                                                {(cuenta.saldo_cuenta ?? 0) > 0 ? 'Con Fondo' : (cuenta.saldo_cuenta ?? 0) < 0 ? 'En Deuda' : 'Neutro'}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant={cuenta.estado === 'activa' ? 'default' : 'secondary'} className={
-                                                cuenta.estado === 'activa'
-                                                    ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-300'
-                                                    : 'bg-gray-100 text-gray-800 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300'
-                                            }>
-                                                {cuenta.estado === 'activa' ? 'Activa' : 'Inactiva'}
-                                            </Badge>
                                         </TableCell>
                                         {!isVendedor && (
                                             <TableCell className="text-right">
@@ -555,7 +547,7 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                 ))}
                                 {cuentasPagina.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={8} className="py-12 text-center text-muted-foreground">
+                                        <TableCell colSpan={6} className="py-12 text-center text-muted-foreground">
                                             {hasFilters ? 'No hay cuentas que coincidan con los filtros aplicados.' : 'No hay cuentas registradas.'}
                                         </TableCell>
                                     </TableRow>
@@ -565,7 +557,7 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                     <TableRow>
                                         <TableCell colSpan={2} className="font-medium">Total de cuentas filtradas</TableCell>
                                         <TableCell className="font-medium">{cuentasFiltradas.length}</TableCell>
-                                        <TableCell colSpan={4} className="font-medium text-right text-emerald-600">{simbolo}: {totalFiltrado.toFixed(2)}</TableCell>
+                                        <TableCell colSpan={2} className="font-medium text-right text-emerald-600">{simbolo}: {totalFiltrado.toFixed(2)}</TableCell>
                                         {!isVendedor && <TableCell />}
                                     </TableRow>
                             </TableFooter>
