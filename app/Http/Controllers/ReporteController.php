@@ -294,7 +294,6 @@ class ReporteController extends Controller
                 'cuentas.nombre_cuenta',
                 'cuentas.tipo',
                 'cuentas.saldo_cuenta',
-                'cuentas.deuda',
                 'cuentas.tipo_cuenta',
                 'cuentas.estado as estado_cuenta',
                 'monedas.id as moneda_id',
@@ -329,7 +328,6 @@ class ReporteController extends Controller
                     'nombre_cuenta' => $row->nombre_cuenta,
                     'tipo' => $row->tipo,
                     'saldo_cuenta' => (float) $row->saldo_cuenta,
-                    'deuda' => (float) $row->deuda,
                     'tipo_cuenta' => $row->tipo_cuenta,
                     'estado_cuenta' => $row->estado_cuenta,
                     'moneda' => [

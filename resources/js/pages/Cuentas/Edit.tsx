@@ -1,3 +1,4 @@
+import HeadingSmall from '@/components/heading-small';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -41,6 +42,7 @@ interface CuentaEditProps {
     saldo_cuenta: number;
     moneda_id: number;
     tipo_cuenta: string;
+    tipo_titular?: string | null;
     estado: string;
     notas_cuenta: string;
     moneda: {
@@ -60,13 +62,13 @@ export default function EditarCuentasPage({ cuenta, monedas }: EditarCuentasPage
     const { props } = usePage() as any;
     const isAdmin = props?.auth?.user?.role === 'admin';
 
-    // Manejo del formulario con useForm - ACTUALIZADO con nuevos campos
     const { data, setData, put, errors, processing } = useForm({
         nombre_cuenta: cuenta.nombre_cuenta,
         tipo: cuenta.tipo as 'tarjeta' | 'efectivo' | 'otro',
         saldo_cuenta: cuenta.saldo_cuenta ?? 0,
         moneda_id: cuenta.moneda_id.toString(),
-        tipo_cuenta: cuenta.tipo_cuenta as 'permanentes' | 'temporales' | 'deudas',
+        tipo_cuenta: cuenta.tipo_cuenta as 'permanentes' | 'temporales',
+        tipo_titular: cuenta.tipo_titular || '',
         estado: cuenta.estado as 'activa' | 'inactiva',
         notas_cuenta: cuenta.notas_cuenta || '',
         security_password: '',
@@ -99,17 +101,10 @@ export default function EditarCuentasPage({ cuenta, monedas }: EditarCuentasPage
             <Head title="Editar Cuenta" />
             <div className="flex h-full flex-1 flex-col gap-6 rounded-xl p-6">
                 {/* Header */}
-                <Card className="border-sidebar-border relative overflow-hidden">
-                    <CardHeader className="pb-4">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <CardTitle className="text-2xl font-bold">Editar Cuenta</CardTitle>
-                                <CardDescription>Actualice los detalles de la cuenta para su negocio</CardDescription>
-                            </div>
-                            <Landmark size={80} className="text-muted-foreground/20 pointer-events-none absolute top-4 right-4" />
-                        </div>
-                    </CardHeader>
-                </Card>
+                <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+                    <HeadingSmall title="Editar Cuenta" description="Actualice los detalles de la cuenta para su negocio" />
+                    <Landmark size={70} color="#d6d3d1" className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40" />
+                </div>
 
                 {/* Formulario de Edición */}
                 <Card>
@@ -226,7 +221,7 @@ export default function EditarCuentasPage({ cuenta, monedas }: EditarCuentasPage
                                         <Label htmlFor="tipo_cuenta">Tipo de Cuenta *</Label>
                                         <Select
                                             value={data.tipo_cuenta}
-                                            onValueChange={(value: 'permanentes' | 'temporales' | 'deudas') => setData('tipo_cuenta', value)}
+                                            onValueChange={(value: 'permanentes' | 'temporales') => setData('tipo_cuenta', value)}
                                         >
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Seleccione un tipo de cuenta" />
@@ -234,10 +229,27 @@ export default function EditarCuentasPage({ cuenta, monedas }: EditarCuentasPage
                                             <SelectContent>
                                                 <SelectItem value="permanentes">Permanente</SelectItem>
                                                 <SelectItem value="temporales">Temporal</SelectItem>
-                                                <SelectItem value="deudas">Deuda</SelectItem>
                                             </SelectContent>
                                         </Select>
                                         <InputError message={errors.tipo_cuenta} />
+                                    </div>
+
+                                    {/* Campo Tipo Titular */}
+                                    <div className="space-y-2">
+                                        <Label htmlFor="tipo_titular">Tipo Titular</Label>
+                                        <Select
+                                            value={data.tipo_titular}
+                                            onValueChange={(value) => setData('tipo_titular', value)}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Seleccione tipo" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="externa">Externa</SelectItem>
+                                                <SelectItem value="personal">Personal</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <InputError message={errors.tipo_titular} />
                                     </div>
 
                                     {/* Campo Estado */}

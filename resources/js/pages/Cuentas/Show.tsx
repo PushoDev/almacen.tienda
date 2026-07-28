@@ -37,6 +37,7 @@ interface CuentaShowProps {
     saldo_cuenta: number;
     moneda_id: number;
     tipo_cuenta: string;
+    tipo_titular?: string | null;
     estado: string;
     notas_cuenta: string;
     created_at: string;
@@ -102,13 +103,30 @@ export default function ShowCuentasPage({ cuenta }: ShowCuentasPageProps) {
                                             className={
                                                 cuenta.tipo_cuenta === 'permanentes'
                                                     ? 'text-emerald-500'
-                                                    : cuenta.tipo_cuenta === 'temporales'
-                                                      ? 'text-amber-500'
-                                                      : 'text-red-500'
+                                                    : 'text-amber-500'
                                             }
                                         >
-                                            {cuenta.tipo_cuenta.charAt(0).toUpperCase() + cuenta.tipo_cuenta.slice(1)}
+                                            {cuenta.tipo_cuenta === 'permanentes' ? 'Permanente' : 'Temporal'}
                                         </Badge>
+                                    </div>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-muted-foreground text-sm font-medium">Tipo Titular</label>
+                                    <div>
+                                        {cuenta.tipo_titular ? (
+                                            <Badge
+                                                variant="outline"
+                                                className={
+                                                    cuenta.tipo_titular === 'externa'
+                                                        ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/20 dark:text-blue-300'
+                                                        : 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/20 dark:text-violet-300'
+                                                }
+                                            >
+                                                {cuenta.tipo_titular === 'externa' ? 'Externa' : 'Personal'}
+                                            </Badge>
+                                        ) : (
+                                            <span className="text-muted-foreground text-xs italic">Sin asignar</span>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="space-y-1">
@@ -142,6 +160,23 @@ export default function ShowCuentasPage({ cuenta }: ShowCuentasPageProps) {
                                             {cuenta.moneda?.simbolo_moneda || '$'} {Math.abs(cuenta.saldo_cuenta).toFixed(2)}
                                             {cuenta.saldo_cuenta < 0 && ' (Negativo)'}
                                         </span>
+                                    </div>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-muted-foreground text-sm font-medium">Estado Financiero</label>
+                                    <div>
+                                        <Badge
+                                            variant="outline"
+                                            className={
+                                                (cuenta.saldo_cuenta ?? 0) > 0
+                                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300'
+                                                    : (cuenta.saldo_cuenta ?? 0) < 0
+                                                        ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300'
+                                                        : 'border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300'
+                                            }
+                                        >
+                                            {(cuenta.saldo_cuenta ?? 0) > 0 ? 'Con Fondo' : (cuenta.saldo_cuenta ?? 0) < 0 ? 'En Deuda' : 'Neutro'}
+                                        </Badge>
                                     </div>
                                 </div>
                             </div>

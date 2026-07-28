@@ -39,15 +39,15 @@ interface CreateCuentasPageProps {
 }
 
 export default function CreateCuentasPage({ monedas }: CreateCuentasPageProps) {
-    // Manejo del formulario con useForm - Con notas pero sin deudas
     const { data, setData, post, reset, errors, processing } = useForm({
         nombre_cuenta: '',
         tipo: 'tarjeta' as 'tarjeta' | 'efectivo' | 'otro',
         saldo_cuenta: 0.0,
         moneda_id: '',
-        tipo_cuenta: 'permanentes' as 'permanentes' | 'temporales' | 'deudas',
+        tipo_cuenta: 'permanentes' as 'permanentes' | 'temporales',
+        tipo_titular: '',
         estado: 'activa' as 'activa' | 'inactiva',
-        notas_cuenta: '', // Mantenemos notas
+        notas_cuenta: '',
     });
 
     // Función para enviar el formulario
@@ -159,7 +159,7 @@ export default function CreateCuentasPage({ monedas }: CreateCuentasPageProps) {
                                         <Label htmlFor="tipo_cuenta">Tipo de Cuenta *</Label>
                                         <Select
                                             value={data.tipo_cuenta}
-                                            onValueChange={(value: 'permanentes' | 'temporales' | 'deudas') => setData('tipo_cuenta', value)}
+                                            onValueChange={(value: 'permanentes' | 'temporales') => setData('tipo_cuenta', value)}
                                         >
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Seleccione un tipo de cuenta" />
@@ -170,6 +170,24 @@ export default function CreateCuentasPage({ monedas }: CreateCuentasPageProps) {
                                             </SelectContent>
                                         </Select>
                                         <InputError message={errors.tipo_cuenta} />
+                                    </div>
+
+                                    {/* Campo Tipo Titular */}
+                                    <div className="space-y-2">
+                                        <Label htmlFor="tipo_titular">Tipo Titular</Label>
+                                        <Select
+                                            value={data.tipo_titular}
+                                            onValueChange={(value) => setData('tipo_titular', value)}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Seleccione tipo" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="externa">Externa</SelectItem>
+                                                <SelectItem value="personal">Personal</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <InputError message={errors.tipo_titular} />
                                     </div>
 
                                     {/* Campo Estado */}
