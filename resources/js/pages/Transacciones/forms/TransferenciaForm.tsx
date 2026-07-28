@@ -1,13 +1,13 @@
 import { Button } from '@/components/ui/button';
-import { Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
+import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useForm } from '@inertiajs/react';
+import axios from 'axios';
 import { Building, DollarSign, User } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 interface Moneda {
     id: number;
@@ -47,45 +47,46 @@ interface Proveedor {
     notas_proveedor: string | null;
 }
 
-interface Props {
-    cuentasOrigen: Cuenta[];
-    cuentasDestino: Cuenta[];
-    clientes: Cliente[];
-    proveedores: Proveedor[];
-    monedasActivas: Moneda[];
+interface SelectItem {
+    id: string;
+    label: string;
+    monedaCodigo: string;
 }
 
 type EntidadTipo = 'cuenta' | 'cliente' | 'proveedor';
 
-interface FormData {
-    origen_tipo: EntidadTipo;
-    origen_id: string;
-    destino_tipo: EntidadTipo;
-    destino_id: string;
-    monto: string;
-    moneda: string;
-    moneda_destino: string;
-    comentario: string;
-    tasa_cambio_aplicada: string;
-    monto_convertido: string;
-}
-
-export default function TransferenciaForm({ cuentasOrigen, cuentasDestino, clientes, proveedores, monedasActivas }: Props) {
+export default function TransferenciaForm() {
+    const [cuentasOrigen, setCuentasOrigen] = useState<Cuenta[]>([]);
+    const [cuentasDestino, setCuentasDestino] = useState<Cuenta[]>([]);
+    const [clientes, setClientes] = useState<Cliente[]>([]);
+    const [proveedores, setProveedores] = useState<Proveedor[]>([]);
+    const [monedasActivas, setMonedasActivas] = useState<Moneda[]>([]);
+    const [loading, setLoading] = useState(true);
     const [alert, setAlert] = useState<{ show: boolean; message: string; type: 'success' | 'error' }>({ show: false, message: '', type: 'success' });
-    const [origenSearch, setOrigenSearch] = useState('');
-    const [destinoSearch, setDestinoSearch] = useState('');
 
-    const { data, setData, post, processing, errors, reset } = useForm<FormData>({
-        origen_tipo: 'cuenta',
+    useEffect(() => {
+        axios.get(route('transacciones.transferencia.data'))
+            .then((res) => {
+                setCuentasOrigen(res.data.cuentasOrigen);
+                setCuentasDestino(res.data.cuentasDestino);
+                setClientes(res.data.clientes);
+                setProveedores(res.data.proveedores);
+                setMonedasActivas(res.data.monedasActivas);
+            })
+            .catch(() => showToast('Error al cargar datos del formulario.', 'error'))
+            .finally(() => setLoading(false));
+    }, []);
+
+    const { data, setData, post, processing, errors, reset } = useForm({
+        origen_tipo: 'cuenta' as EntidadTipo,
         origen_id: '',
-        destino_tipo: 'cuenta',
+        destino_tipo: 'cuenta' as EntidadTipo,
         destino_id: '',
         monto: '',
         moneda: '',
         moneda_destino: '',
         comentario: '',
         tasa_cambio_aplicada: '',
-        monto_convertido: '',
     });
 
     const showToast = (message: string, type: 'success' | 'error') => {
@@ -110,150 +111,108 @@ export default function TransferenciaForm({ cuentasOrigen, cuentasDestino, clien
         });
     };
 
-    const handleEntidadChange = (value: string, tipo: EntidadTipo, campo: 'origen' | 'destino') => {
-        const id = Number(value);
-        let selectedMoneda = '';
-        let initialTasa = '';
-
-        const list = campo === 'destino' ? cuentasDestino : cuentasOrigen;
-
-        if (tipo === 'cuenta') {
-            const cuenta = list.find((c) => c.id === id);
-            selectedMoneda = cuenta?.moneda.codigo_moneda || '';
-            if (selectedMoneda && selectedMoneda !== 'USD') {
-                const monedaInfo = monedasActivas.find((m) => m.codigo_moneda === selectedMoneda);
-                if (monedaInfo) {
-                    const tasa = typeof monedaInfo.tasa_cambio === 'number' ? monedaInfo.tasa_cambio : Number(monedaInfo.tasa_cambio) || 0;
-                    initialTasa = String(tasa);
-                }
-            }
-        } else {
-            selectedMoneda = 'USD';
-        }
-
-        setData((prev) => {
-            const newData = { ...prev };
-            if (campo === 'origen') {
-                newData.origen_tipo = tipo;
-                newData.origen_id = value;
-                newData.moneda = selectedMoneda;
-                newData.tasa_cambio_aplicada = initialTasa;
-                newData.moneda_destino = '';
-                newData.monto_convertido = '';
-            } else {
-                newData.destino_tipo = tipo;
-                newData.destino_id = value;
-                newData.moneda_destino = selectedMoneda;
-            }
-            return newData;
-        });
-    };
-
-    // Recalcular conversión
-    useEffect(() => {
-        if (data.moneda && data.moneda_destino && data.monto) {
-            const monedaOrigen = monedasActivas.find((m) => m.codigo_moneda === data.moneda);
-            const monedaDestino = monedasActivas.find((m) => m.codigo_moneda === data.moneda_destino);
-            if (monedaOrigen && monedaDestino) {
-                const origenEsCuenta = data.origen_tipo === 'cuenta';
-                const destinoEsCuenta = data.destino_tipo === 'cuenta';
-                const montoOrigen = Number(data.monto) || 0;
-                let tasaSistema = 1;
-                let montoConvertido = 0;
-
-                if (origenEsCuenta && destinoEsCuenta) {
-                    const tasaOrigen = Number(monedaOrigen.tasa_cambio) || 1;
-                    tasaSistema = Number(monedaDestino.tasa_cambio) || 1;
-                    montoConvertido = (tasaOrigen > 0 && tasaSistema > 0) ? (montoOrigen / tasaOrigen) * tasaSistema : 0;
-                } else if (origenEsCuenta && !destinoEsCuenta) {
-                    tasaSistema = Number(monedaOrigen.tasa_cambio) || 1;
-                    montoConvertido = tasaSistema > 0 ? montoOrigen / tasaSistema : 0;
-                } else if (!origenEsCuenta && destinoEsCuenta) {
-                    tasaSistema = Number(monedaDestino.tasa_cambio) || 1;
-                    montoConvertido = montoOrigen * tasaSistema;
-                } else {
-                    montoConvertido = montoOrigen;
-                }
-
-                const tasaPersonalizada = data.tasa_cambio_aplicada ? Number(data.tasa_cambio_aplicada) : null;
-                let tasaFinal = tasaSistema;
-                let montoFinal = montoConvertido;
-
-                if (tasaPersonalizada && tasaPersonalizada > 0) {
-                    tasaFinal = tasaPersonalizada;
-                    if (origenEsCuenta && destinoEsCuenta) {
-                        const tasaOrigen = Number(monedaOrigen.tasa_cambio) || 1;
-                        montoFinal = tasaOrigen > 0 ? (montoOrigen / tasaOrigen) * tasaPersonalizada : 0;
-                    } else if (origenEsCuenta && !destinoEsCuenta) {
-                        montoFinal = montoOrigen / tasaPersonalizada;
-                    } else if (!origenEsCuenta && destinoEsCuenta) {
-                        montoFinal = montoOrigen * tasaPersonalizada;
-                    } else {
-                        montoFinal = montoOrigen;
-                    }
-                }
-
-                setData((prev) => ({ ...prev, monto_convertido: montoFinal.toFixed(2) }));
-            }
-        }
-    }, [data.moneda, data.moneda_destino, data.monto, data.tasa_cambio_aplicada, data.origen_tipo, data.destino_tipo, monedasActivas]);
-
-    const getItems = (tipo: EntidadTipo, list: Cuenta[]) => {
+    const getItems = (tipo: EntidadTipo, list: Cuenta[]): SelectItem[] => {
         if (tipo === 'cuenta') {
             return list.map((c) => ({
                 id: String(c.id),
                 label: `${c.nombre_cuenta} (${c.moneda.codigo_moneda}) - Saldo: ${c.saldo_cuenta.toFixed(2)}`,
+                monedaCodigo: c.moneda.codigo_moneda,
             }));
         }
         if (tipo === 'cliente') {
             return clientes.map((cl) => ({
                 id: String(cl.id),
                 label: `${cl.nombre_cliente} (Cliente) - Deuda/Pago: ${(Number(cl.deuda_pago_cliente) || 0).toFixed(2)} USD`,
+                monedaCodigo: 'USD',
             }));
         }
         return proveedores.map((p) => ({
             id: String(p.id),
             label: `${p.nombre_proveedor} (Proveedor) - Saldo: ${(Number(p.saldo_proveedor) || 0).toFixed(2)} USD`,
+            monedaCodigo: 'USD',
         }));
     };
 
     const origenItems = getItems(data.origen_tipo, cuentasOrigen);
-    const origenFiltered = !origenSearch ? origenItems : origenItems.filter((i) => i.label.toLowerCase().includes(origenSearch.toLowerCase()));
+    const selectedOrigen = origenItems.find((i) => i.id === data.origen_id) || null;
     const destinoItems = getItems(data.destino_tipo, cuentasDestino);
-    const destinoFiltered = !destinoSearch ? destinoItems : destinoItems.filter((i) => i.label.toLowerCase().includes(destinoSearch.toLowerCase()));
+    const selectedDestino = destinoItems.find((i) => i.id === data.destino_id) || null;
 
-    const renderConversion = () => {
-        if (!data.moneda || !data.moneda_destino) return null;
+    const conversion = useMemo(() => {
+        if (!data.moneda || !data.moneda_destino || !data.monto) return null;
+
+        const monedaOrigen = monedasActivas.find((m) => m.codigo_moneda === data.moneda);
+        const monedaDestino = monedasActivas.find((m) => m.codigo_moneda === data.moneda_destino);
+        if (!monedaOrigen || !monedaDestino) return null;
+
         const origenEsCuenta = data.origen_tipo === 'cuenta';
         const destinoEsCuenta = data.destino_tipo === 'cuenta';
-        if (!origenEsCuenta && !destinoEsCuenta) {
-            return (
-                <div className="rounded-md bg-gray-50 p-3 dark:bg-gray-900">
-                    <p className="text-sm text-gray-800 dark:text-gray-200">Ambas entidades operan en USD. No se requiere conversión.</p>
-                </div>
-            );
+        const montoOrigen = Number(data.monto) || 0;
+
+        if (!origenEsCuenta && !destinoEsCuenta) return null;
+        if (monedaOrigen.codigo_moneda === monedaDestino.codigo_moneda) return null;
+
+        let tasaOrigen = origenEsCuenta ? Number(monedaOrigen.tasa_cambio) || 1 : 1;
+        let tasaDestino = destinoEsCuenta ? Number(monedaDestino.tasa_cambio) || 1 : 1;
+
+        const tasaCustom = data.tasa_cambio_aplicada ? Number(data.tasa_cambio_aplicada) : null;
+        if (tasaCustom && tasaCustom > 0) {
+            if (origenEsCuenta && data.moneda !== 'USD') {
+                tasaOrigen = tasaCustom;
+            } else {
+                tasaDestino = tasaCustom;
+            }
         }
-        const monedaDestino = monedasActivas.find((m) => m.codigo_moneda === data.moneda_destino);
-        const tasaPersonalizada = data.tasa_cambio_aplicada ? Number(data.tasa_cambio_aplicada) : null;
-        let tasaTexto = '';
-        if (origenEsCuenta && destinoEsCuenta) {
-            tasaTexto = `Tasa: 1 ${data.moneda} = ${tasaPersonalizada && tasaPersonalizada > 0 ? (1 / tasaPersonalizada).toFixed(6) : '...'} ${data.moneda_destino}`;
-        } else if (origenEsCuenta && !destinoEsCuenta) {
-            tasaTexto = `Tasa: 1 ${data.moneda} = ${tasaPersonalizada && tasaPersonalizada > 0 ? (1 / tasaPersonalizada).toFixed(6) : '...'} USD`;
-        } else if (!origenEsCuenta && destinoEsCuenta) {
-            tasaTexto = `Tasa: 1 USD = ${tasaPersonalizada && tasaPersonalizada > 0 ? tasaPersonalizada.toFixed(6) : (monedaDestino?.tasa_cambio || 0).toFixed(6)} ${data.moneda_destino}`;
-        }
+
+        const montoEnUsd = tasaOrigen > 0 ? montoOrigen / tasaOrigen : 0;
+        const montoFinal = montoEnUsd * tasaDestino;
+
+        const origenEsNoUsd = origenEsCuenta && data.moneda !== 'USD';
+        const monedaNoUsd = origenEsNoUsd ? data.moneda : data.moneda_destino;
+        const tasaSistemaNoUsd = origenEsNoUsd
+            ? (Number(monedaOrigen.tasa_cambio) || 1)
+            : (Number(monedaDestino.tasa_cambio) || 1);
+
+        return {
+            montoOrigen,
+            montoConvertido: montoFinal.toFixed(2),
+            monedaOrigenCod: monedaOrigen.codigo_moneda,
+            monedaDestinoCod: monedaDestino.codigo_moneda,
+            tasaSistemaNoUsd,
+            monedaNoUsd,
+            tasaCustom,
+        };
+    }, [data.moneda, data.moneda_destino, data.monto, data.tasa_cambio_aplicada, data.origen_tipo, data.destino_tipo, monedasActivas]);
+
+    const renderConversion = () => {
+        if (!conversion) return null;
+        const { montoOrigen, montoConvertido, monedaOrigenCod, monedaDestinoCod, tasaSistemaNoUsd, monedaNoUsd, tasaCustom } = conversion;
+
+        const tasaMostrar = (tasaCustom && tasaCustom > 0) ? tasaCustom : tasaSistemaNoUsd;
+        const sonDistintas = tasaCustom && tasaCustom > 0 && Math.abs(tasaCustom - tasaSistemaNoUsd) > 0.001;
+
         return (
             <div className="rounded-md bg-green-50 p-3 dark:bg-green-900">
                 <h4 className="mb-2 text-sm font-semibold text-green-800 dark:text-green-200">Conversión de Moneda</h4>
                 <div className="space-y-1 text-sm text-green-700 dark:text-green-300">
-                    <p>Origen: {Number(data.monto || 0).toFixed(2)} {data.moneda}</p>
-                    <p>Destino: {data.monto_convertido || '0.00'} {data.moneda_destino}</p>
-                    <p>{tasaTexto}</p>
+                    <p>Origen: {montoOrigen.toFixed(2)} {monedaOrigenCod}</p>
+                    <p>Destino: {montoConvertido} {monedaDestinoCod}</p>
+                    <p>Tasa: 1 USD = {tasaMostrar.toFixed(2)} {monedaNoUsd}</p>
+                    {sonDistintas && (
+                        <p className="text-xs text-green-600 dark:text-green-400">Tasa del sistema: 1 USD = {tasaSistemaNoUsd.toFixed(2)} {monedaNoUsd}</p>
+                    )}
                 </div>
             </div>
         );
     };
+
+    const origenEsCuenta = data.origen_tipo === 'cuenta';
+    const origenEsNoUsd = origenEsCuenta && data.moneda && data.moneda !== 'USD';
+    const monedaTasa = origenEsNoUsd ? data.moneda : data.moneda_destino;
+
+    if (loading) {
+        return <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">Cargando...</div>;
+    }
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -264,7 +223,6 @@ export default function TransferenciaForm({ cuentasOrigen, cuentasDestino, clien
                     value={data.origen_tipo || 'cuenta'}
                     onValueChange={(value: string) => {
                         if (value === 'cuenta' || value === 'cliente') {
-                            setOrigenSearch('');
                             setData({ ...data, origen_tipo: value as EntidadTipo, origen_id: '', moneda: '', tasa_cambio_aplicada: '' });
                         }
                     }}
@@ -276,20 +234,25 @@ export default function TransferenciaForm({ cuentasOrigen, cuentasDestino, clien
                 <div>
                     <Label htmlFor="origen_id">Entidad de Origen ({data.origen_tipo === 'cuenta' ? 'Cuenta' : 'Cliente'})</Label>
                     <Combobox
-                        value={data.origen_id || null}
-                        onValueChange={(val) => {
-                            if (val) handleEntidadChange(val, data.origen_tipo, 'origen');
-                            else setData({ ...data, origen_id: '', moneda: '', tasa_cambio_aplicada: '' });
+                        items={origenItems}
+                        itemToStringLabel={(item: SelectItem) => item.label}
+                        itemToStringValue={(item: SelectItem) => item.label}
+                        value={selectedOrigen}
+                        onValueChange={(item: SelectItem | null) => {
+                            if (item) {
+                                setData({ ...data, origen_id: item.id, moneda: item.monedaCodigo, tasa_cambio_aplicada: '', moneda_destino: '' });
+                            } else {
+                                setData({ ...data, origen_id: '', moneda: '', tasa_cambio_aplicada: '' });
+                            }
                         }}
-                        onInputValueChange={setOrigenSearch}
                     >
-                        <ComboboxInput id="origen_id" className="w-full" placeholder={`Buscar ${data.origen_tipo === 'cuenta' ? 'cuenta' : 'cliente'} de origen...`} showClear />
+                        <ComboboxInput id="origen_id" className="w-full" placeholder={`Buscar ${data.origen_tipo === 'cuenta' ? 'cuenta' : 'cliente'} de origen...`} showClear={!!data.origen_id} />
                         <ComboboxContent>
+                            <ComboboxEmpty>Sin resultados</ComboboxEmpty>
                             <ComboboxList>
-                                {origenFiltered.map((item) => (
-                                    <ComboboxItem key={item.id} value={item.id}>{item.label}</ComboboxItem>
-                                ))}
-                                {origenFiltered.length === 0 && <div className="py-2 text-center text-sm text-muted-foreground">Sin resultados</div>}
+                                {(item: SelectItem) => (
+                                    <ComboboxItem key={item.id} value={item}>{item.label}</ComboboxItem>
+                                )}
                             </ComboboxList>
                         </ComboboxContent>
                     </Combobox>
@@ -304,7 +267,6 @@ export default function TransferenciaForm({ cuentasOrigen, cuentasDestino, clien
                     value={data.destino_tipo || 'cuenta'}
                     onValueChange={(value: string) => {
                         if (value === 'cuenta' || value === 'cliente' || value === 'proveedor') {
-                            setDestinoSearch('');
                             setData({ ...data, destino_tipo: value as EntidadTipo, destino_id: '' });
                         }
                     }}
@@ -317,20 +279,35 @@ export default function TransferenciaForm({ cuentasOrigen, cuentasDestino, clien
                 <div>
                     <Label htmlFor="destino_id">Entidad de Destino ({data.destino_tipo === 'cuenta' ? 'Cuenta' : data.destino_tipo === 'cliente' ? 'Cliente' : 'Proveedor'})</Label>
                     <Combobox
-                        value={data.destino_id || null}
-                        onValueChange={(val) => {
-                            if (val) handleEntidadChange(val, data.destino_tipo, 'destino');
-                            else setData({ ...data, destino_id: '' });
+                        items={destinoItems}
+                        itemToStringLabel={(item: SelectItem) => item.label}
+                        itemToStringValue={(item: SelectItem) => item.label}
+                        value={selectedDestino}
+                        onValueChange={(item: SelectItem | null) => {
+                            if (item) {
+                                const mOrigen = monedasActivas.find((m) => m.codigo_moneda === data.moneda);
+                                const mDestino = monedasActivas.find((m) => m.codigo_moneda === item.monedaCodigo);
+                                let tasaInicial = '';
+                                if (mOrigen && mDestino && mOrigen.codigo_moneda !== mDestino.codigo_moneda) {
+                                    const tOrigen = data.origen_tipo === 'cuenta' ? Number(mOrigen.tasa_cambio) || 1 : 1;
+                                    const tDestino = data.destino_tipo === 'cuenta' ? Number(mDestino.tasa_cambio) || 1 : 1;
+                                    const origenEsNoUsd = data.origen_tipo === 'cuenta' && data.moneda !== 'USD';
+                                    const tasaNoUsd = origenEsNoUsd ? tOrigen : tDestino;
+                                    if (tasaNoUsd > 0) tasaInicial = tasaNoUsd.toFixed(2);
+                                }
+                                setData({ ...data, destino_id: item.id, moneda_destino: item.monedaCodigo, tasa_cambio_aplicada: tasaInicial });
+                            } else {
+                                setData({ ...data, destino_id: '', moneda_destino: '', tasa_cambio_aplicada: '' });
+                            }
                         }}
-                        onInputValueChange={setDestinoSearch}
                     >
-                        <ComboboxInput id="destino_id" className="w-full" placeholder={`Buscar ${data.destino_tipo === 'cuenta' ? 'cuenta' : data.destino_tipo === 'cliente' ? 'cliente' : 'proveedor'} de destino...`} showClear />
+                        <ComboboxInput id="destino_id" className="w-full" placeholder={`Buscar ${data.destino_tipo === 'cuenta' ? 'cuenta' : data.destino_tipo === 'cliente' ? 'cliente' : 'proveedor'} de destino...`} showClear={!!data.destino_id} />
                         <ComboboxContent>
+                            <ComboboxEmpty>Sin resultados</ComboboxEmpty>
                             <ComboboxList>
-                                {destinoFiltered.map((item) => (
-                                    <ComboboxItem key={item.id} value={item.id}>{item.label}</ComboboxItem>
-                                ))}
-                                {destinoFiltered.length === 0 && <div className="py-2 text-center text-sm text-muted-foreground">Sin resultados</div>}
+                                {(item: SelectItem) => (
+                                    <ComboboxItem key={item.id} value={item}>{item.label}</ComboboxItem>
+                                )}
                             </ComboboxList>
                         </ComboboxContent>
                     </Combobox>
@@ -355,12 +332,12 @@ export default function TransferenciaForm({ cuentasOrigen, cuentasDestino, clien
                 {errors.monto && <p className="mt-1 text-sm text-red-500">{errors.monto}</p>}
             </div>
 
-            {renderConversion()}
-
             <div>
-                <Label htmlFor="tasa_cambio">Tasa de Cambio ({data.moneda_destino ? `1 USD = ? ${data.moneda_destino}` : '...'})</Label>
-                <Input type="number" id="tasa_cambio" value={data.tasa_cambio_aplicada} onChange={(e) => setData({ ...data, tasa_cambio_aplicada: e.target.value })} step="0.0001" min="0.0001" placeholder="Tasa..." />
+                <Label htmlFor="tasa_cambio">Tasa de Cambio (1 USD = ? {monedaTasa || '...'})</Label>
+                <Input type="number" id="tasa_cambio" value={data.tasa_cambio_aplicada} onChange={(e) => setData({ ...data, tasa_cambio_aplicada: e.target.value })} step="0.01" min="0.01" placeholder="Tasa..." />
             </div>
+
+            {renderConversion()}
 
             <div>
                 <Label htmlFor="comentario_transferir">Comentario</Label>

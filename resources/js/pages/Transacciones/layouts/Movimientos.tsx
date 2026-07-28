@@ -75,13 +75,7 @@ export default function Movimientos({ cuentasOrigen, cuentasDestino, clientes, p
                         <IngresoForm />
                     </TabsContent>
                     <TabsContent value="transferir" className="mt-4">
-                        <TransferenciaForm
-                            cuentasOrigen={cuentasOrigen}
-                            cuentasDestino={cuentasDestino}
-                            clientes={clientes}
-                            proveedores={proveedores}
-                            monedasActivas={monedasActivas}
-                        />
+                        <TransferenciaForm />
                     </TabsContent>
                 </Tabs>
             </CardContent>

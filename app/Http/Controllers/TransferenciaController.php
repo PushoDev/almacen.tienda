@@ -18,6 +18,27 @@ use Illuminate\Validation\ValidationException;
 
 class TransferenciaController extends Controller
 {
+    public function formData()
+    {
+        if (auth()->user()->role === 'vendedor') {
+            $cuentasOrigen = auth()->user()->cuentas()->with('moneda')->get();
+        } else {
+            $cuentasOrigen = Cuenta::with('moneda')->get();
+        }
+        $cuentasDestino = $cuentasOrigen;
+        $clientes = Cliente::all();
+        $proveedores = Proveedor::all();
+        $monedasActivas = Moneda::where('estado', true)->get();
+
+        return response()->json([
+            'cuentasOrigen' => $cuentasOrigen,
+            'cuentasDestino' => $cuentasDestino,
+            'clientes' => $clientes,
+            'proveedores' => $proveedores,
+            'monedasActivas' => $monedasActivas,
+        ]);
+    }
+
     public function store(Request $request)
     {
         $monedasValidas = $this->obtenerCodigosMonedasActivas();
@@ -278,7 +299,7 @@ class TransferenciaController extends Controller
         $origenEsCuenta = $origenTipo === 'cuenta';
         $destinoEsCuenta = $destinoTipo === 'cuenta';
 
-        if ($monedaOrigen->codigo_moneda === $monedaDestino->codigo_moneda && $origenEsCuenta === $destinoEsCuenta) {
+        if ($monedaOrigen->codigo_moneda === $monedaDestino->codigo_moneda) {
             return $montoOrigen;
         }
 
@@ -286,79 +307,46 @@ class TransferenciaController extends Controller
             return $montoOrigen;
         }
 
-        if ($origenEsCuenta && $destinoEsCuenta) {
-            $tasaOrigen = $monedaOrigen->tasa_cambio;
-            $tasaDestino = $monedaDestino->tasa_cambio;
-            if ($tasaOrigen <= 0) {
-                throw new \Exception("La tasa de cambio para {$monedaOrigen->codigo_moneda} no es válida.");
-            }
-            if ($tasaDestino <= 0) {
-                throw new \Exception("La tasa de cambio para {$monedaDestino->codigo_moneda} no es válida.");
-            }
-            if ($tasaPersonalizada && $tasaPersonalizada > 0) {
-                if ($monedaOrigen->codigo_moneda === 'USD') {
-                    $tasaDestino = $tasaPersonalizada;
-                } else {
-                    $tasaOrigen = $tasaPersonalizada;
-                }
-            }
-            $montoConvertido = ($montoOrigen / $tasaOrigen) * $tasaDestino;
-        } elseif ($origenEsCuenta && !$destinoEsCuenta) {
-            $tasaOrigen = $tasaPersonalizada ?? $monedaOrigen->tasa_cambio;
-            if ($tasaOrigen <= 0) {
-                throw new \Exception("La tasa de cambio para {$monedaOrigen->codigo_moneda} no es válida.");
-            }
-            $montoConvertido = $montoOrigen / $tasaOrigen;
-        } elseif (!$origenEsCuenta && $destinoEsCuenta) {
-            $tasaDestino = $tasaPersonalizada ?? $monedaDestino->tasa_cambio;
-            if ($tasaDestino <= 0) {
-                throw new \Exception("La tasa de cambio para {$monedaDestino->codigo_moneda} no es válida.");
-            }
-            $montoConvertido = $montoOrigen * $tasaDestino;
-        } else {
-            $montoConvertido = $montoOrigen;
+        $tasaOrigen = $origenEsCuenta ? $monedaOrigen->tasa_cambio : 1.0;
+        $tasaDestino = $destinoEsCuenta ? $monedaDestino->tasa_cambio : 1.0;
+
+        if ($tasaOrigen <= 0) {
+            throw new \Exception("La tasa de cambio para {$monedaOrigen->codigo_moneda} no es válida.");
+        }
+        if ($tasaDestino <= 0) {
+            throw new \Exception("La tasa de cambio para {$monedaDestino->codigo_moneda} no es válida.");
         }
 
-        return round($montoConvertido, 2);
+        if ($tasaPersonalizada && $tasaPersonalizada > 0) {
+            if ($origenEsCuenta && $monedaOrigen->codigo_moneda !== 'USD') {
+                $tasaOrigen = $tasaPersonalizada;
+            } else {
+                $tasaDestino = $tasaPersonalizada;
+            }
+        }
+
+        $montoEnUsd = $montoOrigen / $tasaOrigen;
+        return round($montoEnUsd * $tasaDestino, 2);
     }
 
     private function obtenerTasaCambioFinal(Moneda $monedaOrigen, Moneda $monedaDestino, ?float $tasaPersonalizada, string $origenTipo, string $destinoTipo): float
     {
+        if ($monedaOrigen->codigo_moneda === $monedaDestino->codigo_moneda) {
+            return 1.0;
+        }
+
         if ($tasaPersonalizada && $tasaPersonalizada > 0) {
             return $tasaPersonalizada;
         }
 
-        if ($monedaOrigen->codigo_moneda === $monedaDestino->codigo_moneda && $origenTipo === $destinoTipo) {
-            return 1.0;
-        }
-
         $origenEsCuenta = $origenTipo === 'cuenta';
-        $destinoEsCuenta = $destinoTipo === 'cuenta';
+        $tasaOrigen = $origenEsCuenta ? $monedaOrigen->tasa_cambio : 1.0;
+        $tasaDestino = $monedaDestino->tasa_cambio;
 
-        if ($origenEsCuenta && $destinoEsCuenta) {
-            if ($monedaOrigen->codigo_moneda === 'USD') {
-                return $monedaDestino->tasa_cambio;
-            }
-            return $monedaOrigen->tasa_cambio;
-        } elseif ($origenEsCuenta && !$destinoEsCuenta) {
-            return $monedaOrigen->tasa_cambio;
-        } elseif (!$origenEsCuenta && $destinoEsCuenta) {
-            return $monedaDestino->tasa_cambio;
-        } else {
-            return 1.0;
-        }
-    }
-
-    private function obtenerTasaCambioEntreMonedas(Moneda $monedaOrigen, Moneda $monedaDestino): float
-    {
-        if ($monedaOrigen->codigo_moneda === 'USD') {
-            return $monedaDestino->tasa_cambio;
+        if ($origenEsCuenta && $monedaOrigen->codigo_moneda !== 'USD') {
+            return $tasaOrigen;
         }
 
-        if ($monedaDestino->codigo_moneda === 'USD') {
-            return $monedaOrigen->tasa_cambio;
-        }
-
-        return $monedaOrigen->tasa_cambio / $monedaDestino->tasa_cambio;
+        return $tasaDestino;
     }
 }

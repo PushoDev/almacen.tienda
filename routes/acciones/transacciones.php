@@ -38,6 +38,8 @@ Route::middleware(['auth', 'verified'])->group(
             ->name('transacciones.ingresar');
 
         // Transferencia
+        Route::get('transacciones/transferencia/data', [TransferenciaController::class, 'formData'])
+            ->name('transacciones.transferencia.data');
         Route::post('transacciones/transferir', [TransferenciaController::class, 'store'])
             ->name('transacciones.transferir');
 

@@ -20,7 +20,11 @@ class IngresoController extends Controller
 {
     public function formData()
     {
-        $cuentasDestino = auth()->user()->cuentas()->with('moneda')->get();
+        if (auth()->user()->role === 'vendedor') {
+            $cuentasDestino = auth()->user()->cuentas()->with('moneda')->get();
+        } else {
+            $cuentasDestino = Cuenta::with('moneda')->get();
+        }
         $clientes = Cliente::all();
         $proveedores = Proveedor::all();
 
