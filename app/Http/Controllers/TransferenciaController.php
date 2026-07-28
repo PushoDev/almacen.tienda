@@ -86,8 +86,6 @@ class TransferenciaController extends Controller
             $montoDestino = $this->calcularMontoConvertido($montoOrigen, $monedaOrigen, $monedaDestino, $request->tasa_cambio_aplicada, $request->origen_tipo, $request->destino_tipo);
             $tasaCambioAplicada = $this->obtenerTasaCambioFinal($monedaOrigen, $monedaDestino, $request->tasa_cambio_aplicada, $request->origen_tipo, $request->destino_tipo);
 
-            $this->validarSaldoOrigen($origen, $request->origen_tipo, $montoOrigen);
-
             $saldoAnteriorOrigen = $this->obtenerSaldoEntidad($origen, $request->origen_tipo);
             $saldoAnteriorDestino = $this->obtenerSaldoEntidad($destino, $request->destino_tipo);
 
@@ -243,23 +241,6 @@ class TransferenciaController extends Controller
             if (($entidad->tipo_titular ?? '__sin_asignar__') !== 'personal') {
                 throw new \Exception('No puede usar una cuenta externa o sin asignar como origen.');
             }
-        }
-    }
-
-    private function validarSaldoOrigen($entidad, string $tipo, float $monto): void
-    {
-        switch ($tipo) {
-            case 'cuenta':
-                if ($entidad->saldo_cuenta < $monto) {
-                    throw new \Exception('Saldo insuficiente en la cuenta origen.');
-                }
-                break;
-            case 'cliente':
-                $saldoActual = (float)($entidad->deuda_pago_cliente ?? 0);
-                if ($saldoActual < $monto) {
-                    throw new \Exception('Saldo insuficiente en la cuenta del cliente.');
-                }
-                break;
         }
     }
 
