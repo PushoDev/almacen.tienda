@@ -649,64 +649,6 @@ export default function Show({
                 </div>
 
                 <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                        <Card className="border-emerald-200 bg-emerald-500/5">
-                            <CardContent className="p-4">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
-                                        <ShoppingCart className="h-5 w-5 text-emerald-600" />
-                                    </div>
-                                    <div>
-                                        <p className="text-muted-foreground text-xs">Ventas Realizadas</p>
-                                        <p className="text-2xl font-bold">{totalVentasUnicas}</p>
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="border-blue-200 bg-blue-500/5">
-                            <CardContent className="p-4">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
-                                        <DollarSign className="h-5 w-5 text-blue-600" />
-                                    </div>
-                                    <div>
-                                        <p className="text-muted-foreground text-xs">Total Efectivo</p>
-                                        <p className="text-2xl font-bold">${Number(calculos.ventas_efectivo || 0).toFixed(2)}</p>
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="border-purple-200 bg-purple-500/5">
-                            <CardContent className="p-4">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100">
-                                        <CreditCard className="h-5 w-5 text-purple-600" />
-                                    </div>
-                                    <div>
-                                        <p className="text-muted-foreground text-xs">Transferencias</p>
-                                        <p className="text-2xl font-bold">${Number(calculos.ventas_otros || 0).toFixed(2)}</p>
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="border-amber-200 bg-amber-500/5">
-                            <CardContent className="p-4">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100">
-                                        <Banknote className="h-5 w-5 text-amber-600" />
-                                    </div>
-                                    <div>
-                                        <p className="text-muted-foreground text-xs">Monedas Usadas</p>
-                                        <p className="text-2xl font-bold">{monedasConPagos.length}</p>
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
-
                     <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
                         <Card className="border-emerald-200 bg-emerald-500/5">
                             <CardContent className="p-4">
@@ -883,11 +825,8 @@ export default function Show({
                                         <th className="px-4 py-3 text-left font-semibold">Marca</th>
                                         <th className="px-4 py-3 text-left font-semibold">Modelo</th>
                                         <th className="px-4 py-3 text-left font-semibold">Capacidad</th>
-                                        <th className="px-4 py-3 text-left font-semibold">Color</th>
-                                        <th className="px-4 py-3 text-left font-semibold">Categoría</th>
                                         <th className="px-4 py-3 text-center font-semibold">Cantidad</th>
                                         <th className="px-4 py-3 text-right font-semibold">Precio Unit</th>
-                                        <th className="px-4 py-3 text-right font-semibold">Total Esperado</th>
                                         <th className="px-4 py-3 text-right font-semibold">Total Real</th>
                                     </tr>
                                 </thead>
@@ -920,21 +859,16 @@ export default function Show({
                                                 <td className="text-muted-foreground px-4 py-2">{linea.marca}</td>
                                                 <td className="text-muted-foreground px-4 py-2">{linea.modelo}</td>
                                                 <td className="text-muted-foreground px-4 py-2">{linea.capacidad || 'N/A'}</td>
-                                                <td className="text-muted-foreground px-4 py-2">{linea.color || 'N/A'}</td>
-                                                <td className="text-muted-foreground px-4 py-2">{linea.categoria}</td>
                                                 <td className="px-4 py-2 text-center">
                                                     <span className="text-primary font-bold">{linea.cantidad}</span>
                                                 </td>
                                                 <td className="px-4 py-2 text-right font-mono">${Number(linea.precio_base).toFixed(2)}</td>
-                                                <td className="px-4 py-2 text-right font-mono">
-                                                    ${Number(linea.cantidad * linea.precio_base).toFixed(2)}
-                                                </td>
                                                 <td className="px-4 py-2 text-right font-mono font-medium">${Number(linea.total).toFixed(2)}</td>
                                             </tr>
                                         ))
                                     ) : (
                                         <tr>
-                                            <td colSpan={9} className="text-muted-foreground px-4 py-8 text-center italic">
+                                            <td colSpan={7} className="text-muted-foreground px-4 py-8 text-center italic">
                                                 No hay ventas en este turno
                                             </td>
                                         </tr>
@@ -942,12 +876,11 @@ export default function Show({
                                 </tbody>
                                 <tfoot className="bg-muted/50">
                                     <tr>
-                                        <td colSpan={5} className="px-4 py-3 text-right font-bold">
+                                        <td colSpan={4} className="px-4 py-3 text-right font-bold">
                                             Total
                                         </td>
                                         <td className="px-4 py-3 text-center font-bold">{lineasProductos.reduce((sum, p) => sum + p.cantidad, 0)}</td>
                                         <td className="px-4 py-3"></td>
-                                        <td className="px-4 py-3 text-right font-mono font-bold">${totalEsperadoProductos.toFixed(2)}</td>
                                         <td className="px-4 py-3 text-right font-mono text-lg font-bold text-green-600">
                                             ${totalVentasProductos.toFixed(2)}
                                         </td>
