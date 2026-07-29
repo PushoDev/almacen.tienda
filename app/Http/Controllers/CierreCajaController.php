@@ -587,6 +587,101 @@ class CierreCajaController extends Controller
             $mensajeroExternoTotCUP = round($mensajeroExternoTotCUP, 2);
         }
 
+        // --- COMPARATIVA CON CIERRE ANTERIOR ---
+        $comparativaCuentas = [];
+        $comparativaClientes = [];
+
+        $cierreAnterior = CierreCaja::where('user_id', $cierre->user_id)
+            ->where('id', '<', $cierre->id)
+            ->orderBy('fecha_cierre', 'desc')
+            ->first();
+
+        $tieneCierreAnterior = $cierreAnterior !== null;
+
+        if ($tieneCierreAnterior) {
+            $snapAnteriorCuentas = is_array($cierreAnterior->snapshot_cuentas)
+                ? $cierreAnterior->snapshot_cuentas
+                : [];
+            $snapAnteriorClientes = is_array($cierreAnterior->snapshot_clientes)
+                ? $cierreAnterior->snapshot_clientes
+                : [];
+        } else {
+            $snapAnteriorCuentas = [];
+            $snapAnteriorClientes = [];
+        }
+
+        $snapActualCuentas = is_array($cierre->snapshot_cuentas) ? $cierre->snapshot_cuentas : [];
+        $snapActualClientes = is_array($cierre->snapshot_clientes) ? $cierre->snapshot_clientes : [];
+
+        // Indexar snapshots por id
+        $anteriorCuentasPorId = [];
+        foreach ($snapAnteriorCuentas as $item) {
+            if (isset($item['id'])) {
+                $anteriorCuentasPorId[(int) $item['id']] = $item['saldo'] ?? 0;
+            }
+        }
+        $anteriorClientesPorId = [];
+        foreach ($snapAnteriorClientes as $item) {
+            if (isset($item['id'])) {
+                $anteriorClientesPorId[(int) $item['id']] = $item['deuda'] ?? 0;
+            }
+        }
+
+        $actualCuentasPorId = [];
+        foreach ($snapActualCuentas as $item) {
+            if (isset($item['id'])) {
+                $actualCuentasPorId[(int) $item['id']] = [
+                    'nombre' => $item['nombre'] ?? '',
+                    'tipo' => $item['tipo'] ?? '',
+                    'moneda' => $item['moneda'] ?? 'USD',
+                    'saldo' => $item['saldo'] ?? 0,
+                ];
+            }
+        }
+        $actualClientesPorId = [];
+        foreach ($snapActualClientes as $item) {
+            if (isset($item['id'])) {
+                $actualClientesPorId[(int) $item['id']] = [
+                    'nombre' => $item['nombre'] ?? '',
+                    'deuda' => $item['deuda'] ?? 0,
+                ];
+            }
+        }
+
+        // Construir comparativa de cuentas
+        foreach ($actualCuentasPorId as $id => $data) {
+            $saldoActual = (float) $data['saldo'];
+            $saldoAnterior = (float) ($anteriorCuentasPorId[$id] ?? 0);
+            $diferencia = $saldoActual - $saldoAnterior;
+
+            $comparativaCuentas[] = [
+                'id' => $id,
+                'nombre' => $data['nombre'],
+                'tipo' => $data['tipo'],
+                'moneda' => $data['moneda'],
+                'saldo_anterior' => round($saldoAnterior, 2),
+                'saldo_actual' => round($saldoActual, 2),
+                'diferencia' => round($diferencia, 2),
+                'estado' => $diferencia > 0 ? 'subio' : ($diferencia < 0 ? 'bajo' : 'igual'),
+            ];
+        }
+
+        // Construir comparativa de clientes
+        foreach ($actualClientesPorId as $id => $data) {
+            $deudaActual = (float) $data['deuda'];
+            $deudaAnterior = (float) ($anteriorClientesPorId[$id] ?? 0);
+            $diferencia = $deudaActual - $deudaAnterior;
+
+            $comparativaClientes[] = [
+                'id' => $id,
+                'nombre' => $data['nombre'],
+                'deuda_anterior' => round($deudaAnterior, 2),
+                'deuda_actual' => round($deudaActual, 2),
+                'diferencia' => round($diferencia, 2),
+                'estado' => $diferencia < 0 ? 'mejoro' : ($diferencia > 0 ? 'empeoro' : 'igual'),
+            ];
+        }
+
         $showPayload = [
             'cierre'                => $cierre,
             'userRole'              => $currentUser->role ?? 'vendedor',
@@ -617,6 +712,10 @@ class CierreCajaController extends Controller
             'mensajero_propio_total_cup'    => $mensajeroPropioTotCUP,
             'mensajero_externo_total_cup'   => $mensajeroExternoTotCUP,
             'mensajero_detalles'            => $mensajeroDetallesList,
+            // Comparativa con cierre anterior
+            'comparativa_cuentas'            => $comparativaCuentas,
+            'comparativa_clientes'           => $comparativaClientes,
+            'tiene_cierre_anterior'          => $tieneCierreAnterior,
         ];
 
         if (! $puedeVerCostoImpactoEspeciales) {
@@ -671,21 +770,35 @@ class CierreCajaController extends Controller
         $cuentaIds = $user->cuentas()->pluck('id')->toArray();
 
         // 2. Obtener Movimientos Financieros (Gastos, Ingresos, Transferencias) del usuario
-        // Incluye transferencias entrantes hacia cuentas del usuario
+        // Incluye cualquier movimiento que afecte las cuentas del usuario, sin importar quién lo creó
         $movimientos = MovimientoFinanciero::where(function ($query) use ($user, $cuentaIds) {
-            // Movimientos que el usuario hace (gastos, ingresos, transferencias que envía)
+            // Movimientos creados por el usuario (gastos, ingresos, transferencias)
             $query->where('user_id', $user->id);
 
-            // Transferencias entrantes hacia cuentas del usuario (hechas por otros usuarios)
+            // Movimientos de otros usuarios que afectan las cuentas del vendedor
             if (! empty($cuentaIds)) {
+                // Gastos desde cuentas del usuario (hechos por admin/otros vendedores)
                 $query->orWhere(function ($q) use ($cuentaIds) {
-                    $q->where('tipo_movimiento_id', 3) // Solo transferencias
+                    $q->where('tipo_movimiento_id', 1)
+                        ->whereIn('cuenta_origen_id', $cuentaIds);
+                });
+                // Ingresos a cuentas del usuario (hechos por admin/otros vendedores)
+                $query->orWhere(function ($q) use ($cuentaIds) {
+                    $q->where('tipo_movimiento_id', 2)
                         ->whereIn('cuenta_destino_id', $cuentaIds);
+                });
+                // Transferencias desde/hacia cuentas del usuario (hechas por admin/otros vendedores)
+                $query->orWhere(function ($q) use ($cuentaIds) {
+                    $q->where('tipo_movimiento_id', 3)
+                        ->where(function ($qq) use ($cuentaIds) {
+                            $qq->whereIn('cuenta_origen_id', $cuentaIds)
+                                ->orWhereIn('cuenta_destino_id', $cuentaIds);
+                        });
                 });
             }
         })
             ->where('fecha_operacion', '>=', $inicioTurno)
-            ->with(['tipoMovimiento', 'cuentaOrigen', 'cuentaDestino', 'clienteOrigen', 'clienteDestino', 'proveedorDestino'])
+            ->with(['tipoMovimiento', 'cuentaOrigen', 'cuentaDestino', 'clienteOrigen', 'clienteDestino', 'proveedorDestino', 'user'])
             ->get();
 
         // Estructura para agrupar por Moneda
@@ -949,6 +1062,7 @@ class CierreCajaController extends Controller
                     'hora' => $mov->created_at->format('H:i'),
                     'origen' => $this->obtenerNombreOrigen($mov),
                     'destino' => $this->obtenerNombreDestino($mov),
+                    'usuario_nombre' => $mov->user?->name ?? 'Sistema',
                 ];
 
                 // Resta a la caja
@@ -965,6 +1079,7 @@ class CierreCajaController extends Controller
                     'hora' => $mov->created_at->format('H:i'),
                     'origen' => $this->obtenerNombreOrigen($mov),
                     'destino' => $this->obtenerNombreDestino($mov),
+                    'usuario_nombre' => $mov->user?->name ?? 'Sistema',
                 ];
 
                 // Suma a la caja
@@ -1426,7 +1541,8 @@ class CierreCajaController extends Controller
             'tasa_cambio' => $tasaCambio,
             'hora' => $movimiento->created_at->format('H:i'),
             'afecta_saldo_usuario' => $afectaSaldoOrigen,
-            'es_receptor' => $esReceptor, // Indica si el usuario actual es el receptor
+            'es_receptor' => $esReceptor,
+            'usuario_nombre' => $movimiento->user?->name ?? 'Sistema',
         ];
 
         // Si el destino está en una moneda diferente, agregar también a la lista de esa moneda
@@ -1448,6 +1564,7 @@ class CierreCajaController extends Controller
                 'tasa_cambio' => $tasaCambio,
                 'hora' => $movimiento->created_at->format('H:i'),
                 'es_entrada' => true,
+                'usuario_nombre' => $movimiento->user?->name ?? 'Sistema',
             ];
         } else {
             // Mismo código de moneda, crear item de entrada con el mismo monto
@@ -1465,6 +1582,7 @@ class CierreCajaController extends Controller
                 'tasa_cambio' => $tasaCambio,
                 'hora' => $movimiento->created_at->format('H:i'),
                 'es_entrada' => true,
+                'usuario_nombre' => $movimiento->user?->name ?? 'Sistema',
             ];
             $montoEntrada = $movimiento->monto;
         }

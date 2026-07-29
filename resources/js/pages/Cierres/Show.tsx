@@ -292,6 +292,9 @@ interface Props extends PageProps {
     comisiones_pv_cup?: number;
     comisiones_gestor_cup?: number;
     comisiones_total_cup?: number;
+    comparativa_cuentas?: ComparativaItem[];
+    comparativa_clientes?: ComparativaClienteItem[];
+    tiene_cierre_anterior?: boolean;
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -323,6 +326,9 @@ export default function Show({
     comisiones_pv_cup = 0,
     comisiones_gestor_cup = 0,
     comisiones_total_cup = 0,
+    comparativa_cuentas = [],
+    comparativa_clientes = [],
+    tiene_cierre_anterior = false,
 }: Props) {
     const canViewEspecialesCostImpact = userRole === 'admin' || userRole === 'moderador';
 
@@ -1319,6 +1325,132 @@ export default function Show({
                                     </div>
                                 ) : (
                                     <p className="text-muted-foreground py-12 text-center italic">No hay transferencias registradas en este turno.</p>
+                                )}
+                            </TabsContent>
+                        </Tabs>
+                    </CardContent>
+                </Card>
+
+                {/* Comparativa con Cierre Anterior */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-base">
+                            <TrendingUp className="h-5 w-5 text-blue-600" />
+                            Comparativa con Cierre Anterior
+                        </CardTitle>
+                        <CardDescription>Comparación de saldos y deudas respecto al cierre anterior</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                        <Tabs defaultValue="cuentas" className="w-full">
+                            <TabsList className="grid w-full grid-cols-2">
+                                <TabsTrigger value="cuentas">Cuentas ({comparativa_cuentas?.length ?? 0})</TabsTrigger>
+                                <TabsTrigger value="clientes">Clientes ({comparativa_clientes?.length ?? 0})</TabsTrigger>
+                            </TabsList>
+
+                            <TabsContent value="cuentas" className="mt-4">
+                                {!tiene_cierre_anterior && comparativa_cuentas.length > 0 && (
+                                    <p className="text-muted-foreground mb-2 text-xs italic">
+                                        Primer cierre: estos son los saldos iniciales actuales.
+                                    </p>
+                                )}
+                                <div className="rounded-md border">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Cuenta</TableHead>
+                                                <TableHead>Tipo</TableHead>
+                                                <TableHead>Moneda</TableHead>
+                                                <TableHead className="text-right">Cierre Anterior</TableHead>
+                                                <TableHead className="text-right">Cierre Hoy</TableHead>
+                                                <TableHead className="text-right">Diferencia</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {comparativa_cuentas && comparativa_cuentas.length > 0 ? (
+                                                comparativa_cuentas.map((item: ComparativaItem) => (
+                                                    <TableRow key={item.id}>
+                                                        <TableCell className="font-medium">{item.nombre}</TableCell>
+                                                        <TableCell>
+                                                            <span className="bg-muted rounded px-2 py-0.5 text-xs font-medium">
+                                                                {item.tipo === 'efectivo'
+                                                                    ? 'Efectivo'
+                                                                    : item.tipo === 'tarjeta'
+                                                                      ? 'Tarjeta'
+                                                                      : item.tipo || '-'}
+                                                            </span>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <span className="bg-muted rounded px-2 py-0.5 text-xs font-medium">{item.moneda}</span>
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-mono">
+                                                            ${Number(item.saldo_anterior).toFixed(2)}
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-mono font-medium">
+                                                            ${Number(item.saldo_actual).toFixed(2)}
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-mono">
+                                                            {item.diferencia > 0 ? (
+                                                                <span className="text-green-600">+${Number(item.diferencia).toFixed(2)}</span>
+                                                            ) : item.diferencia < 0 ? (
+                                                                <span className="text-red-600">${Number(item.diferencia).toFixed(2)}</span>
+                                                            ) : (
+                                                                <span className="text-muted-foreground">-</span>
+                                                            )}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))
+                                            ) : (
+                                                <TableRow>
+                                                    <TableCell colSpan={6} className="text-muted-foreground py-8 text-center italic">
+                                                        {!tiene_cierre_anterior
+                                                            ? 'No hay cierre anterior para comparar'
+                                                            : 'No hay cuentas para mostrar'}
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            </TabsContent>
+
+                            <TabsContent value="clientes" className="mt-4">
+                                {comparativa_clientes && comparativa_clientes.length > 0 ? (
+                                    <div className="rounded-md border">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Cliente</TableHead>
+                                                    <TableHead className="text-right">Deuda Anterior</TableHead>
+                                                    <TableHead className="text-right">Deuda Actual</TableHead>
+                                                    <TableHead className="text-right">Diferencia</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {comparativa_clientes.map((item: ComparativaClienteItem) => (
+                                                    <TableRow key={item.id}>
+                                                        <TableCell className="font-medium">{item.nombre}</TableCell>
+                                                        <TableCell className="text-right font-mono">
+                                                            ${Number(item.deuda_anterior).toFixed(2)}
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-mono font-medium">
+                                                            ${Number(item.deuda_actual).toFixed(2)}
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-mono">
+                                                            {item.diferencia < 0 ? (
+                                                                <span className="text-green-600">${Number(item.diferencia).toFixed(2)} ✅</span>
+                                                            ) : item.diferencia > 0 ? (
+                                                                <span className="text-red-600">+${Number(item.diferencia).toFixed(2)} ⚠️</span>
+                                                            ) : (
+                                                                <span className="text-muted-foreground">-</span>
+                                                            )}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                ) : (
+                                    <p className="text-muted-foreground py-8 text-center italic">No hay clientes con deuda registrada.</p>
                                 )}
                             </TabsContent>
                         </Tabs>
