@@ -297,6 +297,16 @@ interface Props extends PageProps {
     comparativa_cuentas?: ComparativaItem[];
     comparativa_clientes?: ComparativaClienteItem[];
     tiene_cierre_anterior?: boolean;
+    transacciones_externas?: Array<{
+        hora: string;
+        tipo: string;
+        desc: string;
+        cuenta: string;
+        usuario_nombre: string;
+        monto: number;
+        moneda: string;
+        es_entrante: boolean;
+    }>;
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -331,6 +341,7 @@ export default function Show({
     comparativa_cuentas = [],
     comparativa_clientes = [],
     tiene_cierre_anterior = false,
+    transacciones_externas = [],
 }: Props) {
     const canViewEspecialesCostImpact = userRole === 'admin' || userRole === 'moderador';
 
@@ -530,66 +541,8 @@ export default function Show({
     });
 
     // Transacciones externas: operaciones de otros usuarios que afectan las cuentas del vendedor
-    const transaccionesExternas = useMemo(() => {
-        const externas: Array<{
-            hora: string;
-            tipo: string;
-            desc: string;
-            cuenta: string;
-            usuario_nombre: string;
-            monto: number;
-            moneda: string;
-            es_entrante: boolean;
-        }> = [];
-
-        (todosGastos ?? []).forEach((item) => {
-            if (item.es_propio === false) {
-                externas.push({
-                    hora: item.hora,
-                    tipo: 'Gasto',
-                    desc: item.desc,
-                    cuenta: item.origen || '-',
-                    usuario_nombre: item.usuario_nombre || 'Sistema',
-                    monto: item.monto,
-                    moneda: 'USD',
-                    es_entrante: false,
-                });
-            }
-        });
-
-        (todosIngresos ?? []).forEach((item) => {
-            if (item.es_propio === false) {
-                externas.push({
-                    hora: item.hora,
-                    tipo: 'Ingreso',
-                    desc: item.desc,
-                    cuenta: item.destino || '-',
-                    usuario_nombre: item.usuario_nombre || 'Sistema',
-                    monto: item.monto,
-                    moneda: 'USD',
-                    es_entrante: true,
-                });
-            }
-        });
-
-        (todasTransferencias ?? []).forEach((item) => {
-            if (item.es_propio === false) {
-                externas.push({
-                    hora: item.hora,
-                    tipo: item.tipo === 'entrante' ? 'Transferencia Entrante' : 'Transferencia Saliente',
-                    desc: item.desc,
-                    cuenta: item.tipo === 'entrante' ? item.destino_nombre : item.origen_nombre,
-                    usuario_nombre: item.usuario_nombre || 'Sistema',
-                    monto: item.monto_origen,
-                    moneda: item.moneda_origen || 'USD',
-                    es_entrante: item.tipo === 'entrante',
-                });
-            }
-        });
-
-        externas.sort((a, b) => a.hora.localeCompare(b.hora));
-        return externas;
-    }, [todosGastos, todosIngresos, todasTransferencias]);
+    // Viene desde el controller para funcionar tanto en cierres nuevos como históricos
+    const transaccionesExternas = transacciones_externas;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>

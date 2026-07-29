@@ -682,8 +682,67 @@ class CierreCajaController extends Controller
             ];
         }
 
+        // --- TRANSACCIONES EXTERNAS (operaciones de otros usuarios en cuentas del vendedor) ---
+        $transaccionesExternas = [];
+        $cierreUser = \App\Models\User::find($cierre->user_id);
+        $cuentaIdsExternas = $cierreUser ? $cierreUser->cuentas()->pluck('id')->toArray() : [];
+
+        if ($cierreUser && ! empty($cuentaIdsExternas)) {
+            $movimientosExternos = \App\Models\MovimientoFinanciero::where(function ($q) use ($cierreUser, $cuentaIdsExternas) {
+                $q->where('user_id', '!=', $cierreUser->id);
+                $q->where(function ($qq) use ($cuentaIdsExternas) {
+                    $qq->where(function ($qqq) use ($cuentaIdsExternas) {
+                        $qqq->where('tipo_movimiento_id', 1)->whereIn('cuenta_origen_id', $cuentaIdsExternas);
+                    })->orWhere(function ($qqq) use ($cuentaIdsExternas) {
+                        $qqq->where('tipo_movimiento_id', 2)->whereIn('cuenta_destino_id', $cuentaIdsExternas);
+                    })->orWhere(function ($qqq) use ($cuentaIdsExternas) {
+                        $qqq->where('tipo_movimiento_id', 3)
+                            ->where(function ($qqqq) use ($cuentaIdsExternas) {
+                                $qqqq->whereIn('cuenta_origen_id', $cuentaIdsExternas)
+                                    ->orWhereIn('cuenta_destino_id', $cuentaIdsExternas);
+                            });
+                    });
+                });
+            })
+                ->whereBetween('fecha_operacion', [$cierre->fecha_apertura, $cierre->fecha_cierre])
+                ->with(['user', 'cuentaOrigen', 'cuentaDestino'])
+                ->get();
+
+            foreach ($movimientosExternos as $mov) {
+                $item = [
+                    'hora' => $mov->created_at->format('H:i'),
+                    'desc' => $mov->descripcion,
+                    'monto' => $mov->monto,
+                    'moneda' => $mov->moneda ?? 'USD',
+                    'usuario_nombre' => $mov->user?->name ?? 'Sistema',
+                ];
+
+                if ($mov->tipo_movimiento_id == 1) {
+                    $item['tipo'] = 'Gasto';
+                    $item['cuenta'] = $mov->cuentaOrigen?->nombre_cuenta ?? '-';
+                    $item['es_entrante'] = false;
+                } elseif ($mov->tipo_movimiento_id == 2) {
+                    $item['tipo'] = 'Ingreso';
+                    $item['cuenta'] = $mov->cuentaDestino?->nombre_cuenta ?? '-';
+                    $item['es_entrante'] = true;
+                } elseif ($mov->tipo_movimiento_id == 3) {
+                    $esEntrante = in_array($mov->cuenta_destino_id, $cuentaIdsExternas);
+                    $item['tipo'] = $esEntrante ? 'Transferencia Entrante' : 'Transferencia Saliente';
+                    $item['cuenta'] = $esEntrante
+                        ? ($mov->cuentaDestino?->nombre_cuenta ?? '-')
+                        : ($mov->cuentaOrigen?->nombre_cuenta ?? '-');
+                    $item['es_entrante'] = $esEntrante;
+                }
+
+                $transaccionesExternas[] = $item;
+            }
+
+            usort($transaccionesExternas, fn($a, $b) => $a['hora'] <=> $b['hora']);
+        }
+
         $showPayload = [
             'cierre'                => $cierre,
+            'transacciones_externas' => $transaccionesExternas,
             'userRole'              => $currentUser->role ?? 'vendedor',
             'comision_pv_total'       => round((float) $comisionPVTotal, 2),
             'comision_gestor_total'   => round((float) $comisionGestorTotal, 2),
