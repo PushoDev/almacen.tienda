@@ -1063,6 +1063,7 @@ class CierreCajaController extends Controller
                     'origen' => $this->obtenerNombreOrigen($mov),
                     'destino' => $this->obtenerNombreDestino($mov),
                     'usuario_nombre' => $mov->user?->name ?? 'Sistema',
+                    'es_propio' => $mov->user_id == $user->id,
                 ];
 
                 // Resta a la caja
@@ -1080,6 +1081,7 @@ class CierreCajaController extends Controller
                     'origen' => $this->obtenerNombreOrigen($mov),
                     'destino' => $this->obtenerNombreDestino($mov),
                     'usuario_nombre' => $mov->user?->name ?? 'Sistema',
+                    'es_propio' => $mov->user_id == $user->id,
                 ];
 
                 // Suma a la caja
@@ -1543,6 +1545,7 @@ class CierreCajaController extends Controller
             'afecta_saldo_usuario' => $afectaSaldoOrigen,
             'es_receptor' => $esReceptor,
             'usuario_nombre' => $movimiento->user?->name ?? 'Sistema',
+            'es_propio' => $movimiento->user_id == $user->id,
         ];
 
         // Si el destino está en una moneda diferente, agregar también a la lista de esa moneda
@@ -1565,6 +1568,7 @@ class CierreCajaController extends Controller
                 'hora' => $movimiento->created_at->format('H:i'),
                 'es_entrada' => true,
                 'usuario_nombre' => $movimiento->user?->name ?? 'Sistema',
+                'es_propio' => $movimiento->user_id == $user->id,
             ];
         } else {
             // Mismo código de moneda, crear item de entrada con el mismo monto
@@ -1583,6 +1587,7 @@ class CierreCajaController extends Controller
                 'hora' => $movimiento->created_at->format('H:i'),
                 'es_entrada' => true,
                 'usuario_nombre' => $movimiento->user?->name ?? 'Sistema',
+                'es_propio' => $movimiento->user_id == $user->id,
             ];
             $montoEntrada = $movimiento->monto;
         }

@@ -36,7 +36,7 @@ import {
     TrendingUp,
     Wallet,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { toast, Toaster } from 'sonner';
 
 const CollapsibleRoot = Collapsible.Root;
@@ -159,6 +159,8 @@ interface ItemMovimiento {
     hora: string;
     origen: string;
     destino: string;
+    usuario_nombre?: string;
+    es_propio?: boolean;
 }
 
 interface TransferenciaItem {
@@ -176,6 +178,8 @@ interface TransferenciaItem {
     hora: string;
     afecta_saldo_usuario?: boolean;
     es_entrada?: boolean;
+    usuario_nombre?: string;
+    es_propio?: boolean;
 }
 
 interface TransferenciaCompleta extends TransferenciaItem {
@@ -453,6 +457,68 @@ export default function Create({
     const todosGastos = (calculos.detalles ?? []).flatMap((d) => d.items_gastos ?? []);
     const todosIngresos = (calculos.detalles ?? []).flatMap((d) => d.items_ingresos ?? []);
     const todasTransferencias = calculos.transferencias_resumen?.detalles_completos ?? [];
+
+    // Transacciones externas: operaciones de otros usuarios que afectan las cuentas del vendedor
+    const transaccionesExternas = useMemo(() => {
+        const externas: Array<{
+            hora: string;
+            tipo: string;
+            desc: string;
+            cuenta: string;
+            usuario_nombre: string;
+            monto: number;
+            moneda: string;
+            es_entrante: boolean;
+        }> = [];
+
+        (todosGastos ?? []).forEach((item) => {
+            if (item.es_propio === false) {
+                externas.push({
+                    hora: item.hora,
+                    tipo: 'Gasto',
+                    desc: item.desc,
+                    cuenta: item.origen || '-',
+                    usuario_nombre: item.usuario_nombre || 'Sistema',
+                    monto: item.monto,
+                    moneda: 'USD',
+                    es_entrante: false,
+                });
+            }
+        });
+
+        (todosIngresos ?? []).forEach((item) => {
+            if (item.es_propio === false) {
+                externas.push({
+                    hora: item.hora,
+                    tipo: 'Ingreso',
+                    desc: item.desc,
+                    cuenta: item.destino || '-',
+                    usuario_nombre: item.usuario_nombre || 'Sistema',
+                    monto: item.monto,
+                    moneda: 'USD',
+                    es_entrante: true,
+                });
+            }
+        });
+
+        (todasTransferencias ?? []).forEach((item) => {
+            if (item.es_propio === false) {
+                externas.push({
+                    hora: item.hora,
+                    tipo: item.tipo === 'entrante' ? 'Transferencia Entrante' : 'Transferencia Saliente',
+                    desc: item.desc,
+                    cuenta: item.tipo === 'entrante' ? item.destino_nombre : item.origen_nombre,
+                    usuario_nombre: item.usuario_nombre || 'Sistema',
+                    monto: item.monto_origen,
+                    moneda: item.moneda_origen || 'USD',
+                    es_entrante: item.tipo === 'entrante',
+                });
+            }
+        });
+
+        externas.sort((a, b) => a.hora.localeCompare(b.hora));
+        return externas;
+    }, [todosGastos, todosIngresos, todasTransferencias]);
 
     const submit = (e?: React.FormEvent) => {
         if (e) e.preventDefault();
@@ -1309,6 +1375,61 @@ export default function Create({
                         </Tabs>
                     </CardContent>
                 </Card>
+
+                {/* Transacciones Externas */}
+                {transaccionesExternas.length > 0 && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-base">
+                                <TrendingUp className="h-5 w-5 text-orange-600" />
+                                Transacciones Externas
+                            </CardTitle>
+                            <CardDescription>
+                                Operaciones realizadas por otros usuarios en tus cuentas durante este turno
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="rounded-md border">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead className="w-16">Hora</TableHead>
+                                            <TableHead className="w-24">Tipo</TableHead>
+                                            <TableHead>Descripción</TableHead>
+                                            <TableHead>Cuenta</TableHead>
+                                            <TableHead className="w-28">Creado por</TableHead>
+                                            <TableHead className="w-32 text-right">Monto</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {transaccionesExternas.map((item, idx) => (
+                                            <TableRow key={idx}>
+                                                <TableCell className="font-mono text-xs">{item.hora}</TableCell>
+                                                <TableCell>
+                                                    <span className={`rounded px-2 py-0.5 text-xs font-medium ${
+                                                        item.tipo === 'Gasto' ? 'bg-red-100 text-red-700' :
+                                                        item.tipo === 'Ingreso' ? 'bg-green-100 text-green-700' :
+                                                        'bg-blue-100 text-blue-700'
+                                                    }`}>
+                                                        {item.tipo}
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell className="max-w-xs truncate text-sm" title={item.desc}>{item.desc}</TableCell>
+                                                <TableCell className="text-muted-foreground text-xs">{item.cuenta}</TableCell>
+                                                <TableCell className="text-muted-foreground text-xs">{item.usuario_nombre}</TableCell>
+                                                <TableCell className="text-right font-mono font-medium">
+                                                    <span className={item.es_entrante ? 'text-green-600' : 'text-red-600'}>
+                                                        {item.es_entrante ? '+' : '-'}${Number(item.monto).toFixed(2)} {item.moneda}
+                                                    </span>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
 
                 {/* Comparativa con Cierre Anterior */}
                 <Card>
