@@ -1,13 +1,13 @@
 # Estado del Desarrollo — almacen.tienda
 
 > **Actualizar este archivo cada vez que se resuelva un bug, se complete una feature o aparezca algo nuevo.**
-> Fecha de última actualización: 2026-07-26
+> Fecha de última actualización: 2026-07-28
 
 ---
 
 ## Rama activa
 
-`feature/bot-telegram`
+`feature/desarrollo-caliente`
 
 ---
 
@@ -90,15 +90,15 @@
 
 ---
 
-## 🐛 Bugs conocidos pendientes
+## ✅ Bugs resueltos recientemente
 
-### VentaController
-
-| ID | Método | Descripción | Impacto |
+| ID | Método | Descripción | Fix |
 |---|---|---|---|
-| **B1** | `guardarDistribucion` (~L1759) | Devuelve `saldo_actual` en la respuesta pero el campo real del modelo es `saldo_cuenta` | UI muestra saldo incorrecto en el modal de distribución |
-| **B2** | `aprobarVenta` + `anularVenta` | Falta guardia XOR: el bloque de comisión vendedor no tiene `&& !$venta->es_venta_gestor` | Doble débito potencial si gestor y comisión PV están ambos configurados |
-| **B3** | `procesarVenta` (~L803) | `foreach ($validatedData['pagos'] as $pago)` sin `?? []` | Crash si el frontend envía `pagos: null` |
+| **B1** | `guardarDistribucion` | Devuelve `saldo_actual` en la respuesta pero el campo real es `saldo_cuenta` | Corregido: ahora retorna `saldo_disponible` desde `saldo_cuenta` (VentaController:L1819) |
+| **B2** | `aprobarVenta` | Falta guardia XOR en comisión vendedor | Corregido: `if (!$venta->es_venta_gestor && ...)` en L1374 |
+| **B3** | `procesarVenta` | `foreach ($pagos)` sin `?? []` | Corregido: `foreach ($validatedData['pagos'] ?? [] as $pago)` en L803 |
+
+## 🐛 Bugs activos pendientes
 
 ### Mensajero
 
@@ -136,6 +136,11 @@
 
 | ID | Descripción | Fecha |
 |---|---|---|
+| **—** | **Módulo Transacciones (75%)** — Gastos, Ingresos, Transferencias con control de saldo, arreglo flujo contable | 2026-07-28 |
+| **—** | **Cuentas — tipo_titular** (externa/personal), eliminación campo `deuda`, unificación `temporales→permanentes` | 2026-07-28 |
+| **—** | **Cuentas — soporte saldos negativos** detectados como deudas, ajustes en UI | 2026-07-28 |
+| **—** | **Logística II** — Expansión con Create/Edit/Show, layouts de charts (ComprasVentas, ProductosPorAlmacen) | 2026-07-27 |
+| **—** | **Logística I** — 4 widgets Capital Financiero (Capital, USD, CUP, EUR) con datos reales, resúmenes de Cuentas/Clientes/Proveedores/Productos | 2026-07-26 |
 | **F6** | Herramienta detección y fusión de productos duplicados — 2 modales, agrupación con capacidad normalizada, suma cantidades + promedio precios | 2026-07-25 |
 
 ## 📋 Pendientes menores conocidos
@@ -200,19 +205,50 @@ resources/js/pages/Empleados/Create.tsx
 resources/js/pages/Empleados/Edit.tsx
 ```
 
+### Logística
+```
+app/Http/Controllers/LogisticaController.php
+app/Services/DashboardStatsService.php
+resources/js/pages/Logistica/Index.tsx
+resources/js/pages/Logistica/Create.tsx
+resources/js/pages/Logistica/Edit.tsx
+resources/js/pages/Logistica/Show.tsx
+resources/js/pages/Logistica/layout/*         ← ComprasVentas, ProductosPorAlmacen, KPIsPeriodo
+```
+
+### Transacciones
+```
+app/Http/Controllers/TransaccionController.php
+app/Http/Controllers/GastoController.php
+app/Http/Controllers/IngresoController.php
+app/Http/Controllers/TransferenciaController.php
+resources/js/pages/Transacciones/Index.tsx
+resources/js/pages/Transacciones/Create.tsx
+resources/js/pages/Transacciones/Show.tsx
+resources/js/pages/Transacciones/Historial.tsx
+resources/js/pages/Transacciones/CambiarCostoManual.tsx
+resources/js/pages/Transacciones/layout/*      ← Movimientos, forms varios
+```
+
 ---
 
 ## 🔄 Historial de cambios recientes
 
 | Fecha | Cambio |
 |:---:|---|
-| 2026-07-26 | **Logística — 4 widgets Capital con datos reales**: reemplazados los `balances` dinámicos por 4 cards fijos (Capital Financiero, USD, CUP, EUR). Capital Financiero suma `total_saldo + clientes.balance_neto + proveedores.balance_neto + productos.total_importe_global`. Capital USD suma `clientes.balance_neto + proveedores.balance_neto + productos.total_importe_global + temporales + USD_perm.equivalente`. Capital CUP/EUR usan `por_moneda_perm[].original`. Iconos (`Landmark`, `DollarSign`, `Wallet`, `Euro`), `border-l-4`, `shadow-sm hover:shadow-md`. Limpiados imports no usados y prop `balances`. |
-| 2026-07-26 | **Cuentas Index — Row 3 ahora filtra solo permanentes**: nuevo `por_moneda_perm` en backend. Formato moneda con `": "` en toda la vista (ej. `$: 305.834,63`). Bug detectado: moneda USD (id=1) eliminada de DB — 79 cuentas huérfanas agrupadas como 'N/A'. |
-| 2026-07-26 | **Cuentas Index rediseñado** — 3 filas de widgets interactivos clickeables (KPIs, desglose por tipo con barras, desglose por moneda). Filtros combinados + resumen de saldos por moneda. Deudas detectadas desde `saldo_cuenta < 0`. Bugfixes: filtro "all" roto, opción "Deudas" ausente en dropdown, acciones ocultas en móvil, paginación con páginas duplicadas. Backend: bloque `$resumen` precalculado en `CuentaController@index`. |
+| 2026-07-28 | **Transacciones 75%** — Gastos, Ingresos, Transferencias funcionales. Arreglos en flujo contable y control de saldos |
+| 2026-07-28 | **Cuentas — `tipo_titular`** (externa/personal), eliminación campo `deuda`, unificación `temporales→permanentes` vía migración |
+| 2026-07-28 | **Cuentas — soporte saldos negativos** como deudas, ajustes en backend y UI |
+| 2026-07-28 | **Arreglo Empleados** — Correcciones en gestión de empleados |
+| 2026-07-27 | **Logística II** — Expansión con Create/Edit/Show, layouts de charts (ComprasVentas, ProductosPorAlmacen, KPIsPeriodo) |
+| 2026-07-27 | **Arreglo Movimientos** — Correcciones en flujo de movimientos de stock |
+| 2026-07-26 | **Logística I** — 4 widgets Capital Financiero (Capital, USD, CUP, EUR) con datos reales, resúmenes de Cuentas/Clientes/Proveedores/Productos. Iconos (`Landmark`, `DollarSign`, `Wallet`, `Euro`), `border-l-4`, `shadow-sm hover:shadow-md`. Limpiados imports no usados y prop `balances`. |
+| 2026-07-26 | **Cuentas Index — Row 3 ahora filtra solo permanentes**: nuevo `por_moneda_perm` en backend. Formato moneda con `": "` en toda la vista (ej. `$: 305.834,63`). |
+| 2026-07-26 | **Cuentas Index rediseñado** — 3 filas de widgets interactivos clickeables. Filtros combinados + resumen de saldos por moneda. Deudas detectadas desde `saldo_cuenta < 0`. |
 | 2026-07-25 | **F6** — Herramienta detección/fusión de duplicados: 2 modales, normalización unicode capacidad, suma cantidades + promedio precios |
+| 2026-07-24 | Columnas **Marca, Modelo, Capacidad, Color** agregadas al Excel de export/import de precios (`PreciosVendedorExport`, `PreciosVendedorImport`). `UserController`: filtrado de cuentas para empleados solo `permanentes` |
 | 2026-07-15 | `color_producto` añadido a tabla/tooltip en Productos, Movimientos, Compras y todas las vistas donde aparecía el producto |
 | 2026-07-15 | `CompraController::show()` implementado — historial de compras recientes en `Comprar/Index`, vista detalle `Comprar/Show`. Fix: parámetro renombrado a `$comprar` para que el route model binding de `{comprar}` funcione correctamente |
-| 2026-07-24 | Columnas **Marca, Modelo, Capacidad, Color** agregadas al Excel de export/import de precios (`PreciosVendedorExport`, `PreciosVendedorImport`). `UserController`: filtrado de cuentas para empleados solo `permanentes` |
 | 2026-07-01 | Snapshot de mensajero en cierre_cajas, resumen financiero turno, desglose comisiones PV/Gestor |
 | 2026-06-28 | `mensajero_monto_final_cup` editable, TasasFlotante global, validaciones mensajero en aprobar |
 | 2026-06-25 | Mensajero multi-moneda en POS (selector moneda + tasa + equivalente USD) |

@@ -204,10 +204,13 @@
 | `id` | PK | |
 | `nombre_cuenta` | string | |
 | `tipo_instrumento` | enum | `tarjeta`, `efectivo`, `otro` |
-| `categoria` | enum | `permanentes`, `temporales`, `deudas` |
+| `tipo_cuenta` | enum | `permanentes` (único valor desde 2026-07-28 — `temporales` unificado) |
+| `tipo_titular` | enum nullable | `externa`, `personal` (agregado 2026-07-28) |
 | `moneda_id` | FK | |
 | `saldo_cuenta` | decimal | Saldo actual |
 | `activa` | boolean | |
+
+> ⚠️ `temporales` fue unificado a `permanentes` el 2026-07-28. El campo `deuda` fue eliminado de la tabla en esa misma fecha.
 
 ---
 
@@ -300,6 +303,10 @@ cierre_cajas ─── users (el vendedor que cerró)
 
 | Migración | Qué hace |
 |---|---|
+| `2026_07_28_165942_unificar_tipo_cuenta_temporales_a_permanentes` | Unifica `temporales→permanentes`, modifica ENUM a solo `permanentes` |
+| `2026_07_28_153937_drop_deuda_from_cuentas` | Elimina columna `deuda` de cuentas |
+| `2026_07_28_153931_add_tipo_titular_to_cuentas` | Nuevo campo `tipo_titular` (`externa`/`personal`) |
+| `2026_07_15_162640_add_color_producto_to_productos` | Campo `color_producto` en productos |
 | `2026_07_01_000001_add_mensajero_snapshot_to_cierre_cajas` | 4 columnas mensajero en cierre_cajas |
 | `2026_06_29_000001_add_mensajero_cuenta_origen_to_ventas` | Campo `mensajero_cuenta_origen` |
 | `2026_06_28_000001_add_mensajero_monto_final_cup_to_ventas` | Campo `mensajero_monto_final_cup` |

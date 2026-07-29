@@ -126,8 +126,13 @@
 | Método | Ruta | Controlador@Método | Vista / Respuesta |
 |---|---|---|---|
 | GET | `/transacciones` | `TransaccionController@index` | `Transacciones/Index` |
-| POST | `/transacciones` | `TransaccionController@store` | JSON |
+| POST | `/transacciones/distribuir-costos-manual` | `TransaccionController@distribuirCostosManual` | JSON |
+| GET | `/transacciones/distribuir-costos/{compra}` | `TransaccionController@mostrarFormularioDistribucion` | Vista |
 | GET | `/transacciones/historial` | `TransaccionController@historial` | `Transacciones/Historial` |
+| POST | `/transacciones/gastar` | `GastoController@store` | JSON |
+| GET | `/transacciones/ingreso/data` | `IngresoController@formData` | JSON |
+| POST | `/transacciones/ingresar` | `IngresoController@store` | JSON |
+| POST | `/transacciones/transferir` | `TransferenciaController@store` | JSON |
 
 ---
 
@@ -162,14 +167,22 @@
 | Método | Ruta | Controlador@Método | Vista / Respuesta |
 |---|---|---|---|
 | GET | `/reportes` | `ReporteController@index` | `Reportes/Index` |
-| GET | `/reportes/ventas-periodo` | `ReporteController@ventasPorPeriodo` | `Reportes/Report/VentasPorPeriodo` |
-| GET | `/reportes/compras-periodo` | `ReporteController@comprasPorPeriodo` | `Reportes/Report/CompraPorPeriodo` |
-| GET | `/reportes/inventario` | `ReporteController@inventarioPorAlmacen` | `Reportes/Report/InventarioPorAlmacen` |
-| GET | `/reportes/ganancias` | `ReporteController@reporteGanancias` | `Reportes/Report/ReporteGanancias` |
-| GET | `/reportes/historial-costos` | `ReporteController@historialCostoPrecio` | `Reportes/Report/HistorialCostoPrecio` |
+| GET | `/reportes/ventas-por-periodo` | `ReporteController@ventasPorPeriodo` | `Reportes/Report/VentasPorPeriodo` |
+| GET | `/reportes/ventas-por-vendedor` | `ReporteController@ventasPorVendedor` | `Reportes/Report/VentasPorVendedor` |
+| GET | `/reportes/productos-mas-vendidos` | `ReporteController@productosMasVendidos` | `Reportes/Report/ProductosMasVendidos` |
+| GET | `/reportes/compras-por-periodo` | `ReporteController@comprasPorPeriodo` | `Reportes/Report/CompraPorPeriodo` |
+| GET | `/reportes/compras-por-proveedor/{proveedorId?}` | `ReporteController@comprasPorProveedor` | `Reportes/Report/ComprasPorProveedor` |
+| GET | `/reportes/productos-mas-comprados` | `ReporteController@productosMasComprados` | `Reportes/Report/ProductosMasComprados` |
+| GET | `/reportes/balance-gastos-mensuales` | `ReporteController@balanceGastosMensuales` | `Reportes/Report/BalanceGastosMensuales` |
+| GET | `/reportes/inventario-por-almacen` | `ReporteController@inventarioPorAlmacen` | `Reportes/Report/InventarioPorAlmacen` |
+| GET | `/reportes/inventario-detallado-por-almacen` | `ReporteController@inventarioDetalladoPorAlmacen` | `Reportes/Report/InventarioDetalladoPorAlmacen` |
+| GET | `/reportes/reporte-stock-bajo` | `ReporteController@reporteStockBajo` | `Reportes/Report/ReporteStockBajo` |
+| GET | `/reportes/valor-inventario` | `ReporteController@valorInventario` | `Reportes/Report/ValorInventario` |
+| GET | `/reportes/reporte-ganancias` | `ReporteController@reporteGanancias` | `Reportes/Report/ReporteGanancias` |
+| GET | `/reportes/historial-precios` | `ReporteController@historialPrecios` | `Reportes/Report/HistorialPrecios` |
+| GET | `/reportes/historial-costo-precio` | `ReporteController@historialCostoPrecio` | `Reportes/Report/HistorialCostoPrecio` |
 | GET | `/reportes/movimientos-financieros` | `ReporteController@movimientosFinancieros` | `Reportes/Report/MovimientosFinancieros` |
-| GET | `/reportes/rastreo` | `ReporteController@rastreoOperaciones` | `Reportes/Report/RastreoOperaciones` |
-| GET | `/reportes/stock-bajo` | `ReporteController@stockBajo` | `Reportes/Report/ReporteStockBajo` |
+| GET | `/reportes/rastreo-operaciones` | `ReporteController@rastreoOperaciones` | `Reportes/Report/RastreoOperaciones` |
 
 ---
 
