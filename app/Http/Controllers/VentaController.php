@@ -987,7 +987,7 @@ class VentaController extends Controller
                 $baseComision = (!$esEspecial && $productoVendedor) ? (float) $productoVendedor->comision : 0;
 
                 // Calcular comisión según el precio aplicado
-                if ($esEspecial) {
+                if ($esEspecial || $esGestor) {
                     $comisionUnitaria = 0;
                 } elseif ((float) $item['precio_venta'] >= $precioBase) {
                     // Igual o por encima del precio base: comisión base + markup extra

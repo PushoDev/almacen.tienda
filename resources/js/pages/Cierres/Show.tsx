@@ -497,9 +497,10 @@ export default function Show({
         precio_base: Number(p.precio_base) || 0,
         precio_venta: Number(p.precio_venta) || 0,
         total: Number(p.total) || 0,
+        comision: Number(p.comision) || 0,
     }));
     const totalVentasProductos = lineasProductos.reduce((s: number, r) => s + r.total, 0);
-    const totalEsperadoProductos = lineasProductos.reduce((s: number, r) => s + r.cantidad * r.precio_base, 0);
+    const totalComisionProductos = lineasProductos.reduce((s: number, r) => s + r.comision, 0);
 
     const pagosPorMonedaYMetodo = todosItemsVentas.reduce(
         (acc, p) => {
@@ -828,6 +829,7 @@ export default function Show({
                                         <th className="px-4 py-3 text-center font-semibold">Cantidad</th>
                                         <th className="px-4 py-3 text-right font-semibold">Precio Unit</th>
                                         <th className="px-4 py-3 text-right font-semibold">Total Real</th>
+                                        <th className="px-4 py-3 text-right font-semibold">Comisión Asignada</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-border divide-y">
@@ -864,11 +866,12 @@ export default function Show({
                                                 </td>
                                                 <td className="px-4 py-2 text-right font-mono">${Number(linea.precio_base).toFixed(2)}</td>
                                                 <td className="px-4 py-2 text-right font-mono font-medium">${Number(linea.total).toFixed(2)}</td>
+                                                <td className="px-4 py-2 text-right font-mono text-green-600">${Number(linea.comision).toFixed(2)}</td>
                                             </tr>
                                         ))
                                     ) : (
                                         <tr>
-                                            <td colSpan={7} className="text-muted-foreground px-4 py-8 text-center italic">
+                                            <td colSpan={8} className="text-muted-foreground px-4 py-8 text-center italic">
                                                 No hay ventas en este turno
                                             </td>
                                         </tr>
@@ -883,6 +886,9 @@ export default function Show({
                                         <td className="px-4 py-3"></td>
                                         <td className="px-4 py-3 text-right font-mono text-lg font-bold text-green-600">
                                             ${totalVentasProductos.toFixed(2)}
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-mono text-lg font-bold text-green-600">
+                                            ${totalComisionProductos.toFixed(2)}
                                         </td>
                                     </tr>
                                 </tfoot>
