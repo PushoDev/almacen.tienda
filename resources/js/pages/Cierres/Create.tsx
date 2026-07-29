@@ -627,7 +627,7 @@ export default function Create({
                 </div>
 
                 {/* NUEVO: Widget de Resumen por Destino (Cuentas vs Clientes) */}
-                {(calculos.ventas_a_cuentas_total_usd !== undefined || calculos.ventas_a_clientes_total_usd !== undefined) && (
+                {false && (
                     <Card>
                         <CardHeader className="pb-2">
                             <CardTitle className="flex items-center gap-2 text-lg">

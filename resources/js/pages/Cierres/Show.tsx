@@ -689,6 +689,7 @@ export default function Show({
                     </Card>
                 </div>
 
+                {false && (
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle className="flex items-center gap-2 text-lg">
@@ -763,6 +764,7 @@ export default function Show({
                         </div>
                     </CardContent>
                 </Card>
+                )}
 
                 <Card>
                     <CardHeader>
