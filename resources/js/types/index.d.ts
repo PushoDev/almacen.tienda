@@ -679,6 +679,13 @@ export interface CompraProveedor {
     total_compra: number;
     productos: ProductoCompra[];
     proveedor_id: number;
+    pagos?: Array<{
+        id: number;
+        monto: number;
+        tipo_pago: string;
+        cuenta?: { id: number; nombre_cuenta: string };
+        cliente?: { id: number; nombre_cliente: string };
+    }>;
 }
 
 // Interface para Transacciones del Proveedor

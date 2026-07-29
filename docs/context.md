@@ -105,20 +105,21 @@ cancelada           → stock devuelto
 
 ### Cuenta (`cuentas`)
 - Tipos de instrumento: `tarjeta`, `efectivo`, `otro`.
-- Categorías: `permanentes`, `temporales`, `deudas`.
+- Categorías: `permanentes` (unificado — `temporales` migrado a `permanentes` el 2026-07-28).
+- `tipo_titular`: `externa` o `personal` (nuevo campo 2026-07-28).
 - Moneda vinculada via `moneda_id`.
 - Vendedores solo ven sus cuentas asignadas (tabla `user_cuentas`).
 - Modificar saldo requiere rol admin + contraseña de seguridad hardcoded (`glorietashop`).
 - **Index rediseñado** (`resources/js/pages/Cuentas/Index.tsx`):
   - 3 filas de widgets interactivos: KPIs (total eq., activas/inactivas), desglose por tipo con barras de porcentaje por cantidad de cuentas, desglose por moneda.
   - Todos los widgets son clickeables y filtran la tabla al hacer clic.
-  - Filtro combinado: tipo + moneda + estado + deudas (por saldo negativo) + búsqueda.
+  - Filtro combinado: tipo + moneda + estado + titular + deudas (por saldo negativo) + búsqueda.
   - Resumen de filtros activos con badges removibles y línea de totales por moneda.
   - Paginación con ventana de páginas.
   - **Row 3** (Desglose por Moneda): solo muestra cuentas **permanentes** (nuevo `por_moneda_perm` en backend).
   - Formato moneda: `": "` entre indicador y valor (ej. `$: 305.834,63`, `CUP: 5.444.544,38`).
 - **Backend** (`CuentaController@index`): precalcula `$resumen` (por_tipo, por_moneda, por_moneda_perm, por_estado, total_saldo) y lo pasa a la vista Inertia.
-- **Deudas**: detectadas desde `saldo_cuenta < 0` (no desde `tipo_cuenta = 'deudas'`, que aún no está en uso).
+- **Deudas**: detectadas desde `saldo_cuenta < 0` (no desde `tipo_cuenta = 'deudas'`).
 
 ### Moneda (`monedas`)
 - `codigo_moneda`: ej. `USD`, `CUP`, `MLC`.
@@ -252,25 +253,28 @@ Prefijo: `/api/tienda` — sin autenticación, throttle: 60 req/min.
 | `AdminController` | Dashboard, tasas de cambio (USD y MLC), historial de comparaciones mensuales |
 | `VentaController` | POS completo: crear venta, aprobar, anular, listado, datos JSON para el frontend |
 | `CompraController` | Registro de compras, gestión inline de proveedores/clientes/almacenes/categorías |
-| `ProductoController` | CRUD de productos, búsqueda, transferencia de códigos, import/export Excel |
+| `ProductoController` | CRUD de productos, búsqueda, transferencia de códigos, import/export Excel, detección/fusión de duplicados |
 | `AlmacenController` | CRUD de almacenes, vista de inventario por almacén |
 | `MovimientosController` | Traslados de stock: crear, enviar, recibir, rechazar, discrepancias |
-| `CuentaController` | CRUD de cuentas, control de saldo con contraseña |
+| `CuentaController` | CRUD de cuentas, control de saldo con contraseña, resumen con KPIs |
 | `CierreCajaController` | Pre-cierre (cálculos), store (persistencia), show (detalle histórico) |
 | `ReporteController` | Todos los reportes: ventas, compras, inventario, ganancias, auditoría |
 | `TransaccionController` | Movimientos financieros, distribución de costos de compra |
+| `GastoController` | Registro de gastos financieros |
+| `IngresoController` | Registro de ingresos financieros |
+| `TransferenciaController` | Transferencias entre cuentas (incluye conversión de moneda) |
 | `TelegramWebhookController` | Bot: comandos texto + callbacks inline de aprobación |
 | `ProductoVendedorController` | Asignación/edición de precios y comisiones por almacén |
 | `UserController` | Gestión de usuarios |
 | `UserAlmacenController` | Asignación de usuarios a almacenes |
-| `LogisticaController` | Vista de logística |
+| `LogisticaController` | Dashboard de logística con KPIs y resúmenes |
 | `MonedaController` | CRUD de monedas, actualización de tasas |
 | `MovimientosPendienteController` | Movimientos de stock pendientes |
 | `NotificationController` | Lectura y marcado de notificaciones |
 | `EcommerceController` | Vista de catálogo público (en desarrollo) |
 | `Api/CatalogoPublicoController` | API REST pública sin auth |
 | `DestinatarioVentaController` | Destinatarios/receptores de ventas |
-| `ClienteController` | CRUD de clientes y gestión de deuda |
+| `ClienteController` | CRUD de clientes y gestión de deuda, resumen con KPIs |
 | `ProveedorController` | CRUD de proveedores |
 | `CategoriaController` | CRUD de categorías |
 
@@ -377,5 +381,5 @@ Cada card tiene: `border-l-4`, `shadow-sm hover:shadow-md`, icono en contenedor 
 
 ## Branch Actual
 
-`feature/bot-telegram` — Trabajo activo en integración del bot de Telegram.
-Últimos cambios: **Dashboard Logística** convertido en panel de resúmenes con 4 cards (Cuentas, Clientes, Proveedores, Productos). Eliminados widgets mock y placeholders. Fixes en `getResumenPorMonedaPerm()` (acumulación por codigo_moneda), extracción de `getMonedaPrincipal()`, constante `STOCK_BAJO_THRESHOLD`. Formato moneda consistente con `toLocaleString('es-ES')`.
+`feature/desarrollo-caliente` — Trabajo activo en transacciones financieras, cuentas y logística.
+Últimos cambios: **Módulo Transacciones** (Gastos, Ingresos, Transferencias) al 75%. **Cuentas**: nuevo campo `tipo_titular` (externa/personal), eliminación de campo `deuda`, unificación `temporales→permanentes`. **Logística I+II**: 4 widgets Capital Financiero + resúmenes de Cuentas/Clientes/Proveedores/Productos + layouts de charts.**Bugs B1/B2/B3 resueltos** en VentaController.

@@ -171,7 +171,7 @@ git push origin feature/nombre-descriptivo
 
 **Ramas activas:**
 - `main` — producción estable
-- `feature/bot-telegram` — rama de desarrollo actual
+- `feature/desarrollo-caliente` — rama de desarrollo actual (transacciones, cuentas, logística)
 
 ---
 

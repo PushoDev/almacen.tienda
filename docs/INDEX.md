@@ -9,18 +9,23 @@
 
 | Campo | Valor |
 |---|---|
-| Rama activa | `feature/bot-telegram` |
-| Última sesión | 2026-07-27 — **Tests + Migraciones**: Arregladas 6 migraciones con sintaxis MySQL-only para que funcionen en SQLite (entorno de tests). Envueltas en `getDriverName() === 'mysql'` o reemplazadas por SQL estándar. **27 tests pasando.** |
-| Estado general | 12/12 módulos estables, 5 bugs conocidos, 4 features pendientes |
-| Próximo paso | Escribir tests de lógica de negocio (módulo Productos primero) |
+| Rama activa | `feature/desarrollo-caliente` |
+| Última sesión | 2026-07-28 — **Transacciones + Cuentas + Logística**: Arreglado módulo de transacciones financieras (75%), ajustes en cuentas (negativos, `tipo_titular`, unificación `temporales→permanentes`), finalizada expansión de Logística I/II. |
+| Estado general | 12/12 módulos estables, ✓ bugs B1/B2/B3 resueltos, 4 features pendientes |
+| Próximo paso | Completar módulo de Transacciones |
 
-### Bugs activos
+### ✅ Bugs resueltos recientemente
+
+| ID | Método | Descripción | Estado |
+|---|---|---|---|
+| **B1** | `guardarDistribucion` | Devuelve `saldo_disponible` desde `saldo_cuenta` correctamente | ✅ Resuelto |
+| **B2** | `aprobarVenta` | Guardia XOR `&& !$venta->es_venta_gestor` implementada en L1374 | ✅ Resuelto |
+| **B3** | `procesarVenta` | `foreach ($validatedData['pagos'] ?? []` con null coalescing en L803 | ✅ Resuelto |
+
+### 🐛 Bugs activos pendientes
 
 | ID | Método | Descripción | Archivo |
 |---|---|---|---|
-| **B1** | `guardarDistribucion` | Devuelve `saldo_actual` pero el campo real es `saldo_cuenta` | `VentaController:~L1759` |
-| **B2** | `aprobarVenta` / `anularVenta` | Falta guardia XOR `&& !$venta->es_venta_gestor` → doble débito potencial | `VentaController` |
-| **B3** | `procesarVenta` | `foreach ($pagos)` sin `?? []` → crash si frontend envía `pagos: null` | `VentaController:~L803` |
 | **B4** | `AlmacenController@edit` | Selector cuenta mensajero mezcla USD/CUP/MLC → puede romper lógica | `AlmacenController` |
 | **B5** | Config mensajero | Está en `Almacenes/Edit`, debería estar en `Empleados/Edit` | UX |
 
@@ -43,10 +48,10 @@
 |---|---|
 | Backend | PHP 8.2, Laravel 12 |
 | Frontend | React 19, Inertia v2, Vite 7, Tailwind v4 |
-| Modelos | 38 |
-| Controladores | 35 |
-| Migraciones | 91 |
-| Páginas frontend | ~96 (16 reportes, 8 auth/settings, 72 operacionales) |
+| Modelos | 37 |
+| Controladores | 27 |
+| Migraciones | 94 |
+| Páginas frontend | ~107 únicas (16 reportes, 8 auth/settings, ~83 operacionales) |
 | Middlewares | 7 |
 | Notificaciones | 7 (4 encoladas) |
 | Comandos artisan | 4 |
@@ -170,11 +175,12 @@ npm run format                   # formatear código con Prettier
 | **Productos** | `ProductoController.php` (807 L) | `Producto`, `ProductoCodigo`, `Categoria` | `Productos/Index`, `Productos/Show`, `Productos/Edit` |
 | **Precios vendedor** | `ProductoVendedorController.php` (421 L) | `ProductoVendedor`, `PrecioHistorial` | `Productos/Vendor/*` (4 páginas) |
 | **Movimientos stock** | `MovimientosController.php` (584 L) | `Movimiento`, `MovimientoDetalle`, `MovimientoSeguimiento` | `Movimientos/Index`, `Movimientos/Show` |
-| **Finanzas** | `TransaccionController.php` (1235 L) | `MovimientoFinanciero`, `Cuenta`, `Moneda`, `TransaccionCuenta` | `Transacciones/*` (7 páginas) |
+| **Finanzas** | `TransaccionController.php`, `GastoController.php`, `IngresoController.php`, `TransferenciaController.php` | `MovimientoFinanciero`, `Cuenta`, `Moneda`, `TransaccionCuenta` | `Transacciones/*` (7+ páginas) |
 | **Reportes** | `ReporteController.php` (847 L) | — | `Reportes/Report/*` (16 vistas) |
 | **Telegram Bot** | `TelegramWebhookController.php` (497 L) | — | `routes/api.php` (webhook) |
 | **Dashboard** | `AdminController.php` (545 L) | `TasaCambio`, `TasaCambioMLC`, `HistorialTasaCambio` | `dashboard.tsx` |
-| **Logística** | `LogisticaController.php` (25 L) | — (usa `DashboardStatsService`) | `Logistica/Index.tsx` (675 L) — página única tipo dashboard |
+| **Logística** | `LogisticaController.php` (25 L) | — (usa `DashboardStatsService`) | `Logistica/*` (Index, Create, Edit, Show, +layouts) |
+| **Transacciones** | `TransaccionController.php`, `GastoController.php`, `IngresoController.php`, `TransferenciaController.php` | `MovimientoFinanciero`, `TransaccionCuenta` | `Transacciones/*` (7+ páginas) |
 | **Usuarios** | `UserController.php`, `UserAlmacenController.php` | `User`, `UserAlmacen` | `Empleados/*` (4 páginas) |
 
 ---
