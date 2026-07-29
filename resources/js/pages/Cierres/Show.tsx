@@ -326,7 +326,6 @@ export default function Show({
 }: Props) {
     const canViewEspecialesCostImpact = userRole === 'admin' || userRole === 'moderador';
 
-    const [showTransaccionesDialog, setShowTransaccionesDialog] = useState(false);
     const [showAnuladasDialog, setShowAnuladasDialog] = useState(false);
     const [showMensajeriaDialog, setShowMensajeriaDialog] = useState(false);
     const [showComisionPVDialog, setShowComisionPVDialog] = useState(false);
@@ -1078,22 +1077,24 @@ export default function Show({
                             </CardContent>
                         </Card>
 
-                        {comisionesGestorDetalles.length > 0 && (
-                            <Card className="border-purple-200 bg-purple-500/5">
-                                <CardContent className="p-3 text-center">
-                                    <Briefcase className="mx-auto mb-1 h-5 w-5 text-purple-600" />
-                                    <p className="text-muted-foreground text-[10px] uppercase">Gestores</p>
-                                    <div className="space-y-0.5">
-                                        {Object.entries(comisionesPorMoneda).map(([moneda, data]) => (
+                        <Card className="border-purple-200 bg-purple-500/5">
+                            <CardContent className="p-3 text-center">
+                                <Briefcase className="mx-auto mb-1 h-5 w-5 text-purple-600" />
+                                <p className="text-muted-foreground text-[10px] uppercase">Gestores</p>
+                                <div className="space-y-0.5">
+                                    {comisionesGestorDetalles.length > 0 ? (
+                                        Object.entries(comisionesPorMoneda).map(([moneda, data]) => (
                                             <p key={moneda} className="text-lg font-bold text-purple-700">
                                                 -${Number(data.total).toFixed(2)} {moneda}
                                             </p>
-                                        ))}
-                                    </div>
-                                    <p className="text-muted-foreground text-[9px]">{comisionesGestorDetalles.length} oper.</p>
-                                </CardContent>
-                            </Card>
-                        )}
+                                        ))
+                                    ) : (
+                                        <p className="text-lg font-bold text-purple-700">$0.00</p>
+                                    )}
+                                </div>
+                                <p className="text-muted-foreground text-[9px]">{comisionesGestorDetalles.length} oper.</p>
+                            </CardContent>
+                        </Card>
                     </div>
                 </div>
 
@@ -1107,54 +1108,11 @@ export default function Show({
                     <CardContent>
                         <Tabs defaultValue="gastos" className="w-full">
                             <TabsList className="mb-4 grid w-full grid-cols-4">
-                                <TabsTrigger value="ingresos">Ingresos ({todosIngresos.length})</TabsTrigger>
                                 <TabsTrigger value="gastos">Gastos ({todosGastos.length})</TabsTrigger>
-                                <TabsTrigger value="gestores">Gestores ({comisionesGestorDetalles.length})</TabsTrigger>
+                                <TabsTrigger value="ingresos">Ingresos ({todosIngresos.length})</TabsTrigger>
                                 <TabsTrigger value="transferencias">Transferencias ({todasTransferencias.length})</TabsTrigger>
+                                <TabsTrigger value="gestores">Gestores ({comisionesGestorDetalles.length})</TabsTrigger>
                             </TabsList>
-
-                            <TabsContent value="ingresos" className="mt-0">
-                                {todosIngresos.length > 0 ? (
-                                    <div className="rounded-md border">
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead className="w-16">Hora</TableHead>
-                                                    <TableHead>Descripción</TableHead>
-                                                    <TableHead>Origen</TableHead>
-                                                    <TableHead>Destino</TableHead>
-                                                    <TableHead className="w-28 text-right">Monto</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {todosIngresos.map((item, idx) => (
-                                                    <TableRow key={idx}>
-                                                        <TableCell className="font-mono text-xs">{item.hora}</TableCell>
-                                                        <TableCell className="text-sm">{item.desc}</TableCell>
-                                                        <TableCell className="text-muted-foreground text-xs">{item.origen || '-'}</TableCell>
-                                                        <TableCell className="text-muted-foreground text-xs">{item.destino || '-'}</TableCell>
-                                                        <TableCell className="text-right font-mono font-medium text-green-600">
-                                                            +${Number(item.monto).toFixed(2)}
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))}
-                                            </TableBody>
-                                            <TableFooter>
-                                                <TableRow>
-                                                    <TableCell colSpan={4} className="font-bold">
-                                                        Total Ingresos
-                                                    </TableCell>
-                                                    <TableCell className="text-right font-bold text-green-600">
-                                                        ${Number(totalIngresos).toFixed(2)}
-                                                    </TableCell>
-                                                </TableRow>
-                                            </TableFooter>
-                                        </Table>
-                                    </div>
-                                ) : (
-                                    <p className="text-muted-foreground py-12 text-center italic">No hay ingresos registrados en este turno.</p>
-                                )}
-                            </TabsContent>
 
                             <TabsContent value="gastos" className="mt-0">
                                 {todosGastos.length > 0 ? (
@@ -1196,6 +1154,49 @@ export default function Show({
                                     </div>
                                 ) : (
                                     <p className="text-muted-foreground py-12 text-center italic">No hay gastos registrados en este turno.</p>
+                                )}
+                            </TabsContent>
+
+                            <TabsContent value="ingresos" className="mt-0">
+                                {todosIngresos.length > 0 ? (
+                                    <div className="rounded-md border">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead className="w-16">Hora</TableHead>
+                                                    <TableHead>Descripción</TableHead>
+                                                    <TableHead>Origen</TableHead>
+                                                    <TableHead>Destino</TableHead>
+                                                    <TableHead className="w-28 text-right">Monto</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {todosIngresos.map((item, idx) => (
+                                                    <TableRow key={idx}>
+                                                        <TableCell className="font-mono text-xs">{item.hora}</TableCell>
+                                                        <TableCell className="text-sm">{item.desc}</TableCell>
+                                                        <TableCell className="text-muted-foreground text-xs">{item.origen || '-'}</TableCell>
+                                                        <TableCell className="text-muted-foreground text-xs">{item.destino || '-'}</TableCell>
+                                                        <TableCell className="text-right font-mono font-medium text-green-600">
+                                                            +${Number(item.monto).toFixed(2)}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                            <TableFooter>
+                                                <TableRow>
+                                                    <TableCell colSpan={4} className="font-bold">
+                                                        Total Ingresos
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-bold text-green-600">
+                                                        ${Number(totalIngresos).toFixed(2)}
+                                                    </TableCell>
+                                                </TableRow>
+                                            </TableFooter>
+                                        </Table>
+                                    </div>
+                                ) : (
+                                    <p className="text-muted-foreground py-12 text-center italic">No hay ingresos registrados en este turno.</p>
                                 )}
                             </TabsContent>
 

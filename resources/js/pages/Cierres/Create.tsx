@@ -350,7 +350,6 @@ export default function Create({
     };
 
     const [showConfirmModal, setShowConfirmModal] = useState(false);
-    const [showTransaccionesDialog, setShowTransaccionesDialog] = useState(false);
     const [showAnuladasDialog, setShowAnuladasDialog] = useState(false);
     const [showMensajeriaDialog, setShowMensajeriaDialog] = useState(false);
     const [showComisionPVDialog, setShowComisionPVDialog] = useState(false);
@@ -1034,11 +1033,7 @@ export default function Create({
                 <div className="space-y-2">
                     <h3 className="text-sm font-bold tracking-wide uppercase">Movimientos Financieros</h3>
                     <div className="grid grid-cols-4 gap-2">
-                        {/* Gastos */}
-                        <Card
-                            className="cursor-pointer border-red-200 bg-red-500/5 transition-colors hover:bg-red-500/10"
-                            onClick={() => setShowTransaccionesDialog(true)}
-                        >
+                        <Card className="border-red-200 bg-red-500/5">
                             <CardContent className="p-3 text-center">
                                 <ArrowUp className="mx-auto mb-1 h-5 w-5 text-red-600" />
                                 <p className="text-muted-foreground text-[10px] uppercase">Gastos</p>
@@ -1047,11 +1042,7 @@ export default function Create({
                             </CardContent>
                         </Card>
 
-                        {/* Ingresos */}
-                        <Card
-                            className="cursor-pointer border-green-200 bg-green-500/5 transition-colors hover:bg-green-500/10"
-                            onClick={() => setShowTransaccionesDialog(true)}
-                        >
+                        <Card className="border-green-200 bg-green-500/5">
                             <CardContent className="p-3 text-center">
                                 <ArrowDown className="mx-auto mb-1 h-5 w-5 text-green-600" />
                                 <p className="text-muted-foreground text-[10px] uppercase">Ingresos</p>
@@ -1060,11 +1051,7 @@ export default function Create({
                             </CardContent>
                         </Card>
 
-                        {/* Transferencias */}
-                        <Card
-                            className="cursor-pointer border-blue-200 bg-blue-500/5 transition-colors hover:bg-blue-500/10"
-                            onClick={() => setShowTransaccionesDialog(true)}
-                        >
+                        <Card className="border-blue-200 bg-blue-500/5">
                             <CardContent className="p-3 text-center">
                                 <TrendingUp className="mx-auto mb-1 h-5 w-5 text-blue-600" />
                                 <p className="text-muted-foreground text-[10px] uppercase">Transfer.</p>
@@ -1073,11 +1060,7 @@ export default function Create({
                             </CardContent>
                         </Card>
 
-                        {/* Gestores */}
-                        <Card
-                            className="cursor-pointer border-purple-200 bg-purple-500/5 transition-colors hover:bg-purple-500/10"
-                            onClick={() => setShowTransaccionesDialog(true)}
-                        >
+                        <Card className="border-purple-200 bg-purple-500/5">
                             <CardContent className="p-3 text-center">
                                 <Briefcase className="mx-auto mb-1 h-5 w-5 text-purple-600" />
                                 <p className="text-muted-foreground text-[10px] uppercase">Gestores</p>
@@ -1098,221 +1081,234 @@ export default function Create({
                     </div>
                 </div>
 
-                {/* Dialog de Detalle de Transacciones - se abre al hacer click en los cards */}
-                <Dialog open={showTransaccionesDialog} onOpenChange={setShowTransaccionesDialog}>
-                    <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden p-0 sm:max-w-4xl">
-                        <DialogHeader className="border-b px-6 pt-6 pb-4">
-                            <DialogTitle>Detalle de Transacciones del Turno</DialogTitle>
-                            <DialogDescription>Desglose completo de ingresos, gastos y transferencias realizadas durante tu turno.</DialogDescription>
-                        </DialogHeader>
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-base">
+                            <TrendingUp className="h-5 w-5 text-blue-600" />
+                            Detalle de Transacciones
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <Tabs defaultValue="gastos" className="w-full">
+                            <TabsList className="mb-4 grid w-full grid-cols-4">
+                                <TabsTrigger value="gastos">Gastos ({todosGastos.length})</TabsTrigger>
+                                <TabsTrigger value="ingresos">Ingresos ({todosIngresos.length})</TabsTrigger>
+                                <TabsTrigger value="transferencias">Transferencias ({todasTransferencias.length})</TabsTrigger>
+                                <TabsTrigger value="gestores">Gestores ({comisionesGestorDetalles.length})</TabsTrigger>
+                            </TabsList>
 
-                        <div className="flex-1 overflow-y-auto px-6 py-4">
-                            <Tabs defaultValue="gastos" className="w-full">
-                                <TabsList className="mb-4 grid w-full grid-cols-4">
-                                    <TabsTrigger value="ingresos">Ingresos ({todosIngresos.length})</TabsTrigger>
-                                    <TabsTrigger value="gastos">Gastos ({todosGastos.length})</TabsTrigger>
-                                    <TabsTrigger value="gestores">Gestores ({comisionesGestorDetalles.length})</TabsTrigger>
-                                    <TabsTrigger value="transferencias">Transferencias ({todasTransferencias.length})</TabsTrigger>
-                                </TabsList>
+                            <TabsContent value="gastos" className="mt-0">
+                                {todosGastos.length > 0 ? (
+                                    <div className="rounded-md border">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead className="w-16">Hora</TableHead>
+                                                    <TableHead>Descripción</TableHead>
+                                                    <TableHead>Origen</TableHead>
+                                                    <TableHead>Destino</TableHead>
+                                                    <TableHead className="w-28 text-right">Monto</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {todosGastos.map((item, idx) => (
+                                                    <TableRow key={idx}>
+                                                        <TableCell className="font-mono text-xs">{item.hora}</TableCell>
+                                                        <TableCell className="text-sm">{item.desc}</TableCell>
+                                                        <TableCell className="text-muted-foreground text-xs">{item.origen || '-'}</TableCell>
+                                                        <TableCell className="text-muted-foreground text-xs">{item.destino || '-'}</TableCell>
+                                                        <TableCell className="text-right font-mono font-medium text-red-600">
+                                                            -${Number(item.monto).toFixed(2)}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                            <TableFooter>
+                                                <TableRow>
+                                                    <TableCell colSpan={4} className="font-bold">
+                                                        Total Gastos
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-bold text-red-600">
+                                                        ${Number(totalGastos).toFixed(2)}
+                                                    </TableCell>
+                                                </TableRow>
+                                            </TableFooter>
+                                        </Table>
+                                    </div>
+                                ) : (
+                                    <p className="text-muted-foreground py-12 text-center italic">No hay gastos registrados en este turno.</p>
+                                )}
+                            </TabsContent>
 
-                                {/* Tab Ingresos */}
-                                <TabsContent value="ingresos" className="mt-0">
-                                    {todosIngresos.length > 0 ? (
-                                        <div className="rounded-md border">
-                                            <Table>
-                                                <TableHeader>
-                                                    <TableRow>
-                                                        <TableHead className="w-16">Hora</TableHead>
-                                                        <TableHead>Descripción</TableHead>
-                                                        <TableHead>Origen</TableHead>
-                                                        <TableHead>Destino</TableHead>
-                                                        <TableHead className="w-28 text-right">Monto</TableHead>
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
-                                                    {todosIngresos.map((item: ItemMovimiento) => (
-                                                        <TableRow key={item.id}>
-                                                            <TableCell className="font-mono text-xs">{item.hora}</TableCell>
-                                                            <TableCell className="text-sm">{item.desc}</TableCell>
-                                                            <TableCell className="text-muted-foreground text-xs">{item.origen}</TableCell>
-                                                            <TableCell className="text-muted-foreground text-xs">{item.destino}</TableCell>
-                                                            <TableCell className="text-right font-mono font-medium text-green-600">
-                                                                +${Number(item.monto).toFixed(2)}
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    ))}
-                                                </TableBody>
-                                                <TableFooter>
-                                                    <TableRow>
-                                                        <TableCell colSpan={4} className="font-bold">
-                                                            Total Ingresos
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-bold text-green-600">
-                                                            ${Number(totalIngresos).toFixed(2)}
+                            <TabsContent value="ingresos" className="mt-0">
+                                {todosIngresos.length > 0 ? (
+                                    <div className="rounded-md border">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead className="w-16">Hora</TableHead>
+                                                    <TableHead>Descripción</TableHead>
+                                                    <TableHead>Origen</TableHead>
+                                                    <TableHead>Destino</TableHead>
+                                                    <TableHead className="w-28 text-right">Monto</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {todosIngresos.map((item, idx) => (
+                                                    <TableRow key={idx}>
+                                                        <TableCell className="font-mono text-xs">{item.hora}</TableCell>
+                                                        <TableCell className="text-sm">{item.desc}</TableCell>
+                                                        <TableCell className="text-muted-foreground text-xs">{item.origen || '-'}</TableCell>
+                                                        <TableCell className="text-muted-foreground text-xs">{item.destino || '-'}</TableCell>
+                                                        <TableCell className="text-right font-mono font-medium text-green-600">
+                                                            +${Number(item.monto).toFixed(2)}
                                                         </TableCell>
                                                     </TableRow>
-                                                </TableFooter>
-                                            </Table>
-                                        </div>
-                                    ) : (
-                                        <p className="text-muted-foreground py-12 text-center italic">No hay ingresos registrados en este turno.</p>
-                                    )}
-                                </TabsContent>
+                                                ))}
+                                            </TableBody>
+                                            <TableFooter>
+                                                <TableRow>
+                                                    <TableCell colSpan={4} className="font-bold">
+                                                        Total Ingresos
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-bold text-green-600">
+                                                        ${Number(totalIngresos).toFixed(2)}
+                                                    </TableCell>
+                                                </TableRow>
+                                            </TableFooter>
+                                        </Table>
+                                    </div>
+                                ) : (
+                                    <p className="text-muted-foreground py-12 text-center italic">No hay ingresos registrados en este turno.</p>
+                                )}
+                            </TabsContent>
 
-                                {/* Tab Gastos */}
-                                <TabsContent value="gastos" className="mt-0">
-                                    {todosGastos.length > 0 ? (
-                                        <div className="rounded-md border">
-                                            <Table>
-                                                <TableHeader>
-                                                    <TableRow>
-                                                        <TableHead className="w-16">Hora</TableHead>
-                                                        <TableHead>Descripción</TableHead>
-                                                        <TableHead>Origen</TableHead>
-                                                        <TableHead>Destino</TableHead>
-                                                        <TableHead className="w-28 text-right">Monto</TableHead>
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
-                                                    {todosGastos.map((item: ItemMovimiento) => (
-                                                        <TableRow key={item.id}>
-                                                            <TableCell className="font-mono text-xs">{item.hora}</TableCell>
-                                                            <TableCell className="text-sm">{item.desc}</TableCell>
-                                                            <TableCell className="text-muted-foreground text-xs">{item.origen}</TableCell>
-                                                            <TableCell className="text-muted-foreground text-xs">{item.destino}</TableCell>
-                                                            <TableCell className="text-right font-mono font-medium text-red-600">
-                                                                -${Number(item.monto).toFixed(2)}
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    ))}
-                                                </TableBody>
-                                                <TableFooter>
-                                                    <TableRow>
-                                                        <TableCell colSpan={4} className="font-bold">
-                                                            Total Gastos
+                            <TabsContent value="gestores" className="mt-0">
+                                {comisionesGestorDetalles.length > 0 ? (
+                                    <div className="rounded-md border">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Venta #</TableHead>
+                                                    <TableHead>Cuenta</TableHead>
+                                                    <TableHead>Comentario</TableHead>
+                                                    <TableHead className="w-36 text-right">Monto Local</TableHead>
+                                                    <TableHead className="w-28 text-right">Equiv. USD</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {comisionesGestorDetalles.map((item) => (
+                                                    <TableRow key={item.venta_id}>
+                                                        <TableCell className="font-mono text-xs">
+                                                            <a
+                                                                href={`/ventas/${item.venta_id}`}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="text-blue-600 hover:underline"
+                                                            >
+                                                                #{item.venta_id}
+                                                            </a>
                                                         </TableCell>
-                                                        <TableCell className="text-right font-bold text-red-600">
-                                                            ${Number(totalGastos).toFixed(2)}
+                                                        <TableCell className="text-sm">
+                                                            <div className="font-medium">{item.cuenta_nombre}</div>
+                                                            <div className="text-muted-foreground text-xs">{item.cuenta_tipo}</div>
+                                                        </TableCell>
+                                                        <TableCell className="max-w-xs text-sm" title={item.comentario || undefined}>
+                                                            {item.comentario ? (
+                                                                <span className="block max-w-[150px] truncate">{item.comentario}</span>
+                                                            ) : (
+                                                                <span className="text-muted-foreground italic">Sin comentario</span>
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-mono font-medium text-red-600">
+                                                            -{Number(item.monto).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {item.moneda_codigo}
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-mono text-xs text-purple-600">
+                                                            ≈ {Number(item.monto_usd).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
                                                         </TableCell>
                                                     </TableRow>
-                                                </TableFooter>
-                                            </Table>
-                                        </div>
-                                    ) : (
-                                        <p className="text-muted-foreground py-12 text-center italic">No hay gastos registrados en este turno.</p>
-                                    )}
-                                </TabsContent>
+                                                ))}
+                                            </TableBody>
+                                            <TableFooter>
+                                                <TableRow>
+                                                    <TableCell colSpan={3} className="font-bold">Total</TableCell>
+                                                    <TableCell className="text-right font-bold text-red-600" colSpan={1}>
+                                                        {Object.entries(comisionesPorMoneda).map(([moneda, data]) => (
+                                                            <div key={moneda}>
+                                                                -{Number(data.total).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {moneda}
+                                                            </div>
+                                                        ))}
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-bold text-purple-600">
+                                                        ≈ {comisionesGestorDetalles.reduce((s, i) => s + (Number(i.monto_usd) || 0), 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
+                                                    </TableCell>
+                                                </TableRow>
+                                            </TableFooter>
+                                        </Table>
+                                    </div>
+                                ) : (
+                                    <p className="text-muted-foreground py-12 text-center italic">No hay comisiones a gestores en este turno.</p>
+                                )}
+                            </TabsContent>
 
-                                {/* Tab Gestores - NUEVO */}
-                                <TabsContent value="gestores" className="mt-0">
-                                    {comisionesGestorDetalles.length > 0 ? (
-                                        <div className="rounded-md border">
-                                            <Table>
-                                                <TableHeader>
-                                                    <TableRow>
-                                                        <TableHead>Venta #</TableHead>
-                                                        <TableHead>Cuenta</TableHead>
-                                                        <TableHead>Comentario</TableHead>
-                                                        <TableHead className="w-28 text-right">Monto</TableHead>
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
-                                                    {comisionesGestorDetalles.map((item: ComisionGestorItem) => (
-                                                        <TableRow key={item.venta_id}>
-                                                            <TableCell className="font-mono text-xs">
-                                                                <a
-                                                                    href={`/ventas/${item.venta_id}`}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    className="text-blue-600 hover:underline"
-                                                                >
-                                                                    #{item.venta_id}
-                                                                </a>
-                                                            </TableCell>
-                                                            <TableCell className="text-sm">
-                                                                <div className="font-medium">{item.cuenta_nombre}</div>
-                                                                <div className="text-muted-foreground text-xs">{item.cuenta_tipo}</div>
-                                                            </TableCell>
-                                                            <TableCell className="max-w-xs text-sm" title={item.comentario || undefined}>
-                                                                {item.comentario ? (
-                                                                    <span className="block max-w-[150px] truncate">{item.comentario}</span>
-                                                                ) : (
-                                                                    <span className="text-muted-foreground italic">Sin comentario</span>
-                                                                )}
-                                                            </TableCell>
-                                                            <TableCell className="text-right font-mono font-medium text-red-600">
-                                                                -${Number(item.monto).toFixed(2)} {item.moneda_codigo}
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    ))}
-                                                </TableBody>
-                                            </Table>
-                                        </div>
-                                    ) : (
-                                        <p className="text-muted-foreground py-12 text-center italic">No hay comisiones a gestores en este turno.</p>
-                                    )}
-                                </TabsContent>
-
-                                {/* Tab Transferencias */}
-                                <TabsContent value="transferencias" className="mt-0">
-                                    {todasTransferencias.length > 0 ? (
-                                        <div className="rounded-md border">
-                                            <Table>
-                                                <TableHeader>
-                                                    <TableRow>
-                                                        <TableHead className="w-16">Hora</TableHead>
-                                                        <TableHead>Descripción</TableHead>
-                                                        <TableHead>Origen</TableHead>
-                                                        <TableHead>Destino</TableHead>
-                                                        <TableHead className="w-32 text-right">Monto</TableHead>
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
-                                                    {todasTransferencias.map((item: TransferenciaCompleta) => (
-                                                        <TableRow key={item.id}>
-                                                            <TableCell className="font-mono text-xs">{item.hora}</TableCell>
-                                                            <TableCell className="max-w-xs truncate text-sm">{item.desc}</TableCell>
-                                                            <TableCell className="text-muted-foreground text-xs">
-                                                                <div className="max-w-[120px] truncate" title={item.origen_nombre}>
-                                                                    {item.origen_nombre}
-                                                                </div>
-                                                            </TableCell>
-                                                            <TableCell className="text-muted-foreground text-xs">
-                                                                <div className="max-w-[120px] truncate" title={item.destino_nombre}>
-                                                                    {item.destino_nombre}
-                                                                </div>
-                                                            </TableCell>
-                                                            <TableCell className="text-right font-mono text-xs">
-                                                                <span className={item.tipo === 'entrante' ? 'text-green-600' : 'text-blue-600'}>
-                                                                    {item.tipo === 'entrante' ? '+' : '-'}${Number(item.monto_origen).toFixed(2)}{' '}
-                                                                    {item.moneda_origen}
-                                                                </span>
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    ))}
-                                                </TableBody>
-                                                <TableFooter>
-                                                    <TableRow>
-                                                        <TableCell colSpan={4} className="font-bold">
-                                                            Total Transferencias
+                            <TabsContent value="transferencias" className="mt-0">
+                                {todasTransferencias.length > 0 ? (
+                                    <div className="rounded-md border">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead className="w-16">Hora</TableHead>
+                                                    <TableHead>Descripción</TableHead>
+                                                    <TableHead>Origen</TableHead>
+                                                    <TableHead>Destino</TableHead>
+                                                    <TableHead className="w-32 text-right">Monto</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {todasTransferencias.map((item, idx) => (
+                                                    <TableRow key={idx}>
+                                                        <TableCell className="font-mono text-xs">{item.hora}</TableCell>
+                                                        <TableCell className="max-w-xs truncate text-sm">{item.desc}</TableCell>
+                                                        <TableCell className="text-muted-foreground text-xs">
+                                                            <div className="max-w-[120px] truncate" title={item.origen_nombre}>
+                                                                {item.origen_nombre}
+                                                            </div>
                                                         </TableCell>
-                                                        <TableCell className="text-right font-bold text-blue-600">
-                                                            ${Number(totalTransferencias).toFixed(2)}
+                                                        <TableCell className="text-muted-foreground text-xs">
+                                                            <div className="max-w-[120px] truncate" title={item.destino_nombre}>
+                                                                {item.destino_nombre}
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-mono text-xs">
+                                                            <span className={item.tipo === 'entrante' ? 'text-green-600' : 'text-blue-600'}>
+                                                                {item.tipo === 'entrante' ? '+' : '-'}${Number(item.monto_origen).toFixed(2)}{' '}
+                                                                {item.moneda_origen}
+                                                            </span>
                                                         </TableCell>
                                                     </TableRow>
-                                                </TableFooter>
-                                            </Table>
-                                        </div>
-                                    ) : (
-                                        <p className="text-muted-foreground py-12 text-center italic">
-                                            No hay transferencias registradas en este turno.
-                                        </p>
-                                    )}
-                                </TabsContent>
-                            </Tabs>
-                        </div>
-                    </DialogContent>
-                </Dialog>
+                                                ))}
+                                            </TableBody>
+                                            <TableFooter>
+                                                <TableRow>
+                                                    <TableCell colSpan={4} className="font-bold">
+                                                        Total Transferencias
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-bold text-blue-600">
+                                                        ${Number(totalTransferencias).toFixed(2)}
+                                                    </TableCell>
+                                                </TableRow>
+                                            </TableFooter>
+                                        </Table>
+                                    </div>
+                                ) : (
+                                    <p className="text-muted-foreground py-12 text-center italic">
+                                        No hay transferencias registradas en este turno.
+                                    </p>
+                                )}
+                            </TabsContent>
+                        </Tabs>
+                    </CardContent>
+                </Card>
 
                 {/* Comparativa con Cierre Anterior */}
                 <Card>

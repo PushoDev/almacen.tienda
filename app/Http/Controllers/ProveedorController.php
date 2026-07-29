@@ -90,7 +90,9 @@ class ProveedorController extends Controller
             'productos' => function ($query) {
                 $query->withPivot('cantidad', 'precio', 'almacen_id');
             },
-            'productos.categoria'
+            'productos.categoria',
+            'pagos.cuenta',
+            'pagos.cliente',
         ])
             ->where('proveedor_id', $proveedor->id)
             ->orderBy('fecha_compra', 'desc')
