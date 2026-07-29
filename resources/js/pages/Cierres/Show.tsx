@@ -20,6 +20,7 @@ import { Head } from '@inertiajs/react';
 import * as Collapsible from '@radix-ui/react-collapsible';
 import {
     ArrowDown,
+    ArrowRightLeft,
     ArrowUp,
     Banknote,
     Briefcase,
@@ -27,6 +28,7 @@ import {
     CreditCard,
     DollarSign,
     Eye,
+    Globe,
     Receipt,
     Search,
     ShoppingCart,
@@ -631,62 +633,136 @@ export default function Show({
                     />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                    <Card className="border-emerald-200 bg-emerald-500/5">
-                        <CardContent className="p-4">
-                            <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
-                                    <ShoppingCart className="h-5 w-5 text-emerald-600" />
+                <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                        <Card className="border-emerald-200 bg-emerald-500/5">
+                            <CardContent className="p-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
+                                        <ShoppingCart className="h-5 w-5 text-emerald-600" />
+                                    </div>
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">Ventas Realizadas</p>
+                                        <p className="text-2xl font-bold">{totalVentasUnicas}</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="text-muted-foreground text-xs">Ventas Realizadas</p>
-                                    <p className="text-2xl font-bold">{totalVentasUnicas}</p>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
+                            </CardContent>
+                        </Card>
 
-                    <Card className="border-blue-200 bg-blue-500/5">
-                        <CardContent className="p-4">
-                            <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
-                                    <DollarSign className="h-5 w-5 text-blue-600" />
+                        <Card className="border-blue-200 bg-blue-500/5">
+                            <CardContent className="p-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
+                                        <DollarSign className="h-5 w-5 text-blue-600" />
+                                    </div>
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">Total Efectivo</p>
+                                        <p className="text-2xl font-bold">${Number(calculos.ventas_efectivo || 0).toFixed(2)}</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="text-muted-foreground text-xs">Total Efectivo</p>
-                                    <p className="text-2xl font-bold">${Number(calculos.ventas_efectivo || 0).toFixed(2)}</p>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
+                            </CardContent>
+                        </Card>
 
-                    <Card className="border-purple-200 bg-purple-500/5">
-                        <CardContent className="p-4">
-                            <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100">
-                                    <CreditCard className="h-5 w-5 text-purple-600" />
+                        <Card className="border-purple-200 bg-purple-500/5">
+                            <CardContent className="p-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100">
+                                        <CreditCard className="h-5 w-5 text-purple-600" />
+                                    </div>
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">Transferencias</p>
+                                        <p className="text-2xl font-bold">${Number(calculos.ventas_otros || 0).toFixed(2)}</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="text-muted-foreground text-xs">Transferencias</p>
-                                    <p className="text-2xl font-bold">${Number(calculos.ventas_otros || 0).toFixed(2)}</p>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
+                            </CardContent>
+                        </Card>
 
-                    <Card className="border-amber-200 bg-amber-500/5">
-                        <CardContent className="p-4">
-                            <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100">
-                                    <Banknote className="h-5 w-5 text-amber-600" />
+                        <Card className="border-amber-200 bg-amber-500/5">
+                            <CardContent className="p-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100">
+                                        <Banknote className="h-5 w-5 text-amber-600" />
+                                    </div>
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">Monedas Usadas</p>
+                                        <p className="text-2xl font-bold">{monedasConPagos.length}</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="text-muted-foreground text-xs">Monedas Usadas</p>
-                                    <p className="text-2xl font-bold">{monedasConPagos.length}</p>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+                        <Card className="border-emerald-200 bg-emerald-500/5">
+                            <CardContent className="p-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
+                                        <DollarSign className="h-5 w-5 text-emerald-600" />
+                                    </div>
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">USD Efectivo</p>
+                                        <p className="text-2xl font-bold">$999.99</p>
+                                    </div>
                                 </div>
-                            </div>
-                        </CardContent>
-                    </Card>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-blue-200 bg-blue-500/5">
+                            <CardContent className="p-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
+                                        <Banknote className="h-5 w-5 text-blue-600" />
+                                    </div>
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">CUP Efectivo</p>
+                                        <p className="text-2xl font-bold">$888.88</p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-sky-200 bg-sky-500/5">
+                            <CardContent className="p-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-100">
+                                        <Globe className="h-5 w-5 text-sky-600" />
+                                    </div>
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">USD Internacional</p>
+                                        <p className="text-2xl font-bold">$1,234.56</p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-purple-200 bg-purple-500/5">
+                            <CardContent className="p-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100">
+                                        <ArrowRightLeft className="h-5 w-5 text-purple-600" />
+                                    </div>
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">CUP Transferencias</p>
+                                        <p className="text-2xl font-bold">$777.77</p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-amber-200 bg-amber-500/5">
+                            <CardContent className="p-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100">
+                                        <CreditCard className="h-5 w-5 text-amber-600" />
+                                    </div>
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">USD Transferencia</p>
+                                        <p className="text-2xl font-bold">$666.66</p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
                 </div>
 
                 {false && (
