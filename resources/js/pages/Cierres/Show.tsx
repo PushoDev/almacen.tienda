@@ -20,6 +20,7 @@ import { Head } from '@inertiajs/react';
 import * as Collapsible from '@radix-ui/react-collapsible';
 import {
     ArrowDown,
+    ArrowRightLeft,
     ArrowUp,
     Banknote,
     Briefcase,
@@ -27,6 +28,7 @@ import {
     CreditCard,
     DollarSign,
     Eye,
+    Globe,
     Receipt,
     Search,
     ShoppingCart,
@@ -372,6 +374,16 @@ export default function Show({
     const moneda_referencia = 'USD';
 
     const calculos = useMemo(() => {
+        const detalles = cierre.detalles || [];
+        const usdDetalle = detalles.find((d) => d.moneda === 'USD');
+        const eurDetalle = detalles.find((d) => d.moneda === 'EUR');
+        const cupDetalle = detalles.find((d) => d.moneda === 'CUP');
+
+        const usdEfectivo = (usdDetalle?.ventas_efectivo_cuentas ?? 0) + ((eurDetalle?.ventas_efectivo_cuentas ?? 0) / (eurDetalle?.tasa_cambio ?? 1));
+        const cupEfectivo = cupDetalle?.ventas_efectivo_cuentas ?? 0;
+        const usdTransferencia = usdDetalle?.ventas_transferencia_cuentas ?? 0;
+        const cupTransferencias = cupDetalle?.ventas_transferencia_cuentas ?? 0;
+
         return {
             saldo_inicial: cierre.saldo_inicial || 0,
             ventas_efectivo: cierre.ventas_efectivo || 0,
@@ -379,7 +391,7 @@ export default function Show({
             total_gastos: cierre.total_gastos || 0,
             total_devoluciones: cierre.total_devoluciones || 0,
             saldo_esperado_global: cierre.saldo_esperado || 0,
-            detalles: cierre.detalles || [],
+            detalles,
             comisiones_gestor_total: cierre.comisiones_gestor || 0,
             comisiones_gestor_detalles: cierre.comisiones_gestor_detalles || [],
             ventas_a_cuentas_total_usd: calcularVentasACuentasTotal(),
@@ -388,6 +400,11 @@ export default function Show({
             ventas_a_cuentas_transferencia_usd: calcularVentasACuentasTransferencia(),
             ventas_a_clientes_efectivo_usd: calcularVentasAClientesEfectivo(),
             ventas_a_clientes_transferencia_usd: calcularVentasAClientesTransferencia(),
+            usd_efectivo: usdEfectivo,
+            cup_efectivo: cupEfectivo,
+            usd_transferencia: usdTransferencia,
+            cup_transferencias: cupTransferencias,
+            usd_internacional: calcularVentasAClientesTotal(),
         };
     }, [cierre]);
 
@@ -480,9 +497,10 @@ export default function Show({
         precio_base: Number(p.precio_base) || 0,
         precio_venta: Number(p.precio_venta) || 0,
         total: Number(p.total) || 0,
+        comision: Number(p.comision) || 0,
     }));
     const totalVentasProductos = lineasProductos.reduce((s: number, r) => s + r.total, 0);
-    const totalEsperadoProductos = lineasProductos.reduce((s: number, r) => s + r.cantidad * r.precio_base, 0);
+    const totalComisionProductos = lineasProductos.reduce((s: number, r) => s + r.comision, 0);
 
     const pagosPorMonedaYMetodo = todosItemsVentas.reduce(
         (acc, p) => {
@@ -631,64 +649,81 @@ export default function Show({
                     />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                    <Card className="border-emerald-200 bg-emerald-500/5">
-                        <CardContent className="p-4">
-                            <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
-                                    <ShoppingCart className="h-5 w-5 text-emerald-600" />
+                <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+                        <Card className="border-emerald-200 bg-emerald-500/5">
+                            <CardContent className="p-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
+                                        <DollarSign className="h-5 w-5 text-emerald-600" />
+                                    </div>
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">USD Efectivo</p>
+                                        <p className="text-2xl font-bold">${Number(calculos.usd_efectivo || 0).toFixed(2)}</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="text-muted-foreground text-xs">Ventas Realizadas</p>
-                                    <p className="text-2xl font-bold">{totalVentasUnicas}</p>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
+                            </CardContent>
+                        </Card>
 
-                    <Card className="border-blue-200 bg-blue-500/5">
-                        <CardContent className="p-4">
-                            <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
-                                    <DollarSign className="h-5 w-5 text-blue-600" />
+                        <Card className="border-blue-200 bg-blue-500/5">
+                            <CardContent className="p-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
+                                        <Banknote className="h-5 w-5 text-blue-600" />
+                                    </div>
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">CUP Efectivo</p>
+                                        <p className="text-2xl font-bold">${Number(calculos.cup_efectivo || 0).toFixed(2)}</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="text-muted-foreground text-xs">Total Efectivo</p>
-                                    <p className="text-2xl font-bold">${Number(calculos.ventas_efectivo || 0).toFixed(2)}</p>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
+                            </CardContent>
+                        </Card>
 
-                    <Card className="border-purple-200 bg-purple-500/5">
-                        <CardContent className="p-4">
-                            <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100">
-                                    <CreditCard className="h-5 w-5 text-purple-600" />
+                        <Card className="border-sky-200 bg-sky-500/5">
+                            <CardContent className="p-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-100">
+                                        <Globe className="h-5 w-5 text-sky-600" />
+                                    </div>
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">USD Internacional</p>
+                                        <p className="text-2xl font-bold">${Number(calculos.usd_internacional || 0).toFixed(2)}</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="text-muted-foreground text-xs">Transferencias</p>
-                                    <p className="text-2xl font-bold">${Number(calculos.ventas_otros || 0).toFixed(2)}</p>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
+                            </CardContent>
+                        </Card>
 
-                    <Card className="border-amber-200 bg-amber-500/5">
-                        <CardContent className="p-4">
-                            <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100">
-                                    <Banknote className="h-5 w-5 text-amber-600" />
+                        <Card className="border-purple-200 bg-purple-500/5">
+                            <CardContent className="p-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100">
+                                        <ArrowRightLeft className="h-5 w-5 text-purple-600" />
+                                    </div>
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">CUP Transferencias</p>
+                                        <p className="text-2xl font-bold">${Number(calculos.cup_transferencias || 0).toFixed(2)}</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="text-muted-foreground text-xs">Monedas Usadas</p>
-                                    <p className="text-2xl font-bold">{monedasConPagos.length}</p>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-amber-200 bg-amber-500/5">
+                            <CardContent className="p-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100">
+                                        <CreditCard className="h-5 w-5 text-amber-600" />
+                                    </div>
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">USD Transferencia</p>
+                                        <p className="text-2xl font-bold">${Number(calculos.usd_transferencia || 0).toFixed(2)}</p>
+                                    </div>
                                 </div>
-                            </div>
-                        </CardContent>
-                    </Card>
+                            </CardContent>
+                        </Card>
+                    </div>
                 </div>
 
+                {false && (
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle className="flex items-center gap-2 text-lg">
@@ -763,6 +798,7 @@ export default function Show({
                         </div>
                     </CardContent>
                 </Card>
+                )}
 
                 <Card>
                     <CardHeader>
@@ -790,12 +826,10 @@ export default function Show({
                                         <th className="px-4 py-3 text-left font-semibold">Marca</th>
                                         <th className="px-4 py-3 text-left font-semibold">Modelo</th>
                                         <th className="px-4 py-3 text-left font-semibold">Capacidad</th>
-                                        <th className="px-4 py-3 text-left font-semibold">Color</th>
-                                        <th className="px-4 py-3 text-left font-semibold">Categoría</th>
                                         <th className="px-4 py-3 text-center font-semibold">Cantidad</th>
                                         <th className="px-4 py-3 text-right font-semibold">Precio Unit</th>
-                                        <th className="px-4 py-3 text-right font-semibold">Total Esperado</th>
                                         <th className="px-4 py-3 text-right font-semibold">Total Real</th>
+                                        <th className="px-4 py-3 text-right font-semibold">Comisión Asignada</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-border divide-y">
@@ -827,21 +861,17 @@ export default function Show({
                                                 <td className="text-muted-foreground px-4 py-2">{linea.marca}</td>
                                                 <td className="text-muted-foreground px-4 py-2">{linea.modelo}</td>
                                                 <td className="text-muted-foreground px-4 py-2">{linea.capacidad || 'N/A'}</td>
-                                                <td className="text-muted-foreground px-4 py-2">{linea.color || 'N/A'}</td>
-                                                <td className="text-muted-foreground px-4 py-2">{linea.categoria}</td>
                                                 <td className="px-4 py-2 text-center">
                                                     <span className="text-primary font-bold">{linea.cantidad}</span>
                                                 </td>
                                                 <td className="px-4 py-2 text-right font-mono">${Number(linea.precio_base).toFixed(2)}</td>
-                                                <td className="px-4 py-2 text-right font-mono">
-                                                    ${Number(linea.cantidad * linea.precio_base).toFixed(2)}
-                                                </td>
                                                 <td className="px-4 py-2 text-right font-mono font-medium">${Number(linea.total).toFixed(2)}</td>
+                                                <td className="px-4 py-2 text-right font-mono text-green-600">${Number(linea.comision).toFixed(2)}</td>
                                             </tr>
                                         ))
                                     ) : (
                                         <tr>
-                                            <td colSpan={9} className="text-muted-foreground px-4 py-8 text-center italic">
+                                            <td colSpan={8} className="text-muted-foreground px-4 py-8 text-center italic">
                                                 No hay ventas en este turno
                                             </td>
                                         </tr>
@@ -849,14 +879,16 @@ export default function Show({
                                 </tbody>
                                 <tfoot className="bg-muted/50">
                                     <tr>
-                                        <td colSpan={5} className="px-4 py-3 text-right font-bold">
+                                        <td colSpan={4} className="px-4 py-3 text-right font-bold">
                                             Total
                                         </td>
                                         <td className="px-4 py-3 text-center font-bold">{lineasProductos.reduce((sum, p) => sum + p.cantidad, 0)}</td>
                                         <td className="px-4 py-3"></td>
-                                        <td className="px-4 py-3 text-right font-mono font-bold">${totalEsperadoProductos.toFixed(2)}</td>
                                         <td className="px-4 py-3 text-right font-mono text-lg font-bold text-green-600">
                                             ${totalVentasProductos.toFixed(2)}
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-mono text-lg font-bold text-green-600">
+                                            ${totalComisionProductos.toFixed(2)}
                                         </td>
                                     </tr>
                                 </tfoot>
