@@ -213,6 +213,12 @@ class CierreCajaController extends Controller
                 'devoluciones' => 0,
                 'saldo_esperado_global' => $calculos['saldo_esperado_global'],
                 'detalles' => $calculos['detalles'],
+                // Widgets: Totales por moneda (sin conversión global)
+                'usd_efectivo'       => $calculos['usd_efectivo'] ?? 0,
+                'cup_efectivo'       => $calculos['cup_efectivo'] ?? 0,
+                'usd_transferencia'  => $calculos['usd_transferencia'] ?? 0,
+                'cup_transferencias' => $calculos['cup_transferencias'] ?? 0,
+                'usd_internacional'  => $calculos['usd_internacional'] ?? 0,
                 'transferencias_resumen' => $this->obtenerResumenTransferencias($calculos['detalles']),
                 // NUEVO: Totales separados por destino (cuentas vs clientes)
                 'ventas_a_cuentas_total_usd' => $calculos['ventas_a_cuentas_total_usd'],
@@ -1272,6 +1278,21 @@ class CierreCajaController extends Controller
             $saldoEsperadoTotalUSD += ($saldoCalculado / $tasa);
         }
 
+        // --- WIDGETS: Totales por moneda para cuentas ---
+        $usdEfectivoRaw = $resumenPorMoneda['USD']['ventas_efectivo_cuentas'] ?? 0;
+        $eurEfectivoRaw = $resumenPorMoneda['EUR']['ventas_efectivo_cuentas'] ?? 0;
+        $eurTasa = ! empty($resumenPorMoneda['EUR']['tasa_cambio']) && $resumenPorMoneda['EUR']['tasa_cambio'] > 0
+            ? $resumenPorMoneda['EUR']['tasa_cambio']
+            : 1;
+        $cupEfectivoRaw   = $resumenPorMoneda['CUP']['ventas_efectivo_cuentas'] ?? 0;
+        $usdTransfRaw     = $resumenPorMoneda['USD']['ventas_transferencia_cuentas'] ?? 0;
+        $cupTransfRaw     = $resumenPorMoneda['CUP']['ventas_transferencia_cuentas'] ?? 0;
+
+        $widgetUsdEfectivo      = $usdEfectivoRaw + round($eurEfectivoRaw / $eurTasa, 2);
+        $widgetCupEfectivo      = $cupEfectivoRaw;
+        $widgetUsdTransferencia = $usdTransfRaw;
+        $widgetCupTransferencias = $cupTransfRaw;
+
         // --- VENTAS ESPECIALES COMPLETADAS EN EL TURNO ---
         $ventasEspeciales = Venta::where('user_id', $user->id)
             ->where('created_at', '>=', $inicioTurno)
@@ -1453,6 +1474,13 @@ class CierreCajaController extends Controller
             'ventas_a_cuentas_transferencia_usd' => round($ventasACuentasTransferenciaUSD, 2),
             'ventas_a_clientes_efectivo_usd' => round($ventasAClientesEfectivoUSD, 2),
             'ventas_a_clientes_transferencia_usd' => round($ventasAClientesTransferenciaUSD, 2),
+            // Widgets: Totales por moneda (sin conversión global)
+            'usd_efectivo'       => round($widgetUsdEfectivo, 2),
+            'cup_efectivo'       => round($widgetCupEfectivo, 2),
+            'usd_transferencia'  => round($widgetUsdTransferencia, 2),
+            'cup_transferencias' => round($widgetCupTransferencias, 2),
+            // USD Internacional = total de ventas que fueron a CLIENTES (deuda)
+            'usd_internacional'  => round($ventasAClientesTotalUSD, 2),
             // Comisiones a gestores (legacy)
             'comisiones_gestor_total' => round($comisionesGestorTotalUSD, 2),
             'comisiones_gestor_detalles' => $comisionesGestorDetalles,

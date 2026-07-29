@@ -250,6 +250,12 @@ interface Calculos {
     mensajero_total_cup?: number;
     mensajero_count?: number;
     mensajero_detalles?: MensajeroDetalleItem[];
+    // Widgets: Totales por moneda (sin conversión global)
+    usd_efectivo?: number;
+    cup_efectivo?: number;
+    usd_transferencia?: number;
+    cup_transferencias?: number;
+    usd_internacional?: number;
 }
 
 interface MensajeroDetalleItem {
@@ -638,7 +644,7 @@ export default function Create({
                                     </div>
                                     <div>
                                         <p className="text-muted-foreground text-xs">USD Efectivo</p>
-                                        <p className="text-2xl font-bold">$999.99</p>
+                                        <p className="text-2xl font-bold">${Number(calculos.usd_efectivo || 0).toFixed(2)}</p>
                                     </div>
                                 </div>
                             </CardContent>
@@ -652,7 +658,7 @@ export default function Create({
                                     </div>
                                     <div>
                                         <p className="text-muted-foreground text-xs">CUP Efectivo</p>
-                                        <p className="text-2xl font-bold">$888.88</p>
+                                        <p className="text-2xl font-bold">${Number(calculos.cup_efectivo || 0).toFixed(2)}</p>
                                     </div>
                                 </div>
                             </CardContent>
@@ -666,7 +672,7 @@ export default function Create({
                                     </div>
                                     <div>
                                         <p className="text-muted-foreground text-xs">USD Internacional</p>
-                                        <p className="text-2xl font-bold">$1,234.56</p>
+                                        <p className="text-2xl font-bold">${Number(calculos.usd_internacional || 0).toFixed(2)}</p>
                                     </div>
                                 </div>
                             </CardContent>
@@ -680,7 +686,7 @@ export default function Create({
                                     </div>
                                     <div>
                                         <p className="text-muted-foreground text-xs">CUP Transferencias</p>
-                                        <p className="text-2xl font-bold">$777.77</p>
+                                        <p className="text-2xl font-bold">${Number(calculos.cup_transferencias || 0).toFixed(2)}</p>
                                     </div>
                                 </div>
                             </CardContent>
@@ -694,7 +700,7 @@ export default function Create({
                                     </div>
                                     <div>
                                         <p className="text-muted-foreground text-xs">USD Transferencia</p>
-                                        <p className="text-2xl font-bold">$666.66</p>
+                                        <p className="text-2xl font-bold">${Number(calculos.usd_transferencia || 0).toFixed(2)}</p>
                                     </div>
                                 </div>
                             </CardContent>

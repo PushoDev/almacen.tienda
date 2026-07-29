@@ -374,6 +374,16 @@ export default function Show({
     const moneda_referencia = 'USD';
 
     const calculos = useMemo(() => {
+        const detalles = cierre.detalles || [];
+        const usdDetalle = detalles.find((d) => d.moneda === 'USD');
+        const eurDetalle = detalles.find((d) => d.moneda === 'EUR');
+        const cupDetalle = detalles.find((d) => d.moneda === 'CUP');
+
+        const usdEfectivo = (usdDetalle?.ventas_efectivo_cuentas ?? 0) + ((eurDetalle?.ventas_efectivo_cuentas ?? 0) / (eurDetalle?.tasa_cambio ?? 1));
+        const cupEfectivo = cupDetalle?.ventas_efectivo_cuentas ?? 0;
+        const usdTransferencia = usdDetalle?.ventas_transferencia_cuentas ?? 0;
+        const cupTransferencias = cupDetalle?.ventas_transferencia_cuentas ?? 0;
+
         return {
             saldo_inicial: cierre.saldo_inicial || 0,
             ventas_efectivo: cierre.ventas_efectivo || 0,
@@ -381,7 +391,7 @@ export default function Show({
             total_gastos: cierre.total_gastos || 0,
             total_devoluciones: cierre.total_devoluciones || 0,
             saldo_esperado_global: cierre.saldo_esperado || 0,
-            detalles: cierre.detalles || [],
+            detalles,
             comisiones_gestor_total: cierre.comisiones_gestor || 0,
             comisiones_gestor_detalles: cierre.comisiones_gestor_detalles || [],
             ventas_a_cuentas_total_usd: calcularVentasACuentasTotal(),
@@ -390,6 +400,11 @@ export default function Show({
             ventas_a_cuentas_transferencia_usd: calcularVentasACuentasTransferencia(),
             ventas_a_clientes_efectivo_usd: calcularVentasAClientesEfectivo(),
             ventas_a_clientes_transferencia_usd: calcularVentasAClientesTransferencia(),
+            usd_efectivo: usdEfectivo,
+            cup_efectivo: cupEfectivo,
+            usd_transferencia: usdTransferencia,
+            cup_transferencias: cupTransferencias,
+            usd_internacional: calcularVentasAClientesTotal(),
         };
     }, [cierre]);
 
@@ -701,7 +716,7 @@ export default function Show({
                                     </div>
                                     <div>
                                         <p className="text-muted-foreground text-xs">USD Efectivo</p>
-                                        <p className="text-2xl font-bold">$999.99</p>
+                                        <p className="text-2xl font-bold">${Number(calculos.usd_efectivo || 0).toFixed(2)}</p>
                                     </div>
                                 </div>
                             </CardContent>
@@ -715,7 +730,7 @@ export default function Show({
                                     </div>
                                     <div>
                                         <p className="text-muted-foreground text-xs">CUP Efectivo</p>
-                                        <p className="text-2xl font-bold">$888.88</p>
+                                        <p className="text-2xl font-bold">${Number(calculos.cup_efectivo || 0).toFixed(2)}</p>
                                     </div>
                                 </div>
                             </CardContent>
@@ -729,7 +744,7 @@ export default function Show({
                                     </div>
                                     <div>
                                         <p className="text-muted-foreground text-xs">USD Internacional</p>
-                                        <p className="text-2xl font-bold">$1,234.56</p>
+                                        <p className="text-2xl font-bold">${Number(calculos.usd_internacional || 0).toFixed(2)}</p>
                                     </div>
                                 </div>
                             </CardContent>
@@ -743,7 +758,7 @@ export default function Show({
                                     </div>
                                     <div>
                                         <p className="text-muted-foreground text-xs">CUP Transferencias</p>
-                                        <p className="text-2xl font-bold">$777.77</p>
+                                        <p className="text-2xl font-bold">${Number(calculos.cup_transferencias || 0).toFixed(2)}</p>
                                     </div>
                                 </div>
                             </CardContent>
@@ -757,7 +772,7 @@ export default function Show({
                                     </div>
                                     <div>
                                         <p className="text-muted-foreground text-xs">USD Transferencia</p>
-                                        <p className="text-2xl font-bold">$666.66</p>
+                                        <p className="text-2xl font-bold">${Number(calculos.usd_transferencia || 0).toFixed(2)}</p>
                                     </div>
                                 </div>
                             </CardContent>
