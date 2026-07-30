@@ -2003,7 +2003,7 @@ export default function Create({
                                                                         <TooltipTrigger asChild>
                                                                             <span className="cursor-default truncate block">
                                                                                 {d.productos.map(p =>
-                                                                                    [p.marca, p.modelo].filter(Boolean).join(' ') + ' x' + p.cantidad
+                                                                                    [p.nombre, p.marca, p.modelo].filter(Boolean).join(' ') + ' x' + p.cantidad
                                                                                 ).join(', ')}
                                                                             </span>
                                                                         </TooltipTrigger>
@@ -2011,7 +2011,7 @@ export default function Create({
                                                                             <ul className="list-disc list-inside space-y-0.5">
                                                                                 {d.productos.map((p, i) => (
                                                                                     <li key={i}>
-                                                                                        {[p.marca, p.modelo].filter(Boolean).join(' ') || p.nombre}
+                                                                                        {[p.nombre, p.marca, p.modelo].filter(Boolean).join(' ')}
                                                                                         {' '}x{p.cantidad}
                                                                                     </li>
                                                                                 ))}
@@ -2090,7 +2090,7 @@ export default function Create({
                                                                         <TooltipTrigger asChild>
                                                                             <span className="cursor-default truncate block">
                                                                                 {d.productos.map(p =>
-                                                                                    [p.marca, p.modelo].filter(Boolean).join(' ') + ' x' + p.cantidad
+                                                                                    [p.nombre, p.marca, p.modelo].filter(Boolean).join(' ') + ' x' + p.cantidad
                                                                                 ).join(', ')}
                                                                             </span>
                                                                         </TooltipTrigger>
@@ -2098,7 +2098,7 @@ export default function Create({
                                                                             <ul className="list-disc list-inside space-y-0.5">
                                                                                 {d.productos.map((p, i) => (
                                                                                     <li key={i}>
-                                                                                        {[p.marca, p.modelo].filter(Boolean).join(' ') || p.nombre}
+                                                                                        {[p.nombre, p.marca, p.modelo].filter(Boolean).join(' ')}
                                                                                         {' '}x{p.cantidad}
                                                                                     </li>
                                                                                 ))}
