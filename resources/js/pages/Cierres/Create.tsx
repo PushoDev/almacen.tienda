@@ -1187,11 +1187,10 @@ export default function Create({
                     </CardHeader>
                     <CardContent>
                         <Tabs defaultValue="gastos" className="w-full">
-                            <TabsList className="mb-4 grid w-full grid-cols-4">
+                            <TabsList className="mb-4 grid w-full grid-cols-3">
                                 <TabsTrigger value="gastos">Gastos ({todosGastos.length})</TabsTrigger>
                                 <TabsTrigger value="ingresos">Ingresos ({todosIngresos.length})</TabsTrigger>
                                 <TabsTrigger value="transferencias">Transferencias ({todasTransferencias.length})</TabsTrigger>
-                                <TabsTrigger value="gestores">Gestores ({comisionesGestorDetalles.length})</TabsTrigger>
                             </TabsList>
 
                             <TabsContent value="gastos" className="mt-0">
@@ -1202,8 +1201,7 @@ export default function Create({
                                                 <TableRow>
                                                     <TableHead className="w-16">Hora</TableHead>
                                                     <TableHead>Descripción</TableHead>
-                                                    <TableHead>Origen</TableHead>
-                                                    <TableHead>Destino</TableHead>
+                                                    <TableHead>Cuenta de Operación</TableHead>
                                                     <TableHead className="w-28 text-right">Monto</TableHead>
                                                 </TableRow>
                                             </TableHeader>
@@ -1213,7 +1211,6 @@ export default function Create({
                                                         <TableCell className="font-mono text-xs">{item.hora}</TableCell>
                                                         <TableCell className="text-sm">{item.desc}</TableCell>
                                                         <TableCell className="text-muted-foreground text-xs">{item.origen || '-'}</TableCell>
-                                                        <TableCell className="text-muted-foreground text-xs">{item.destino || '-'}</TableCell>
                                                         <TableCell className="text-right font-mono font-medium text-red-600">
                                                             -${Number(item.monto).toFixed(2)}
                                                         </TableCell>
@@ -1222,7 +1219,7 @@ export default function Create({
                                             </TableBody>
                                             <TableFooter>
                                                 <TableRow>
-                                                    <TableCell colSpan={4} className="font-bold">
+                                                    <TableCell colSpan={3} className="font-bold">
                                                         Total Gastos
                                                     </TableCell>
                                                     <TableCell className="text-right font-bold text-red-600">
@@ -1245,8 +1242,7 @@ export default function Create({
                                                 <TableRow>
                                                     <TableHead className="w-16">Hora</TableHead>
                                                     <TableHead>Descripción</TableHead>
-                                                    <TableHead>Origen</TableHead>
-                                                    <TableHead>Destino</TableHead>
+                                                    <TableHead>Cuenta de Operación</TableHead>
                                                     <TableHead className="w-28 text-right">Monto</TableHead>
                                                 </TableRow>
                                             </TableHeader>
@@ -1255,7 +1251,6 @@ export default function Create({
                                                     <TableRow key={idx}>
                                                         <TableCell className="font-mono text-xs">{item.hora}</TableCell>
                                                         <TableCell className="text-sm">{item.desc}</TableCell>
-                                                        <TableCell className="text-muted-foreground text-xs">{item.origen || '-'}</TableCell>
                                                         <TableCell className="text-muted-foreground text-xs">{item.destino || '-'}</TableCell>
                                                         <TableCell className="text-right font-mono font-medium text-green-600">
                                                             +${Number(item.monto).toFixed(2)}
@@ -1265,7 +1260,7 @@ export default function Create({
                                             </TableBody>
                                             <TableFooter>
                                                 <TableRow>
-                                                    <TableCell colSpan={4} className="font-bold">
+                                                    <TableCell colSpan={3} className="font-bold">
                                                         Total Ingresos
                                                     </TableCell>
                                                     <TableCell className="text-right font-bold text-green-600">
@@ -1277,74 +1272,6 @@ export default function Create({
                                     </div>
                                 ) : (
                                     <p className="text-muted-foreground py-12 text-center italic">No hay ingresos registrados en este turno.</p>
-                                )}
-                            </TabsContent>
-
-                            <TabsContent value="gestores" className="mt-0">
-                                {comisionesGestorDetalles.length > 0 ? (
-                                    <div className="rounded-md border">
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead>Venta #</TableHead>
-                                                    <TableHead>Cuenta</TableHead>
-                                                    <TableHead>Comentario</TableHead>
-                                                    <TableHead className="w-36 text-right">Monto Local</TableHead>
-                                                    <TableHead className="w-28 text-right">Equiv. USD</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {comisionesGestorDetalles.map((item) => (
-                                                    <TableRow key={item.venta_id}>
-                                                        <TableCell className="font-mono text-xs">
-                                                            <a
-                                                                href={`/ventas/${item.venta_id}`}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="text-blue-600 hover:underline"
-                                                            >
-                                                                #{item.venta_id}
-                                                            </a>
-                                                        </TableCell>
-                                                        <TableCell className="text-sm">
-                                                            <div className="font-medium">{item.cuenta_nombre}</div>
-                                                            <div className="text-muted-foreground text-xs">{item.cuenta_tipo}</div>
-                                                        </TableCell>
-                                                        <TableCell className="max-w-xs text-sm" title={item.comentario || undefined}>
-                                                            {item.comentario ? (
-                                                                <span className="block max-w-[150px] truncate">{item.comentario}</span>
-                                                            ) : (
-                                                                <span className="text-muted-foreground italic">Sin comentario</span>
-                                                            )}
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-mono font-medium text-red-600">
-                                                            -{Number(item.monto).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {item.moneda_codigo}
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-mono text-xs text-purple-600">
-                                                            ≈ {Number(item.monto_usd).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))}
-                                            </TableBody>
-                                            <TableFooter>
-                                                <TableRow>
-                                                    <TableCell colSpan={3} className="font-bold">Total</TableCell>
-                                                    <TableCell className="text-right font-bold text-red-600" colSpan={1}>
-                                                        {Object.entries(comisionesPorMoneda).map(([moneda, data]) => (
-                                                            <div key={moneda}>
-                                                                -{Number(data.total).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {moneda}
-                                                            </div>
-                                                        ))}
-                                                    </TableCell>
-                                                    <TableCell className="text-right font-bold text-purple-600">
-                                                        ≈ {comisionesGestorDetalles.reduce((s, i) => s + (Number(i.monto_usd) || 0), 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
-                                                    </TableCell>
-                                                </TableRow>
-                                            </TableFooter>
-                                        </Table>
-                                    </div>
-                                ) : (
-                                    <p className="text-muted-foreground py-12 text-center italic">No hay comisiones a gestores en este turno.</p>
                                 )}
                             </TabsContent>
 
