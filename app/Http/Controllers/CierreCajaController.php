@@ -1842,7 +1842,7 @@ class CierreCajaController extends Controller
 
                 $resumenTransferencias['detalles_completos'][] = [
                     'id' => $id,
-                    'descripcion' => $transferencia['desc'] ?? '',
+                    'desc' => $transferencia['desc'] ?? '',
                     'monto_origen' => $transferencia['monto_origen'] ?? 0,
                     'moneda_origen' => $transferencia['moneda_origen'] ?? 'USD',
                     'origen_tipo' => $transferencia['origen_tipo'] ?? '',
@@ -1854,6 +1854,8 @@ class CierreCajaController extends Controller
                     'tasa_cambio' => $transferencia['tasa_cambio'] ?? 1,
                     'hora' => $transferencia['hora'] ?? '',
                     'afecta_saldo_usuario' => $transferencia['afecta_saldo_usuario'] ?? false,
+                    'es_propio' => $transferencia['es_propio'] ?? true,
+                    'usuario_nombre' => $transferencia['usuario_nombre'] ?? 'Sistema',
                     'tipo' => $tipo,
                 ];
             };
