@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem, PageProps } from '@/types';
@@ -644,6 +645,30 @@ export default function Show({
     const gastosExternos = useMemo(() => transaccionesExternas.filter(i => i.tipo === 'Gasto' && (!busquedaExternas || i.desc.toLowerCase().includes(busquedaExternas.toLowerCase()) || i.cuenta.toLowerCase().includes(busquedaExternas.toLowerCase()))), [transaccionesExternas, busquedaExternas]);
     const ingresosExternos = useMemo(() => transaccionesExternas.filter(i => i.tipo === 'Ingreso' && (!busquedaExternas || i.desc.toLowerCase().includes(busquedaExternas.toLowerCase()) || i.cuenta.toLowerCase().includes(busquedaExternas.toLowerCase()))), [transaccionesExternas, busquedaExternas]);
     const transferenciasExternas = useMemo(() => transaccionesExternas.filter(i => (i.tipo === 'Transferencia Saliente' || i.tipo === 'Transferencia Entrante') && (!busquedaExternas || i.desc.toLowerCase().includes(busquedaExternas.toLowerCase()) || i.cuenta.toLowerCase().includes(busquedaExternas.toLowerCase()) || (i.origen && i.origen.toLowerCase().includes(busquedaExternas.toLowerCase())) || (i.destino && i.destino.toLowerCase().includes(busquedaExternas.toLowerCase())))), [transaccionesExternas, busquedaExternas]);
+
+    // Filtros para Comparativa
+    const [busquedaCuentas, setBusquedaCuentas] = useState('');
+    const [filtroTipoCuentas, setFiltroTipoCuentas] = useState('todos');
+    const [busquedaClientes, setBusquedaClientes] = useState('');
+
+    const tiposUnicos = useMemo(() => {
+        const tipos = new Set((comparativa_cuentas ?? []).map(c => c.tipo));
+        return ['todos', ...Array.from(tipos).sort()];
+    }, [comparativa_cuentas]);
+
+    const cuentasFiltradas = useMemo(() => {
+        return (comparativa_cuentas ?? []).filter(c => {
+            const matchTexto = !busquedaCuentas || c.nombre.toLowerCase().includes(busquedaCuentas.toLowerCase());
+            const matchTipo = filtroTipoCuentas === 'todos' || c.tipo === filtroTipoCuentas;
+            return matchTexto && matchTipo;
+        });
+    }, [comparativa_cuentas, busquedaCuentas, filtroTipoCuentas]);
+
+    const clientesFiltrados = useMemo(() => {
+        return (comparativa_clientes ?? []).filter(c => {
+            return !busquedaClientes || c.nombre.toLowerCase().includes(busquedaClientes.toLowerCase());
+        });
+    }, [comparativa_clientes, busquedaClientes]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -1531,86 +1556,143 @@ export default function Show({
                                         Primer cierre: estos son los saldos iniciales actuales.
                                     </p>
                                 )}
-                                <div className="rounded-md border">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Cuenta</TableHead>
-                                                <TableHead>Tipo</TableHead>
-                                                <TableHead>Moneda</TableHead>
-                                                <TableHead className="text-right">Cierre Anterior</TableHead>
-                                                <TableHead className="text-right">Cierre Hoy</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {comparativa_cuentas && comparativa_cuentas.length > 0 ? (
-                                                comparativa_cuentas.map((item: ComparativaItem) => (
-                                                    <TableRow key={item.id}>
-                                                        <TableCell className="font-medium">{item.nombre}</TableCell>
-                                                        <TableCell>
-                                                            <span className="bg-muted rounded px-2 py-0.5 text-xs font-medium">
-                                                                {item.tipo === 'efectivo'
-                                                                    ? 'Efectivo'
-                                                                    : item.tipo === 'tarjeta'
-                                                                      ? 'Tarjeta'
-                                                                      : item.tipo || '-'}
-                                                            </span>
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <span className="bg-muted rounded px-2 py-0.5 text-xs font-medium">{item.moneda}</span>
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-mono">
-                                                            ${Number(item.saldo_anterior).toFixed(2)}
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-mono font-medium">
-                                                            ${Number(item.saldo_actual).toFixed(2)}
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))
-                                            ) : (
-                                                <TableRow>
-                                                    <TableCell colSpan={5} className="text-muted-foreground py-8 text-center italic">
-                                                        {!tiene_cierre_anterior
-                                                            ? 'No hay cierre anterior para comparar'
-                                                            : 'No hay cuentas para mostrar'}
-                                                    </TableCell>
-                                                </TableRow>
-                                            )}
-                                        </TableBody>
-                                    </Table>
-                                </div>
+                                <Accordion type="single" collapsible>
+                                    <AccordionItem value="cuentas">
+                                        <AccordionTrigger className="text-sm font-semibold">
+                                            Cuentas ({cuentasFiltradas.length})
+                                        </AccordionTrigger>
+                                        <AccordionContent>
+                                            <div className="space-y-3">
+                                                <div className="relative">
+                                                    <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+                                                    <Input
+                                                        placeholder="Buscar cuenta..."
+                                                        value={busquedaCuentas}
+                                                        onChange={(e) => setBusquedaCuentas(e.target.value)}
+                                                        className="pl-9"
+                                                    />
+                                                </div>
+                                                <div className="flex flex-wrap gap-1">
+                                                    {tiposUnicos.map(tipo => (
+                                                        <Button
+                                                            key={tipo}
+                                                            variant={filtroTipoCuentas === tipo ? 'default' : 'outline'}
+                                                            size="sm"
+                                                            onClick={() => setFiltroTipoCuentas(tipo)}
+                                                            className="text-xs capitalize"
+                                                        >
+                                                            {tipo === 'todos' ? 'Todos' : tipo}
+                                                        </Button>
+                                                    ))}
+                                                </div>
+                                                <div className="rounded-md border">
+                                                    <Table>
+                                                        <TableHeader>
+                                                            <TableRow>
+                                                                <TableHead>Cuenta</TableHead>
+                                                                <TableHead>Tipo</TableHead>
+                                                                <TableHead>Moneda</TableHead>
+                                                                <TableHead className="text-right">Cierre Anterior</TableHead>
+                                                                <TableHead className="text-right">Cierre Hoy</TableHead>
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                            {cuentasFiltradas.length > 0 ? (
+                                                                cuentasFiltradas.map((item: ComparativaItem) => (
+                                                                    <TableRow key={item.id}>
+                                                                        <TableCell className="font-medium">{item.nombre}</TableCell>
+                                                                        <TableCell>
+                                                                            <span className="bg-muted rounded px-2 py-0.5 text-xs font-medium">
+                                                                                {item.tipo === 'efectivo' ? 'Efectivo' : item.tipo === 'tarjeta' ? 'Tarjeta' : item.tipo || '-'}
+                                                                            </span>
+                                                                        </TableCell>
+                                                                        <TableCell>
+                                                                            <span className="bg-muted rounded px-2 py-0.5 text-xs font-medium">{item.moneda}</span>
+                                                                        </TableCell>
+                                                                        <TableCell className="text-right font-mono">
+                                                                            ${Number(item.saldo_anterior).toFixed(2)}
+                                                                        </TableCell>
+                                                                        <TableCell className="text-right font-mono font-medium">
+                                                                            ${Number(item.saldo_actual).toFixed(2)}
+                                                                        </TableCell>
+                                                                    </TableRow>
+                                                                ))
+                                                            ) : (
+                                                                <TableRow>
+                                                                    <TableCell colSpan={5} className="text-muted-foreground py-8 text-center italic">
+                                                                        {busquedaCuentas || filtroTipoCuentas !== 'todos'
+                                                                            ? 'No se encontraron cuentas con los filtros aplicados'
+                                                                            : !tiene_cierre_anterior
+                                                                              ? 'No hay cierre anterior para comparar'
+                                                                              : 'No hay cuentas para mostrar'}
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            )}
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            </div>
+                                        </AccordionContent>
+                                    </AccordionItem>
+                                </Accordion>
                             </TabsContent>
 
                             {userRole !== 'vendedor' && (
                             <TabsContent value="clientes" className="mt-4">
-                                {comparativa_clientes && comparativa_clientes.length > 0 ? (
-                                    <div className="rounded-md border">
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead>Cliente</TableHead>
-                                                    <TableHead className="text-right">Deuda Anterior</TableHead>
-                                                    <TableHead className="text-right">Deuda Actual</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {comparativa_clientes.map((item: ComparativaClienteItem) => (
-                                                    <TableRow key={item.id}>
-                                                        <TableCell className="font-medium">{item.nombre}</TableCell>
-                                                        <TableCell className="text-right font-mono">
-                                                            ${Number(item.deuda_anterior).toFixed(2)}
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-mono font-medium">
-                                                            ${Number(item.deuda_actual).toFixed(2)}
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
-                                    </div>
-                                ) : (
-                                    <p className="text-muted-foreground py-8 text-center italic">No hay clientes con deuda registrada.</p>
-                                )}
+                                <Accordion type="single" collapsible>
+                                    <AccordionItem value="clientes">
+                                        <AccordionTrigger className="text-sm font-semibold">
+                                            Clientes ({clientesFiltrados.length})
+                                        </AccordionTrigger>
+                                        <AccordionContent>
+                                            <div className="space-y-3">
+                                                <div className="relative">
+                                                    <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+                                                    <Input
+                                                        placeholder="Buscar cliente..."
+                                                        value={busquedaClientes}
+                                                        onChange={(e) => setBusquedaClientes(e.target.value)}
+                                                        className="pl-9"
+                                                    />
+                                                </div>
+                                                <div className="rounded-md border">
+                                                    <Table>
+                                                        <TableHeader>
+                                                            <TableRow>
+                                                                <TableHead>Cliente</TableHead>
+                                                                <TableHead className="text-right">Deuda Anterior</TableHead>
+                                                                <TableHead className="text-right">Deuda Actual</TableHead>
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                            {clientesFiltrados.length > 0 ? (
+                                                                clientesFiltrados.map((item: ComparativaClienteItem) => (
+                                                                    <TableRow key={item.id}>
+                                                                        <TableCell className="font-medium">{item.nombre}</TableCell>
+                                                                        <TableCell className="text-right font-mono">
+                                                                            ${Number(item.deuda_anterior).toFixed(2)}
+                                                                        </TableCell>
+                                                                        <TableCell className="text-right font-mono font-medium">
+                                                                            ${Number(item.deuda_actual).toFixed(2)}
+                                                                        </TableCell>
+                                                                    </TableRow>
+                                                                ))
+                                                            ) : (
+                                                                <TableRow>
+                                                                    <TableCell colSpan={3} className="text-muted-foreground py-8 text-center italic">
+                                                                        {busquedaClientes
+                                                                            ? 'No se encontraron clientes con los filtros aplicados'
+                                                                            : 'No hay clientes con deuda registrada.'}
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            )}
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            </div>
+                                        </AccordionContent>
+                                    </AccordionItem>
+                                </Accordion>
                             </TabsContent>
                             )}
                         </Tabs>
