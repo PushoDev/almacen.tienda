@@ -15,11 +15,15 @@ return new class extends Migration
             ->where('tipo_cuenta', 'temporales')
             ->update(['tipo_cuenta' => 'permanentes']);
 
-        DB::statement("ALTER TABLE cuentas MODIFY COLUMN tipo_cuenta ENUM('permanentes') NOT NULL DEFAULT 'permanentes'");
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE cuentas MODIFY COLUMN tipo_cuenta ENUM('permanentes') NOT NULL DEFAULT 'permanentes'");
+        }
     }
 
     public function down(): void
     {
-        DB::statement("ALTER TABLE cuentas MODIFY COLUMN tipo_cuenta ENUM('permanentes', 'temporales', 'deudas') NOT NULL DEFAULT 'permanentes'");
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE cuentas MODIFY COLUMN tipo_cuenta ENUM('permanentes', 'temporales', 'deudas') NOT NULL DEFAULT 'permanentes'");
+        }
     }
 };
