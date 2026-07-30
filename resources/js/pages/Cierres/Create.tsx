@@ -468,6 +468,13 @@ export default function Create({
     const todosIngresos = (calculos.detalles ?? []).flatMap((d) => d.items_ingresos ?? []);
     const todasTransferencias = calculos.transferencias_resumen?.detalles_completos ?? [];
 
+    // Solo las operaciones realizadas por el propio usuario (para Detalle de Transacciones)
+    const todosGastosPropios = useMemo(() => (todosGastos ?? []).filter(g => g.es_propio === true), [todosGastos]);
+    const todosIngresosPropios = useMemo(() => (todosIngresos ?? []).filter(g => g.es_propio === true), [todosIngresos]);
+    const todasTransferenciasPropias = useMemo(() => (todasTransferencias ?? []).filter(t => t.es_propio === true), [todasTransferencias]);
+    const totalGastosPropio = todosGastosPropios.reduce((sum, g) => sum + Number(g.monto), 0);
+    const totalIngresosPropio = todosIngresosPropios.reduce((sum, g) => sum + Number(g.monto), 0);
+
     // Transacciones externas: operaciones de otros usuarios que afectan las cuentas del vendedor
     const transaccionesExternas = useMemo(() => {
         const externas: Array<{
@@ -492,7 +499,7 @@ export default function Create({
                     cuenta: item.origen || '-',
                     usuario_nombre: item.usuario_nombre || 'Sistema',
                     monto: item.monto,
-                    moneda: 'USD',
+                    moneda: item.moneda || 'USD',
                     es_entrante: false,
                 });
             }
@@ -507,7 +514,7 @@ export default function Create({
                     cuenta: item.destino || '-',
                     usuario_nombre: item.usuario_nombre || 'Sistema',
                     monto: item.monto,
-                    moneda: 'USD',
+                    moneda: item.moneda || 'USD',
                     es_entrante: true,
                 });
             }
@@ -522,9 +529,16 @@ export default function Create({
                     cuenta: item.tipo === 'entrante' ? item.destino_nombre : item.origen_nombre,
                     origen: item.origen_nombre || '-',
                     destino: item.destino_nombre || '-',
+                    origen_tipo: item.origen_tipo || '',
+                    destino_tipo: item.destino_tipo || '',
+                    monto_origen: item.monto_origen,
+                    moneda_origen: item.moneda_origen || 'USD',
+                    monto_destino: item.monto_destino ?? 0,
+                    moneda_destino: item.moneda_destino || 'USD',
+                    tasa_cambio: item.tasa_cambio ?? 1,
                     usuario_nombre: item.usuario_nombre || 'Sistema',
-                    monto: item.monto_origen,
-                    moneda: item.moneda_origen || 'USD',
+                    monto: item.tipo === 'entrante' ? (item.monto_destino ?? item.monto_origen) : item.monto_origen,
+                    moneda: item.tipo === 'entrante' ? (item.moneda_destino || item.moneda_origen || 'USD') : (item.moneda_origen || 'USD'),
                     es_entrante: item.tipo === 'entrante',
                 });
             }
@@ -537,7 +551,7 @@ export default function Create({
     const [busquedaExternas, setBusquedaExternas] = useState('');
     const gastosExternos = useMemo(() => transaccionesExternas.filter(i => i.tipo === 'Gasto' && (!busquedaExternas || i.desc.toLowerCase().includes(busquedaExternas.toLowerCase()) || i.cuenta.toLowerCase().includes(busquedaExternas.toLowerCase()))), [transaccionesExternas, busquedaExternas]);
     const ingresosExternos = useMemo(() => transaccionesExternas.filter(i => i.tipo === 'Ingreso' && (!busquedaExternas || i.desc.toLowerCase().includes(busquedaExternas.toLowerCase()) || i.cuenta.toLowerCase().includes(busquedaExternas.toLowerCase()))), [transaccionesExternas, busquedaExternas]);
-    const transferenciasExternas = useMemo(() => transaccionesExternas.filter(i => (i.tipo === 'Transferencia Saliente' || i.tipo === 'Transferencia Entrante') && (!busquedaExternas || i.desc.toLowerCase().includes(busquedaExternas.toLowerCase()) || i.cuenta.toLowerCase().includes(busquedaExternas.toLowerCase()))), [transaccionesExternas, busquedaExternas]);
+    const transferenciasExternas = useMemo(() => transaccionesExternas.filter(i => (i.tipo === 'Transferencia Saliente' || i.tipo === 'Transferencia Entrante') && (!busquedaExternas || i.desc.toLowerCase().includes(busquedaExternas.toLowerCase()) || i.cuenta.toLowerCase().includes(busquedaExternas.toLowerCase()) || (i.origen && i.origen.toLowerCase().includes(busquedaExternas.toLowerCase())) || (i.destino && i.destino.toLowerCase().includes(busquedaExternas.toLowerCase())))), [transaccionesExternas, busquedaExternas]);
 
     const submit = (e?: React.FormEvent) => {
         if (e) e.preventDefault();
@@ -1186,15 +1200,15 @@ export default function Create({
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <Tabs defaultValue="gastos" className="w-full">
+                         <Tabs defaultValue="gastos" className="w-full">
                             <TabsList className="mb-4 grid w-full grid-cols-3">
-                                <TabsTrigger value="gastos">Gastos ({todosGastos.length})</TabsTrigger>
-                                <TabsTrigger value="ingresos">Ingresos ({todosIngresos.length})</TabsTrigger>
-                                <TabsTrigger value="transferencias">Transferencias ({todasTransferencias.length})</TabsTrigger>
+                                <TabsTrigger value="gastos">Gastos ({todosGastosPropios.length})</TabsTrigger>
+                                <TabsTrigger value="ingresos">Ingresos ({todosIngresosPropios.length})</TabsTrigger>
+                                <TabsTrigger value="transferencias">Transferencias ({todasTransferenciasPropias.length})</TabsTrigger>
                             </TabsList>
 
                             <TabsContent value="gastos" className="mt-0">
-                                {todosGastos.length > 0 ? (
+                                {todosGastosPropios.length > 0 ? (
                                     <div className="rounded-md border">
                                         <Table>
                                             <TableHeader>
@@ -1206,7 +1220,7 @@ export default function Create({
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {todosGastos.map((item, idx) => (
+                                                {todosGastosPropios.map((item, idx) => (
                                                     <TableRow key={idx}>
                                                         <TableCell className="font-mono text-xs">{item.hora}</TableCell>
                                                         <TableCell className="text-sm">{item.desc}</TableCell>
@@ -1223,7 +1237,7 @@ export default function Create({
                                                         Total Gastos
                                                     </TableCell>
                                                     <TableCell className="text-right font-bold text-red-600">
-                                                        ${Number(totalGastos).toFixed(2)}
+                                                        ${Number(totalGastosPropio).toFixed(2)}
                                                     </TableCell>
                                                 </TableRow>
                                             </TableFooter>
@@ -1235,7 +1249,7 @@ export default function Create({
                             </TabsContent>
                             
                             <TabsContent value="ingresos" className="mt-0">
-                                {todosIngresos.length > 0 ? (
+                                {todosIngresosPropios.length > 0 ? (
                                     <div className="rounded-md border">
                                         <Table>
                                             <TableHeader>
@@ -1247,7 +1261,7 @@ export default function Create({
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {todosIngresos.map((item, idx) => (
+                                                {todosIngresosPropios.map((item, idx) => (
                                                     <TableRow key={idx}>
                                                         <TableCell className="font-mono text-xs">{item.hora}</TableCell>
                                                         <TableCell className="text-sm">{item.desc}</TableCell>
@@ -1264,7 +1278,7 @@ export default function Create({
                                                         Total Ingresos
                                                     </TableCell>
                                                     <TableCell className="text-right font-bold text-green-600">
-                                                        ${Number(totalIngresos).toFixed(2)}
+                                                        ${Number(totalIngresosPropio).toFixed(2)}
                                                     </TableCell>
                                                 </TableRow>
                                             </TableFooter>
@@ -1276,7 +1290,7 @@ export default function Create({
                             </TabsContent>
 
                             <TabsContent value="transferencias" className="mt-0">
-                                {todasTransferencias.length > 0 ? (
+                                {todasTransferenciasPropias.length > 0 ? (
                                     <div className="rounded-md border">
                                         <Table>
                                             <TableHeader>
@@ -1289,7 +1303,7 @@ export default function Create({
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {todasTransferencias.map((item, idx) => (
+                                                {todasTransferenciasPropias.map((item, idx) => (
                                                     <TableRow key={idx}>
                                                         <TableCell className="font-mono text-xs">{item.hora}</TableCell>
                                                         <TableCell className="max-w-xs truncate text-sm">{item.desc}</TableCell>
@@ -1384,10 +1398,10 @@ export default function Create({
                                                                 <TableHead>Destino</TableHead>
                                                             </>
                                                         ) : (
-                                                            <TableHead>Cuenta</TableHead>
+                                                            <TableHead>Cuenta de Operación</TableHead>
                                                         )}
                                                         <TableHead className="w-28">Creado por</TableHead>
-                                                        <TableHead className="w-32 text-right">Monto</TableHead>
+                                                        <TableHead className="w-40 text-right">Monto</TableHead>
                                                     </TableRow>
                                                     </TableHeader>
                                                     <TableBody>
@@ -1397,17 +1411,40 @@ export default function Create({
                                                                 <TableCell className="max-w-xs truncate text-sm" title={item.desc}>{item.desc}</TableCell>
                                                                 {tab.value === 'transferencias' ? (
                                                                     <>
-                                                                        <TableCell className="text-muted-foreground text-xs">{item.origen}</TableCell>
-                                                                        <TableCell className="text-muted-foreground text-xs">{item.destino}</TableCell>
+                                                                        <TableCell className="text-muted-foreground text-xs">
+                                                                            <div className="max-w-[120px] truncate" title={`${item.origen_tipo}: ${item.origen}`}>
+                                                                                {item.origen_tipo ? <span className="capitalize">{item.origen_tipo}:</span> : ''} {item.origen}
+                                                                            </div>
+                                                                        </TableCell>
+                                                                        <TableCell className="text-muted-foreground text-xs">
+                                                                            <div className="max-w-[120px] truncate" title={`${item.destino_tipo}: ${item.destino}`}>
+                                                                                {item.destino_tipo ? <span className="capitalize">{item.destino_tipo}:</span> : ''} {item.destino}
+                                                                            </div>
+                                                                        </TableCell>
                                                                     </>
                                                                 ) : (
                                                                     <TableCell className="text-muted-foreground text-xs">{item.cuenta}</TableCell>
                                                                 )}
                                                                 <TableCell className="text-muted-foreground text-xs">{item.usuario_nombre}</TableCell>
-                                                                <TableCell className="text-right font-mono font-medium">
-                                                                    <span className={tab.esGasto ? 'text-red-600' : 'text-green-600'}>
-                                                                        {tab.esGasto ? '-' : '+'}${Number(item.monto).toFixed(2)} {item.moneda}
-                                                                    </span>
+                                                                <TableCell className="text-right font-mono text-xs">
+                                                                    {tab.value === 'transferencias' ? (
+                                                                        <div>
+                                                                            <span className={item.es_entrante ? 'text-green-600' : 'text-blue-600'}>
+                                                                                {item.es_entrante ? '+' : '-'}${Number(item.monto).toFixed(2)} {item.moneda}
+                                                                            </span>
+                                                                            {(item.moneda_origen && item.moneda_destino && item.moneda_origen !== item.moneda_destino) && (
+                                                                                <div className="text-muted-foreground mt-0.5 text-[10px] leading-tight whitespace-nowrap">
+                                                                                    ≈ ${Number(item.es_entrante ? item.monto_origen : item.monto_destino).toFixed(2)}{' '}
+                                                                                    {item.es_entrante ? item.moneda_origen : item.moneda_destino}
+                                                                                    <span className="ml-0.5">@ {Number(item.tasa_cambio).toFixed(2)}</span>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    ) : (
+                                                                        <span className={tab.esGasto ? 'text-red-600' : 'text-green-600'}>
+                                                                            {tab.esGasto ? '-' : '+'}${Number(item.monto).toFixed(2)} {item.moneda}
+                                                                        </span>
+                                                                    )}
                                                                 </TableCell>
                                                             </TableRow>
                                                         )) : (
