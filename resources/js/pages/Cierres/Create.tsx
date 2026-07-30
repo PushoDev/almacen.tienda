@@ -1212,7 +1212,7 @@ export default function Create({
                                                         <TableCell className="text-sm">{item.desc}</TableCell>
                                                         <TableCell className="text-muted-foreground text-xs">{item.origen || '-'}</TableCell>
                                                         <TableCell className="text-right font-mono font-medium text-red-600">
-                                                            -${Number(item.monto).toFixed(2)}
+                                                            -${Number(item.monto).toFixed(2)} {item.moneda || 'USD'}
                                                         </TableCell>
                                                     </TableRow>
                                                 ))}
@@ -1233,7 +1233,7 @@ export default function Create({
                                     <p className="text-muted-foreground py-12 text-center italic">No hay gastos registrados en este turno.</p>
                                 )}
                             </TabsContent>
-
+                            
                             <TabsContent value="ingresos" className="mt-0">
                                 {todosIngresos.length > 0 ? (
                                     <div className="rounded-md border">
@@ -1253,7 +1253,7 @@ export default function Create({
                                                         <TableCell className="text-sm">{item.desc}</TableCell>
                                                         <TableCell className="text-muted-foreground text-xs">{item.destino || '-'}</TableCell>
                                                         <TableCell className="text-right font-mono font-medium text-green-600">
-                                                            +${Number(item.monto).toFixed(2)}
+                                                            +${Number(item.monto).toFixed(2)} {item.moneda || 'USD'}
                                                         </TableCell>
                                                     </TableRow>
                                                 ))}

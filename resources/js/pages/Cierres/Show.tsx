@@ -1256,7 +1256,7 @@ export default function Show({
                                                         <TableCell className="text-sm">{item.desc}</TableCell>
                                                         <TableCell className="text-muted-foreground text-xs">{item.origen || '-'}</TableCell>
                                                         <TableCell className="text-right font-mono font-medium text-red-600">
-                                                            -${Number(item.monto).toFixed(2)}
+                                                            -${Number(item.monto).toFixed(2)} {item.moneda || 'USD'}
                                                         </TableCell>
                                                     </TableRow>
                                                 ))}
@@ -1297,7 +1297,7 @@ export default function Show({
                                                         <TableCell className="text-sm">{item.desc}</TableCell>
                                                         <TableCell className="text-muted-foreground text-xs">{item.destino || '-'}</TableCell>
                                                         <TableCell className="text-right font-mono font-medium text-green-600">
-                                                            +${Number(item.monto).toFixed(2)}
+                                                            +${Number(item.monto).toFixed(2)} {item.moneda || 'USD'}
                                                         </TableCell>
                                                     </TableRow>
                                                 ))}
