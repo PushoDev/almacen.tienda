@@ -154,11 +154,20 @@ interface DetalleMoneda {
     operaciones_detalle: OperacionDetaile[];
 }
 
+interface ProductoItem {
+    nombre: string;
+    marca: string | null;
+    modelo: string | null;
+    cantidad: number;
+}
+
 interface ComisionPVItemShow {
     venta_id: number;
     comision_usd: number;
     comision_cup: number;
     fecha: string;
+    total_venta: number;
+    productos: ProductoItem[];
 }
 
 interface ComisionGestorItem {
@@ -170,6 +179,8 @@ interface ComisionGestorItem {
     cuenta_tipo: string;
     comentario: string;
     fecha: string;
+    total_venta: number;
+    productos: ProductoItem[];
 }
 
 interface ComparativaItem {
@@ -1916,7 +1927,7 @@ export default function Show({
                         {/* Dialog detalles Comisión PV */}
                         {comisiones_pv_detalles.length > 0 && (
                             <Dialog open={showComisionPVDialog} onOpenChange={setShowComisionPVDialog}>
-                                <DialogContent className="sm:max-w-md">
+                                <DialogContent className="sm:max-w-3xl">
                                     <DialogHeader>
                                         <DialogTitle className="text-blue-700 dark:text-blue-300">
                                             Comisiones P.V. del Turno
@@ -1930,32 +1941,68 @@ export default function Show({
                                         <Table>
                                             <TableHeader>
                                                 <TableRow>
-                                                    <TableHead className="text-xs">Venta</TableHead>
-                                                    <TableHead className="text-right text-xs">USD</TableHead>
-                                                    <TableHead className="text-right text-xs">CUP</TableHead>
-                                                    <TableHead className="text-right text-xs">Fecha</TableHead>
+                                                    <TableHead className="text-xs w-[80px]">Venta</TableHead>
+                                                    <TableHead className="text-right text-xs w-[100px]">Total Venta</TableHead>
+                                                    <TableHead className="text-xs">Productos</TableHead>
+                                                    <TableHead className="text-right text-xs w-[140px]">Comisión</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
                                                 {comisiones_pv_detalles.map((d) => (
                                                     <TableRow key={d.venta_id}>
                                                         <TableCell className="text-xs font-medium">#{d.venta_id}</TableCell>
-                                                        <TableCell className="text-right text-xs">${d.comision_usd.toFixed(2)}</TableCell>
-                                                        <TableCell className="text-right text-xs font-semibold text-blue-700 dark:text-blue-300">
-                                                            {d.comision_cup.toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                                        <TableCell className="text-right text-xs">
+                                                            ${d.total_venta?.toFixed(2)}
                                                         </TableCell>
-                                                        <TableCell className="text-right text-xs text-muted-foreground">{d.fecha}</TableCell>
+                                                        <TableCell className="text-xs max-w-[300px]">
+                                                            {d.productos && d.productos.length > 0 ? (
+                                                                <TooltipProvider>
+                                                                    <Tooltip>
+                                                                        <TooltipTrigger asChild>
+                                                                            <span className="cursor-default truncate block">
+                                                                                {d.productos.map(p =>
+                                                                                    [p.marca, p.modelo].filter(Boolean).join(' ') + ' x' + p.cantidad
+                                                                                ).join(', ')}
+                                                                            </span>
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent side="bottom" align="start" className="max-w-md">
+                                                                            <ul className="list-disc list-inside space-y-0.5">
+                                                                                {d.productos.map((p, i) => (
+                                                                                    <li key={i}>
+                                                                                        {[p.marca, p.modelo].filter(Boolean).join(' ') || p.nombre}
+                                                                                        {' '}x{p.cantidad}
+                                                                                    </li>
+                                                                                ))}
+                                                                            </ul>
+                                                                        </TooltipContent>
+                                                                    </Tooltip>
+                                                                </TooltipProvider>
+                                                            ) : (
+                                                                <span className="text-muted-foreground">Sin productos</span>
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="text-right text-xs whitespace-nowrap">
+                                                            <span className="font-medium">${d.comision_usd.toFixed(2)}</span>
+                                                            {' / '}
+                                                            <span className="font-semibold text-blue-700 dark:text-blue-300">
+                                                                {d.comision_cup.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                            </span>
+                                                        </TableCell>
                                                     </TableRow>
                                                 ))}
                                             </TableBody>
                                             <TableFooter>
                                                 <TableRow>
                                                     <TableCell className="text-xs font-bold">Total</TableCell>
-                                                    <TableCell className="text-right text-xs font-bold">${Number(comision_pv_total).toFixed(2)}</TableCell>
-                                                    <TableCell className="text-right text-xs font-bold text-blue-700 dark:text-blue-300">
-                                                        {Number(comisiones_pv_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
-                                                    </TableCell>
                                                     <TableCell />
+                                                    <TableCell />
+                                                    <TableCell className="text-right text-xs font-bold whitespace-nowrap">
+                                                        ${Number(comision_pv_total).toFixed(2)}
+                                                        {' / '}
+                                                        <span className="text-blue-700 dark:text-blue-300">
+                                                            {Number(comisiones_pv_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                        </span>
+                                                    </TableCell>
                                                 </TableRow>
                                             </TableFooter>
                                         </Table>
@@ -1967,7 +2014,7 @@ export default function Show({
                         {/* Dialog detalles Comisión Gestor */}
                         {comisionesGestorDetalles.length > 0 && (
                             <Dialog open={showComisionGestorDialog} onOpenChange={setShowComisionGestorDialog}>
-                                <DialogContent className="sm:max-w-md">
+                                <DialogContent className="sm:max-w-3xl">
                                     <DialogHeader>
                                         <DialogTitle className="text-purple-700 dark:text-purple-300">
                                             Comisiones Gestor del Turno
@@ -1981,34 +2028,70 @@ export default function Show({
                                         <Table>
                                             <TableHeader>
                                                 <TableRow>
-                                                    <TableHead className="text-xs">Venta</TableHead>
-                                                    <TableHead className="text-right text-xs">USD</TableHead>
-                                                    <TableHead className="text-right text-xs">CUP</TableHead>
-                                                    <TableHead className="text-xs">Cuenta</TableHead>
+                                                    <TableHead className="text-xs w-[80px]">Venta</TableHead>
+                                                    <TableHead className="text-right text-xs w-[100px]">Total Venta</TableHead>
+                                                    <TableHead className="text-xs">Productos</TableHead>
+                                                    <TableHead className="text-right text-xs w-[140px]">Comisión</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
                                                 {comisionesGestorDetalles.map((d) => (
                                                     <TableRow key={d.venta_id}>
                                                         <TableCell className="text-xs font-medium">#{d.venta_id}</TableCell>
-                                                        <TableCell className="text-right text-xs">${d.monto_usd.toFixed(2)}</TableCell>
-                                                        <TableCell className="text-right text-xs font-semibold text-purple-700 dark:text-purple-300">
-                                                            {d.moneda_codigo === 'CUP'
-                                                                ? d.monto.toLocaleString('es-ES', { minimumFractionDigits: 2 })
-                                                                : '—'}
+                                                        <TableCell className="text-right text-xs">
+                                                            ${d.total_venta?.toFixed(2)}
                                                         </TableCell>
-                                                        <TableCell className="text-xs text-muted-foreground">{d.cuenta_nombre}</TableCell>
+                                                        <TableCell className="text-xs max-w-[300px]">
+                                                            {d.productos && d.productos.length > 0 ? (
+                                                                <TooltipProvider>
+                                                                    <Tooltip>
+                                                                        <TooltipTrigger asChild>
+                                                                            <span className="cursor-default truncate block">
+                                                                                {d.productos.map(p =>
+                                                                                    [p.marca, p.modelo].filter(Boolean).join(' ') + ' x' + p.cantidad
+                                                                                ).join(', ')}
+                                                                            </span>
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent side="bottom" align="start" className="max-w-md">
+                                                                            <ul className="list-disc list-inside space-y-0.5">
+                                                                                {d.productos.map((p, i) => (
+                                                                                    <li key={i}>
+                                                                                        {[p.marca, p.modelo].filter(Boolean).join(' ') || p.nombre}
+                                                                                        {' '}x{p.cantidad}
+                                                                                    </li>
+                                                                                ))}
+                                                                            </ul>
+                                                                        </TooltipContent>
+                                                                    </Tooltip>
+                                                                </TooltipProvider>
+                                                            ) : (
+                                                                <span className="text-muted-foreground">Sin productos</span>
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="text-right text-xs whitespace-nowrap">
+                                                            <span className="font-medium">${d.monto_usd.toFixed(2)}</span>
+                                                            {' / '}
+                                                            <span className="font-semibold text-purple-700 dark:text-purple-300">
+                                                                {d.moneda_codigo === 'CUP'
+                                                                    ? d.monto.toLocaleString('es-ES', { minimumFractionDigits: 2 }) + ' CUP'
+                                                                    : '—'}
+                                                            </span>
+                                                        </TableCell>
                                                     </TableRow>
                                                 ))}
                                             </TableBody>
                                             <TableFooter>
                                                 <TableRow>
                                                     <TableCell className="text-xs font-bold">Total</TableCell>
-                                                    <TableCell className="text-right text-xs font-bold">${Number(comision_gestor_total).toFixed(2)}</TableCell>
-                                                    <TableCell className="text-right text-xs font-bold text-purple-700 dark:text-purple-300">
-                                                        {Number(comisiones_gestor_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
-                                                    </TableCell>
                                                     <TableCell />
+                                                    <TableCell />
+                                                    <TableCell className="text-right text-xs font-bold whitespace-nowrap">
+                                                        ${Number(comision_gestor_total).toFixed(2)}
+                                                        {' / '}
+                                                        <span className="text-purple-700 dark:text-purple-300">
+                                                            {Number(comisiones_gestor_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                        </span>
+                                                    </TableCell>
                                                 </TableRow>
                                             </TableFooter>
                                         </Table>

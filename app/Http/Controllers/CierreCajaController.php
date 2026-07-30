@@ -435,20 +435,28 @@ class CierreCajaController extends Controller
         ]);
 
         // Calcular comisiones y ganancia desde las ventas del turno del cierre
-        $comisionesPVVentasCierre = \App\Models\Venta::where('user_id', $cierre->user_id)
+        $comisionesPVVentasCierre = \App\Models\Venta::with(['detalles.producto:id,nombre_producto,marca_producto,modelo_producto'])
+            ->where('user_id', $cierre->user_id)
             ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
             ->where('estado', 'completada')
             ->where('es_venta_gestor', false)
             ->where('total_comision', '>', 0)
-            ->get(['id', 'total_comision', 'comision_tasa', 'created_at']);
+            ->get(['id', 'total', 'cliente_id', 'total_comision', 'comision_tasa', 'created_at']);
 
         $comisionPVTotal = $comisionesPVVentasCierre->sum(fn($v) => (float) $v->total_comision);
 
         $comisionesPVDetallesCierre = $comisionesPVVentasCierre->map(fn($v) => [
-            'venta_id'    => $v->id,
-            'comision_usd'=> round((float) $v->total_comision, 2),
-            'comision_cup'=> round((float) $v->total_comision * (float) $v->comision_tasa, 2),
-            'fecha'       => $v->created_at->format('Y-m-d H:i'),
+            'venta_id'     => $v->id,
+            'comision_usd' => round((float) $v->total_comision, 2),
+            'comision_cup' => round((float) $v->total_comision * (float) $v->comision_tasa, 2),
+            'fecha'        => $v->created_at->format('Y-m-d H:i'),
+            'total_venta'  => round((float) $v->total, 2),
+            'productos'    => $v->detalles->map(fn($d) => [
+                'nombre'   => $d->producto?->nombre_producto ?? 'Producto #'.$d->producto_id,
+                'marca'    => $d->producto?->marca_producto,
+                'modelo'   => $d->producto?->modelo_producto,
+                'cantidad' => (int) $d->cantidad,
+            ])->values()->all(),
         ])->values()->all();
 
         $comisionGestorTotal = \App\Models\Venta::where('user_id', $cierre->user_id)
@@ -1208,8 +1216,8 @@ class CierreCajaController extends Controller
             ->where('es_venta_gestor', true)
             ->whereNotNull('gestor_cuenta_id')
             ->where('gestor_monto', '>', 0)
-            ->with(['gestorCuenta.moneda', 'monedaCobro'])
-            ->get();
+            ->with(['gestorCuenta.moneda', 'monedaCobro', 'detalles.producto:id,nombre_producto,marca_producto,modelo_producto'])
+            ->get(['id', 'total', 'cliente_id', 'gestor_monto', 'gestor_cuenta_id', 'gestor_comentario', 'moneda_cobro_id', 'created_at', 'es_venta_gestor']);
 
         foreach ($ventasConGestor as $venta) {
             $montoComision = (float) $venta->gestor_monto;
@@ -1229,14 +1237,21 @@ class CierreCajaController extends Controller
 
             // Crear detalle para la UI
             $comisionesGestorDetalles[] = [
-                'venta_id' => $venta->id,
-                'monto' => $montoComision,
-                'moneda_codigo' => $monedaCodigo,
-                'monto_usd' => round($montoEnUSD, 2),
-                'cuenta_nombre' => $venta->gestorCuenta?->nombre_cuenta ?? 'N/A',
-                'cuenta_tipo' => $venta->gestorCuenta?->tipo ?? 'N/A',
-                'comentario' => $venta->gestor_comentario ?? '',
-                'fecha' => $venta->created_at->format('Y-m-d H:i'),
+                'venta_id'     => $venta->id,
+                'monto'        => $montoComision,
+                'moneda_codigo'=> $monedaCodigo,
+                'monto_usd'    => round($montoEnUSD, 2),
+                'cuenta_nombre'=> $venta->gestorCuenta?->nombre_cuenta ?? 'N/A',
+                'cuenta_tipo'  => $venta->gestorCuenta?->tipo ?? 'N/A',
+                'comentario'   => $venta->gestor_comentario ?? '',
+                'fecha'        => $venta->created_at->format('Y-m-d H:i'),
+                'total_venta'  => round((float) $venta->total, 2),
+                'productos'    => $venta->detalles->map(fn($d) => [
+                    'nombre'   => $d->producto?->nombre_producto ?? 'Producto #'.$d->producto_id,
+                    'marca'    => $d->producto?->marca_producto,
+                    'modelo'   => $d->producto?->modelo_producto,
+                    'cantidad' => (int) $d->cantidad,
+                ])->values()->all(),
             ];
 
             // Restar del saldo calculado de la moneda correspondiente
@@ -1348,22 +1363,30 @@ class CierreCajaController extends Controller
         $ventasEspecialesImpactoUSD = round($ventasEspecialesTotalUSD - $ventasEspecialesCostoUSD, 2);
 
         // --- COMISIÓN PUNTO DE VENTA (ventas sin gestor) ---
-        $comisionesPVVentas = Venta::where('user_id', $user->id)
+        $comisionesPVVentas = Venta::with(['detalles.producto:id,nombre_producto,marca_producto,modelo_producto'])
+            ->where('user_id', $user->id)
             ->where('created_at', '>=', $inicioTurno)
             ->where('estado', 'completada')
             ->where('es_venta_gestor', false)
             ->where('total_comision', '>', 0)
-            ->get(['id', 'total_comision', 'comision_tasa', 'created_at']);
+            ->get(['id', 'total', 'cliente_id', 'total_comision', 'comision_tasa', 'created_at']);
 
         $comisionPVTotal = $comisionesPVVentas->sum(fn($v) =>
             (float) $v->total_comision
         );
 
         $comisionesPVDetalles = $comisionesPVVentas->map(fn($v) => [
-            'venta_id'    => $v->id,
-            'comision_usd'=> round((float) $v->total_comision, 2),
-            'comision_cup'=> round((float) $v->total_comision * (float) ($v->comision_tasa ?: 1), 2),
-            'fecha'       => $v->created_at->format('Y-m-d H:i'),
+            'venta_id'     => $v->id,
+            'comision_usd' => round((float) $v->total_comision, 2),
+            'comision_cup' => round((float) $v->total_comision * (float) ($v->comision_tasa ?: 1), 2),
+            'fecha'        => $v->created_at->format('Y-m-d H:i'),
+            'total_venta'  => round((float) $v->total, 2),
+            'productos'    => $v->detalles->map(fn($d) => [
+                'nombre'   => $d->producto?->nombre_producto ?? 'Producto #'.$d->producto_id,
+                'marca'    => $d->producto?->marca_producto,
+                'modelo'   => $d->producto?->modelo_producto,
+                'cantidad' => (int) $d->cantidad,
+            ])->values()->all(),
         ])->values()->all();
 
         // --- COMISIÓN GESTOR (ventas con gestor, en USD) ---
