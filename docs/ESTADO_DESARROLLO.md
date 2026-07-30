@@ -1,7 +1,7 @@
 # Estado del Desarrollo — almacen.tienda
 
 > **Actualizar este archivo cada vez que se resuelva un bug, se complete una feature o aparezca algo nuevo.**
-> Fecha de última actualización: 2026-07-28
+> Fecha de última actualización: 2026-07-30
 
 ---
 
@@ -167,10 +167,11 @@ resources/js/pages/Vendor/Listado.tsx        ← listado con filtros
 
 ### Cierre de Caja
 ```
-app/Http/Controllers/CierreCajaController.php
+app/Http/Controllers/CierreCajaController.php    ← 1,923 líneas
 app/Models/CierreCaja.php
 resources/js/pages/Cierres/Create.tsx
 resources/js/pages/Cierres/Show.tsx
+resources/js/pages/Cierres/Index.tsx
 ```
 
 ### Bot Telegram
@@ -236,6 +237,7 @@ resources/js/pages/Transacciones/layout/*      ← Movimientos, forms varios
 
 | Fecha | Cambio |
 |:---:|---|
+| 2026-07-30 | **Últimos commits** — "Compras con 0.90", mejoras UX/UI en Cierres (Create/Show), arreglos en VentaController y CompraController |
 | 2026-07-28 | **Transacciones 75%** — Gastos, Ingresos, Transferencias funcionales. Arreglos en flujo contable y control de saldos |
 | 2026-07-28 | **Cuentas — `tipo_titular`** (externa/personal), eliminación campo `deuda`, unificación `temporales→permanentes` vía migración |
 | 2026-07-28 | **Cuentas — soporte saldos negativos** como deudas, ajustes en backend y UI |

@@ -46,5 +46,5 @@ $parteFija = $nombre . $marca . $modelo . $capacidad;
 - **CSRF & XSS**: Standard Laravel protections enhanced with TypeScript typing for all props.
 
 ## 📊 Database Design Highlights
-- **60+ Migrations**: Indicating a highly granular and normalized database schema.
+- **94 Migraciones**: Indicando un esquema de base de datos altamente granular y normalizado.
 - **Pivot Tables with Metadata**: Tables like `almacen_producto` and `producto_vendedors` carry business logic (quantities, specific prices).

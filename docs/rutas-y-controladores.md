@@ -1,171 +1,213 @@
 # Rutas y Controladores — Referencia
 
 > Mapa completo de rutas → controlador → método → vista. Actualizar cuando se agreguen rutas nuevas.
+> Última actualización: 2026-07-30
 
 ---
 
 ## Módulo de Ventas (POS)
 
 | Método | Ruta | Controlador@Método | Vista / Respuesta |
-|---|---|---|---|
-| GET | `/ventas` | `VentaController@index` | `Vendor/Index` |
+|--------|------|-------------------|-------------------|
+| GET | `/punto-venta` | `VentaController@index` | `Vendor/Index` |
 | GET | `/ventas/listado` | `VentaController@listadoVentas` | `Vendor/Listado` |
-| GET | `/ventas/{id}` | `VentaController@show` | `Vendor/Show` |
+| GET | `/ventas/{id}/show` | `VentaController@show` | `Vendor/Show` |
+| GET | `/ventas/reporte-diario` | `VentaController@showReporteDiarioView` | `Vendor/ReporteDiario` |
 | POST | `/ventas/procesar` | `VentaController@procesarVenta` | JSON |
-| POST | `/ventas/{id}/destinatario` | `VentaController@guardarDestinatario` | JSON |
-| POST | `/ventas/{id}/distribucion` | `VentaController@guardarDistribucion` | JSON |
-| POST | `/ventas/{id}/editar-pendiente` | `VentaController@editarVentaPendiente` | JSON |
-| POST | `/ventas/{id}/aprobar` | `VentaController@aprobarVenta` | JSON |
-| POST | `/ventas/{id}/anular` | `VentaController@anularVenta` | JSON |
-| POST | `/ventas/{id}/aprobar-especial` | `VentaController@aprobarSolicitudEspecial` | JSON |
-| POST | `/ventas/{id}/rechazar-especial` | `VentaController@rechazarSolicitudEspecial` | JSON |
-| POST | `/ventas/{id}/decision-notificada` | `VentaController@marcarDecisionNotificada` | JSON |
+| POST | `/ventas/{venta}/destinatario` | `VentaController@guardarDestinatario` | JSON |
+| POST | `/ventas/{venta}/distribucion` | `VentaController@guardarDistribucion` | JSON |
+| POST | `/ventas/{venta}/editar-pendiente` | `VentaController@editarVentaPendiente` | JSON |
+| POST | `/ventas/{venta}/aprobar` | `VentaController@aprobarVenta` | JSON |
+| POST | `/ventas/{venta}/anular` | `VentaController@anularVenta` | JSON |
+| POST | `/ventas/{venta}/especial/aprobar` | `VentaController@aprobarSolicitudEspecial` | JSON |
+| POST | `/ventas/{venta}/especial/rechazar` | `VentaController@rechazarSolicitudEspecial` | JSON |
+| POST | `/ventas/{venta}/decision-notificada` | `VentaController@marcarDecisionNotificada` | JSON |
 
 ### Endpoints JSON del POS (datos para el frontend)
 
 | Método | Ruta | Qué devuelve |
-|---|---|---|
+|--------|------|-------------|
 | GET | `/ventas/almacenes` | Almacenes accesibles del usuario + cuenta mensajero |
-| GET | `/ventas/almacen/{id}/productos` | Productos con stock, precio_base, comision |
+| GET | `/ventas/almacenes/{id}/productos` | Productos con stock, precio_base, comision |
 | GET | `/ventas/clientes` | Clientes (id + nombre) |
 | GET | `/ventas/cuentas` | Cuentas accesibles con moneda y saldo |
-| GET | `/ventas/cuentas-filtradas` | Cuentas filtradas por moneda_id + tipo |
-| GET | `/ventas/cuentas-gestor` | Cuentas para el selector de gestor |
+| GET | `/ventas/cuentas/filtradas` | Cuentas filtradas por moneda_id + tipo |
+| GET | `/ventas/cuentas/gestor` | Cuentas para el selector de gestor |
 | GET | `/ventas/monedas` | Monedas activas con tasa |
-| GET | `/ventas/clientes-fisicos` | Clientes físicos con deuda (para pagos) |
-| POST | `/ventas/cliente` | Crear cliente o devolver existente |
+| GET | `/ventas/clientes-fisicos-pago` | Clientes físicos con deuda (para pagos) |
+| POST | `/ventas/clientes/store` | Crear cliente o devolver existente |
+| GET | `/ventas/reporte-data` | Datos para reporte diario |
 
 ---
 
 ## Módulo de Cierre de Caja
 
 | Método | Ruta | Controlador@Método | Vista / Respuesta |
-|---|---|---|---|
-| GET | `/cierres` | `CierreCajaController@index` | `Cierres/Index` |
-| GET | `/cierres/crear` | `CierreCajaController@create` | `Cierres/Create` |
-| POST | `/cierres` | `CierreCajaController@store` | redirect |
-| GET | `/cierres/{id}` | `CierreCajaController@show` | `Cierres/Show` |
+|--------|------|-------------------|-------------------|
+| GET | `/vendor/cierres` | `CierreCajaController@index` | `Cierres/Index` |
+| GET | `/vendor/cierres/crear` | `CierreCajaController@create` | `Cierres/Create` |
+| POST | `/vendor/cierres` | `CierreCajaController@store` | redirect |
+| GET | `/vendor/cierres/{id}` | `CierreCajaController@show` | `Cierres/Show` |
+| POST | `/vendor/cierres/{id}/aprobar` | `CierreCajaController@aprobar` | JSON |
 
 ---
 
 ## Módulo de Productos
 
 | Método | Ruta | Controlador@Método | Vista / Respuesta |
-|---|---|---|---|
-| GET | `/productos` | `ProductoController@index` | `Productos/Index` |
-| GET | `/productos/{id}` | `ProductoController@show` | `Productos/Show` |
-| GET | `/productos/{id}/editar` | `ProductoController@edit` | `Productos/Edit` |
-| PUT | `/productos/{id}` | `ProductoController@update` | redirect |
-| DELETE | `/productos/{id}` | `ProductoController@destroy` | JSON |
-| POST | `/productos/importar` | `ProductoController@importar` | JSON |
-| GET | `/productos/exportar` | `ProductoController@exportar` | Excel download |
+|--------|------|-------------------|-------------------|
+| GET | `/listado-productos` | `ProductoController@index` | `Productos/Index` |
+| GET | `/listado-productos/create` | `ProductoController@create` | `Productos/Create` |
+| POST | `/listado-productos` | `ProductoController@store` | redirect |
+| GET | `/listado-productos/{producto}` | `ProductoController@show` | `Productos/Show` |
+| GET | `/listado-productos/{producto}/edit` | `ProductoController@edit` | `Productos/Edit` |
+| PUT | `/listado-productos/{producto}` | `ProductoController@update` | redirect |
+| DELETE | `/listado-productos/{producto}` | `ProductoController@destroy` | JSON |
+| GET | `/listado-productos/exportar/excel` | `ProductoController@export` | Excel download |
+| POST | `/listado-productos/importar/excel` | `ProductoController@import` | JSON |
+| POST | `/listado-productos/importar/almacen/{almacenId}` | `ProductoController@importToAlmacen` | JSON |
+| GET | `/listado-productos/descargar/plantilla` | `ProductoController@downloadTemplate` | Excel download |
+| GET | `/listado-productos/duplicados` | `ProductoController@duplicados` | JSON |
+| POST | `/listado-productos/normalizar-duplicados` | `ProductoController@normalizarDuplicados` | JSON |
+| POST | `/listado-productos/fusionar-duplicados` | `ProductoController@fusionarDuplicados` | JSON |
+| POST | `/listado-productos/{producto}/transferir-codigo` | `ProductoController@transferirCodigo` | JSON |
 
 ### Precios de vendedor
 
 | Método | Ruta | Controlador@Método | Vista / Respuesta |
-|---|---|---|---|
-| GET | `/productos/vendedor` | `ProductoVendedorController@index` | `Productos/Vendor/Index` |
-| POST | `/productos/vendedor/actualizar` | `ProductoVendedorController@actualizarPrecios` | JSON |
-| GET | `/productos/vendedor/exportar` | `ProductoVendedorController@exportar` | Excel download |
-| POST | `/productos/vendedor/importar` | `ProductoVendedorController@importar` | JSON |
+|--------|------|-------------------|-------------------|
+| GET | `/disponibles` | `ProductoVendedorController@index` | `Productos/Vendor/Index` |
+| POST | `/disponibles/{disponible}` | `ProductoVendedorController@update` | JSON |
+| GET | `/disponibles/{producto}/precios-vendedores/{almacen}` | `ProductoVendedorController@preciosPorVendedor` | JSON |
+| POST | `/disponibles/{producto}/precios-base` | `ProductoVendedorController@setPreciosBase` | JSON |
+| GET | `/disponibles/almacen/{almacen}/exportar` | `ProductoVendedorController@exportExcel` | Excel download |
+| POST | `/disponibles/almacen/{almacen}/importar` | `ProductoVendedorController@importExcel` | JSON |
 
 ---
 
 ## Módulo de Compras
 
 | Método | Ruta | Controlador@Método | Vista / Respuesta |
-|---|---|---|---|
-| GET | `/compras` | `CompraController@index` | `Comprar/Index` |
-| GET | `/compras/{id}` | `CompraController@show` | `Comprar/Show` |
-| POST | `/compras` | `CompraController@store` | JSON |
+|--------|------|-------------------|-------------------|
+| GET | `/comprar` | `CompraController@index` | `Comprar/Index` |
+| GET | `/comprar/{comprar}` | `CompraController@show` | `Comprar/Show` |
+| POST | `/comprar` | `CompraController@store` | JSON |
+
+### Endpoints JSON de Compras
+
+| Método | Ruta | Qué devuelve |
+|--------|------|-------------|
+| GET | `/compras/almacenes` | Almacenes con búsqueda |
+| POST | `/compras/almacenes` | Crear almacén inline |
+| GET | `/compras/proveedores` | Proveedores con búsqueda |
+| POST | `/compras/proveedores` | Crear proveedor inline |
+| GET | `/compras/categorias` | Categorías |
+| POST | `/compras/categorias` | Crear categoría inline |
+| GET | `/compras/clientes/fisicos` | Clientes físicos |
+| GET | `/compras/clientes/buscar` | Búsqueda rápida de clientes |
+| POST | `/compras/clientes` | Crear cliente inline |
+| GET | `/compras/cuentas/pago` | Cuentas para pago |
+| GET | `/compras/datos` | Datos combinados para formulario |
+| POST | `/compras/registrar` | Registrar compra completa |
+| GET | `/compras/almacenes/{id}/productos` | Productos por almacén |
 
 ---
 
 ## Módulo de Almacenes
 
 | Método | Ruta | Controlador@Método | Vista / Respuesta |
-|---|---|---|---|
+|--------|------|-------------------|-------------------|
 | GET | `/almacenes` | `AlmacenController@index` | `Almacenes/Index` |
-| GET | `/almacenes/crear` | `AlmacenController@create` | `Almacenes/Create` |
+| GET | `/almacenes/create` | `AlmacenController@create` | `Almacenes/Create` |
 | POST | `/almacenes` | `AlmacenController@store` | redirect |
-| GET | `/almacenes/{id}` | `AlmacenController@show` | `Almacenes/Show` |
-| GET | `/almacenes/{id}/editar` | `AlmacenController@edit` | `Almacenes/Edit` |
-| PUT | `/almacenes/{id}` | `AlmacenController@update` | redirect |
-| DELETE | `/almacenes/{id}` | `AlmacenController@destroy` | redirect |
+| GET | `/almacenes/{almacen}` | `AlmacenController@show` | `Almacenes/Show` |
+| GET | `/almacenes/{almacen}/edit` | `AlmacenController@edit` | `Almacenes/Edit` |
+| PUT | `/almacenes/{almacen}` | `AlmacenController@update` | redirect |
+| DELETE | `/almacenes/{almacen}` | `AlmacenController@destroy` | redirect |
 
 ---
 
 ## Módulo de Movimientos de Stock
 
 | Método | Ruta | Controlador@Método | Vista / Respuesta |
-|---|---|---|---|
+|--------|------|-------------------|-------------------|
 | GET | `/movimientos` | `MovimientosController@index` | `Movimientos/Index` |
-| GET | `/movimientos/{id}` | `MovimientosController@show` | `Movimientos/Show` |
+| GET | `/movimientos/{movimiento}` | `MovimientosController@show` | `Movimientos/Show` |
 | POST | `/movimientos` | `MovimientosController@store` | JSON |
-| POST | `/movimientos/{id}/enviar` | `MovimientosController@enviar` | JSON |
-| POST | `/movimientos/{id}/recibir` | `MovimientosController@recibir` | JSON |
-| POST | `/movimientos/{id}/rechazar` | `MovimientosController@rechazar` | JSON |
-| POST | `/movimientos/{id}/cancelar` | `MovimientosController@cancelar` | JSON |
+| POST | `/movimientos/{movimiento}/aprobar` | `MovimientosController@aprobar` | JSON |
+| POST | `/movimientos/{movimiento}/enviar` | `MovimientosController@enviar` | JSON |
+| POST | `/movimientos/{movimiento}/recibir` | `MovimientosController@recibir` | JSON |
+| POST | `/movimientos/{movimiento}/rechazar` | `MovimientosController@rechazar` | JSON |
+| GET | `/movimientos/{movimiento}/seguimiento` | `MovimientosController@seguimiento` | JSON |
+| GET | `/movimientos/reportes/discrepancias` | `MovimientosController@reporteDiscrepancias` | JSON |
+| GET | `/movimientos/almacenes` | `MovimientosController@getAlmacenes` | JSON |
+| GET | `/movimientos/almacenes/{id}/productos` | `MovimientosController@getProductosPorAlmacen` | JSON |
 
 ---
 
 ## Módulo de Cuentas Financieras
 
 | Método | Ruta | Controlador@Método | Vista / Respuesta |
-|---|---|---|---|
+|--------|------|-------------------|-------------------|
 | GET | `/cuentas` | `CuentaController@index` | `Cuentas/Index` |
+| GET | `/cuentas/create` | `CuentaController@create` | `Cuentas/Create` |
 | POST | `/cuentas` | `CuentaController@store` | JSON |
-| PUT | `/cuentas/{id}` | `CuentaController@update` | JSON |
-| DELETE | `/cuentas/{id}` | `CuentaController@destroy` | JSON |
+| GET | `/cuentas/{cuenta}` | `CuentaController@show` | `Cuentas/Show` |
+| GET | `/cuentas/{cuenta}/edit` | `CuentaController@edit` | `Cuentas/Edit` |
+| PUT/PATCH | `/cuentas/{cuenta}` | `CuentaController@update` | JSON |
+| DELETE | `/cuentas/{cuenta}` | `CuentaController@destroy` | JSON |
 | POST | `/cuentas/{id}/ajustar-saldo` | `CuentaController@ajustarSaldo` | JSON — requiere contraseña |
+
+> Las rutas `show`, `edit`, `update`, `destroy` están protegidas por middleware `check.cuenta.permission`.
 
 ---
 
 ## Módulo de Transacciones Financieras
 
 | Método | Ruta | Controlador@Método | Vista / Respuesta |
-|---|---|---|---|
+|--------|------|-------------------|-------------------|
 | GET | `/transacciones` | `TransaccionController@index` | `Transacciones/Index` |
-| POST | `/transacciones/distribuir-costos-manual` | `TransaccionController@distribuirCostosManual` | JSON |
+| GET | `/transacciones/{movimiento}` | `TransaccionController@show` | `Transacciones/Show` |
 | GET | `/transacciones/distribuir-costos/{compra}` | `TransaccionController@mostrarFormularioDistribucion` | Vista |
-| GET | `/transacciones/historial` | `TransaccionController@historial` | `Transacciones/Historial` |
+| POST | `/transacciones/distribuir-costos-manual` | `TransaccionController@distribuirCostosManual` | JSON |
 | POST | `/transacciones/gastar` | `GastoController@store` | JSON |
 | GET | `/transacciones/ingreso/data` | `IngresoController@formData` | JSON |
 | POST | `/transacciones/ingresar` | `IngresoController@store` | JSON |
+| GET | `/transacciones/transferencia/data` | `TransferenciaController@formData` | JSON |
 | POST | `/transacciones/transferir` | `TransferenciaController@store` | JSON |
+| POST | `/transacciones/gasto-transportacion` | `TransaccionController@gastoTransportacion` | JSON |
 
 ---
 
 ## Módulo de Usuarios y Empleados
 
 | Método | Ruta | Controlador@Método | Vista / Respuesta |
-|---|---|---|---|
+|--------|------|-------------------|-------------------|
 | GET | `/empleados` | `UserController@index` | `Empleados/Index` |
-| GET | `/empleados/crear` | `UserController@create` | `Empleados/Create` |
+| GET | `/empleados/create` | `UserController@create` | `Empleados/Create` |
 | POST | `/empleados` | `UserController@store` | redirect |
-| GET | `/empleados/{id}/editar` | `UserController@edit` | `Empleados/Edit` |
-| PUT | `/empleados/{id}` | `UserController@update` | redirect |
-| DELETE | `/empleados/{id}` | `UserController@destroy` | redirect |
-| POST | `/empleados/{id}/almacenes` | `UserAlmacenController@sync` | JSON |
+| GET | `/empleados/{user}/edit` | `UserController@edit` | `Empleados/Edit` |
+| PUT | `/empleados/{user}` | `UserController@update` | redirect |
+| DELETE | `/empleados/{user}` | `UserController@destroy` | redirect |
 
 ---
 
 ## Módulo de Clientes
 
 | Método | Ruta | Controlador@Método | Vista / Respuesta |
-|---|---|---|---|
+|--------|------|-------------------|-------------------|
 | GET | `/clientes` | `ClienteController@index` | `Clientes/Index` |
-| GET | `/clientes/{id}` | `ClienteController@show` | `Clientes/Show` |
+| GET | `/clientes/{cliente}` | `ClienteController@show` | `Clientes/Show` |
 | POST | `/clientes` | `ClienteController@store` | JSON |
-| PUT | `/clientes/{id}` | `ClienteController@update` | JSON |
-| DELETE | `/clientes/{id}` | `ClienteController@destroy` | JSON |
+| PUT | `/clientes/{cliente}` | `ClienteController@update` | JSON |
+| DELETE | `/clientes/{cliente}` | `ClienteController@destroy` | JSON |
 
 ---
 
 ## Módulo de Reportes
 
 | Método | Ruta | Controlador@Método | Vista / Respuesta |
-|---|---|---|---|
+|--------|------|-------------------|-------------------|
 | GET | `/reportes` | `ReporteController@index` | `Reportes/Index` |
 | GET | `/reportes/ventas-por-periodo` | `ReporteController@ventasPorPeriodo` | `Reportes/Report/VentasPorPeriodo` |
 | GET | `/reportes/ventas-por-vendedor` | `ReporteController@ventasPorVendedor` | `Reportes/Report/VentasPorVendedor` |
@@ -186,50 +228,125 @@
 
 ---
 
-## API Pública (sin autenticación)
+## Módulo de Logística
 
-Prefijo: `/api/tienda` — throttle: 60 req/min
+| Método | Ruta | Controlador@Método | Vista / Respuesta |
+|--------|------|-------------------|-------------------|
+| GET | `/logistica` | `LogisticaController@index` | `Logistica/Index` |
+| GET | `/logistica/create` | `LogisticaController@create` | `Logistica/Create` |
+| POST | `/logistica` | `LogisticaController@store` | redirect |
+| GET | `/logistica/{logistica}` | `LogisticaController@show` | `Logistica/Show` |
+| GET | `/logistica/{logistica}/edit` | `LogisticaController@edit` | `Logistica/Edit` |
+| PUT | `/logistica/{logistica}` | `LogisticaController@update` | redirect |
+| DELETE | `/logistica/{logistica}` | `LogisticaController@destroy` | redirect |
 
-| Método | Ruta | Descripción |
-|---|---|---|
-| GET | `/api/tienda/almacenes` | Lista almacenes activos |
-| GET | `/api/tienda/almacenes/{id}` | Detalle de almacén |
-| GET | `/api/tienda/almacenes/{id}/productos` | Productos del almacén con stock |
-| GET | `/api/tienda/productos` | Búsqueda de productos |
-| GET | `/api/tienda/productos/{id}` | Detalle de producto |
-| GET | `/api/tienda/productos/{id}/stock` | Stock por almacén |
-| GET | `/api/tienda/categorias` | Categorías |
-| GET | `/api/tienda/docs/openapi.json` | Especificación OpenAPI |
-| GET | `/api/tienda/docs` | Swagger UI |
+---
+
+## Módulo de Monedas
+
+| Método | Ruta | Controlador@Método | Vista / Respuesta |
+|--------|------|-------------------|-------------------|
+| GET | `/monedas` | `MonedaController@index` | `Monedas/Index` |
+| GET | `/monedas/create` | `MonedaController@create` | `Monedas/Create` |
+| POST | `/monedas` | `MonedaController@store` | redirect |
+| GET | `/monedas/{moneda}/edit` | `MonedaController@edit` | `Monedas/Edit` |
+| PUT | `/monedas/{moneda}` | `MonedaController@update` | redirect |
+| DELETE | `/monedas/{moneda}` | `MonedaController@destroy` | redirect |
+| PATCH | `/monedas/{moneda}/cambiar-estado` | `MonedaController@cambiarEstado` | JSON |
+| PATCH | `/monedas/{moneda}/establecer-principal` | `MonedaController@establecerPrincipal` | JSON |
+
+---
+
+## Dashboard
+
+| Método | Ruta | Controlador@Método | Vista / Respuesta |
+|--------|------|-------------------|-------------------|
+| GET | `/` | — | `auth/login` (Inertia) |
+| GET | `/dashboard` | `AdminController@index` | `dashboard` |
+| POST | `/dashboard/update-tasa` | `AdminController@update` | JSON |
+| POST | `/dashboard/update-tasa-mlc` | `AdminController@updateMLC` | JSON |
+| GET | `/dashboard/chart-data` | `ReporteController@getComprasVentasData` | JSON |
+| GET | `/dashboard/financial-states` | `ReporteController@getFinancialStates` | JSON |
+| GET | `/dashboard/usuarios` | `ReporteController@getUsuarios` | JSON |
+| GET | `/dashboard/monedas` | `ReporteController@getMonedas` | JSON |
+| GET | `/dashboard/historial-comparaciones` | `AdminController@getHistorialComparaciones` | JSON |
+| GET | `/dashboard/historial-comparaciones/view` | — | `dashboard/historial-comparaciones` |
+| GET | `/dashboard/estadisticas-costo-precio` | `AdminController@getEstadisticasCostoPrecio` | JSON |
+
+---
+
+## Notificaciones
+
+| Método | Ruta | Controlador@Método | Vista / Respuesta |
+|--------|------|-------------------|-------------------|
+| GET | `/notifications` | `NotificationController@index` | `Notifications/Index` |
+| GET | `/notifications/history` | `NotificationController@history` | JSON |
+| POST | `/notifications/{id}/read` | `NotificationController@markAsRead` | JSON |
+| POST | `/notifications/mark-all-read` | `NotificationController@markAllAsRead` | JSON |
+
+---
+
+## Settings (Ajustes de Perfil)
+
+| Método | Ruta | Controlador@Método | Vista / Respuesta |
+|--------|------|-------------------|-------------------|
+| GET | `/settings/profile` | `ProfileController@edit` | `settings/profile` |
+| PATCH | `/settings/profile` | `ProfileController@update` | redirect |
+| DELETE | `/settings/profile` | `ProfileController@destroy` | redirect |
+| POST | `/settings/profile/telegram-token` | `ProfileController@generateTelegramToken` | JSON |
+| DELETE | `/settings/profile/telegram` | `ProfileController@disconnectTelegram` | JSON |
+| GET | `/settings/password` | `PasswordController@edit` | `settings/password` |
+| PUT | `/settings/password` | `PasswordController@update` | redirect |
+| GET | `/settings/appearance` | — | `settings/appearance` |
+
+---
+
+## API Pública (catálogo sin autenticación)
+
+Definida en `routes/web.php` con prefijo `/api/tienda` y middleware `throttle:60,1`.
+
+| Método | Ruta | Controlador@Método | Descripción |
+|--------|------|-------------------|-------------|
+| GET | `/api/tienda/almacenes` | `CatalogoPublicoController@indexAlmacenes` | Lista almacenes activos |
+| GET | `/api/tienda/almacenes/{id}` | `CatalogoPublicoController@showAlmacen` | Detalle de almacén |
+| GET | `/api/tienda/almacenes/{id}/productos` | `CatalogoPublicoController@productosPorAlmacen` | Productos del almacén con stock |
+| GET | `/api/tienda/productos` | `CatalogoPublicoController@searchProductos` | Búsqueda de productos |
+| GET | `/api/tienda/productos/{id}` | `CatalogoPublicoController@showProducto` | Detalle de producto |
+| GET | `/api/tienda/productos/{id}/stock` | `CatalogoPublicoController@stockPorProducto` | Stock por almacén |
+| GET | `/api/tienda/categorias` | `CatalogoPublicoController@indexCategorias` | Categorías |
+| GET | `/api/tienda/docs/openapi.json` | `CatalogoPublicoController@openApiSpec` | Especificación OpenAPI |
+| GET | `/api/tienda/docs` | `CatalogoPublicoController@swaggerUi` | Swagger UI |
 
 ---
 
 ## Bot de Telegram (webhook)
 
+Definido en `routes/api.php`.
+
 | Método | Ruta | Controlador@Método |
-|---|---|---|
+|--------|------|-------------------|
 | POST | `/api/telegram/webhook` | `TelegramWebhookController@handle` |
 
 Autenticado por header `X-Telegram-Bot-Api-Secret-Token`.
 
 ---
 
-## Dashboard
+## Remesas
 
-| Método | Ruta | Controlador@Método | Vista |
-|---|---|---|---|
-| GET | `/` | `AdminController@dashboard` | `dashboard` |
-| GET | `/historial-comparaciones` | `AdminController@historialComparaciones` | `dashboard/historial-comparaciones` |
+| Método | Ruta | Controlador@Método | Vista / Respuesta |
+|--------|------|-------------------|-------------------|
+| GET | `/remesas` | — (Inertia directo) | `Remesas/Index` |
 
 ---
 
 ## Middlewares aplicados por ruta
 
 | Middleware | Qué protege |
-|---|---|
+|-----------|-------------|
 | `auth` | Todas las rutas web (excepto login) |
-| `EnsureUserIsAdmin` | Rutas exclusivas de admin (aprobar ventas especiales, modificar costos, etc.) |
-| `EnsureUserIsModerator` | Rutas para admin + moderador |
-| `EnsureUserIsVendor` | Rutas del POS y cierre de caja |
-| `CheckAlmacenPermission` | Verifica que el usuario tiene acceso al almacén en la URL |
-| `CheckCuentaPermission` | Verifica que el usuario tiene acceso a la cuenta en la URL |
+| `verified` | Rutas que requieren email verificado (dashboard, CRUDs, acciones) |
+| `check.cuenta.permission` | Verifica que el usuario tiene acceso a la cuenta en `show`/`edit`/`update`/`destroy` de cuentas |
+| `HandleInertiaRequests` | Comparte datos globales con Inertia (usuario, tasas, permisos) |
+| `throttle:60,1` | API pública (60 req/min) |
+
+> **Nota:** Las clases `EnsureUserIsAdmin`, `EnsureUserIsModerator`, `EnsureUserIsVendor` y `CheckAlmacenPermission` existen en `app/Http/Middleware/` pero **no están registradas ni aplicadas a ninguna ruta**. La verificación de roles se hace inline en los controladores mediante `$user->isAdmin()`, `$user->isModerator()`.

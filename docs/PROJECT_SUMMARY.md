@@ -34,6 +34,8 @@
 | Bot de Telegram (notificaciones, comandos, aprobar/rechazar) | ✅ Estable |
 | API Pública (catálogo sin auth para e-commerce) | ✅ Básico |
 | Notificaciones (database + Telegram) | ✅ Estable |
+| Settings (perfil, contraseña, apariencia, vinculación Telegram) | ✅ Estable |
+| Remesas (control de envíos) | ✅ Básico |
 | Usuarios y empleados (roles, asignación almacenes/cuentas) | ✅ Estable |
 
 ## Rama activa

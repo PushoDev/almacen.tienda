@@ -2,18 +2,19 @@
 
 ## Patrón de Header para todas las páginas
 
-Cada página renderiza un header con la siguiente estructura dentro del contenedor principal con clases `animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-6 rounded-xl p-6`:
+Cada página renderiza un header con la siguiente estructura dentro del layout principal `AppSidebarLayout`:
 
 ```tsx
-<div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+<div className="flex flex-col gap-4">
     <HeadingSmall title="Título de la Página" description="Descripción breve del propósito." />
-    <IconComponent
-        size={70}
-        color="#d6d3d1"
-        className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
-    />
+    {/* Breadcrumbs, tabs y contenido adicional aquí */}
 </div>
 ```
+
+El layout `AppSidebarLayout` envuelve toda la página y provee:
+- Sidebar de navegación persistente
+- Header superior con migas de pan (breadcrumbs)
+- Contenido principal con padding y scroll
 
 ## Componentes
 
@@ -25,7 +26,7 @@ Archivo: `resources/js/components/heading-small.tsx`
 export default function HeadingSmall({ title, description }: { title: string; description?: string }) {
     return (
         <header>
-            <h3 className="text-sidebar-accent mb-0.5 font-medium">{title}</h3>
+            <h3 className="mb-0.5 font-medium">{title}</h3>
             {description && <p className="text-muted-foreground text-sm">{description}</p>}
         </header>
     );
@@ -36,39 +37,41 @@ Props:
 - `title`: string (requerido) — Título principal del header
 - `description`: string (opcional) — Subtítulo o descripción breve
 
-### Contenedor
+### Contenedor de página
 
-Clases fijas del div contenedor:
+Las páginas usan la estructura `<AppLayout>` → contenido dentro de un `<div>` con clases que varían según la página, usualmente con `flex flex-col gap-4` o similar. No hay un contenedor fijo con clases predefinidas; cada página adapta su layout al contenido (tablas, formularios, cards).
 
-| Clase | Propósito |
-|---|---|
-| `bg-sidebar` | Fondo basado en el color del sidebar |
-| `border-sidebar-accent` | Borde con color de acento del sidebar |
-| `relative` | Posicionamiento relativo para el icono decorativo |
-| `col-span-4` | Ocupa todo el ancho del grid |
-| `space-y-1` | Espaciado vertical entre título y descripción |
-| `overflow-hidden` | Oculta desbordamiento del icono |
-| `rounded-2xl` | Bordes redondeados grandes |
-| `border border-dashed` | Borde punteado |
-| `p-4` | Padding por defecto (algunas páginas usan `p-6`) |
+### Cards de contenido
+
+El cuerpo de las páginas usa componentes `<Card>` de shadcn/ui:
+
+```tsx
+<Card>
+    <CardHeader>
+        <CardTitle>Subtítulo</CardTitle>
+        <CardDescription>Descripción</CardDescription>
+    </CardHeader>
+    <CardContent>
+        {/* contenido */}
+    </CardContent>
+</Card>
+```
 
 ### Icono decorativo (opcional)
 
-Lucide React icon posicionado en la esquina inferior derecha:
+Algunas páginas incluyen un icono Lucide React posicionado en la esquina inferior derecha del header:
 
 ```tsx
 <IconComponent
     size={70}
-    color="#d6d3d1"             // gris claro
-    className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
+    color="#d6d3d1"
+    className="pointer-events-none absolute right-2 bottom-0 opacity-40"
 />
 ```
 
 Propiedades clave:
 - `pointer-events-none` — No interfiere con clicks
 - `absolute right-2 bottom-0` — Esquina inferior derecha
-- `translate-y-[-5]` — Pequeño ajuste vertical
-- `animate-pulse` — Animación de pulso suave
 - `opacity-40` — Semitransparente
 
 ## Ejemplos por página
@@ -82,13 +85,13 @@ Propiedades clave:
 | Notifications/Index | Historial de Notificaciones | `Bell` | `#d6d3d1` |
 | Reporte VentasPorVendedor | Reporte de Ventas por Vendedor | `User` | `#22d3ee` |
 | Empleados/Index | Gestión de Empleados | — | — |
-| Cierres/Index | Cierres de Caja | — | — |
+| Cierres/Index | Cierres de Caja | `ComputerIcon` | — |
 
-Algunas páginas (como Empleados, Cierres) no usan el icono decorativo. Otras personalizan el color del icono.
+Algunas páginas (como Empleados) no usan el icono decorativo. Otras personalizan el color del icono.
 
 ## Reglas
 
 1. Siempre usar `HeadingSmall` con `title` descriptivo y `description` opcional
 2. El icono decorativo es opcional pero consistente cuando se usa
-3. No cambiar las clases del contenedor (son fijas para todas las páginas)
-4. El `p-4` es el padding estándar; `p-6` se usa excepcionalmente en páginas densas (Cierres)
+3. Usar componentes `Card` de shadcn/ui para agrupar secciones de contenido
+4. Breadcrumbs deben definirse por página usando el helper del layout
