@@ -23,6 +23,8 @@
 | POST | `/ventas/{venta}/especial/rechazar` | `VentaController@rechazarSolicitudEspecial` | JSON |
 | POST | `/ventas/{venta}/decision-notificada` | `VentaController@marcarDecisionNotificada` | JSON |
 
+> ⚠️ **Rutas registradas pero rotas**: `POST /ventas/validar-stock` (`ventas.validarStock`) y `POST /ventas/actualizar-tasas` (`ventas.actualizarTasas`) están definidas en `routes/shop/puntoventa.php` pero `VentaController` **no tiene** los métodos `validarStock` ni `actualizarTasas` — llamarlas produce un error fatal.
+
 ### Endpoints JSON del POS (datos para el frontend)
 
 | Método | Ruta | Qué devuelve |
@@ -127,6 +129,38 @@
 
 ---
 
+## Módulo de Categorías
+
+| Método | Ruta | Controlador@Método | Vista / Respuesta |
+|--------|------|-------------------|-------------------|
+| GET | `/categorias` | `CategoriaController@index` | `Categorias/Index` |
+| GET | `/categorias/create` | `CategoriaController@create` | `Categorias/Create` |
+| POST | `/categorias` | `CategoriaController@store` | redirect |
+| GET | `/categorias/{categoria}` | `CategoriaController@show` | `Categorias/Show` |
+| GET | `/categorias/{categoria}/edit` | `CategoriaController@edit` | `Categorias/Edit` |
+| PUT | `/categorias/{categoria}` | `CategoriaController@update` | redirect |
+| DELETE | `/categorias/{categoria}` | `CategoriaController@destroy` | redirect |
+
+`Route::resource` completo, definido en `routes/crud/categorias.php`.
+
+---
+
+## Módulo de Proveedores
+
+| Método | Ruta | Controlador@Método | Vista / Respuesta |
+|--------|------|-------------------|-------------------|
+| GET | `/proveedores` | `ProveedorController@index` | `Proveedores/Index` |
+| GET | `/proveedores/create` | `ProveedorController@create` | `Proveedores/Create` |
+| POST | `/proveedores` | `ProveedorController@store` | redirect |
+| GET | `/proveedores/{proveedor}` | `ProveedorController@show` | `Proveedores/Show` |
+| GET | `/proveedores/{proveedor}/edit` | `ProveedorController@edit` | `Proveedores/Edit` |
+| PUT | `/proveedores/{proveedor}` | `ProveedorController@update` | redirect |
+| DELETE | `/proveedores/{proveedor}` | `ProveedorController@destroy` | redirect |
+
+`Route::resource` completo, definido en `routes/crud/proveedores.php`. `ProveedorController` también define `actualizarSaldo`, `conDeuda`, `conFondo`, `resetearSaldo` — implementados pero **sin ruta asignada** (código muerto/no expuesto).
+
+---
+
 ## Módulo de Movimientos de Stock
 
 | Método | Ruta | Controlador@Método | Vista / Respuesta |
@@ -170,6 +204,7 @@
 | GET | `/transacciones/{movimiento}` | `TransaccionController@show` | `Transacciones/Show` |
 | GET | `/transacciones/distribuir-costos/{compra}` | `TransaccionController@mostrarFormularioDistribucion` | Vista |
 | POST | `/transacciones/distribuir-costos-manual` | `TransaccionController@distribuirCostosManual` | JSON |
+| POST | `/transacciones/distribuir-costos` | `TransaccionController@distribuirCostosManual` | JSON — ruta duplicada (mismo método, nombre `distribuir.costos.manual`) |
 | POST | `/transacciones/gastar` | `GastoController@store` | JSON |
 | GET | `/transacciones/ingreso/data` | `IngresoController@formData` | JSON |
 | POST | `/transacciones/ingresar` | `IngresoController@store` | JSON |
@@ -343,10 +378,11 @@ Autenticado por header `X-Telegram-Bot-Api-Secret-Token`.
 
 | Middleware | Qué protege |
 |-----------|-------------|
-| `auth` | Todas las rutas web (excepto login) |
-| `verified` | Rutas que requieren email verificado (dashboard, CRUDs, acciones) |
+| `auth` + `verified` | **Todos** los grupos de rutas en `routes/*.php` (web, crud/, acciones/, shop/, empleados/) — no es una protección selectiva por módulo, es blanket-wide |
 | `check.cuenta.permission` | Verifica que el usuario tiene acceso a la cuenta en `show`/`edit`/`update`/`destroy` de cuentas |
 | `HandleInertiaRequests` | Comparte datos globales con Inertia (usuario, tasas, permisos) |
 | `throttle:60,1` | API pública (60 req/min) |
 
-> **Nota:** Las clases `EnsureUserIsAdmin`, `EnsureUserIsModerator`, `EnsureUserIsVendor` y `CheckAlmacenPermission` existen en `app/Http/Middleware/` pero **no están registradas ni aplicadas a ninguna ruta**. La verificación de roles se hace inline en los controladores mediante `$user->isAdmin()`, `$user->isModerator()`.
+> **Nota (corregida):** `EnsureUserIsAdmin`, `EnsureUserIsModerator` y `EnsureUserIsVendor` **sí están registradas** como alias de middleware (`admin`, `moderator`, `vendor`) en `bootstrap/app.php:37-40`, pero **no se aplican a ninguna ruta**. Solo `CheckAlmacenPermission` está realmente sin registrar (importada pero comentada en `bootstrap/app.php:31`). La verificación de roles se hace inline en los controladores mediante `$user->isAdmin()`, `$user->isModerador()`.
+
+> **Ruta huérfana:** `routes/vendor/vendedor.php` (define `GET /vendedor`) existe pero **no está incluida (`require`) desde `routes/web.php`** — es código muerto, inalcanzable.

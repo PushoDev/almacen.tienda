@@ -136,7 +136,7 @@
 
 | ID | Descripción | Fecha |
 |---|---|---|
-| **—** | **Módulo Transacciones (75%)** — Gastos, Ingresos, Transferencias con control de saldo, arreglo flujo contable | 2026-07-28 |
+| **—** | **Módulo Transacciones (75%)** — Gastos, Ingresos, Transferencias con control de saldo, arreglo flujo contable. ⚠️ Sin cambios desde esta fecha: los 8 commits del 2026-07-30 titulados "Mejorando transacciones sections" en realidad modificaron `CierreCajaController`/`Cierres/*.tsx`, no los controladores de Transacciones — no leer el git log literalmente para este módulo. | 2026-07-28 |
 | **—** | **Cuentas — tipo_titular** (externa/personal), eliminación campo `deuda`, unificación `temporales→permanentes` | 2026-07-28 |
 | **—** | **Cuentas — soporte saldos negativos** detectados como deudas, ajustes en UI | 2026-07-28 |
 | **—** | **Logística II** — Expansión con Create/Edit/Show, layouts de charts (ComprasVentas, ProductosPorAlmacen) | 2026-07-27 |
@@ -145,6 +145,9 @@
 
 ## 📋 Pendientes menores conocidos
 
+- [ ] **Código muerto — páginas duplicadas en minúscula**: `resources/js/pages/almacenes/`, `categorias/`, `proveedores/` (con `index.tsx` minúscula) coexisten con `Almacenes/`, `Categorias/`, `Proveedores/` (mayúscula, las que realmente usan los controladores vía `Inertia::render`). Las versiones en minúscula no están referenciadas por ningún controlador — sin tocar de nuevo desde feb/abr/jun 2026. Candidatas a eliminar.
+- [ ] **Rutas rotas**: `POST /ventas/validar-stock` y `POST /ventas/actualizar-tasas` están registradas en `routes/shop/puntoventa.php` pero `VentaController` no tiene esos métodos — fallarían si se invocan. Ver `docs/rutas-y-controladores.md`.
+- [ ] **Ruta huérfana**: `routes/vendor/vendedor.php` (define `/vendedor`) no está incluida desde `routes/web.php` — inalcanzable.
 - [ ] Validar que `anularVenta` desde estado `rechazada` no revierta el stock dos veces (el stock ya fue revertido por `rechazarSolicitudEspecial`). Verificar si la UI expone ese botón para ventas rechazadas.
 - [ ] El commando `/reporte` del bot no filtra por almacén del usuario — devuelve todos los almacenes. Considerar filtro para admins con almacenes asignados.
 - [ ] Ecommerce: vista pública del catálogo está en desarrollo, no vinculada al POS.
@@ -167,7 +170,7 @@ resources/js/pages/Vendor/Listado.tsx        ← listado con filtros
 
 ### Cierre de Caja
 ```
-app/Http/Controllers/CierreCajaController.php    ← 1,923 líneas
+app/Http/Controllers/CierreCajaController.php    ← ~1,943 líneas
 app/Models/CierreCaja.php
 resources/js/pages/Cierres/Create.tsx
 resources/js/pages/Cierres/Show.tsx
@@ -237,7 +240,8 @@ resources/js/pages/Transacciones/layout/*      ← Movimientos, forms varios
 
 | Fecha | Cambio |
 |:---:|---|
-| 2026-07-30 | **Últimos commits** — "Compras con 0.90", mejoras UX/UI en Cierres (Create/Show), arreglos en VentaController y CompraController |
+| 2026-07-30 | **Cierres — desglose de productos y filtros** (8 commits, 14:18→17:02, mal etiquetados "transacciones"): `CierreCajaController` agrega `productos` (nombre/marca/modelo/cantidad) a cada línea de comisión PV y Gestor; campo `moneda` en movimientos financieros del detalle de cierre; deduplicación de transferencias por `movimiento_id`; `Cierres/Show.tsx`/`Create.tsx` separan gastos/ingresos/transferencias `es_propio` vs externos y agregan búsqueda/filtro para cuentas y clientes en la comparativa (~800 líneas modificadas en total) |
+| 2026-07-30 | "Compras con 0.90" en `CompraController` (commit `e7fc149e`, previo a los 8 commits de Cierres) |
 | 2026-07-28 | **Transacciones 75%** — Gastos, Ingresos, Transferencias funcionales. Arreglos en flujo contable y control de saldos |
 | 2026-07-28 | **Cuentas — `tipo_titular`** (externa/personal), eliminación campo `deuda`, unificación `temporales→permanentes` vía migración |
 | 2026-07-28 | **Cuentas — soporte saldos negativos** como deudas, ajustes en backend y UI |

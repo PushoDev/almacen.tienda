@@ -132,6 +132,16 @@ Ninguno.
 
 ---
 
+### 3b) Búsqueda global de productos (todos los almacenes)
+
+**GET** `/api/tienda/productos` — `CatalogoPublicoController@searchProductos`
+
+Mismos query params que el endpoint anterior (`q`, `categoria_id`, `marca`, `precio_min`, `precio_max`, `etiquetas`, `order_by`, `order_dir`, `per_page`), pero busca en **todo el catálogo** en lugar de un almacén específico. El `stock_total` devuelto es la suma de `almacen_producto.cantidad` en todos los almacenes.
+
+> ⚠️ A diferencia de `/almacenes/{id}/productos` (que excluye productos con `stock = 0`), esta búsqueda global **no filtra por stock** — puede devolver productos con `stock_total: 0`. Tenerlo en cuenta al mostrar badges de "disponible".
+
+---
+
 ### 4) Detalle de producto
 
 **GET** `/api/tienda/productos/{id}`

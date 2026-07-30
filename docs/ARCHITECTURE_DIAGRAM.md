@@ -33,6 +33,7 @@ graph TB
     Pages <--> Routes
     Routes --> Controllers
     Controllers --> Services
+    Controllers --> Models
     Services --> Models
     Models <--> DB
     Models --> Storage
@@ -44,6 +45,10 @@ graph TB
     Procurement --> Finance : "Expense Entry"
     Inventory --> Finance : "Cost Reconciliation"
 ```
+
+> **Nota:** El paso `Controllers → Services` es minoritario en el código real — solo existen 2 clases en `app/Services/` (`DashboardStatsService`, `NotificationService`, ambas de solo-lectura/estadísticas). La mayoría de los controladores (`VentaController`, `CierreCajaController`, `CompraController`, etc.) van directo a Models/`DB::transaction()` sin capa de servicio intermedia — ver `docs/TECHNICAL_ANALYSIS.md`.
+>
+> La base de datos real es **MySQL 8.4** en producción, pero el entorno local por defecto (`.env.example`, `composer.json` post-create script) usa **SQLite**.
 
 ## Module Interaction Details
 

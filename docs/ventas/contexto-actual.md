@@ -273,7 +273,7 @@ SOLO SI estaba completada:
 
 | Archivo | Rol |
 |---|---|
-| `app/Http/Controllers/CierreCajaController.php` | Controlador del cierre — `create()`, `store()`, `show()`, `obtenerDetallesCierre()`, `aprobar()` (1,923 líneas) |
+| `app/Http/Controllers/CierreCajaController.php` | Controlador del cierre — `create()`, `store()`, `show()`, `obtenerDetallesCierre()`, `aprobar()` (~1,943 líneas — creció desde la última edición de este doc con el desglose de productos por comisión y el campo `moneda`) |
 | `app/Models/CierreCaja.php` | Modelo — snapshot financiero del turno |
 | `resources/js/pages/Cierres/Create.tsx` | Vista de creación — preview en tiempo real |
 | `resources/js/pages/Cierres/Show.tsx` | Vista histórica de cierre guardado |

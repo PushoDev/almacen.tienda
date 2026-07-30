@@ -10,9 +10,9 @@
 | Campo | Valor |
 |---|---|---|
 | Rama activa | `feature/desarrollo-caliente` |
-| Última sesión | 2026-07-30 — **Compras + UX/UI Cierres**: Mejoras en compras (0.90), arreglos en vistas de Cierres (Create/Show), ajustes en VentaController y CompraController. Docs actualizados alineados con código. |
+| Última sesión | 2026-07-30 — **Compras + UX/UI Cierres**: Mejoras en compras (0.90) en `CompraController` (commit `e7fc149e`). Después de esa doc-sync, hubo 8 commits adicionales el mismo día (14:18→17:02, con mensajes engañosos "Mejorando transacciones sections" que **no tocan** el módulo Transacciones) que ampliaron `CierreCajaController.php` y `Cierres/Create.tsx`/`Show.tsx` (~800 líneas): desglose de productos por línea de comisión PV/Gestor, campo `moneda` en movimientos financieros del cierre, deduplicación de transferencias por `movimiento_id`, separación `es_propio` de gastos/ingresos/transferencias, y filtros de búsqueda para cuentas/clientes en la comparativa. `VentaController` **no cambió** en esta sesión. |
 | Estado general | 12/12 módulos estables, ✓ bugs B1/B2/B3 resueltos, 4 features pendientes |
-| Próximo paso | Completar módulo de Transacciones |
+| Próximo paso | Completar módulo de Transacciones (sin cambios desde 2026-07-28 pese a los commits titulados "transacciones" del 30/07 — ver nota arriba) |
 
 ### ✅ Bugs resueltos recientemente
 
@@ -49,12 +49,12 @@
 | Backend | PHP 8.2+, Laravel 12 |
 | Frontend | React 19, Inertia v2, Vite 7, Tailwind v4 |
 | Modelos | 37 |
-| Controladores | 30 (27 raíz + 3 subdirectorios: Api, Auth, Settings) |
+| Controladores | 38 (27 raíz incl. `Controller.php` base + 11 en subdirectorios: 1 Api, 8 Auth, 2 Settings) |
 | Migraciones | 94 |
-| Páginas frontend | ~120 únicas (16 reportes, 8 auth/settings, ~96 operacionales) |
-| Middlewares | 7 |
-| Notificaciones | 7 (4 encoladas) |
-| Comandos artisan | 4 |
+| Páginas frontend | 117 únicas (16 reportes, 9 auth/settings, ~92 operacionales) |
+| Middlewares | 7 (solo 3 aplicados a rutas reales: `HandleInertiaRequests`, `HandleAppearance`, `check.cuenta.permission`; `EnsureUserIsAdmin/Moderator/Vendor` registradas como alias pero sin uso, `CheckAlmacenPermission` ni registrada) |
+| Notificaciones | 7 (5 encoladas: Cambio, CierreCaja, MovimientoStock, VentaCreada, MovimientoFinanciero) |
+| Comandos artisan | 5 |
 | Servicios | 2 (`DashboardStatsService` — 8+ métodos públicos/privados para resúmenes, `NotificationService`) |
 | Exports/Imports Excel | 3 exports, 2 imports |
 | Roles | `admin` / `moderador` / `vendedor` |
@@ -141,6 +141,10 @@
 |---|---|
 | [cambios-cliente-proveedor.md](cambios-cliente-proveedor.md) | Cambios en el módulo de clientes/proveedores |
 | [newforsale.md](newforsale.md) | Nuevas features para ventas |
+| [arreglos-pendientes/Propuesta-CierreCaja.md](arreglos-pendientes/Propuesta-CierreCaja.md) | Propuesta original que originó los cambios de Cierre de Caja del 2026-07-30 |
+| [sections/](./sections/) | Notas de sesión sueltas (`session-ses_*.md`, `analisisTasa.md`) — no indexadas individualmente, consultar solo si se busca contexto histórico puntual |
+| [code/](./code/) | Snippets/notas técnicas puntuales: `export-pdf.md`, `report-pdf.md`, `vendor.md` |
+| [context-antigravity/contexto_completo.md](context-antigravity/contexto_completo.md) | Contexto generado para otra herramienta (Antigravity) — puede estar desalineado con `context.md`, usar `context.md` como fuente principal |
 
 ---
 
@@ -169,7 +173,7 @@ composer dump-autoload           # regenerar autoload después de crear clase
 
 npm run dev                      # frontend con hot reload (Vite)
 npm run build                    # build de producción
-npm run typecheck                # validar tipos TypeScript
+npm run types                    # validar tipos TypeScript
 npm run lint                     # corregir estilo de código
 npm run format                   # formatear código con Prettier
 ```
@@ -181,13 +185,13 @@ npm run format                   # formatear código con Prettier
 | Módulo | Controlador | Modelos | Páginas frontend |
 |---|---|---|---|
 | **Ventas POS** | `app/Http/Controllers/VentaController.php` (2053 L) | `Venta`, `VentaDetalle`, `PagoVenta`, `DestinatarioVenta` | `Vendor/Index`, `Vendor/Show`, `Vendor/Listado` |
-| **Cierres** | `CierreCajaController.php` (1923 L) | `CierreCaja` | `Cierres/Index`, `Cierres/Create`, `Cierres/Show` |
+| **Cierres** | `CierreCajaController.php` (~1943 L) | `CierreCaja` | `Cierres/Index`, `Cierres/Create`, `Cierres/Show` |
 | **Compras** | `CompraController.php` (791 L) | `Compra`, `CompraProducto`, `CompraPago` | `Comprar/Index`, `Comprar/Show` |
 | **Productos** | `ProductoController.php` (807 L) | `Producto`, `ProductoCodigo`, `Categoria` | `Productos/Index`, `Productos/Show`, `Productos/Edit` |
 | **Precios vendedor** | `ProductoVendedorController.php` (421 L) | `ProductoVendedor`, `PrecioHistorial` | `Productos/Vendor/*` (4 páginas) |
 | **Movimientos stock** | `MovimientosController.php` (584 L) | `Movimiento`, `MovimientoDetalle`, `MovimientoSeguimiento` | `Movimientos/Index`, `Movimientos/Show` |
 | **Finanzas** | `TransaccionController.php`, `GastoController.php`, `IngresoController.php`, `TransferenciaController.php` | `MovimientoFinanciero`, `Cuenta`, `Moneda`, `TransaccionCuenta` | `Transacciones/*` (7+ páginas) |
-| **Reportes** | `ReporteController.php` (847 L) | — | `Reportes/Report/*` (16 vistas) |
+| **Reportes** | `ReporteController.php` (~845 L) | — | `Reportes/Report/*` (16 vistas) |
 | **Telegram Bot** | `TelegramWebhookController.php` (497 L) | — | `routes/api.php` (webhook) |
 | **Dashboard** | `AdminController.php` (545 L) | `TasaCambio`, `TasaCambioMLC`, `HistorialTasaCambio` | `dashboard.tsx` |
 | **Logística** | `LogisticaController.php` (25 L) | — (usa `DashboardStatsService`) | `Logistica/*` (Index, Create, Edit, Show, +layouts) |
