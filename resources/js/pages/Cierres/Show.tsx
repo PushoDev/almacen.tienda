@@ -1240,7 +1240,7 @@ export default function Show({
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-base">
                             <TrendingUp className="h-5 w-5 text-blue-600" />
-                            Detalle de Transacciones
+                            Detalle de Transacciones Locales
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -1394,7 +1394,7 @@ export default function Show({
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-base">
                             <TrendingUp className="h-5 w-5 text-orange-600" />
-                            Transacciones Externas
+                            Detalles Transacciones Externas
                         </CardTitle>
                         <CardDescription>
                             Operaciones realizadas por otros usuarios en las cuentas de {cierre.usuario?.name || 'este vendedor'} durante este turno
@@ -1518,9 +1518,11 @@ export default function Show({
                     </CardHeader>
                     <CardContent className="space-y-6">
                         <Tabs defaultValue="cuentas" className="w-full">
-                            <TabsList className="grid w-full grid-cols-2">
+                            <TabsList className={`grid w-full ${userRole !== 'vendedor' ? 'grid-cols-2' : ''}`}>
                                 <TabsTrigger value="cuentas">Cuentas ({comparativa_cuentas?.length ?? 0})</TabsTrigger>
-                                <TabsTrigger value="clientes">Clientes ({comparativa_clientes?.length ?? 0})</TabsTrigger>
+                                {userRole !== 'vendedor' && (
+                                    <TabsTrigger value="clientes">Clientes ({comparativa_clientes?.length ?? 0})</TabsTrigger>
+                                )}
                             </TabsList>
 
                             <TabsContent value="cuentas" className="mt-4">
@@ -1538,7 +1540,6 @@ export default function Show({
                                                 <TableHead>Moneda</TableHead>
                                                 <TableHead className="text-right">Cierre Anterior</TableHead>
                                                 <TableHead className="text-right">Cierre Hoy</TableHead>
-                                                <TableHead className="text-right">Diferencia</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -1564,20 +1565,11 @@ export default function Show({
                                                         <TableCell className="text-right font-mono font-medium">
                                                             ${Number(item.saldo_actual).toFixed(2)}
                                                         </TableCell>
-                                                        <TableCell className="text-right font-mono">
-                                                            {item.diferencia > 0 ? (
-                                                                <span className="text-green-600">+${Number(item.diferencia).toFixed(2)}</span>
-                                                            ) : item.diferencia < 0 ? (
-                                                                <span className="text-red-600">${Number(item.diferencia).toFixed(2)}</span>
-                                                            ) : (
-                                                                <span className="text-muted-foreground">-</span>
-                                                            )}
-                                                        </TableCell>
                                                     </TableRow>
                                                 ))
                                             ) : (
                                                 <TableRow>
-                                                    <TableCell colSpan={6} className="text-muted-foreground py-8 text-center italic">
+                                                    <TableCell colSpan={5} className="text-muted-foreground py-8 text-center italic">
                                                         {!tiene_cierre_anterior
                                                             ? 'No hay cierre anterior para comparar'
                                                             : 'No hay cuentas para mostrar'}
@@ -1589,6 +1581,7 @@ export default function Show({
                                 </div>
                             </TabsContent>
 
+                            {userRole !== 'vendedor' && (
                             <TabsContent value="clientes" className="mt-4">
                                 {comparativa_clientes && comparativa_clientes.length > 0 ? (
                                     <div className="rounded-md border">
@@ -1598,7 +1591,6 @@ export default function Show({
                                                     <TableHead>Cliente</TableHead>
                                                     <TableHead className="text-right">Deuda Anterior</TableHead>
                                                     <TableHead className="text-right">Deuda Actual</TableHead>
-                                                    <TableHead className="text-right">Diferencia</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
@@ -1611,15 +1603,6 @@ export default function Show({
                                                         <TableCell className="text-right font-mono font-medium">
                                                             ${Number(item.deuda_actual).toFixed(2)}
                                                         </TableCell>
-                                                        <TableCell className="text-right font-mono">
-                                                            {item.diferencia < 0 ? (
-                                                                <span className="text-green-600">${Number(item.diferencia).toFixed(2)} ✅</span>
-                                                            ) : item.diferencia > 0 ? (
-                                                                <span className="text-red-600">+${Number(item.diferencia).toFixed(2)} ⚠️</span>
-                                                            ) : (
-                                                                <span className="text-muted-foreground">-</span>
-                                                            )}
-                                                        </TableCell>
                                                     </TableRow>
                                                 ))}
                                             </TableBody>
@@ -1629,6 +1612,7 @@ export default function Show({
                                     <p className="text-muted-foreground py-8 text-center italic">No hay clientes con deuda registrada.</p>
                                 )}
                             </TabsContent>
+                            )}
                         </Tabs>
                     </CardContent>
                 </Card>
