@@ -1,7 +1,7 @@
 # Contexto de Ventas — Estado Actual del Código
 
 **Creado:** 2026-06-28
-**Última actualización:** 2026-07-01
+**Última actualización:** 2026-07-30
 **Referencia:** Ver `flujos-venta.md` para diseño y flujos, `pendiente-cierre-caja.md` para cierre.
 
 ---
@@ -25,7 +25,8 @@
 | `resources/js/pages/Vendor/Index.tsx` | POS — punto de venta |
 | `resources/js/pages/Vendor/Show.tsx` | Detalle y gestión de venta pendiente |
 | `resources/js/pages/Vendor/Listado.tsx` | Listado de ventas con filtros |
-| `resources/js/pages/Vendor/ReporteDiario.tsx` | Reporte diario |
+| `resources/js/pages/Vendor/DetalleCierre.tsx` | Desglose de cierre por venta |
+| `resources/js/pages/Vendor/Cierre.tsx` | Vista de cierre individual |
 | `database/tables/producto_vendedors` | Precios y comisiones por almacén/producto |
 
 ---
@@ -238,36 +239,41 @@ SOLO SI estaba completada:
 
 ---
 
-## Bugs resueltos (2026-06-28)
+## Bugs resueltos
 
 | ID | Ubicación | Descripción | Estado |
 |---|---|---|---|
 | B_mensajero_skip | `aprobarVenta` | Movimiento del mensajero se saltaba silenciosamente si faltaba cuenta o tipo | ✅ Resuelto — bloquea con error claro |
 | B_mensajero_tasa | `aprobarVenta` / Show.tsx | La tasa en Show no tenía efecto real cuando moneda era CUP | ✅ Resuelto — reemplazado por `monto_final_cup` editable |
+| **B1** | `guardarDistribucion` | Devuelve `saldo_actual` pero el campo es `saldo_cuenta` | ✅ Resuelto — ahora retorna `saldo_disponible` desde `saldo_cuenta` |
+| **B2** | `aprobarVenta` | Falta guardia XOR en comisión vendedor | ✅ Resuelto — `if (!$venta->es_venta_gestor && ...)` implementado |
+| **B3** | `procesarVenta` | `foreach ($pagos)` sin `?? []` | ✅ Resuelto — `foreach ($validatedData['pagos'] ?? [] as $pago)` |
 
-## Bugs pendientes conocidos
+## Bugs activos pendientes
 
 | ID | Ubicación | Descripción | Impacto |
 |---|---|---|---|
-| B1 | `guardarDistribucion` | Devuelve `saldo_actual` en respuesta pero el campo es `saldo_cuenta` | UI muestra dato incorrecto |
-| B2 | `aprobarVenta` / `anularVenta` | Falta guardia XOR — la comisión vendedor podría ejecutarse aunque haya gestor | Doble débito potencial |
-| B3 | `procesarVenta` | `foreach ($validatedData['pagos'] as $pago)` sin `?? []` (línea ~810) | Crash si pagos es null |
+| B4 | `AlmacenController@edit` | Selector cuenta mensajero mezcla USD/CUP/MLC | Puede romper lógica mensajero |
+| B5 | Config mensajero | Está en `Almacenes/Edit`, debería estar en `Empleados/Edit` | UX confusa |
 
 ---
 
 ## Features pendientes conocidas
 
-| ID | Pantalla | Descripción |
-|---|---|---|
-| F1 | Show.tsx | Selector XOR visual `[Punto de Venta] / [Gestor]` en panel distribución |
+| ID | Pantalla | Descripción | Prioridad |
+|---|---|---|---|
+| F1 | Show.tsx | Selector XOR visual `[Punto de Venta] / [Gestor]` en panel distribución | Alta |
+| F2 | Show.tsx | Display mensajero multi-moneda completo (soporte cualquier moneda) | Media |
+| F4 | — | `ganancia_real_total` muestra 0 en algunos casos | Media |
+| F5 | Productos/Index | Selector de paginación (10/15/25/50/100) | Baja |
 
 ---
 
-## Cierre de Caja — Archivos y estructura (actualizado 2026-07-01)
+## Cierre de Caja — Archivos y estructura (actualizado 2026-07-30)
 
 | Archivo | Rol |
 |---|---|
-| `app/Http/Controllers/CierreCajaController.php` | Controlador del cierre — `create()`, `store()`, `show()`, `obtenerDetallesCierre()` |
+| `app/Http/Controllers/CierreCajaController.php` | Controlador del cierre — `create()`, `store()`, `show()`, `obtenerDetallesCierre()`, `aprobar()` (1,923 líneas) |
 | `app/Models/CierreCaja.php` | Modelo — snapshot financiero del turno |
 | `resources/js/pages/Cierres/Create.tsx` | Vista de creación — preview en tiempo real |
 | `resources/js/pages/Cierres/Show.tsx` | Vista histórica de cierre guardado |

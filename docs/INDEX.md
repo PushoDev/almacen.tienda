@@ -8,9 +8,9 @@
 ## Session Checkpoint
 
 | Campo | Valor |
-|---|---|
+|---|---|---|
 | Rama activa | `feature/desarrollo-caliente` |
-| Última sesión | 2026-07-28 — **Transacciones + Cuentas + Logística**: Arreglado módulo de transacciones financieras (75%), ajustes en cuentas (negativos, `tipo_titular`, unificación `temporales→permanentes`), finalizada expansión de Logística I/II. |
+| Última sesión | 2026-07-30 — **Compras + UX/UI Cierres**: Mejoras en compras (0.90), arreglos en vistas de Cierres (Create/Show), ajustes en VentaController y CompraController. Docs actualizados alineados con código. |
 | Estado general | 12/12 módulos estables, ✓ bugs B1/B2/B3 resueltos, 4 features pendientes |
 | Próximo paso | Completar módulo de Transacciones |
 
@@ -19,8 +19,8 @@
 | ID | Método | Descripción | Estado |
 |---|---|---|---|
 | **B1** | `guardarDistribucion` | Devuelve `saldo_disponible` desde `saldo_cuenta` correctamente | ✅ Resuelto |
-| **B2** | `aprobarVenta` | Guardia XOR `&& !$venta->es_venta_gestor` implementada en L1374 | ✅ Resuelto |
-| **B3** | `procesarVenta` | `foreach ($validatedData['pagos'] ?? []` con null coalescing en L803 | ✅ Resuelto |
+| **B2** | `aprobarVenta` | Guardia XOR `&& !$venta->es_venta_gestor` implementada | ✅ Resuelto |
+| **B3** | `procesarVenta` | `foreach ($validatedData['pagos'] ?? []` con null coalescing | ✅ Resuelto |
 
 ### 🐛 Bugs activos pendientes
 
@@ -45,13 +45,13 @@
 ## Snapshot del proyecto
 
 | Métrica | Valor |
-|---|---|
-| Backend | PHP 8.2, Laravel 12 |
+|---|---|---|
+| Backend | PHP 8.2+, Laravel 12 |
 | Frontend | React 19, Inertia v2, Vite 7, Tailwind v4 |
 | Modelos | 37 |
-| Controladores | 27 |
+| Controladores | 30 (27 raíz + 3 subdirectorios: Api, Auth, Settings) |
 | Migraciones | 94 |
-| Páginas frontend | ~107 únicas (16 reportes, 8 auth/settings, ~83 operacionales) |
+| Páginas frontend | ~120 únicas (16 reportes, 8 auth/settings, ~96 operacionales) |
 | Middlewares | 7 |
 | Notificaciones | 7 (4 encoladas) |
 | Comandos artisan | 4 |
@@ -125,6 +125,17 @@
 | [API_PUBLIC_CATALOG.md](API_PUBLIC_CATALOG.md) | Endpoints de la API pública de catálogo (sin auth) |
 | [TECHNICAL_ANALYSIS.md](TECHNICAL_ANALYSIS.md) | Análisis técnico del stack y patrones |
 
+### Usuarios y Settings
+| Documento | Contenido |
+|---|---|
+| [guia-desarrollo.md](guia-desarrollo.md) | Perfil, contraseña, apariencia, vinculación Telegram |
+| [context.md](context.md) | Sección `Usuarios` con roles y asignación de almacenes/cuentas |
+
+### Remesas
+| Documento | Contenido |
+|---|---|
+| [context.md](context.md) | N/A — página básica `/remesas` |
+
 ### Otros
 | Documento | Contenido |
 |---|---|
@@ -170,7 +181,7 @@ npm run format                   # formatear código con Prettier
 | Módulo | Controlador | Modelos | Páginas frontend |
 |---|---|---|---|
 | **Ventas POS** | `app/Http/Controllers/VentaController.php` (2053 L) | `Venta`, `VentaDetalle`, `PagoVenta`, `DestinatarioVenta` | `Vendor/Index`, `Vendor/Show`, `Vendor/Listado` |
-| **Cierres** | `CierreCajaController.php` (1691 L) | `CierreCaja` | `Cierres/Index`, `Cierres/Create`, `Cierres/Show` |
+| **Cierres** | `CierreCajaController.php` (1923 L) | `CierreCaja` | `Cierres/Index`, `Cierres/Create`, `Cierres/Show` |
 | **Compras** | `CompraController.php` (791 L) | `Compra`, `CompraProducto`, `CompraPago` | `Comprar/Index`, `Comprar/Show` |
 | **Productos** | `ProductoController.php` (807 L) | `Producto`, `ProductoCodigo`, `Categoria` | `Productos/Index`, `Productos/Show`, `Productos/Edit` |
 | **Precios vendedor** | `ProductoVendedorController.php` (421 L) | `ProductoVendedor`, `PrecioHistorial` | `Productos/Vendor/*` (4 páginas) |

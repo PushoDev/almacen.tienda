@@ -38,7 +38,7 @@ Sistema de gestión de inventario, punto de venta y logística multi-almacén di
 | `moderador` | Similar a admin pero sin operaciones destructivas. Ve todos los datos |
 | `vendedor` | Limitado a sus almacenes y cuentas asignadas. No ve precios de costo ni datos sensibles |
 
-Los controladores filtran datos por rol directamente: `in_array($user->role, ['admin', 'moderador'])`.
+Los controladores filtran datos por rol mediante helpers del modelo: `$user->isAdmin()`, `$user->isModerador()`, o inline con `$user->role === 'admin'`.
 
 ---
 
@@ -250,33 +250,35 @@ Prefijo: `/api/tienda` — sin autenticación, throttle: 60 req/min.
 
 | Controlador | Responsabilidad Principal |
 |---|---|
-| `AdminController` | Dashboard, tasas de cambio (USD y MLC), historial de comparaciones mensuales |
-| `VentaController` | POS completo: crear venta, aprobar, anular, listado, datos JSON para el frontend |
+| `AdminController` | Dashboard, tasas de cambio (USD y MLC), historial de comparaciones mensuales, estadísticas costo/precio |
+| `VentaController` | POS completo: crear venta, aprobar, anular, listado, reporte diario, datos JSON para el frontend |
 | `CompraController` | Registro de compras, gestión inline de proveedores/clientes/almacenes/categorías |
 | `ProductoController` | CRUD de productos, búsqueda, transferencia de códigos, import/export Excel, detección/fusión de duplicados |
 | `AlmacenController` | CRUD de almacenes, vista de inventario por almacén |
-| `MovimientosController` | Traslados de stock: crear, enviar, recibir, rechazar, discrepancias |
+| `MovimientosController` | Traslados de stock: crear, aprobar, enviar, recibir, rechazar, seguimiento, discrepancias |
 | `CuentaController` | CRUD de cuentas, control de saldo con contraseña, resumen con KPIs |
-| `CierreCajaController` | Pre-cierre (cálculos), store (persistencia), show (detalle histórico) |
-| `ReporteController` | Todos los reportes: ventas, compras, inventario, ganancias, auditoría |
-| `TransaccionController` | Movimientos financieros, distribución de costos de compra |
+| `CierreCajaController` | Pre-cierre (cálculos), store (persistencia), show (detalle histórico), aprobar cierre |
+| `ReporteController` | Todos los reportes: ventas, compras, inventario, ganancias, auditoría. También datos dashboard (chart, financial-states, usuarios, monedas) |
+| `TransaccionController` | Movimientos financieros, distribución de costos de compra, gastos de transportación |
 | `GastoController` | Registro de gastos financieros |
 | `IngresoController` | Registro de ingresos financieros |
 | `TransferenciaController` | Transferencias entre cuentas (incluye conversión de moneda) |
 | `TelegramWebhookController` | Bot: comandos texto + callbacks inline de aprobación |
-| `ProductoVendedorController` | Asignación/edición de precios y comisiones por almacén |
-| `UserController` | Gestión de usuarios |
+| `ProductoVendedorController` | Asignación/edición de precios y comisiones por almacén, export/import Excel, precios base |
+| `UserController` | Gestión de usuarios (CRUD) |
 | `UserAlmacenController` | Asignación de usuarios a almacenes |
-| `LogisticaController` | Dashboard de logística con KPIs y resúmenes |
-| `MonedaController` | CRUD de monedas, actualización de tasas |
+| `LogisticaController` | Dashboard de logística con KPIs y resúmenes (resource completo) |
+| `MonedaController` | CRUD de monedas, actualización de tasas, cambiar estado, establecer principal |
 | `MovimientosPendienteController` | Movimientos de stock pendientes |
-| `NotificationController` | Lectura y marcado de notificaciones |
-| `EcommerceController` | Vista de catálogo público (en desarrollo) |
-| `Api/CatalogoPublicoController` | API REST pública sin auth |
+| `NotificationController` | Lectura, historial y marcado de notificaciones |
+| `EcommerceController` | Vista de catálogo público (en desarrollo — rutas comentadas) |
+| `Api/CatalogoPublicoController` | API REST pública sin auth (catálogo, almacenes, Swagger) |
 | `DestinatarioVentaController` | Destinatarios/receptores de ventas |
 | `ClienteController` | CRUD de clientes y gestión de deuda, resumen con KPIs |
 | `ProveedorController` | CRUD de proveedores |
 | `CategoriaController` | CRUD de categorías |
+| `Settings/ProfileController` | Perfil de usuario, telegram token, desconexión telegram |
+| `Settings/PasswordController` | Cambio de contraseña |
 
 ---
 
@@ -284,12 +286,13 @@ Prefijo: `/api/tienda` — sin autenticación, throttle: 60 req/min.
 
 | Middleware | Uso |
 |---|---|
-| `EnsureUserIsAdmin` | Protege rutas solo para `admin` |
-| `EnsureUserIsModerator` | Rutas para `admin` o `moderador` |
-| `EnsureUserIsVendor` | Rutas de vendedor |
-| `CheckAlmacenPermission` | Verifica que el usuario tiene acceso al almacén solicitado |
-| `CheckCuentaPermission` | Verifica que el usuario tiene acceso a la cuenta solicitada |
-| `HandleInertiaRequests` | Comparte datos globales con Inertia (usuario, permisos) |
+| `auth` + `verified` | Protege todas las rutas del panel (dashboard, CRUDs, acciones) |
+| `check.cuenta.permission` | Verifica que el usuario tiene acceso a la cuenta (en show/edit/update/destroy de cuentas) |
+| `HandleInertiaRequests` | Comparte datos globales con Inertia (usuario, permisos, tasas) |
+| `HandleAppearance` | Maneja preferencia de tema (claro/oscuro) |
+| `throttle:60,1` | Rate limiting para API pública (60 req/min) |
+
+> **Nota:** `EnsureUserIsAdmin`, `EnsureUserIsModerator`, `EnsureUserIsVendor` y `CheckAlmacenPermission` existen como clases pero **no están aplicadas a rutas**. La verificación de roles se hace inline en los controladores (`$user->isAdmin()`).
 
 ---
 
@@ -382,4 +385,4 @@ Cada card tiene: `border-l-4`, `shadow-sm hover:shadow-md`, icono en contenedor 
 ## Branch Actual
 
 `feature/desarrollo-caliente` — Trabajo activo en transacciones financieras, cuentas y logística.
-Últimos cambios: **Módulo Transacciones** (Gastos, Ingresos, Transferencias) al 75%. **Cuentas**: nuevo campo `tipo_titular` (externa/personal), eliminación de campo `deuda`, unificación `temporales→permanentes`. **Logística I+II**: 4 widgets Capital Financiero + resúmenes de Cuentas/Clientes/Proveedores/Productos + layouts de charts.**Bugs B1/B2/B3 resueltos** en VentaController.
+Últimos cambios: **Compras con 0.90**, mejoras UX/UI en Cierres. **Módulo Transacciones** (Gastos, Ingresos, Transferencias) al 75%. **Cuentas**: nuevo campo `tipo_titular` (externa/personal), eliminación de campo `deuda`, unificación `temporales→permanentes`. **Logística I+II**: 4 widgets Capital Financiero + resúmenes de Cuentas/Clientes/Proveedores/Productos + layouts de charts. **Bugs B1/B2/B3 resueltos** en VentaController.

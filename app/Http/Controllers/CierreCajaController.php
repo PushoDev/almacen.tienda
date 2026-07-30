@@ -1109,12 +1109,10 @@ class CierreCajaController extends Controller
                     $resumenPorMoneda[$codigo]['productos_resumen'][$key]['cantidad'] += $det->cantidad;
                     $resumenPorMoneda[$codigo]['productos_resumen'][$key]['total'] += (float) $det->subtotal;
 
-                    // Calcular comisión prorrateada (PV + Gestor + Mensajero)
+                    // Calcular comisión prorrateada (PV o Gestor)
                     $detSubtotal = (float) $det->subtotal;
                     $totalProductos = (float) $pago->venta->detalles->sum('subtotal');
                     $ratio = $totalProductos > 0 ? $detSubtotal / $totalProductos : 0;
-
-                    $mensajeroProrated = $ratio * (float) ($pago->venta->mensajero_monto ?? 0);
 
                     $hasGestor = ($pago->venta->es_venta_gestor ?? false) && (float) ($pago->venta->gestor_monto ?? 0) > 0;
 
@@ -1122,12 +1120,9 @@ class CierreCajaController extends Controller
                         $gestorMonto  = (float) ($pago->venta->gestor_monto ?? 0);
                         $gestorTasa   = (float) ($pago->venta->tasa_aplicada_gestor ?? 0);
                         $gestorUSD    = $gestorTasa > 0 ? $gestorMonto / $gestorTasa : $gestorMonto;
-                        $comisionTotal = ($ratio * $gestorUSD) + $mensajeroProrated;
+                        $comisionTotal = $ratio * $gestorUSD;
                     } else {
-                        $pvMonto = (float) $det->comision_unitaria * $det->cantidad;
-                        $pvTasa  = (float) ($pago->venta->comision_tasa ?? 0);
-                        $pvComision = $pvTasa > 0 ? $pvMonto / $pvTasa : $pvMonto;
-                        $comisionTotal = $pvComision + $mensajeroProrated;
+                        $comisionTotal = (float) $det->comision_unitaria * $det->cantidad;
                     }
 
                     $resumenPorMoneda[$codigo]['productos_resumen'][$key]['comision'] += round($comisionTotal, 2);
@@ -1359,12 +1354,12 @@ class CierreCajaController extends Controller
             ->get(['id', 'total_comision', 'comision_tasa', 'created_at']);
 
         $comisionPVTotal = $comisionesPVVentas->sum(fn($v) =>
-            (float) $v->total_comision / ((float) ($v->comision_tasa ?? 0) ?: 1)
+            (float) $v->total_comision
         );
 
         $comisionesPVDetalles = $comisionesPVVentas->map(fn($v) => [
             'venta_id'    => $v->id,
-            'comision_usd'=> round((float) $v->total_comision / ((float) ($v->comision_tasa ?? 0) ?: 1), 2),
+            'comision_usd'=> round((float) $v->total_comision, 2),
             'comision_cup'=> round((float) $v->total_comision * (float) ($v->comision_tasa ?: 1), 2),
             'fecha'       => $v->created_at->format('Y-m-d H:i'),
         ])->values()->all();

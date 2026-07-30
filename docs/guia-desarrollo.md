@@ -108,6 +108,8 @@ php artisan tinker
 npm run dev        # desarrollo con hot reload
 npm run build      # build de producción
 npm run typecheck  # validar tipos TypeScript
+npm run lint       # corregir estilo de código (ESLint + Prettier)
+npm run format     # formatear código con Prettier
 
 # Bot Telegram — registrar webhook (solo en producción con HTTPS)
 php artisan tinker
@@ -139,7 +141,7 @@ routes/
 - Controladores delgados — lógica compleja en métodos privados o servicios.
 - Siempre usar `DB::beginTransaction()` con rollback en operaciones críticas.
 - Validar con `$request->validate([...])` o Form Requests.
-- Los roles se verifican con: `in_array($user->role, ['admin', 'moderador'])`.
+- Los roles se verifican con helpers del modelo: `$user->isAdmin()`, `$user->isModerador()`, o `$user->role === 'admin'` inline.
 
 ### TypeScript (React + Inertia)
 - Interfaces para todos los props tipados (copiar el patrón de `Vendor/Show.tsx`).

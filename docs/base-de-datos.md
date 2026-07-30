@@ -58,13 +58,16 @@
 | `marca` | string nullable | |
 | `modelo` | string nullable | |
 | `capacidad` | string nullable | |
+| `color_producto` | string nullable | Agregado 2026-07-15 |
 | `descripcion` | text nullable | |
+| `descripcion_corta` | text nullable | Para e-commerce |
+| `slug` | string nullable | URL amigable para e-commerce |
 | `imagen` | string nullable | Ruta relativa desde `public/` |
 | `precio_compra_producto` | decimal | Costo en USD — **solo visible para admin/moderador** |
 | `categoria_id` | FK | |
 | `activo` | boolean | |
 
-**Relaciones:** `hasMany(ProductoCodigo)`, `hasMany(AlmacenProducto)`, `hasMany(ProductoVendedor)`, `belongsTo(Categoria)`
+**Relaciones:** `hasMany(ProductoCodigo)`, `hasMany(AlmacenProducto)`, `hasMany(ProductoVendedor)`, `belongsTo(Categoria)`, `hasMany(CostoHistorial)`, `hasMany(HistorialPrecioCosto)`
 
 ---
 
@@ -105,8 +108,11 @@
 | `cliente_id` | FK nullable | |
 | `estado` | enum | `solicitud_especial`, `pendiente`, `completada`, `rechazada`, `cancelada` |
 | `motivo_anulacion` | string nullable | Solo en ventas canceladas |
+| `detalle_anulacion` | string nullable | Razón detallada de anulación |
+| `detalles_venta` | text nullable | Notas internas de la venta |
 | `nota_venta_especial` | text nullable | Justificación de la venta especial |
 | `decision_notificada` | boolean | Si el vendedor ya vio la decisión admin |
+| `es_venta_especial` | boolean nullable | Flag de venta especial |
 
 #### Campos financieros
 | Campo | Tipo | Descripción |
@@ -119,6 +125,9 @@
 | `total_esperado_usd` | decimal | Costo total + ganancia objetivo |
 | `moneda_id` | FK | Moneda principal de la venta |
 | `tasa_cambio_principal` | decimal | Tasa al momento de crear |
+| `moneda_cobro_id` | FK nullable | Moneda en que se cobró realmente |
+| `tasa_aplicada_venta` | decimal nullable | Tasa real aplicada en la venta |
+| `monto_diferencia_cambiaria` | decimal nullable | Diferencia por tasa aplicada vs oficial |
 
 #### Campos de mensajero
 | Campo | Tipo | Descripción |
@@ -126,6 +135,7 @@
 | `mensajero_monto` | decimal nullable | Monto mensajero en USD equivalente |
 | `mensajero_tipo` | enum nullable | `propio` o `externo` |
 | `mensajero_cuenta_id` | FK nullable | Cuenta CUP que recibe/paga al mensajero |
+| `mensajero_cuenta_origen_id` | FK nullable | Cuenta origen para mensajero externo |
 | `mensajero_tasa` | decimal nullable | Tasa referencia (ya no dicta el monto final) |
 | `mensajero_monto_final_cup` | decimal nullable | **Monto real en CUP** — editable en Show.tsx |
 | `mensajero_moneda_id` | FK nullable | Moneda original del cliente |
@@ -159,9 +169,11 @@
 | `producto_codigo_id` | FK nullable | Código de barras específico usado |
 | `cantidad` | int | |
 | `precio_venta` | decimal | Precio aplicado en esta venta |
-| `precio_compra` | decimal | Costo unitario al momento de la venta |
+| `precio_base` | decimal nullable | Precio base del producto_vendedors al momento de la venta |
+| `costo_unitario` | decimal | Costo unitario al momento de la venta (campo `costo_unitario` en migración, no `precio_compra`) |
+| `costo` | decimal nullable | Costo total (`costo_unitario × cantidad`) |
 | `subtotal` | decimal | `precio_venta × cantidad` |
-| `ganancia` | decimal | `(precio_venta - precio_compra) × cantidad` |
+| `ganancia` | decimal | `(precio_venta - costo_unitario) × cantidad` |
 | `comision_unitaria` | decimal | Comisión por unidad calculada |
 
 ---
@@ -186,9 +198,25 @@
 |---|---|---|
 | `id` | PK | |
 | `user_id` | FK | Vendedor que hizo el cierre |
+| `almacen_id` | FK nullable | Almacén del turno |
+| `revisor_id` | FK nullable | Admin/moderador que revisó |
+| `fecha_apertura` | datetime nullable | Inicio del turno |
+| `fecha_cierre` | datetime | Momento del cierre |
+| `saldo_inicial` | decimal nullable | Efectivo inicial en caja |
 | `saldo_esperado` | decimal | Calculado por el sistema |
 | `saldo_contado` | decimal | Ingresado por el vendedor |
 | `diferencia` | decimal | `saldo_contado - saldo_esperado` |
+| `ventas_efectivo` | decimal nullable | Total ventas cobradas en efectivo |
+| `ventas_otros` | decimal nullable | Total ventas cobradas por otros medios |
+| `total_gastos` | decimal nullable | Total de gastos del turno |
+| `total_devoluciones` | decimal nullable | Total devuelto a clientes |
+| `comisiones_gestor` | decimal nullable | Total comisiones de gestores |
+| `comisiones_gestor_detalles` | json nullable | Desglose de comisiones gestor |
+| `observaciones` | text nullable | |
+| `estado` | string nullable | Estado del cierre |
+| `detalles` | json nullable | Datos de ventas y operaciones del turno |
+| `arqueo_detalles` | json nullable | Conteo físico por denominación |
+| `confirmacion_transferencias` | json nullable | Transferencias pendientes de confirmar |
 | `snapshot_cuentas` | json | Saldos de cuentas al momento del cierre |
 | `snapshot_clientes` | json | Deudas de clientes al momento del cierre |
 | `mensajero_total_usd` | decimal | Total mensajero del turno en USD |
@@ -218,11 +246,13 @@
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `id` | PK | |
-| `nombre` | string | |
-| `codigo_moneda` | string | Ej: `USD`, `CUP`, `MLC` |
+| `nombre_moneda` | string | Nombre completo (ej. `Dólar Americano`) |
+| `codigo_moneda` | string | Código ISO: `USD`, `CUP`, `MLC` |
+| `simbolo_moneda` | string nullable | Símbolo: `$`, `₱`, etc. |
 | `tasa_cambio` | decimal | Unidades de esta moneda por 1 USD |
 | `principal` | boolean | La moneda base del sistema |
 | `activa` | boolean | |
+| `commission` | decimal nullable | Comisión por cambio de moneda |
 
 ---
 
@@ -279,6 +309,118 @@
 | `total` | decimal | |
 
 **Relaciones:** `hasMany(CompraProducto)`, `hasMany(CompraPago)`
+
+---
+
+---
+
+## Tablas adicionales (no documentadas anteriormente)
+
+### `cost_distributions`
+Distribución de costos de compra entre productos (landed cost).
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `id` | PK | |
+| `compra_id` | FK | Compra asociada |
+| `total_gastos` | decimal | Total de gastos a distribuir |
+| `metodo` | string | Método de distribución |
+| `moneda_id` | FK | Moneda de los gastos |
+
+### `cost_distribution_items`
+Cada ítem de la distribución de costos.
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `id` | PK | |
+| `cost_distribution_id` | FK | Distribución padre |
+| `producto_id` | FK | Producto |
+| `monto` | decimal | Monto asignado |
+
+### `transaccion_cuentas`
+Relación M:M entre transacciones y cuentas (soporta múltiples cuentas por movimiento).
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `id` | PK | |
+| `movimiento_financiero_id` | FK | |
+| `cuenta_id` | FK | |
+| `tipo` | enum | `origen`, `destino` |
+| `monto` | decimal | |
+
+### `precio_historials`
+Historial de cambios de precios por vendedor.
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `id` | PK | |
+| `producto_vendedor_id` | FK | |
+| `precio_anterior` | decimal | |
+| `precio_nuevo` | decimal | |
+| `user_id` | FK | Quién hizo el cambio |
+| `motivo` | string nullable | |
+
+### `historial_precio_costos`
+Historial de cambios de costo de productos (con protección por contraseña de admin).
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `id` | PK | |
+| `producto_id` | FK | |
+| `costo_anterior` | decimal | |
+| `costo_nuevo` | decimal | |
+| `user_id` | FK | |
+| `motivo` | string nullable | |
+
+### `historial_tasa_cambios`
+Historial de cambios de tasa de monedas.
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `id` | PK | |
+| `moneda_id` | FK | |
+| `tasa_anterior` | decimal | |
+| `tasa_nueva` | decimal | |
+| `user_id` | FK | |
+| `impacto_cuentas` | json nullable | Impacto financiero del cambio |
+
+### `tipo_movimiento_financieros`
+Catálogo de tipos de movimiento financiero.
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `id` | PK | 1=Gasto, 2=Ingreso, 3=Transferencia |
+| `nombre` | string | |
+| `descripcion` | string nullable | |
+
+### `destinatario_ventas`
+Destinatario/receptor de una venta.
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `id` | PK | |
+| `venta_id` | FK | |
+| `nombre` | string | |
+| `telefono` | string nullable | |
+| `direccion` | text nullable | |
+
+### `user_cuentas`
+Asignación de cuentas financieras a usuarios.
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `user_id` | FK | |
+| `cuenta_id` | FK | |
+
+### `historial_comparacion_mensuals`
+Snapshot mensual de comparación entre periodos.
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `id` | PK | |
+| `user_id` | FK | |
+| `datos` | json | Datos del periodo |
+| `periodo` | string | Identificador del periodo |
 
 ---
 
