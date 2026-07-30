@@ -1285,7 +1285,7 @@ export default function Create({
                                                     <TableHead>Descripción</TableHead>
                                                     <TableHead>Origen</TableHead>
                                                     <TableHead>Destino</TableHead>
-                                                    <TableHead className="w-32 text-right">Monto</TableHead>
+                                                    <TableHead className="w-40 text-right">Monto</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
@@ -1294,34 +1294,33 @@ export default function Create({
                                                         <TableCell className="font-mono text-xs">{item.hora}</TableCell>
                                                         <TableCell className="max-w-xs truncate text-sm">{item.desc}</TableCell>
                                                         <TableCell className="text-muted-foreground text-xs">
-                                                            <div className="max-w-[120px] truncate" title={item.origen_nombre}>
-                                                                {item.origen_nombre}
+                                                            <div className="max-w-[120px] truncate" title={`${item.origen_tipo}: ${item.origen_nombre}`}>
+                                                                <span className="capitalize">{item.origen_tipo}:</span> {item.origen_nombre}
                                                             </div>
                                                         </TableCell>
                                                         <TableCell className="text-muted-foreground text-xs">
-                                                            <div className="max-w-[120px] truncate" title={item.destino_nombre}>
-                                                                {item.destino_nombre}
+                                                            <div className="max-w-[120px] truncate" title={`${item.destino_tipo}: ${item.destino_nombre}`}>
+                                                                <span className="capitalize">{item.destino_tipo}:</span> {item.destino_nombre}
                                                             </div>
                                                         </TableCell>
                                                         <TableCell className="text-right font-mono text-xs">
-                                                            <span className={item.tipo === 'entrante' ? 'text-green-600' : 'text-blue-600'}>
-                                                                {item.tipo === 'entrante' ? '+' : '-'}${Number(item.monto_origen).toFixed(2)}{' '}
-                                                                {item.moneda_origen}
-                                                            </span>
+                                                            <div>
+                                                                <span className={item.tipo === 'entrante' ? 'text-green-600' : 'text-blue-600'}>
+                                                                    {item.tipo === 'entrante' ? '+' : '-'}${Number(item.tipo === 'entrante' ? item.monto_destino : item.monto_origen).toFixed(2)}{' '}
+                                                                    {item.tipo === 'entrante' ? item.moneda_destino : item.moneda_origen}
+                                                                </span>
+                                                                {(item.moneda_origen ?? item.moneda_destino) && item.moneda_origen !== item.moneda_destino && (
+                                                                    <div className="text-muted-foreground mt-0.5 text-[10px] leading-tight whitespace-nowrap">
+                                                                        ≈ ${Number(item.tipo === 'entrante' ? item.monto_origen : item.monto_destino).toFixed(2)}{' '}
+                                                                        {item.tipo === 'entrante' ? item.moneda_origen : item.moneda_destino}
+                                                                        <span className="ml-0.5">@ {Number(item.tasa_cambio).toFixed(2)}</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
                                                         </TableCell>
                                                     </TableRow>
                                                 ))}
                                             </TableBody>
-                                            <TableFooter>
-                                                <TableRow>
-                                                    <TableCell colSpan={4} className="font-bold">
-                                                        Total Transferencias
-                                                    </TableCell>
-                                                    <TableCell className="text-right font-bold text-blue-600">
-                                                        ${Number(totalTransferencias).toFixed(2)}
-                                                    </TableCell>
-                                                </TableRow>
-                                            </TableFooter>
                                         </Table>
                                     </div>
                                 ) : (
