@@ -185,7 +185,7 @@ export default function ComprarPage() {
     // 🆕 Estado para el modal de crear proveedor
     const [isCrearProveedorDialogOpen, setIsCrearProveedorDialogOpen] = useState(false);
 
-    const [tempFormData, setTempFormData] = useState<Omit<ProductoComprarProps, 'id' | 'almacen_id'> & { almacen_id: string }>({
+    const [tempFormData, setTempFormData] = useState<Omit<ProductoComprarProps, 'id' | 'almacen_id' | 'precio' | 'cantidad'> & { almacen_id: string; precio: string; cantidad: string }>({
         almacen_id: '',
         producto: '',
         marca: '',
@@ -194,8 +194,8 @@ export default function ComprarPage() {
         color: '',
         categoria: '',
         codigo: '',
-        cantidad: 0,
-        precio: 0,
+        cantidad: '',
+        precio: '',
     });
 
     const [productos, setProductos] = useState<ProductoComprarProps[]>([]);
@@ -307,7 +307,7 @@ export default function ComprarPage() {
         const { name, value } = e.target;
         setTempFormData((prev) => ({
             ...prev,
-            [name]: name === 'cantidad' || name === 'precio' ? parseFloat(value) || 0 : value.toUpperCase(),
+            [name]: name === 'precio' || name === 'cantidad' ? value : value.toUpperCase(),
         }));
     };
 
@@ -333,13 +333,16 @@ export default function ComprarPage() {
             color: '',
             categoria: '',
             codigo: '',
-            cantidad: 0,
-            precio: 0,
+            cantidad: '',
+            precio: '',
         });
     };
 
     const agregarProducto = () => {
-        if (!tempFormData.producto || !tempFormData.categoria || tempFormData.cantidad <= 0 || tempFormData.precio <= 0 || !tempFormData.almacen_id) {
+        const cant = parseInt(tempFormData.cantidad) || 0;
+        const prec = parseFloat(tempFormData.precio) || 0;
+
+        if (!tempFormData.producto || !tempFormData.categoria || cant <= 0 || prec <= 0 || !tempFormData.almacen_id) {
             toast.warning('Por favor, completa los campos obligatorios (Producto, Categoría, Cantidad, Precio y Almacén).');
             return;
         }
@@ -361,8 +364,8 @@ export default function ComprarPage() {
             color: tempFormData.color,
             categoria: tempFormData.categoria,
             codigo: nuevoCodigo,
-            cantidad: tempFormData.cantidad,
-            precio: tempFormData.precio,
+            cantidad: cant,
+            precio: prec,
         };
 
         if (editingProductId) {
@@ -391,8 +394,8 @@ export default function ComprarPage() {
                 color: productoParaEditar.color || '',
                 categoria: productoParaEditar.categoria,
                 codigo: productoParaEditar.codigo,
-                cantidad: productoParaEditar.cantidad,
-                precio: productoParaEditar.precio,
+                cantidad: String(productoParaEditar.cantidad),
+                precio: String(productoParaEditar.precio),
             });
             setEditingProductId(id);
             setIsDialogOpen(true);
@@ -400,11 +403,14 @@ export default function ComprarPage() {
     };
 
     const handleActualizarProducto = () => {
+        const cant = parseInt(tempFormData.cantidad) || 0;
+        const prec = parseFloat(tempFormData.precio) || 0;
+
         if (
             !tempFormData.producto.trim() ||
             !tempFormData.categoria.trim() ||
-            tempFormData.cantidad <= 0 ||
-            tempFormData.precio <= 0 ||
+            cant <= 0 ||
+            prec <= 0 ||
             !tempFormData.almacen_id
         ) {
             toast.warning('Por favor, completa los campos obligatorios válidos (Producto, Categoría, Cantidad, Precio y Almacén).');
@@ -424,8 +430,8 @@ export default function ComprarPage() {
                           color: tempFormData.color,
                           categoria: tempFormData.categoria,
                           codigo: tempFormData.codigo,
-                          cantidad: tempFormData.cantidad,
-                          precio: tempFormData.precio,
+                          cantidad: cant,
+                          precio: prec,
                       } as ProductoComprarProps)
                     : prod,
             ),
@@ -1563,13 +1569,13 @@ export default function ComprarPage() {
 
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="precio_producto">Precio *</Label>
-                                <Input name="precio" placeholder="$ 0.00" value={tempFormData.precio || ''} onChange={handleTempInputChange} />
+                                <Input inputMode="decimal" name="precio" placeholder="$ 0.00" value={tempFormData.precio ?? ''} onChange={handleTempInputChange} />
                                 {errors['productos.0.precio'] && <InputError message={errors['productos.0.precio']} />}
                             </div>
 
                             <div className="grid w-full max-w-sm items-center gap-1">
                                 <Label htmlFor="cantidad_producto">Cantidad *</Label>
-                                <Input name="cantidad" placeholder="0" value={tempFormData.cantidad || ''} onChange={handleTempInputChange} />
+                                <Input inputMode="numeric" name="cantidad" placeholder="0" value={tempFormData.cantidad ?? ''} onChange={handleTempInputChange} />
                                 {errors['productos.0.cantidad'] && <InputError message={errors['productos.0.cantidad']} />}
                             </div>
                         </div>
@@ -1737,9 +1743,9 @@ export default function ComprarPage() {
                                                                             id="edit-cantidad"
                                                                             type="number"
                                                                             name="cantidad"
-                                                                            value={tempFormData.cantidad || ''}
-                                                                            onChange={handleTempInputChange}
-                                                                            min="1"
+                                                                             value={tempFormData.cantidad ?? ''}
+                                                                             onChange={handleTempInputChange}
+                                                                             min="1"
                                                                         />
                                                                     </div>
 
@@ -1754,11 +1760,11 @@ export default function ComprarPage() {
                                                                                 type="number"
                                                                                 step="0.01"
                                                                                 name="precio"
-                                                                                value={tempFormData.precio || ''}
+                                                                                value={tempFormData.precio ?? ''}
                                                                                 onChange={handleTempInputChange}
                                                                                 className="pl-7"
-                                                                                min="0"
-                                                                            />
+                                                                                min="0.01"
+                                                                                />
                                                                         </div>
                                                                     </div>
                                                                 </div>

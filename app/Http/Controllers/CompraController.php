@@ -206,7 +206,7 @@ class CompraController extends Controller
             'productos.*.codigo' => 'nullable|string|max:255',
             'productos.*.codigo_barras' => 'nullable|string|max:255',
             'productos.*.cantidad' => 'required|integer|min:1',
-            'productos.*.precio' => 'required|numeric|min:0',
+            'productos.*.precio' => 'required|numeric|min:0.01',
             'pagos' => 'array|nullable',
             'pagos.*.cuenta_id' => 'required|exists:cuentas,id',
             'pagos.*.monto' => 'required|numeric|min:0.01',
