@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem, PageProps } from '@/types';
@@ -153,11 +154,20 @@ interface DetalleMoneda {
     operaciones_detalle: OperacionDetaile[];
 }
 
+interface ProductoItem {
+    nombre: string;
+    marca: string | null;
+    modelo: string | null;
+    cantidad: number;
+}
+
 interface ComisionPVItemShow {
     venta_id: number;
     comision_usd: number;
     comision_cup: number;
     fecha: string;
+    total_venta: number;
+    productos: ProductoItem[];
 }
 
 interface ComisionGestorItem {
@@ -169,6 +179,8 @@ interface ComisionGestorItem {
     cuenta_tipo: string;
     comentario: string;
     fecha: string;
+    total_venta: number;
+    productos: ProductoItem[];
 }
 
 interface ComparativaItem {
@@ -560,6 +572,13 @@ export default function Show({
         });
     });
 
+    // Solo las operaciones realizadas por el propio usuario (para Detalle de Transacciones)
+    const todosGastosPropios = useMemo(() => (todosGastos ?? []).filter(g => g.es_propio === true), [todosGastos]);
+    const todosIngresosPropios = useMemo(() => (todosIngresos ?? []).filter(g => g.es_propio === true), [todosIngresos]);
+    const todasTransferenciasPropias = useMemo(() => (todasTransferencias ?? []).filter(t => t.es_propio === true), [todasTransferencias]);
+    const totalGastosPropio = todosGastosPropios.reduce((sum: number, g) => sum + Number(g.monto), 0);
+    const totalIngresosPropio = todosIngresosPropios.reduce((sum: number, g) => sum + Number(g.monto), 0);
+
     // Transacciones externas: operaciones de otros usuarios que afectan las cuentas del vendedor
     const transaccionesExternas = useMemo(() => {
         const externas: Array<{
@@ -584,7 +603,7 @@ export default function Show({
                     cuenta: item.origen || '-',
                     usuario_nombre: item.usuario_nombre || 'Sistema',
                     monto: item.monto,
-                    moneda: 'USD',
+                    moneda: item.moneda || 'USD',
                     es_entrante: false,
                 });
             }
@@ -599,7 +618,7 @@ export default function Show({
                     cuenta: item.destino || '-',
                     usuario_nombre: item.usuario_nombre || 'Sistema',
                     monto: item.monto,
-                    moneda: 'USD',
+                    moneda: item.moneda || 'USD',
                     es_entrante: true,
                 });
             }
@@ -614,9 +633,16 @@ export default function Show({
                     cuenta: item.tipo === 'entrante' ? item.destino_nombre : item.origen_nombre,
                     origen: item.origen_nombre || '-',
                     destino: item.destino_nombre || '-',
+                    origen_tipo: item.origen_tipo || '',
+                    destino_tipo: item.destino_tipo || '',
+                    monto_origen: item.monto_origen,
+                    moneda_origen: item.moneda_origen || 'USD',
+                    monto_destino: item.monto_destino ?? 0,
+                    moneda_destino: item.moneda_destino || 'USD',
+                    tasa_cambio: item.tasa_cambio ?? 1,
                     usuario_nombre: item.usuario_nombre || 'Sistema',
-                    monto: item.monto_origen,
-                    moneda: item.moneda_origen || 'USD',
+                    monto: item.tipo === 'entrante' ? (item.monto_destino ?? item.monto_origen) : item.monto_origen,
+                    moneda: item.tipo === 'entrante' ? (item.moneda_destino || item.moneda_origen || 'USD') : (item.moneda_origen || 'USD'),
                     es_entrante: item.tipo === 'entrante',
                 });
             }
@@ -629,7 +655,31 @@ export default function Show({
     const [busquedaExternas, setBusquedaExternas] = useState('');
     const gastosExternos = useMemo(() => transaccionesExternas.filter(i => i.tipo === 'Gasto' && (!busquedaExternas || i.desc.toLowerCase().includes(busquedaExternas.toLowerCase()) || i.cuenta.toLowerCase().includes(busquedaExternas.toLowerCase()))), [transaccionesExternas, busquedaExternas]);
     const ingresosExternos = useMemo(() => transaccionesExternas.filter(i => i.tipo === 'Ingreso' && (!busquedaExternas || i.desc.toLowerCase().includes(busquedaExternas.toLowerCase()) || i.cuenta.toLowerCase().includes(busquedaExternas.toLowerCase()))), [transaccionesExternas, busquedaExternas]);
-    const transferenciasExternas = useMemo(() => transaccionesExternas.filter(i => (i.tipo === 'Transferencia Saliente' || i.tipo === 'Transferencia Entrante') && (!busquedaExternas || i.desc.toLowerCase().includes(busquedaExternas.toLowerCase()) || i.cuenta.toLowerCase().includes(busquedaExternas.toLowerCase()))), [transaccionesExternas, busquedaExternas]);
+    const transferenciasExternas = useMemo(() => transaccionesExternas.filter(i => (i.tipo === 'Transferencia Saliente' || i.tipo === 'Transferencia Entrante') && (!busquedaExternas || i.desc.toLowerCase().includes(busquedaExternas.toLowerCase()) || i.cuenta.toLowerCase().includes(busquedaExternas.toLowerCase()) || (i.origen && i.origen.toLowerCase().includes(busquedaExternas.toLowerCase())) || (i.destino && i.destino.toLowerCase().includes(busquedaExternas.toLowerCase())))), [transaccionesExternas, busquedaExternas]);
+
+    // Filtros para Comparativa
+    const [busquedaCuentas, setBusquedaCuentas] = useState('');
+    const [filtroTipoCuentas, setFiltroTipoCuentas] = useState('todos');
+    const [busquedaClientes, setBusquedaClientes] = useState('');
+
+    const tiposUnicos = useMemo(() => {
+        const tipos = new Set((comparativa_cuentas ?? []).map(c => c.tipo));
+        return ['todos', ...Array.from(tipos).sort()];
+    }, [comparativa_cuentas]);
+
+    const cuentasFiltradas = useMemo(() => {
+        return (comparativa_cuentas ?? []).filter(c => {
+            const matchTexto = !busquedaCuentas || c.nombre.toLowerCase().includes(busquedaCuentas.toLowerCase());
+            const matchTipo = filtroTipoCuentas === 'todos' || c.tipo === filtroTipoCuentas;
+            return matchTexto && matchTipo;
+        });
+    }, [comparativa_cuentas, busquedaCuentas, filtroTipoCuentas]);
+
+    const clientesFiltrados = useMemo(() => {
+        return (comparativa_clientes ?? []).filter(c => {
+            return !busquedaClientes || c.nombre.toLowerCase().includes(busquedaClientes.toLowerCase());
+        });
+    }, [comparativa_clientes, busquedaClientes]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -1226,51 +1276,48 @@ export default function Show({
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-base">
                             <TrendingUp className="h-5 w-5 text-blue-600" />
-                            Detalle de Transacciones
+                            Detalle de Transacciones Locales
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
                         <Tabs defaultValue="gastos" className="w-full">
-                            <TabsList className="mb-4 grid w-full grid-cols-4">
-                                <TabsTrigger value="gastos">Gastos ({todosGastos.length})</TabsTrigger>
-                                <TabsTrigger value="ingresos">Ingresos ({todosIngresos.length})</TabsTrigger>
-                                <TabsTrigger value="transferencias">Transferencias ({todasTransferencias.length})</TabsTrigger>
-                                <TabsTrigger value="gestores">Gestores ({comisionesGestorDetalles.length})</TabsTrigger>
+                            <TabsList className="mb-4 grid w-full grid-cols-3">
+                                <TabsTrigger value="gastos">Gastos ({todosGastosPropios.length})</TabsTrigger>
+                                <TabsTrigger value="ingresos">Ingresos ({todosIngresosPropios.length})</TabsTrigger>
+                                <TabsTrigger value="transferencias">Transferencias ({todasTransferenciasPropias.length})</TabsTrigger>
                             </TabsList>
 
                             <TabsContent value="gastos" className="mt-0">
-                                {todosGastos.length > 0 ? (
+                                {todosGastosPropios.length > 0 ? (
                                     <div className="rounded-md border">
                                         <Table>
                                             <TableHeader>
                                                 <TableRow>
                                                     <TableHead className="w-16">Hora</TableHead>
                                                     <TableHead>Descripción</TableHead>
-                                                    <TableHead>Origen</TableHead>
-                                                    <TableHead>Destino</TableHead>
+                                                    <TableHead>Cuenta de Operación</TableHead>
                                                     <TableHead className="w-28 text-right">Monto</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {todosGastos.map((item, idx) => (
+                                                {todosGastosPropios.map((item, idx) => (
                                                     <TableRow key={idx}>
                                                         <TableCell className="font-mono text-xs">{item.hora}</TableCell>
                                                         <TableCell className="text-sm">{item.desc}</TableCell>
                                                         <TableCell className="text-muted-foreground text-xs">{item.origen || '-'}</TableCell>
-                                                        <TableCell className="text-muted-foreground text-xs">{item.destino || '-'}</TableCell>
                                                         <TableCell className="text-right font-mono font-medium text-red-600">
-                                                            -${Number(item.monto).toFixed(2)}
+                                                            -${Number(item.monto).toFixed(2)} {item.moneda || 'USD'}
                                                         </TableCell>
                                                     </TableRow>
                                                 ))}
                                             </TableBody>
                                             <TableFooter>
                                                 <TableRow>
-                                                    <TableCell colSpan={4} className="font-bold">
+                                                    <TableCell colSpan={3} className="font-bold">
                                                         Total Gastos
                                                     </TableCell>
                                                     <TableCell className="text-right font-bold text-red-600">
-                                                        ${Number(totalGastos).toFixed(2)}
+                                                        ${Number(totalGastosPropio).toFixed(2)}
                                                     </TableCell>
                                                 </TableRow>
                                             </TableFooter>
@@ -1282,38 +1329,36 @@ export default function Show({
                             </TabsContent>
 
                             <TabsContent value="ingresos" className="mt-0">
-                                {todosIngresos.length > 0 ? (
+                                {todosIngresosPropios.length > 0 ? (
                                     <div className="rounded-md border">
                                         <Table>
                                             <TableHeader>
                                                 <TableRow>
                                                     <TableHead className="w-16">Hora</TableHead>
                                                     <TableHead>Descripción</TableHead>
-                                                    <TableHead>Origen</TableHead>
-                                                    <TableHead>Destino</TableHead>
+                                                    <TableHead>Cuenta de Operación</TableHead>
                                                     <TableHead className="w-28 text-right">Monto</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {todosIngresos.map((item, idx) => (
+                                                {todosIngresosPropios.map((item, idx) => (
                                                     <TableRow key={idx}>
                                                         <TableCell className="font-mono text-xs">{item.hora}</TableCell>
                                                         <TableCell className="text-sm">{item.desc}</TableCell>
-                                                        <TableCell className="text-muted-foreground text-xs">{item.origen || '-'}</TableCell>
                                                         <TableCell className="text-muted-foreground text-xs">{item.destino || '-'}</TableCell>
                                                         <TableCell className="text-right font-mono font-medium text-green-600">
-                                                            +${Number(item.monto).toFixed(2)}
+                                                            +${Number(item.monto).toFixed(2)} {item.moneda || 'USD'}
                                                         </TableCell>
                                                     </TableRow>
                                                 ))}
                                             </TableBody>
                                             <TableFooter>
                                                 <TableRow>
-                                                    <TableCell colSpan={4} className="font-bold">
+                                                    <TableCell colSpan={3} className="font-bold">
                                                         Total Ingresos
                                                     </TableCell>
                                                     <TableCell className="text-right font-bold text-green-600">
-                                                        ${Number(totalIngresos).toFixed(2)}
+                                                        ${Number(totalIngresosPropio).toFixed(2)}
                                                     </TableCell>
                                                 </TableRow>
                                             </TableFooter>
@@ -1324,76 +1369,8 @@ export default function Show({
                                 )}
                             </TabsContent>
 
-                            <TabsContent value="gestores" className="mt-0">
-                                {comisionesGestorDetalles.length > 0 ? (
-                                    <div className="rounded-md border">
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead>Venta #</TableHead>
-                                                    <TableHead>Cuenta</TableHead>
-                                                    <TableHead>Comentario</TableHead>
-                                                    <TableHead className="w-36 text-right">Monto Local</TableHead>
-                                                    <TableHead className="w-28 text-right">Equiv. USD</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {comisionesGestorDetalles.map((item) => (
-                                                    <TableRow key={item.venta_id}>
-                                                        <TableCell className="font-mono text-xs">
-                                                            <a
-                                                                href={`/ventas/${item.venta_id}`}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="text-blue-600 hover:underline"
-                                                            >
-                                                                #{item.venta_id}
-                                                            </a>
-                                                        </TableCell>
-                                                        <TableCell className="text-sm">
-                                                            <div className="font-medium">{item.cuenta_nombre}</div>
-                                                            <div className="text-muted-foreground text-xs">{item.cuenta_tipo}</div>
-                                                        </TableCell>
-                                                        <TableCell className="max-w-xs text-sm" title={item.comentario || undefined}>
-                                                            {item.comentario ? (
-                                                                <span className="block max-w-[150px] truncate">{item.comentario}</span>
-                                                            ) : (
-                                                                <span className="text-muted-foreground italic">Sin comentario</span>
-                                                            )}
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-mono font-medium text-red-600">
-                                                            -{Number(item.monto).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {item.moneda_codigo}
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-mono text-xs text-purple-600">
-                                                            ≈ {Number(item.monto_usd).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))}
-                                            </TableBody>
-                                            <TableFooter>
-                                                <TableRow>
-                                                    <TableCell colSpan={3} className="font-bold">Total</TableCell>
-                                                    <TableCell className="text-right font-bold text-red-600" colSpan={1}>
-                                                        {Object.entries(comisionesPorMoneda).map(([moneda, data]) => (
-                                                            <div key={moneda}>
-                                                                -{Number(data.total).toLocaleString('es-ES', { minimumFractionDigits: 2 })} {moneda}
-                                                            </div>
-                                                        ))}
-                                                    </TableCell>
-                                                    <TableCell className="text-right font-bold text-purple-600">
-                                                        ≈ {comisionesGestorDetalles.reduce((s, i) => s + (Number(i.monto_usd) || 0), 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} USD
-                                                    </TableCell>
-                                                </TableRow>
-                                            </TableFooter>
-                                        </Table>
-                                    </div>
-                                ) : (
-                                    <p className="text-muted-foreground py-12 text-center italic">No hay comisiones a gestores en este turno.</p>
-                                )}
-                            </TabsContent>
-
                             <TabsContent value="transferencias" className="mt-0">
-                                {todasTransferencias.length > 0 ? (
+                                {todasTransferenciasPropias.length > 0 ? (
                                     <div className="rounded-md border">
                                         <Table>
                                             <TableHeader>
@@ -1402,43 +1379,42 @@ export default function Show({
                                                     <TableHead>Descripción</TableHead>
                                                     <TableHead>Origen</TableHead>
                                                     <TableHead>Destino</TableHead>
-                                                    <TableHead className="w-32 text-right">Monto</TableHead>
+                                                    <TableHead className="w-40 text-right">Monto</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {todasTransferencias.map((item, idx) => (
+                                                {todasTransferenciasPropias.map((item, idx) => (
                                                     <TableRow key={idx}>
                                                         <TableCell className="font-mono text-xs">{item.hora}</TableCell>
                                                         <TableCell className="max-w-xs truncate text-sm">{item.desc}</TableCell>
                                                         <TableCell className="text-muted-foreground text-xs">
-                                                            <div className="max-w-[120px] truncate" title={item.origen_nombre}>
-                                                                {item.origen_nombre}
+                                                            <div className="max-w-[120px] truncate" title={`${item.origen_tipo}: ${item.origen_nombre}`}>
+                                                                <span className="capitalize">{item.origen_tipo}:</span> {item.origen_nombre}
                                                             </div>
                                                         </TableCell>
                                                         <TableCell className="text-muted-foreground text-xs">
-                                                            <div className="max-w-[120px] truncate" title={item.destino_nombre}>
-                                                                {item.destino_nombre}
+                                                            <div className="max-w-[120px] truncate" title={`${item.destino_tipo}: ${item.destino_nombre}`}>
+                                                                <span className="capitalize">{item.destino_tipo}:</span> {item.destino_nombre}
                                                             </div>
                                                         </TableCell>
                                                         <TableCell className="text-right font-mono text-xs">
-                                                            <span className={item.tipo === 'entrante' ? 'text-green-600' : 'text-blue-600'}>
-                                                                {item.tipo === 'entrante' ? '+' : '-'}${Number(item.monto_origen).toFixed(2)}{' '}
-                                                                {item.moneda_origen}
-                                                            </span>
+                                                            <div>
+                                                                <span className={item.tipo === 'entrante' ? 'text-green-600' : 'text-blue-600'}>
+                                                                    {item.tipo === 'entrante' ? '+' : '-'}${Number(item.tipo === 'entrante' ? item.monto_destino : item.monto_origen).toFixed(2)}{' '}
+                                                                    {item.tipo === 'entrante' ? item.moneda_destino : item.moneda_origen}
+                                                                </span>
+                                                                {(item.moneda_origen ?? item.moneda_destino) && item.moneda_origen !== item.moneda_destino && (
+                                                                    <div className="text-muted-foreground mt-0.5 text-[10px] leading-tight whitespace-nowrap">
+                                                                        ≈ ${Number(item.tipo === 'entrante' ? item.monto_origen : item.monto_destino).toFixed(2)}{' '}
+                                                                        {item.tipo === 'entrante' ? item.moneda_origen : item.moneda_destino}
+                                                                        <span className="ml-0.5">@ {Number(item.tasa_cambio).toFixed(2)}</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
                                                         </TableCell>
                                                     </TableRow>
                                                 ))}
                                             </TableBody>
-                                            <TableFooter>
-                                                <TableRow>
-                                                    <TableCell colSpan={4} className="font-bold">
-                                                        Total Transferencias
-                                                    </TableCell>
-                                                    <TableCell className="text-right font-bold text-blue-600">
-                                                        ${Number(totalTransferencias).toFixed(2)}
-                                                    </TableCell>
-                                                </TableRow>
-                                            </TableFooter>
                                         </Table>
                                     </div>
                                 ) : (
@@ -1454,7 +1430,7 @@ export default function Show({
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-base">
                             <TrendingUp className="h-5 w-5 text-orange-600" />
-                            Transacciones Externas
+                            Detalles Transacciones Externas
                         </CardTitle>
                         <CardDescription>
                             Operaciones realizadas por otros usuarios en las cuentas de {cierre.usuario?.name || 'este vendedor'} durante este turno
@@ -1500,10 +1476,10 @@ export default function Show({
                                                                 <TableHead>Destino</TableHead>
                                                             </>
                                                         ) : (
-                                                            <TableHead>Cuenta</TableHead>
+                                                            <TableHead>Cuenta de Operación</TableHead>
                                                         )}
                                                         <TableHead className="w-28">Creado por</TableHead>
-                                                        <TableHead className="w-32 text-right">Monto</TableHead>
+                                                        <TableHead className="w-40 text-right">Monto</TableHead>
                                                     </TableRow>
                                                     </TableHeader>
                                                     <TableBody>
@@ -1513,17 +1489,40 @@ export default function Show({
                                                                 <TableCell className="max-w-xs truncate text-sm" title={item.desc}>{item.desc}</TableCell>
                                                                 {tab.value === 'transferencias' ? (
                                                                     <>
-                                                                        <TableCell className="text-muted-foreground text-xs">{item.origen}</TableCell>
-                                                                        <TableCell className="text-muted-foreground text-xs">{item.destino}</TableCell>
+                                                                        <TableCell className="text-muted-foreground text-xs">
+                                                                            <div className="max-w-[120px] truncate" title={`${item.origen_tipo}: ${item.origen}`}>
+                                                                                {item.origen_tipo ? <span className="capitalize">{item.origen_tipo}:</span> : ''} {item.origen}
+                                                                            </div>
+                                                                        </TableCell>
+                                                                        <TableCell className="text-muted-foreground text-xs">
+                                                                            <div className="max-w-[120px] truncate" title={`${item.destino_tipo}: ${item.destino}`}>
+                                                                                {item.destino_tipo ? <span className="capitalize">{item.destino_tipo}:</span> : ''} {item.destino}
+                                                                            </div>
+                                                                        </TableCell>
                                                                     </>
                                                                 ) : (
                                                                     <TableCell className="text-muted-foreground text-xs">{item.cuenta}</TableCell>
                                                                 )}
                                                                 <TableCell className="text-muted-foreground text-xs">{item.usuario_nombre}</TableCell>
-                                                                <TableCell className="text-right font-mono font-medium">
-                                                                    <span className={tab.esGasto ? 'text-red-600' : 'text-green-600'}>
-                                                                        {tab.esGasto ? '-' : '+'}${Number(item.monto).toFixed(2)} {item.moneda}
-                                                                    </span>
+                                                                <TableCell className="text-right font-mono text-xs">
+                                                                    {tab.value === 'transferencias' ? (
+                                                                        <div>
+                                                                            <span className={item.es_entrante ? 'text-green-600' : 'text-blue-600'}>
+                                                                                {item.es_entrante ? '+' : '-'}${Number(item.monto).toFixed(2)} {item.moneda}
+                                                                            </span>
+                                                                            {(item.moneda_origen && item.moneda_destino && item.moneda_origen !== item.moneda_destino) && (
+                                                                                <div className="text-muted-foreground mt-0.5 text-[10px] leading-tight whitespace-nowrap">
+                                                                                    ≈ ${Number(item.es_entrante ? item.monto_origen : item.monto_destino).toFixed(2)}{' '}
+                                                                                    {item.es_entrante ? item.moneda_origen : item.moneda_destino}
+                                                                                    <span className="ml-0.5">@ {Number(item.tasa_cambio).toFixed(2)}</span>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    ) : (
+                                                                        <span className={tab.esGasto ? 'text-red-600' : 'text-green-600'}>
+                                                                            {tab.esGasto ? '-' : '+'}${Number(item.monto).toFixed(2)} {item.moneda}
+                                                                        </span>
+                                                                    )}
                                                                 </TableCell>
                                                             </TableRow>
                                                         )) : (
@@ -1555,9 +1554,11 @@ export default function Show({
                     </CardHeader>
                     <CardContent className="space-y-6">
                         <Tabs defaultValue="cuentas" className="w-full">
-                            <TabsList className="grid w-full grid-cols-2">
+                            <TabsList className={`grid w-full ${userRole !== 'vendedor' ? 'grid-cols-2' : ''}`}>
                                 <TabsTrigger value="cuentas">Cuentas ({comparativa_cuentas?.length ?? 0})</TabsTrigger>
-                                <TabsTrigger value="clientes">Clientes ({comparativa_clientes?.length ?? 0})</TabsTrigger>
+                                {userRole !== 'vendedor' && (
+                                    <TabsTrigger value="clientes">Clientes ({comparativa_clientes?.length ?? 0})</TabsTrigger>
+                                )}
                             </TabsList>
 
                             <TabsContent value="cuentas" className="mt-4">
@@ -1566,106 +1567,145 @@ export default function Show({
                                         Primer cierre: estos son los saldos iniciales actuales.
                                     </p>
                                 )}
-                                <div className="rounded-md border">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Cuenta</TableHead>
-                                                <TableHead>Tipo</TableHead>
-                                                <TableHead>Moneda</TableHead>
-                                                <TableHead className="text-right">Cierre Anterior</TableHead>
-                                                <TableHead className="text-right">Cierre Hoy</TableHead>
-                                                <TableHead className="text-right">Diferencia</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {comparativa_cuentas && comparativa_cuentas.length > 0 ? (
-                                                comparativa_cuentas.map((item: ComparativaItem) => (
-                                                    <TableRow key={item.id}>
-                                                        <TableCell className="font-medium">{item.nombre}</TableCell>
-                                                        <TableCell>
-                                                            <span className="bg-muted rounded px-2 py-0.5 text-xs font-medium">
-                                                                {item.tipo === 'efectivo'
-                                                                    ? 'Efectivo'
-                                                                    : item.tipo === 'tarjeta'
-                                                                      ? 'Tarjeta'
-                                                                      : item.tipo || '-'}
-                                                            </span>
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <span className="bg-muted rounded px-2 py-0.5 text-xs font-medium">{item.moneda}</span>
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-mono">
-                                                            ${Number(item.saldo_anterior).toFixed(2)}
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-mono font-medium">
-                                                            ${Number(item.saldo_actual).toFixed(2)}
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-mono">
-                                                            {item.diferencia > 0 ? (
-                                                                <span className="text-green-600">+${Number(item.diferencia).toFixed(2)}</span>
-                                                            ) : item.diferencia < 0 ? (
-                                                                <span className="text-red-600">${Number(item.diferencia).toFixed(2)}</span>
+                                <Accordion type="single" collapsible>
+                                    <AccordionItem value="cuentas">
+                                        <AccordionTrigger className="text-sm font-semibold">
+                                            Cuentas ({cuentasFiltradas.length})
+                                        </AccordionTrigger>
+                                        <AccordionContent>
+                                            <div className="space-y-3">
+                                                <div className="relative">
+                                                    <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+                                                    <Input
+                                                        placeholder="Buscar cuenta..."
+                                                        value={busquedaCuentas}
+                                                        onChange={(e) => setBusquedaCuentas(e.target.value)}
+                                                        className="pl-9"
+                                                    />
+                                                </div>
+                                                <div className="flex flex-wrap gap-1">
+                                                    {tiposUnicos.map(tipo => (
+                                                        <Button
+                                                            key={tipo}
+                                                            variant={filtroTipoCuentas === tipo ? 'default' : 'outline'}
+                                                            size="sm"
+                                                            onClick={() => setFiltroTipoCuentas(tipo)}
+                                                            className="text-xs capitalize"
+                                                        >
+                                                            {tipo === 'todos' ? 'Todos' : tipo}
+                                                        </Button>
+                                                    ))}
+                                                </div>
+                                                <div className="rounded-md border">
+                                                    <Table>
+                                                        <TableHeader>
+                                                            <TableRow>
+                                                                <TableHead>Cuenta</TableHead>
+                                                                <TableHead>Tipo</TableHead>
+                                                                <TableHead>Moneda</TableHead>
+                                                                <TableHead className="text-right">Cierre Anterior</TableHead>
+                                                                <TableHead className="text-right">Cierre Hoy</TableHead>
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                            {cuentasFiltradas.length > 0 ? (
+                                                                cuentasFiltradas.map((item: ComparativaItem) => (
+                                                                    <TableRow key={item.id}>
+                                                                        <TableCell className="font-medium">{item.nombre}</TableCell>
+                                                                        <TableCell>
+                                                                            <span className="bg-muted rounded px-2 py-0.5 text-xs font-medium">
+                                                                                {item.tipo === 'efectivo' ? 'Efectivo' : item.tipo === 'tarjeta' ? 'Tarjeta' : item.tipo || '-'}
+                                                                            </span>
+                                                                        </TableCell>
+                                                                        <TableCell>
+                                                                            <span className="bg-muted rounded px-2 py-0.5 text-xs font-medium">{item.moneda}</span>
+                                                                        </TableCell>
+                                                                        <TableCell className="text-right font-mono">
+                                                                            ${Number(item.saldo_anterior).toFixed(2)}
+                                                                        </TableCell>
+                                                                        <TableCell className="text-right font-mono font-medium">
+                                                                            ${Number(item.saldo_actual).toFixed(2)}
+                                                                        </TableCell>
+                                                                    </TableRow>
+                                                                ))
                                                             ) : (
-                                                                <span className="text-muted-foreground">-</span>
+                                                                <TableRow>
+                                                                    <TableCell colSpan={5} className="text-muted-foreground py-8 text-center italic">
+                                                                        {busquedaCuentas || filtroTipoCuentas !== 'todos'
+                                                                            ? 'No se encontraron cuentas con los filtros aplicados'
+                                                                            : !tiene_cierre_anterior
+                                                                              ? 'No hay cierre anterior para comparar'
+                                                                              : 'No hay cuentas para mostrar'}
+                                                                    </TableCell>
+                                                                </TableRow>
                                                             )}
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))
-                                            ) : (
-                                                <TableRow>
-                                                    <TableCell colSpan={6} className="text-muted-foreground py-8 text-center italic">
-                                                        {!tiene_cierre_anterior
-                                                            ? 'No hay cierre anterior para comparar'
-                                                            : 'No hay cuentas para mostrar'}
-                                                    </TableCell>
-                                                </TableRow>
-                                            )}
-                                        </TableBody>
-                                    </Table>
-                                </div>
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            </div>
+                                        </AccordionContent>
+                                    </AccordionItem>
+                                </Accordion>
                             </TabsContent>
 
+                            {userRole !== 'vendedor' && (
                             <TabsContent value="clientes" className="mt-4">
-                                {comparativa_clientes && comparativa_clientes.length > 0 ? (
-                                    <div className="rounded-md border">
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead>Cliente</TableHead>
-                                                    <TableHead className="text-right">Deuda Anterior</TableHead>
-                                                    <TableHead className="text-right">Deuda Actual</TableHead>
-                                                    <TableHead className="text-right">Diferencia</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {comparativa_clientes.map((item: ComparativaClienteItem) => (
-                                                    <TableRow key={item.id}>
-                                                        <TableCell className="font-medium">{item.nombre}</TableCell>
-                                                        <TableCell className="text-right font-mono">
-                                                            ${Number(item.deuda_anterior).toFixed(2)}
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-mono font-medium">
-                                                            ${Number(item.deuda_actual).toFixed(2)}
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-mono">
-                                                            {item.diferencia < 0 ? (
-                                                                <span className="text-green-600">${Number(item.diferencia).toFixed(2)} ✅</span>
-                                                            ) : item.diferencia > 0 ? (
-                                                                <span className="text-red-600">+${Number(item.diferencia).toFixed(2)} ⚠️</span>
+                                <Accordion type="single" collapsible>
+                                    <AccordionItem value="clientes">
+                                        <AccordionTrigger className="text-sm font-semibold">
+                                            Clientes ({clientesFiltrados.length})
+                                        </AccordionTrigger>
+                                        <AccordionContent>
+                                            <div className="space-y-3">
+                                                <div className="relative">
+                                                    <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+                                                    <Input
+                                                        placeholder="Buscar cliente..."
+                                                        value={busquedaClientes}
+                                                        onChange={(e) => setBusquedaClientes(e.target.value)}
+                                                        className="pl-9"
+                                                    />
+                                                </div>
+                                                <div className="rounded-md border">
+                                                    <Table>
+                                                        <TableHeader>
+                                                            <TableRow>
+                                                                <TableHead>Cliente</TableHead>
+                                                                <TableHead className="text-right">Deuda Anterior</TableHead>
+                                                                <TableHead className="text-right">Deuda Actual</TableHead>
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                            {clientesFiltrados.length > 0 ? (
+                                                                clientesFiltrados.map((item: ComparativaClienteItem) => (
+                                                                    <TableRow key={item.id}>
+                                                                        <TableCell className="font-medium">{item.nombre}</TableCell>
+                                                                        <TableCell className="text-right font-mono">
+                                                                            ${Number(item.deuda_anterior).toFixed(2)}
+                                                                        </TableCell>
+                                                                        <TableCell className="text-right font-mono font-medium">
+                                                                            ${Number(item.deuda_actual).toFixed(2)}
+                                                                        </TableCell>
+                                                                    </TableRow>
+                                                                ))
                                                             ) : (
-                                                                <span className="text-muted-foreground">-</span>
+                                                                <TableRow>
+                                                                    <TableCell colSpan={3} className="text-muted-foreground py-8 text-center italic">
+                                                                        {busquedaClientes
+                                                                            ? 'No se encontraron clientes con los filtros aplicados'
+                                                                            : 'No hay clientes con deuda registrada.'}
+                                                                    </TableCell>
+                                                                </TableRow>
                                                             )}
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
-                                    </div>
-                                ) : (
-                                    <p className="text-muted-foreground py-8 text-center italic">No hay clientes con deuda registrada.</p>
-                                )}
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            </div>
+                                        </AccordionContent>
+                                    </AccordionItem>
+                                </Accordion>
                             </TabsContent>
+                            )}
                         </Tabs>
                     </CardContent>
                 </Card>
@@ -1887,7 +1927,7 @@ export default function Show({
                         {/* Dialog detalles Comisión PV */}
                         {comisiones_pv_detalles.length > 0 && (
                             <Dialog open={showComisionPVDialog} onOpenChange={setShowComisionPVDialog}>
-                                <DialogContent className="sm:max-w-md">
+                                <DialogContent className="sm:max-w-3xl">
                                     <DialogHeader>
                                         <DialogTitle className="text-blue-700 dark:text-blue-300">
                                             Comisiones P.V. del Turno
@@ -1901,32 +1941,68 @@ export default function Show({
                                         <Table>
                                             <TableHeader>
                                                 <TableRow>
-                                                    <TableHead className="text-xs">Venta</TableHead>
-                                                    <TableHead className="text-right text-xs">USD</TableHead>
-                                                    <TableHead className="text-right text-xs">CUP</TableHead>
-                                                    <TableHead className="text-right text-xs">Fecha</TableHead>
+                                                    <TableHead className="text-xs w-[80px]">Venta</TableHead>
+                                                    <TableHead className="text-right text-xs w-[100px]">Total Venta</TableHead>
+                                                    <TableHead className="text-xs">Productos</TableHead>
+                                                    <TableHead className="text-right text-xs w-[140px]">Comisión</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
                                                 {comisiones_pv_detalles.map((d) => (
                                                     <TableRow key={d.venta_id}>
                                                         <TableCell className="text-xs font-medium">#{d.venta_id}</TableCell>
-                                                        <TableCell className="text-right text-xs">${d.comision_usd.toFixed(2)}</TableCell>
-                                                        <TableCell className="text-right text-xs font-semibold text-blue-700 dark:text-blue-300">
-                                                            {d.comision_cup.toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                                        <TableCell className="text-right text-xs">
+                                                            ${d.total_venta?.toFixed(2)}
                                                         </TableCell>
-                                                        <TableCell className="text-right text-xs text-muted-foreground">{d.fecha}</TableCell>
+                                                        <TableCell className="text-xs max-w-[300px]">
+                                                            {d.productos && d.productos.length > 0 ? (
+                                                                <TooltipProvider>
+                                                                    <Tooltip>
+                                                                        <TooltipTrigger asChild>
+                                                                            <span className="cursor-default truncate block">
+                                                                                {d.productos.map(p =>
+                                                                                    [p.nombre, p.marca, p.modelo].filter(Boolean).join(' ') + ' x' + p.cantidad
+                                                                                ).join(', ')}
+                                                                            </span>
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent side="bottom" align="start" className="max-w-md">
+                                                                            <ul className="list-disc list-inside space-y-0.5">
+                                                                                {d.productos.map((p, i) => (
+                                                                                    <li key={i}>
+                                                                                        {[p.nombre, p.marca, p.modelo].filter(Boolean).join(' ')}
+                                                                                        {' '}x{p.cantidad}
+                                                                                    </li>
+                                                                                ))}
+                                                                            </ul>
+                                                                        </TooltipContent>
+                                                                    </Tooltip>
+                                                                </TooltipProvider>
+                                                            ) : (
+                                                                <span className="text-muted-foreground">Sin productos</span>
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="text-right text-xs whitespace-nowrap">
+                                                            <span className="font-medium">${d.comision_usd.toFixed(2)}</span>
+                                                            {' / '}
+                                                            <span className="font-semibold text-blue-700 dark:text-blue-300">
+                                                                {d.comision_cup.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                            </span>
+                                                        </TableCell>
                                                     </TableRow>
                                                 ))}
                                             </TableBody>
                                             <TableFooter>
                                                 <TableRow>
                                                     <TableCell className="text-xs font-bold">Total</TableCell>
-                                                    <TableCell className="text-right text-xs font-bold">${Number(comision_pv_total).toFixed(2)}</TableCell>
-                                                    <TableCell className="text-right text-xs font-bold text-blue-700 dark:text-blue-300">
-                                                        {Number(comisiones_pv_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
-                                                    </TableCell>
                                                     <TableCell />
+                                                    <TableCell />
+                                                    <TableCell className="text-right text-xs font-bold whitespace-nowrap">
+                                                        ${Number(comision_pv_total).toFixed(2)}
+                                                        {' / '}
+                                                        <span className="text-blue-700 dark:text-blue-300">
+                                                            {Number(comisiones_pv_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                        </span>
+                                                    </TableCell>
                                                 </TableRow>
                                             </TableFooter>
                                         </Table>
@@ -1938,7 +2014,7 @@ export default function Show({
                         {/* Dialog detalles Comisión Gestor */}
                         {comisionesGestorDetalles.length > 0 && (
                             <Dialog open={showComisionGestorDialog} onOpenChange={setShowComisionGestorDialog}>
-                                <DialogContent className="sm:max-w-md">
+                                <DialogContent className="sm:max-w-3xl">
                                     <DialogHeader>
                                         <DialogTitle className="text-purple-700 dark:text-purple-300">
                                             Comisiones Gestor del Turno
@@ -1952,34 +2028,70 @@ export default function Show({
                                         <Table>
                                             <TableHeader>
                                                 <TableRow>
-                                                    <TableHead className="text-xs">Venta</TableHead>
-                                                    <TableHead className="text-right text-xs">USD</TableHead>
-                                                    <TableHead className="text-right text-xs">CUP</TableHead>
-                                                    <TableHead className="text-xs">Cuenta</TableHead>
+                                                    <TableHead className="text-xs w-[80px]">Venta</TableHead>
+                                                    <TableHead className="text-right text-xs w-[100px]">Total Venta</TableHead>
+                                                    <TableHead className="text-xs">Productos</TableHead>
+                                                    <TableHead className="text-right text-xs w-[140px]">Comisión</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
                                                 {comisionesGestorDetalles.map((d) => (
                                                     <TableRow key={d.venta_id}>
                                                         <TableCell className="text-xs font-medium">#{d.venta_id}</TableCell>
-                                                        <TableCell className="text-right text-xs">${d.monto_usd.toFixed(2)}</TableCell>
-                                                        <TableCell className="text-right text-xs font-semibold text-purple-700 dark:text-purple-300">
-                                                            {d.moneda_codigo === 'CUP'
-                                                                ? d.monto.toLocaleString('es-ES', { minimumFractionDigits: 2 })
-                                                                : '—'}
+                                                        <TableCell className="text-right text-xs">
+                                                            ${d.total_venta?.toFixed(2)}
                                                         </TableCell>
-                                                        <TableCell className="text-xs text-muted-foreground">{d.cuenta_nombre}</TableCell>
+                                                        <TableCell className="text-xs max-w-[300px]">
+                                                            {d.productos && d.productos.length > 0 ? (
+                                                                <TooltipProvider>
+                                                                    <Tooltip>
+                                                                        <TooltipTrigger asChild>
+                                                                            <span className="cursor-default truncate block">
+                                                                                {d.productos.map(p =>
+                                                                                    [p.nombre, p.marca, p.modelo].filter(Boolean).join(' ') + ' x' + p.cantidad
+                                                                                ).join(', ')}
+                                                                            </span>
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent side="bottom" align="start" className="max-w-md">
+                                                                            <ul className="list-disc list-inside space-y-0.5">
+                                                                                {d.productos.map((p, i) => (
+                                                                                    <li key={i}>
+                                                                                        {[p.nombre, p.marca, p.modelo].filter(Boolean).join(' ')}
+                                                                                        {' '}x{p.cantidad}
+                                                                                    </li>
+                                                                                ))}
+                                                                            </ul>
+                                                                        </TooltipContent>
+                                                                    </Tooltip>
+                                                                </TooltipProvider>
+                                                            ) : (
+                                                                <span className="text-muted-foreground">Sin productos</span>
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="text-right text-xs whitespace-nowrap">
+                                                            <span className="font-medium">${d.monto_usd.toFixed(2)}</span>
+                                                            {' / '}
+                                                            <span className="font-semibold text-purple-700 dark:text-purple-300">
+                                                                {d.moneda_codigo === 'CUP'
+                                                                    ? d.monto.toLocaleString('es-ES', { minimumFractionDigits: 2 }) + ' CUP'
+                                                                    : '—'}
+                                                            </span>
+                                                        </TableCell>
                                                     </TableRow>
                                                 ))}
                                             </TableBody>
                                             <TableFooter>
                                                 <TableRow>
                                                     <TableCell className="text-xs font-bold">Total</TableCell>
-                                                    <TableCell className="text-right text-xs font-bold">${Number(comision_gestor_total).toFixed(2)}</TableCell>
-                                                    <TableCell className="text-right text-xs font-bold text-purple-700 dark:text-purple-300">
-                                                        {Number(comisiones_gestor_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
-                                                    </TableCell>
                                                     <TableCell />
+                                                    <TableCell />
+                                                    <TableCell className="text-right text-xs font-bold whitespace-nowrap">
+                                                        ${Number(comision_gestor_total).toFixed(2)}
+                                                        {' / '}
+                                                        <span className="text-purple-700 dark:text-purple-300">
+                                                            {Number(comisiones_gestor_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                        </span>
+                                                    </TableCell>
                                                 </TableRow>
                                             </TableFooter>
                                         </Table>

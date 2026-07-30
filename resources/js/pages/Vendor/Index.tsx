@@ -502,7 +502,7 @@ export default function PuntoVentaOficial({
 
     const comisionTotalNum = useMemo(
         () => carrito.reduce((sum, item) => sum + calcularComisionEfectiva(item) * item.cantidad, 0),
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+         
         [carrito],
     );
 

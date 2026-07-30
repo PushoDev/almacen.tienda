@@ -435,20 +435,28 @@ class CierreCajaController extends Controller
         ]);
 
         // Calcular comisiones y ganancia desde las ventas del turno del cierre
-        $comisionesPVVentasCierre = \App\Models\Venta::where('user_id', $cierre->user_id)
+        $comisionesPVVentasCierre = \App\Models\Venta::with(['detalles.producto:id,nombre_producto,marca_producto,modelo_producto'])
+            ->where('user_id', $cierre->user_id)
             ->whereBetween('created_at', [$cierre->fecha_apertura, $cierre->fecha_cierre])
             ->where('estado', 'completada')
             ->where('es_venta_gestor', false)
             ->where('total_comision', '>', 0)
-            ->get(['id', 'total_comision', 'comision_tasa', 'created_at']);
+            ->get(['id', 'total', 'cliente_id', 'total_comision', 'comision_tasa', 'created_at']);
 
         $comisionPVTotal = $comisionesPVVentasCierre->sum(fn($v) => (float) $v->total_comision);
 
         $comisionesPVDetallesCierre = $comisionesPVVentasCierre->map(fn($v) => [
-            'venta_id'    => $v->id,
-            'comision_usd'=> round((float) $v->total_comision, 2),
-            'comision_cup'=> round((float) $v->total_comision * (float) $v->comision_tasa, 2),
-            'fecha'       => $v->created_at->format('Y-m-d H:i'),
+            'venta_id'     => $v->id,
+            'comision_usd' => round((float) $v->total_comision, 2),
+            'comision_cup' => round((float) $v->total_comision * (float) $v->comision_tasa, 2),
+            'fecha'        => $v->created_at->format('Y-m-d H:i'),
+            'total_venta'  => round((float) $v->total, 2),
+            'productos'    => $v->detalles->map(fn($d) => [
+                'nombre'   => $d->producto?->nombre_producto ?? 'Producto #'.$d->producto_id,
+                'marca'    => $d->producto?->marca_producto,
+                'modelo'   => $d->producto?->modelo_producto,
+                'cantidad' => (int) $d->cantidad,
+            ])->values()->all(),
         ])->values()->all();
 
         $comisionGestorTotal = \App\Models\Venta::where('user_id', $cierre->user_id)
@@ -1143,6 +1151,7 @@ class CierreCajaController extends Controller
                     'id' => 'm_' . $mov->id,
                     'desc' => $mov->descripcion,
                     'monto' => $mov->monto,
+                    'moneda' => $mov->moneda ?? 'USD',
                     'hora' => $mov->created_at->format('H:i'),
                     'origen' => $this->obtenerNombreOrigen($mov),
                     'destino' => $this->obtenerNombreDestino($mov),
@@ -1161,6 +1170,7 @@ class CierreCajaController extends Controller
                     'id' => 'm_' . $mov->id,
                     'desc' => $mov->descripcion,
                     'monto' => $mov->monto,
+                    'moneda' => $mov->moneda ?? 'USD',
                     'hora' => $mov->created_at->format('H:i'),
                     'origen' => $this->obtenerNombreOrigen($mov),
                     'destino' => $this->obtenerNombreDestino($mov),
@@ -1206,8 +1216,8 @@ class CierreCajaController extends Controller
             ->where('es_venta_gestor', true)
             ->whereNotNull('gestor_cuenta_id')
             ->where('gestor_monto', '>', 0)
-            ->with(['gestorCuenta.moneda', 'monedaCobro'])
-            ->get();
+            ->with(['gestorCuenta.moneda', 'monedaCobro', 'detalles.producto:id,nombre_producto,marca_producto,modelo_producto'])
+            ->get(['id', 'total', 'cliente_id', 'gestor_monto', 'gestor_cuenta_id', 'gestor_comentario', 'moneda_cobro_id', 'created_at', 'es_venta_gestor']);
 
         foreach ($ventasConGestor as $venta) {
             $montoComision = (float) $venta->gestor_monto;
@@ -1227,14 +1237,21 @@ class CierreCajaController extends Controller
 
             // Crear detalle para la UI
             $comisionesGestorDetalles[] = [
-                'venta_id' => $venta->id,
-                'monto' => $montoComision,
-                'moneda_codigo' => $monedaCodigo,
-                'monto_usd' => round($montoEnUSD, 2),
-                'cuenta_nombre' => $venta->gestorCuenta?->nombre_cuenta ?? 'N/A',
-                'cuenta_tipo' => $venta->gestorCuenta?->tipo ?? 'N/A',
-                'comentario' => $venta->gestor_comentario ?? '',
-                'fecha' => $venta->created_at->format('Y-m-d H:i'),
+                'venta_id'     => $venta->id,
+                'monto'        => $montoComision,
+                'moneda_codigo'=> $monedaCodigo,
+                'monto_usd'    => round($montoEnUSD, 2),
+                'cuenta_nombre'=> $venta->gestorCuenta?->nombre_cuenta ?? 'N/A',
+                'cuenta_tipo'  => $venta->gestorCuenta?->tipo ?? 'N/A',
+                'comentario'   => $venta->gestor_comentario ?? '',
+                'fecha'        => $venta->created_at->format('Y-m-d H:i'),
+                'total_venta'  => round((float) $venta->total, 2),
+                'productos'    => $venta->detalles->map(fn($d) => [
+                    'nombre'   => $d->producto?->nombre_producto ?? 'Producto #'.$d->producto_id,
+                    'marca'    => $d->producto?->marca_producto,
+                    'modelo'   => $d->producto?->modelo_producto,
+                    'cantidad' => (int) $d->cantidad,
+                ])->values()->all(),
             ];
 
             // Restar del saldo calculado de la moneda correspondiente
@@ -1346,22 +1363,30 @@ class CierreCajaController extends Controller
         $ventasEspecialesImpactoUSD = round($ventasEspecialesTotalUSD - $ventasEspecialesCostoUSD, 2);
 
         // --- COMISIÓN PUNTO DE VENTA (ventas sin gestor) ---
-        $comisionesPVVentas = Venta::where('user_id', $user->id)
+        $comisionesPVVentas = Venta::with(['detalles.producto:id,nombre_producto,marca_producto,modelo_producto'])
+            ->where('user_id', $user->id)
             ->where('created_at', '>=', $inicioTurno)
             ->where('estado', 'completada')
             ->where('es_venta_gestor', false)
             ->where('total_comision', '>', 0)
-            ->get(['id', 'total_comision', 'comision_tasa', 'created_at']);
+            ->get(['id', 'total', 'cliente_id', 'total_comision', 'comision_tasa', 'created_at']);
 
         $comisionPVTotal = $comisionesPVVentas->sum(fn($v) =>
             (float) $v->total_comision
         );
 
         $comisionesPVDetalles = $comisionesPVVentas->map(fn($v) => [
-            'venta_id'    => $v->id,
-            'comision_usd'=> round((float) $v->total_comision, 2),
-            'comision_cup'=> round((float) $v->total_comision * (float) ($v->comision_tasa ?: 1), 2),
-            'fecha'       => $v->created_at->format('Y-m-d H:i'),
+            'venta_id'     => $v->id,
+            'comision_usd' => round((float) $v->total_comision, 2),
+            'comision_cup' => round((float) $v->total_comision * (float) ($v->comision_tasa ?: 1), 2),
+            'fecha'        => $v->created_at->format('Y-m-d H:i'),
+            'total_venta'  => round((float) $v->total, 2),
+            'productos'    => $v->detalles->map(fn($d) => [
+                'nombre'   => $d->producto?->nombre_producto ?? 'Producto #'.$d->producto_id,
+                'marca'    => $d->producto?->marca_producto,
+                'modelo'   => $d->producto?->modelo_producto,
+                'cantidad' => (int) $d->cantidad,
+            ])->values()->all(),
         ])->values()->all();
 
         // --- COMISIÓN GESTOR (ventas con gestor, en USD) ---
@@ -1827,46 +1852,46 @@ class CierreCajaController extends Controller
                 ];
             }
 
-            // Agregar detalles completos para vista
+            // Agregar detalles completos para vista (deduplicados por movimiento_id)
+            $seenMovimientos = [];
+
+            $agregarDetalle = function (array $transferencia, string $tipo) use (&$resumenTransferencias, &$seenMovimientos) {
+                $id = $transferencia['id'] ?? '';
+                $baseId = str_replace(['t_entrada_', 't_'], '', $id);
+
+                if (isset($seenMovimientos[$baseId])) return;
+
+                $seenMovimientos[$baseId] = true;
+
+                $resumenTransferencias['detalles_completos'][] = [
+                    'id' => $id,
+                    'desc' => $transferencia['desc'] ?? '',
+                    'monto_origen' => $transferencia['monto_origen'] ?? 0,
+                    'moneda_origen' => $transferencia['moneda_origen'] ?? 'USD',
+                    'origen_tipo' => $transferencia['origen_tipo'] ?? '',
+                    'origen_nombre' => $transferencia['origen_nombre'] ?? '',
+                    'monto_destino' => $transferencia['monto_destino'] ?? 0,
+                    'moneda_destino' => $transferencia['moneda_destino'] ?? 'USD',
+                    'destino_tipo' => $transferencia['destino_tipo'] ?? '',
+                    'destino_nombre' => $transferencia['destino_nombre'] ?? '',
+                    'tasa_cambio' => $transferencia['tasa_cambio'] ?? 1,
+                    'hora' => $transferencia['hora'] ?? '',
+                    'afecta_saldo_usuario' => $transferencia['afecta_saldo_usuario'] ?? false,
+                    'es_propio' => $transferencia['es_propio'] ?? true,
+                    'usuario_nombre' => $transferencia['usuario_nombre'] ?? 'Sistema',
+                    'tipo' => $tipo,
+                ];
+            };
+
             if (! empty($monedaData['items_transferencias_salientes'])) {
                 foreach ($monedaData['items_transferencias_salientes'] as $transferencia) {
-                    $resumenTransferencias['detalles_completos'][] = [
-                        'id' => $transferencia['id'] ?? '',
-                        'descripcion' => $transferencia['desc'] ?? '',
-                        'monto_origen' => $transferencia['monto_origen'] ?? 0,
-                        'moneda_origen' => $transferencia['moneda_origen'] ?? 'USD',
-                        'origen_tipo' => $transferencia['origen_tipo'] ?? '',
-                        'origen_nombre' => $transferencia['origen_nombre'] ?? '',
-                        'monto_destino' => $transferencia['monto_destino'] ?? 0,
-                        'moneda_destino' => $transferencia['moneda_destino'] ?? 'USD',
-                        'destino_tipo' => $transferencia['destino_tipo'] ?? '',
-                        'destino_nombre' => $transferencia['destino_nombre'] ?? '',
-                        'tasa_cambio' => $transferencia['tasa_cambio'] ?? 1,
-                        'hora' => $transferencia['hora'] ?? '',
-                        'afecta_saldo_usuario' => $transferencia['afecta_saldo_usuario'] ?? false,
-                        'tipo' => 'saliente',
-                    ];
+                    $agregarDetalle($transferencia, 'saliente');
                 }
             }
 
-            // Agregar transferencias entrantes si existen
             if (! empty($monedaData['items_transferencias_entrantes'])) {
                 foreach ($monedaData['items_transferencias_entrantes'] as $transferencia) {
-                    $resumenTransferencias['detalles_completos'][] = [
-                        'id' => $transferencia['id'] ?? '',
-                        'descripcion' => $transferencia['desc'] ?? '',
-                        'monto_origen' => $transferencia['monto_origen'] ?? 0,
-                        'moneda_origen' => $transferencia['moneda_origen'] ?? 'USD',
-                        'origen_tipo' => $transferencia['origen_tipo'] ?? '',
-                        'origen_nombre' => $transferencia['origen_nombre'] ?? '',
-                        'monto_destino' => $transferencia['monto_destino'] ?? 0,
-                        'moneda_destino' => $transferencia['moneda_destino'] ?? 'USD',
-                        'destino_tipo' => $transferencia['destino_tipo'] ?? '',
-                        'destino_nombre' => $transferencia['destino_nombre'] ?? '',
-                        'tasa_cambio' => $transferencia['tasa_cambio'] ?? 1,
-                        'hora' => $transferencia['hora'] ?? '',
-                        'tipo' => 'entrante',
-                    ];
+                    $agregarDetalle($transferencia, 'entrante');
                 }
             }
         }
