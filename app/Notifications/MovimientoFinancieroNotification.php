@@ -35,7 +35,78 @@ class MovimientoFinancieroNotification extends Notification
      */
     public function via(object $notifiable): array
     {
-        return ['database'];
+        $channels = ['database'];
+
+        if (!$notifiable->telegram_chat_id) {
+            return $channels;
+        }
+
+        if ($notifiable->role === 'admin') {
+            $channels[] = \App\Channels\TelegramChannel::class;
+        } elseif ($notifiable->role === 'vendedor') {
+            $esSuCuentaOrigen = $this->movimiento->cuenta_origen_id &&
+                $notifiable->cuentas()->where('cuentas.id', $this->movimiento->cuenta_origen_id)->exists();
+            $esSuCuentaDestino = $this->movimiento->cuenta_destino_id &&
+                $notifiable->cuentas()->where('cuentas.id', $this->movimiento->cuenta_destino_id)->exists();
+
+            if ($esSuCuentaOrigen || $esSuCuentaDestino) {
+                $channels[] = \App\Channels\TelegramChannel::class;
+            }
+        }
+
+        return $channels;
+    }
+
+    /**
+     * Get the Telegram representation of the notification.
+     *
+     * @return array<string, mixed>
+     */
+    public function toTelegram(object $notifiable): array
+    {
+        $monto = number_format($this->movimiento->monto, 2);
+
+        switch ($this->tipoOperacion) {
+            case 'gasto':
+                $nombreOrigen = $this->movimiento->cuentaOrigen->nombre_cuenta ??
+                    ($this->movimiento->clienteOrigen->nombre_cliente ?? 'Desconocido');
+                $icon = '🔴';
+                $titulo = 'Gasto Registrado';
+                $detalle = "📤 Desde: {$nombreOrigen}";
+                break;
+
+            case 'ingreso':
+                $nombreDestino = $this->movimiento->cuentaDestino->nombre_cuenta ??
+                    ($this->movimiento->clienteDestino->nombre_cliente ??
+                    ($this->movimiento->proveedorDestino->nombre_proveedor ?? 'Desconocido'));
+                $icon = '🟢';
+                $titulo = 'Ingreso Registrado';
+                $detalle = "📥 Hacia: {$nombreDestino}";
+                break;
+
+            case 'transferencia':
+            default:
+                $nombreOrigen = $this->movimiento->cuentaOrigen->nombre_cuenta ??
+                    ($this->movimiento->clienteOrigen->nombre_cliente ?? 'Desconocido');
+                $nombreDestino = $this->movimiento->cuentaDestino->nombre_cuenta ??
+                    ($this->movimiento->clienteDestino->nombre_cliente ??
+                    ($this->movimiento->proveedorDestino->nombre_proveedor ?? 'Desconocido'));
+                $icon = '🔄';
+                $titulo = 'Transferencia Registrada';
+                $detalle = "📤 De: {$nombreOrigen}\n📥 A: {$nombreDestino}";
+                break;
+        }
+
+        $texto  = "{$icon} <b>{$titulo}</b>\n";
+        $texto .= "💰 Monto: $ {$monto} {$this->movimiento->moneda}\n";
+        $texto .= "{$detalle}\n";
+        $texto .= "👤 Registrado por: {$this->movimiento->user->name}\n";
+        $texto .= "🕐 " . now()->format('d/m/Y H:i');
+
+        return [
+            'text'       => $texto,
+            'parse_mode' => 'HTML',
+        ];
     }
 
     /**

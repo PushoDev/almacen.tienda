@@ -182,8 +182,8 @@ export default function Profile({
                         </div>
                     </form>
 
-                    {/* Sección Telegram — solo admin */}
-                    {auth.user.role === 'admin' && <div className="border-t pt-6 grid gap-3">
+                    {/* Sección Telegram — admin y vendedor (moderador queda fuera del bot por ahora) */}
+                    {(auth.user.role === 'admin' || auth.user.role === 'vendedor') && <div className="border-t pt-6 grid gap-3">
                         <HeadingSmall
                             title="Conexión con Telegram"
                             description="Recibe notificaciones del sistema directamente en Telegram"

@@ -10,9 +10,9 @@
 | Campo | Valor |
 |---|---|---|
 | Rama activa | `feature/desarrollo-caliente` |
-| Última sesión | 2026-07-30 — **Compras + UX/UI Cierres**: Mejoras en compras (0.90) en `CompraController` (commit `e7fc149e`). Después de esa doc-sync, hubo 8 commits adicionales el mismo día (14:18→17:02, con mensajes engañosos "Mejorando transacciones sections" que **no tocan** el módulo Transacciones) que ampliaron `CierreCajaController.php` y `Cierres/Create.tsx`/`Show.tsx` (~800 líneas): desglose de productos por línea de comisión PV/Gestor, campo `moneda` en movimientos financieros del cierre, deduplicación de transferencias por `movimiento_id`, separación `es_propio` de gastos/ingresos/transferencias, y filtros de búsqueda para cuentas/clientes en la comparativa. `VentaController` **no cambió** en esta sesión. |
-| Estado general | 12/12 módulos estables, ✓ bugs B1/B2/B3 resueltos, 4 features pendientes |
-| Próximo paso | Completar módulo de Transacciones (sin cambios desde 2026-07-28 pese a los commits titulados "transacciones" del 30/07 — ver nota arriba) |
+| Última sesión | 2026-07-31 — **Tests Pest + frontend Combobox**: 100 tests nuevos (`VentaTest`, `CierreCajaTest`, `MovimientoTest`, `TransaccionFinancieraTest`), 3 bugs reales encontrados y corregidos (B6/B7/B8, ver `ESTADO_DESARROLLO.md`). En frontend: campo "Destino del Pago" del POS migrado a `Combobox` (con bug de Radix `AlertDialog` vs `@base-ui/react` resuelto de forma genérica en `combobox.tsx`), e inputs numéricos ya no cambian de valor con la rueda del mouse (fix centralizado en `input.tsx`). |
+| Estado general | 12/12 módulos estables, ✓ bugs B1/B2/B3/B6/B7/B8 resueltos, ver lista de tareas priorizada en `ESTADO_DESARROLLO.md` |
+| Próximo paso | Ver "🎯 Lista de tareas priorizada" en `ESTADO_DESARROLLO.md` — alta prioridad: tests de Cuentas, Combobox en `Vendor/Index.tsx` (POS), validar doble reversión de stock en `anularVenta` |
 
 ### ✅ Bugs resueltos recientemente
 
@@ -21,6 +21,9 @@
 | **B1** | `guardarDistribucion` | Devuelve `saldo_disponible` desde `saldo_cuenta` correctamente | ✅ Resuelto |
 | **B2** | `aprobarVenta` | Guardia XOR `&& !$venta->es_venta_gestor` implementada | ✅ Resuelto |
 | **B3** | `procesarVenta` | `foreach ($validatedData['pagos'] ?? []` con null coalescing | ✅ Resuelto |
+| **B6** | `MovimientosController::rechazar()` | Duplicaba stock fantasma al rechazar un movimiento en tránsito | ✅ Resuelto (2026-07-31) |
+| **B7** | Migraciones enum `estado` (movimientos) | Gateadas solo a MySQL — rotas en SQLite (default del quickstart) | ✅ Resuelto (2026-07-31) |
+| **B8** | `TransferenciaController::store()` | Vendedor podía transferir a cuenta de otro vendedor (check sin filtrar por usuario) | ✅ Resuelto (2026-07-31) |
 
 ### 🐛 Bugs activos pendientes
 

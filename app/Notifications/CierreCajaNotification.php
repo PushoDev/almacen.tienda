@@ -32,9 +32,20 @@ class CierreCajaNotification extends Notification
     public function via(object $notifiable): array
     {
         $channels = ['database'];
-        if ($notifiable->role === 'admin' && $notifiable->telegram_chat_id) {
-            $channels[] = \App\Channels\TelegramChannel::class;
+
+        if (!$notifiable->telegram_chat_id) {
+            return $channels;
         }
+
+        if ($notifiable->role === 'admin') {
+            $channels[] = \App\Channels\TelegramChannel::class;
+        } elseif ($notifiable->role === 'vendedor') {
+            $esSuCuenta = $notifiable->cuentas()->where('cuentas.id', $this->cierre->cuenta_id)->exists();
+            if ($esSuCuenta) {
+                $channels[] = \App\Channels\TelegramChannel::class;
+            }
+        }
+
         return $channels;
     }
 

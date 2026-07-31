@@ -1,5 +1,4 @@
 import HeadingSmall from '@/components/heading-small';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -7,30 +6,42 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem, PageProps } from '@/types';
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { ComputerIcon, Filter, Plus } from 'lucide-react';
 import { useState } from 'react';
 
 interface Cierre {
     id: number;
     fecha_cierre: string;
-    saldo_inicial: string;
-    saldo_contado: string;
-    diferencia: string;
-    estado: string;
     usuario: { name: string };
-    revisor?: { name: string };
+}
+
+interface PaginationLink {
+    url: string | null;
+    label: string;
+    active: boolean;
+}
+
+interface Vendedor {
+    id: number;
+    name: string;
 }
 
 interface Props extends PageProps {
     cierres: {
         data: Cierre[];
-        links: any[];
+        links: PaginationLink[];
+        from: number | null;
+        to: number | null;
+        total: number;
     };
     filters: {
-        fecha?: string;
-        estado?: string;
+        fecha_desde?: string;
+        fecha_hasta?: string;
+        user_id?: string;
     };
+    vendedores: Vendedor[];
+    es_admin_o_moderador: boolean;
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -44,41 +55,28 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function Index({ auth, cierres, filters }: Props) {
+export default function Index({ auth, cierres, filters, vendedores, es_admin_o_moderador }: Props) {
     const { flash } = usePage<PageProps & { flash: { success?: string; error?: string } }>().props;
 
-    const [fecha, setFecha] = useState(filters.fecha || '');
-    const [estado, setEstado] = useState(filters.estado || 'todos');
+    const [fechaDesde, setFechaDesde] = useState(filters.fecha_desde || '');
+    const [fechaHasta, setFechaHasta] = useState(filters.fecha_hasta || '');
+    const [vendedorId, setVendedorId] = useState(filters.user_id || 'todos');
 
     const handleFilter = () => {
-        window.location.href = route('ventas.cierres', { fecha, estado });
+        router.get(
+            route('ventas.cierres'),
+            {
+                fecha_desde: fechaDesde,
+                fecha_hasta: fechaHasta,
+                user_id: vendedorId === 'todos' ? '' : vendedorId,
+            },
+            { preserveState: true, preserveScroll: true },
+        );
     };
 
-    const getStatusBadge = (estado: string) => {
-        switch (estado) {
-            case 'aprobado':
-                return (
-                    <Badge variant="default" className="bg-green-600 hover:bg-green-700">
-                        Aprobado
-                    </Badge>
-                );
-            case 'rechazado':
-                return <Badge variant="destructive">Rechazado</Badge>;
-            case 'pendiente':
-                return (
-                    <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-200">
-                        Pendiente
-                    </Badge>
-                );
-            case 'abierto':
-                return (
-                    <Badge variant="outline" className="border-blue-600 text-blue-600">
-                        Abierto
-                    </Badge>
-                );
-            default:
-                return <Badge variant="outline">{estado}</Badge>;
-        }
+    const goToPage = (url: string | null) => {
+        if (!url) return;
+        router.get(url, {}, { preserveState: true, preserveScroll: true });
     };
 
     return (
@@ -115,29 +113,38 @@ export default function Index({ auth, cierres, filters }: Props) {
                     <Card>
                         <CardHeader>
                             <CardTitle>Filtros</CardTitle>
-                            <CardDescription>Busca cierres específicos por fecha o estado.</CardDescription>
+                            <CardDescription>Busca cierres específicos por rango de fecha{es_admin_o_moderador ? ' o vendedor' : ''}.</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="flex flex-col gap-4 md:flex-row">
-                                <div className="w-full md:w-1/3">
-                                    <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="w-full" />
-                                </div>
-                                <div className="w-full md:w-1/3">
-                                    <Select value={estado} onValueChange={setEstado}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Estado" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="todos">Todos los estados</SelectItem>
-                                            <SelectItem value="abierto">Abierto</SelectItem>
-                                            <SelectItem value="pendiente">Pendiente</SelectItem>
-                                            <SelectItem value="aprobado">Aprobado</SelectItem>
-                                            <SelectItem value="rechazado">Rechazado</SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                            <div className="flex flex-col gap-4 md:flex-row md:flex-wrap">
+                                <div className="w-full md:w-auto">
+                                    <label className="text-muted-foreground mb-1 block text-xs">Desde</label>
+                                    <Input type="date" value={fechaDesde} onChange={(e) => setFechaDesde(e.target.value)} className="w-full" />
                                 </div>
                                 <div className="w-full md:w-auto">
-                                    <Button onClick={handleFilter} variant="secondary">
+                                    <label className="text-muted-foreground mb-1 block text-xs">Hasta</label>
+                                    <Input type="date" value={fechaHasta} onChange={(e) => setFechaHasta(e.target.value)} className="w-full" />
+                                </div>
+                                {es_admin_o_moderador && (
+                                    <div className="w-full md:w-56">
+                                        <label className="text-muted-foreground mb-1 block text-xs">Vendedor</label>
+                                        <Select value={vendedorId} onValueChange={setVendedorId}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Vendedor" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="todos">Todos los vendedores</SelectItem>
+                                                {vendedores.map((v) => (
+                                                    <SelectItem key={v.id} value={String(v.id)}>
+                                                        {v.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
+                                <div className="flex w-full items-end md:w-auto">
+                                    <Button onClick={handleFilter} variant="secondary" className="w-full md:w-auto">
                                         <Filter className="mr-2 h-4 w-4" /> Filtrar
                                     </Button>
                                 </div>
@@ -151,10 +158,6 @@ export default function Index({ auth, cierres, filters }: Props) {
                                 <TableRow>
                                     <TableHead>Fecha</TableHead>
                                     <TableHead>Vendedor</TableHead>
-                                    <TableHead>Saldo Inicial</TableHead>
-                                    <TableHead>Contado</TableHead>
-                                    <TableHead>Diferencia</TableHead>
-                                    <TableHead>Estado</TableHead>
                                     <TableHead className="text-right">Acciones</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -164,20 +167,6 @@ export default function Index({ auth, cierres, filters }: Props) {
                                         <TableRow key={cierre.id}>
                                             <TableCell className="font-medium">{new Date(cierre.fecha_cierre).toLocaleString()}</TableCell>
                                             <TableCell>{cierre.usuario.name}</TableCell>
-                                            <TableCell>${Number(cierre.saldo_inicial).toFixed(2)}</TableCell>
-                                            <TableCell className="font-bold">${Number(cierre.saldo_contado).toFixed(2)}</TableCell>
-                                            <TableCell
-                                                className={
-                                                    Number(cierre.diferencia) !== 0
-                                                        ? Number(cierre.diferencia) > 0
-                                                            ? 'font-bold text-green-600'
-                                                            : 'font-bold text-red-600'
-                                                        : 'text-gray-500'
-                                                }
-                                            >
-                                                ${Number(cierre.diferencia).toFixed(2)}
-                                            </TableCell>
-                                            <TableCell>{getStatusBadge(cierre.estado)}</TableCell>
                                             <TableCell className="text-right">
                                                 <Button variant="ghost" size="sm" asChild>
                                                     <Link href={route('ventas.cierres.show', cierre.id)}>Ver detalle</Link>
@@ -187,13 +176,41 @@ export default function Index({ auth, cierres, filters }: Props) {
                                     ))
                                 ) : (
                                     <TableRow>
-                                        <TableCell colSpan={7} className="h-24 text-center">
+                                        <TableCell colSpan={3} className="h-24 text-center">
                                             No se encontraron cierres.
                                         </TableCell>
                                     </TableRow>
                                 )}
                             </TableBody>
                         </Table>
+                        {cierres.links.length > 3 && (
+                            <div className="flex flex-col items-center justify-between gap-2 border-t p-4 sm:flex-row">
+                                <div className="text-muted-foreground text-sm">
+                                    Mostrando {cierres.from ?? 0} a {cierres.to ?? 0} de {cierres.total} resultados
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {cierres.links.map((link, index) => {
+                                        const displayLabel = link.label
+                                            .replace('&laquo;', '«')
+                                            .replace('&raquo;', '»')
+                                            .replace('pagination.previous', '«')
+                                            .replace('pagination.next', '»');
+
+                                        return (
+                                            <Button
+                                                key={index}
+                                                variant={link.active ? 'default' : 'outline'}
+                                                size="sm"
+                                                disabled={!link.url}
+                                                onClick={() => goToPage(link.url)}
+                                            >
+                                                {displayLabel}
+                                            </Button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </main>
             </div>
