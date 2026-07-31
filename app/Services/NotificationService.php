@@ -41,10 +41,24 @@ class NotificationService
         }
 
         if (isset($operacion['cuenta_id'])) {
-            $vendedoresCuenta = User::whereHas('cuentas', 
+            $vendedoresCuenta = User::whereHas('cuentas',
                 fn($query) => $query->where('cuentas.id', $operacion['cuenta_id'])
             )->where('role', 'vendedor')->get();
             $usuarios = $usuarios->merge($vendedoresCuenta);
+        }
+
+        if (isset($operacion['cuenta_origen_id'])) {
+            $vendedoresCuentaOrigen = User::whereHas('cuentas',
+                fn($query) => $query->where('cuentas.id', $operacion['cuenta_origen_id'])
+            )->where('role', 'vendedor')->get();
+            $usuarios = $usuarios->merge($vendedoresCuentaOrigen);
+        }
+
+        if (isset($operacion['cuenta_destino_id'])) {
+            $vendedoresCuentaDestino = User::whereHas('cuentas',
+                fn($query) => $query->where('cuentas.id', $operacion['cuenta_destino_id'])
+            )->where('role', 'vendedor')->get();
+            $usuarios = $usuarios->merge($vendedoresCuentaDestino);
         }
 
         // Eliminar duplicados
