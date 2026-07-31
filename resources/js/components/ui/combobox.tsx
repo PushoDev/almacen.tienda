@@ -84,14 +84,25 @@ function ComboboxContent({
   align = "start",
   alignOffset = 0,
   anchor,
+  container,
   ...props
 }: ComboboxPrimitive.Popup.Props &
   Pick<
     ComboboxPrimitive.Positioner.Props,
     "side" | "align" | "sideOffset" | "alignOffset" | "anchor"
-  >) {
+  > & {
+    /**
+     * Contenedor DOM donde se porta el popup. Por defecto se porta a `<body>`.
+     * Necesario cuando el Combobox vive dentro de un Dialog/AlertDialog de Radix:
+     * si el popup queda como hermano (no descendiente) del contenido del diálogo,
+     * el focus-trap de Radix intercepta los clicks del popup como "fuera" del
+     * diálogo y rompe la selección con mouse. Pasar aquí el nodo del diálogo
+     * (ej. el ancestro `[data-slot=alert-dialog-content]`) lo resuelve.
+     */
+    container?: React.ComponentProps<typeof ComboboxPrimitive.Portal>["container"]
+  }) {
   return (
-    <ComboboxPrimitive.Portal>
+    <ComboboxPrimitive.Portal container={container}>
       <ComboboxPrimitive.Positioner
         side={side}
         sideOffset={sideOffset}

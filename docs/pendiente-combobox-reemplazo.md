@@ -6,7 +6,7 @@
 
 - **Librería**: `@base-ui/react` v1.4.1
 - **Archivo**: `resources/js/components/ui/combobox.tsx` (278 líneas, 16 subcomponentes)
-- **Ya validado en**: `Movimientos/Index.tsx` y `Transacciones/layouts/Movimientos.tsx`
+- **Ya validado en**: `Movimientos/Index.tsx`, `Transacciones/layouts/Movimientos.tsx` y `components/ventas/PaymentForm.tsx` (campo "Destino del Pago", dentro de un `AlertDialog` — ver sección de Dialog más abajo)
 
 ## Patrón de conversión
 
@@ -72,6 +72,40 @@ const itemsFiltrados = itemsPermitidos.filter(i => !xSearch || i.nombre.toLowerC
 - `itemToStringLabel` compara con `.toString() ===`, no con `==` — evita falsos positivos de coerción.
 - El estado vacío (`Sin resultados`) se renderiza a mano como `<div>` condicional, dentro de `ComboboxList`, después del `.map()` — no usar `ComboboxEmpty`, para mantener consistencia con el patrón ya validado.
 - Si el campo tiene reglas de qué opciones puede ver el usuario (rol) o depende de otro campo ya seleccionado (exclusión mutua, filtrado en cascada), ese filtrado va **antes** del filtro de texto, como una lista base separada (ver `almacenesOrigen`/`almacenesDestino` en `Movimientos/Index.tsx`).
+
+## Combobox dentro de un Dialog o AlertDialog
+
+**Síntoma**: el combobox funciona con teclado (flechas + Enter seleccionan bien, incluso hace scroll del listbox), pero con mouse falla de dos formas a la vez:
+- El click en un `ComboboxItem` no selecciona nada — el popup se cierra y el foco salta a otro campo del formulario (ej. el siguiente input).
+- La rueda del mouse sobre el popup hace scroll de la **página de fondo** en vez de la lista interna del combobox, aunque el scrollbar del popup se vea.
+
+**Causa**: `AlertDialog`/`Dialog` (`resources/js/components/ui/alert-dialog.tsx` y `dialog.tsx`) usan `@radix-ui/react-alert-dialog` / `@radix-ui/react-dialog`. `Combobox` usa `@base-ui/react`. Son dos librerías de UI headless distintas, cada una con su propio manejo de foco y portales. `ComboboxContent` porta su popup a `<body>` por defecto (`ComboboxPrimitive.Portal`), quedando como **hermano**, no descendiente, del contenido del diálogo de Radix. El focus-trap de Radix considera cualquier interacción dentro de ese popup como "fuera" del diálogo y la intercepta — de ahí que el click no llegue al item y el foco se redirija.
+
+**Caso real**: `resources/js/components/ventas/PaymentForm.tsx`, campo "Destino del Pago", dentro del `AlertDialog` "Procesar Venta" de `Vendor/Index.tsx`. Encontrado y arreglado el 2026-07-31.
+
+**Fix (reutilizable, ya aplicado)**:
+
+1. `combobox.tsx` — `ComboboxContent` acepta un prop opcional `container` que se reenvía a `ComboboxPrimitive.Portal` (no rompe nada existente; sin el prop se sigue portando a `<body>` como siempre):
+   ```tsx
+   function ComboboxContent({ ..., container, ...props }) {
+     return (
+       <ComboboxPrimitive.Portal container={container}>
+         ...
+   ```
+
+2. En el componente que renderiza el Combobox dentro del diálogo, resolver el nodo del diálogo con un `ref` + `closest('[data-slot="alert-dialog-content"]')` (o `[data-slot="dialog-content"]` si es `Dialog` en vez de `AlertDialog`) y pasarlo como `container`:
+   ```tsx
+   const formRef = useRef<HTMLDivElement>(null)
+   const [dialogContainer, setDialogContainer] = useState<HTMLElement | undefined>(undefined)
+   useEffect(() => {
+     const container = formRef.current?.closest('[data-slot="alert-dialog-content"]')
+     if (container instanceof HTMLElement) setDialogContainer(container)
+   }, [])
+
+   // <div ref={formRef}> ... <ComboboxContent container={dialogContainer}> ...
+   ```
+
+**Cuándo aplicar esto**: cualquier Combobox nuevo que se renderice dentro de un `Dialog`/`AlertDialog` necesita este `container` desde el inicio — no hace falta esperar a que falle. Si el combobox vive en una página normal (sin diálogo encima, como `Movimientos/Index.tsx`), no se necesita nada de esto.
 
 ## Prioridades
 

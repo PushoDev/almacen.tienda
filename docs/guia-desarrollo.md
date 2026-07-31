@@ -156,6 +156,8 @@ routes/
 - Formularios con `useForm()` de Inertia.
 - Navegación con `router.post/get()` de Inertia (no `fetch` directo para rutas web).
 - Nombres de archivos y componentes en **PascalCase**.
+- **Inputs numéricos nunca deben cambiar de valor con la rueda del mouse.** Ya está resuelto de forma centralizada en `resources/js/components/ui/input.tsx` (`onWheel` hace `blur()` cuando `type="number"`) — no hace falta nada extra al usar `<Input type="number">` en ningún formulario nuevo. Si se crea un input numérico que **no** use el componente `Input` compartido (ej. un `<input>` nativo suelto), replicar el mismo `onWheel`.
+- **Combobox dentro de un `Dialog`/`AlertDialog`**: si el combobox no responde al click con mouse ni al scroll dentro de su propio popup (aunque sí responda al teclado), es el conflicto documentado en [`pendiente-combobox-reemplazo.md`](pendiente-combobox-reemplazo.md#combobox-dentro-de-un-dialog-o-alertdialog) — ir directo ahí, no depurar desde cero.
 
 ### Base de datos
 - Nombres de tablas y columnas en **snake_case español**.
