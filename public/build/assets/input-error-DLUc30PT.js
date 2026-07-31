@@ -1,1 +1,0 @@
-import{j as n}from"./app-CMKSaNS5.js";import{a as o}from"./createLucideIcon-t1LD7TD3.js";function a({message:r,className:t="",...e}){return r?n.jsx("p",{...e,className:o("text-sm text-red-600 dark:text-red-400",t),children:r}):null}export{a as I};
