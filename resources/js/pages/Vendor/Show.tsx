@@ -340,6 +340,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     const [showMensajeroForm, setShowMensajeroForm] = useState(false);
     const [mensajeroFormTipo, setMensajeroFormTipo] = useState<'propio' | 'externo' | ''>('');
     const [mensajeroFormMontoCUP, setMensajeroFormMontoCUP] = useState('');
+    const [mensajeroFormTasa, setMensajeroFormTasa] = useState('');
     const [mensajeroFormCuentaId, setMensajeroFormCuentaId] = useState('');
     const [mensajeroFormCuentaOrigenId, setMensajeroFormCuentaOrigenId] = useState('');
     const [cuentasMensajero, setCuentasMensajero] = useState<Cuenta[]>([]);
@@ -378,13 +379,17 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     useEffect(() => {
         if (!showMensajeroForm || !currentVenta.mensajero) return;
         setMensajeroFormTipo('externo');
-        // Si ya se guardó un monto final, usarlo; si no, sugerir monto_USD × tasa_CUP
+        // Tasa: usar la ya guardada en la venta si existe, si no la del sistema (editable desde aquí)
+        const tasaCUPSistema = monedasSistema.find(m => m.codigo === 'CUP')?.tasa ?? 0;
+        const tasaInicial = currentVenta.mensajero.tasa ?? tasaCUPSistema;
+        setMensajeroFormTasa(tasaInicial > 0 ? String(tasaInicial) : '');
+
+        // Si ya se guardó un monto final, usarlo; si no, sugerir monto_USD × tasa
         let montoInicial = 0;
         if (currentVenta.mensajero.monto_final_cup) {
             montoInicial = currentVenta.mensajero.monto_final_cup;
         } else {
-            const tasaCUP = monedasSistema.find(m => m.codigo === 'CUP')?.tasa ?? 0;
-            montoInicial = Number(currentVenta.mensajero.monto) * tasaCUP;
+            montoInicial = Number(currentVenta.mensajero.monto) * tasaInicial;
         }
         setMensajeroFormMontoCUP(montoInicial > 0 ? String(Number(montoInicial).toFixed(2)) : '');
         const cuentaGuardada = currentVenta.mensajero.cuenta?.id;
@@ -507,6 +512,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
         const montoCUP = parseFloat(mensajeroFormMontoCUP);
         if (!montoCUP || montoCUP <= 0) { toast.error('Ingresa el monto CUP al mensajero.'); return; }
 
+        const tasa = parseFloat(mensajeroFormTasa);
+        if (!tasa || tasa <= 0) { toast.error('Ingresa la tasa de cambio para el pago.'); return; }
+
         // EXTERNO: solo necesita la cuenta de donde sale el pago
         if (!mensajeroFormCuentaId) { toast.error('Selecciona la cuenta CUP de donde sale el pago al mensajero.'); return; }
         const cuentaSel = cuentasMensajero.find(c => String(c.id) === mensajeroFormCuentaId);
@@ -519,6 +527,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
             mensajero_tipo: 'externo',
             mensajero_cuenta_id: Number(mensajeroFormCuentaId),
             mensajero_monto_final_cup: montoCUP,
+            mensajero_tasa: tasa,
         });
     };
 
@@ -2204,7 +2213,32 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         );
                                     })()}
 
-                                    {/* Monto final al mensajero — editable */}
+                                    {/* Tasa de cambio para procesar el pago — editable, independiente de la tasa del sistema */}
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Tasa de cambio para el pago (CUP/USD)</Label>
+                                        <Input
+                                            type="number"
+                                            min="0.0001"
+                                            step="0.01"
+                                            value={mensajeroFormTasa}
+                                            onChange={e => {
+                                                const nuevaTasa = e.target.value;
+                                                setMensajeroFormTasa(nuevaTasa);
+                                                const tasaNum = parseFloat(nuevaTasa);
+                                                if (tasaNum > 0 && currentVenta.mensajero) {
+                                                    const nuevoMontoCUP = Number(currentVenta.mensajero.monto) * tasaNum;
+                                                    setMensajeroFormMontoCUP(nuevoMontoCUP > 0 ? String(nuevoMontoCUP.toFixed(2)) : '');
+                                                }
+                                            }}
+                                            placeholder="Ej: 380.00"
+                                            className="h-8 text-sm"
+                                        />
+                                        <p className="text-xs text-muted-foreground">
+                                            Recalcula el monto CUP de abajo. Se sugiere con la tasa del sistema, pero puedes ajustarla al momento de pagar.
+                                        </p>
+                                    </div>
+
+                                    {/* Monto final al mensajero — editable (permite ajuste manual adicional) */}
                                     <div className="space-y-1">
                                         <Label className="text-xs">Monto final al mensajero (CUP)</Label>
                                         <Input

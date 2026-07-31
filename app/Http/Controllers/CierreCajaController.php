@@ -589,7 +589,8 @@ class CierreCajaController extends Controller
                 ->where('estado', 'completada')
                 ->whereNotNull('mensajero_monto')
                 ->where('mensajero_monto', '>', 0)
-                ->get(['id', 'mensajero_monto', 'mensajero_monto_original', 'mensajero_monto_final_cup', 'mensajero_tipo', 'mensajero_tasa', 'mensajero_tasa_entrada']);
+                ->with('detalles.producto:id,nombre_producto,marca_producto,modelo_producto')
+                ->get(['id', 'total', 'mensajero_monto', 'mensajero_monto_original', 'mensajero_monto_final_cup', 'mensajero_tipo', 'mensajero_tasa', 'mensajero_tasa_entrada']);
 
             $mensajeroCount         = $mensajeroCierre->count();
             $mensajeroTotUSD        = round($mensajeroCierre->sum(fn($v) => (float) $v->mensajero_monto), 2);
@@ -613,10 +614,18 @@ class CierreCajaController extends Controller
                     $mensajeroExternoTotCUP += $cup;
                 }
                 $mensajeroDetallesList[] = [
-                    'venta_id'  => $v->id,
-                    'monto_usd' => round($montoUSD, 2),
-                    'monto_cup' => round($cup, 2),
-                    'tipo'      => $v->mensajero_tipo,
+                    'venta_id'    => $v->id,
+                    'monto_usd'   => round($montoUSD, 2),
+                    'monto_cup'   => round($cup, 2),
+                    'tasa'        => $montoUSD > 0 ? round($cup / $montoUSD, 2) : null,
+                    'tipo'        => $v->mensajero_tipo,
+                    'total_venta' => round((float) $v->total, 2),
+                    'productos'   => $v->detalles->map(fn($d) => [
+                        'nombre'   => $d->producto?->nombre_producto ?? 'Producto #'.$d->producto_id,
+                        'marca'    => $d->producto?->marca_producto,
+                        'modelo'   => $d->producto?->modelo_producto,
+                        'cantidad' => (int) $d->cantidad,
+                    ])->values()->all(),
                 ];
                 return $cup;
             }), 2);
@@ -859,8 +868,8 @@ class CierreCajaController extends Controller
             ->where('estado', 'completada')
             ->whereNotNull('mensajero_monto')
             ->where('mensajero_monto', '>', 0)
-            ->with('mensajeroMoneda')
-            ->get(['id', 'mensajero_monto', 'mensajero_monto_original', 'mensajero_monto_final_cup', 'mensajero_moneda_id', 'mensajero_tipo', 'mensajero_cuenta_id', 'mensajero_tasa', 'mensajero_tasa_entrada', 'mensajero_cuenta_origen_id']);
+            ->with(['mensajeroMoneda', 'detalles.producto:id,nombre_producto,marca_producto,modelo_producto'])
+            ->get(['id', 'total', 'mensajero_monto', 'mensajero_monto_original', 'mensajero_monto_final_cup', 'mensajero_moneda_id', 'mensajero_tipo', 'mensajero_cuenta_id', 'mensajero_tasa', 'mensajero_tasa_entrada', 'mensajero_cuenta_origen_id']);
 
         // 2. Obtener IDs de cuentas del usuario para buscar transferencias entrantes
         $cuentaIds = $user->cuentas()->pluck('id')->toArray();
@@ -1240,7 +1249,7 @@ class CierreCajaController extends Controller
             ->whereNotNull('gestor_cuenta_id')
             ->where('gestor_monto', '>', 0)
             ->with(['gestorCuenta.moneda', 'monedaCobro', 'detalles.producto:id,nombre_producto,marca_producto,modelo_producto'])
-            ->get(['id', 'total', 'cliente_id', 'gestor_monto', 'gestor_cuenta_id', 'gestor_comentario', 'moneda_cobro_id', 'created_at', 'es_venta_gestor']);
+            ->get(['id', 'total', 'cliente_id', 'gestor_monto', 'gestor_cuenta_id', 'gestor_comentario', 'moneda_cobro_id', 'created_at', 'es_venta_gestor', 'tasa_aplicada_gestor']);
 
         foreach ($ventasConGestor as $venta) {
             $montoComision = (float) $venta->gestor_monto;
@@ -1252,7 +1261,11 @@ class CierreCajaController extends Controller
                 ($gestorCuenta?->tipo_moneda) ??
                 'USD';
 
-            $tasaCambio = $gestorCuenta?->moneda?->tasa_cambio ?? 1;
+            // Tasa realmente negociada en la venta (tasa_aplicada_gestor, editable desde
+            // guardarDestinatario()) tiene prioridad sobre la tasa global actual del sistema —
+            // esta última puede haber cambiado desde que se hizo la venta.
+            $tasaVenta  = (float) ($venta->tasa_aplicada_gestor ?? 0);
+            $tasaCambio = $tasaVenta > 0 ? $tasaVenta : ($gestorCuenta?->moneda?->tasa_cambio ?? 1);
             $montoEnUSD = $tasaCambio > 0 ? $montoComision / $tasaCambio : $montoComision;
 
             // Agregar al total
@@ -1264,6 +1277,8 @@ class CierreCajaController extends Controller
                 'monto'        => $montoComision,
                 'moneda_codigo'=> $monedaCodigo,
                 'monto_usd'    => round($montoEnUSD, 2),
+                // Tasa efectiva (monto / monto_usd) — siempre coincide con los montos mostrados.
+                'tasa'         => $montoEnUSD > 0 ? round($montoComision / $montoEnUSD, 2) : null,
                 'cuenta_nombre'=> $venta->gestorCuenta?->nombre_cuenta ?? 'N/A',
                 'cuenta_tipo'  => $venta->gestorCuenta?->tipo ?? 'N/A',
                 'comentario'   => $venta->gestor_comentario ?? '',
@@ -1485,10 +1500,21 @@ class CierreCajaController extends Controller
             }
 
             $mensajeroDetalles[] = [
-                'venta_id'   => $v->id,
-                'monto_usd'  => round($montoUSD, 2),
-                'monto_cup'  => round($montoCUP, 2),
-                'tipo'       => $v->mensajero_tipo,
+                'venta_id'    => $v->id,
+                'monto_usd'   => round($montoUSD, 2),
+                'monto_cup'   => round($montoCUP, 2),
+                // Tasa efectiva (monto_cup / monto_usd), no simplemente mensajero_tasa —
+                // así siempre coincide con el monto mostrado aunque se haya ajustado
+                // manualmente el monto final (premio/sanción) por encima del cálculo por tasa.
+                'tasa'        => $montoUSD > 0 ? round($montoCUP / $montoUSD, 2) : null,
+                'tipo'        => $v->mensajero_tipo,
+                'total_venta' => round((float) $v->total, 2),
+                'productos'   => $v->detalles->map(fn($d) => [
+                    'nombre'   => $d->producto?->nombre_producto ?? 'Producto #'.$d->producto_id,
+                    'marca'    => $d->producto?->marca_producto,
+                    'modelo'   => $d->producto?->modelo_producto,
+                    'cantidad' => (int) $d->cantidad,
+                ])->values()->all(),
             ];
         }
         $mensajeroTotalUSD        = round($mensajeroTotalUSD, 2);
