@@ -633,7 +633,14 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
         (currentVenta.comision_pago?.cuenta?.saldo_disponible ?? Infinity) <
             (currentVenta.comision_pago?.monto_cup ?? 0);
 
-    const puedeAprobar = isVentaPendiente && currentVenta.destinatario !== null && !gestorSinSaldo && !comisionSinSaldo;
+    // Venta sin gestor con comisión pendiente de configurar (cuenta + tasa) — si no se
+    // resuelve antes de aprobar, la comisión nunca se descuenta de ninguna cuenta.
+    const comisionSinConfigurar =
+        !currentVenta.gestor &&
+        currentVenta.total_comision > 0 &&
+        (currentVenta.comision_pago === null || !currentVenta.comision_pago?.tasa);
+
+    const puedeAprobar = isVentaPendiente && currentVenta.destinatario !== null && !gestorSinSaldo && !comisionSinSaldo && !comisionSinConfigurar;
 
     const monedaPrincipal = currentVenta.moneda_principal;
     const simboloMonedaPrincipal = getCurrencySymbol(monedaPrincipal);
@@ -1510,7 +1517,15 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                                         step="0.0001"
                                                         min="0.0001"
                                                         value={tasaAplicadaGestor}
-                                                        onChange={(e) => setTasaAplicadaGestor(e.target.value)}
+                                                        onChange={(e) => {
+                                                            const nuevaTasa = e.target.value;
+                                                            setTasaAplicadaGestor(nuevaTasa);
+                                                            const tasaNum = parseFloat(nuevaTasa);
+                                                            if (tasaNum > 0) {
+                                                                const montoCalculado = currentVenta.total_comision * tasaNum;
+                                                                setGestorMonto(montoCalculado.toFixed(2));
+                                                            }
+                                                        }}
                                                         placeholder="Ej: 500"
                                                     />
                                                 </div>
@@ -1818,11 +1833,13 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         ? 'Aprobando...'
                                         : !currentVenta.destinatario
                                           ? 'Falta Receptor'
-                                          : gestorSinSaldo
-                                            ? 'Sin Fondos Gestor'
-                                            : comisionSinSaldo
-                                              ? 'Sin Fondos Comisión'
-                                              : 'Aprobar Venta'}
+                                          : comisionSinConfigurar
+                                            ? 'Falta Configurar Comisión'
+                                            : gestorSinSaldo
+                                              ? 'Sin Fondos Gestor'
+                                              : comisionSinSaldo
+                                                ? 'Sin Fondos Comisión'
+                                                : 'Aprobar Venta'}
                                 </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
@@ -2144,12 +2161,18 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         </Badge>
                                     )}
                                 </h4>
-                                <Button size="sm" variant="outline" onClick={() => {
-                                    setShowMensajeroForm(!showMensajeroForm);
-                                }}>
-                                    {showMensajeroForm ? 'Cancelar' : currentVenta.mensajero ? 'Editar' : 'Agregar'}
-                                </Button>
+                                {currentVenta.mensajero && (
+                                    <Button size="sm" variant="outline" onClick={() => {
+                                        setShowMensajeroForm(!showMensajeroForm);
+                                    }}>
+                                        {showMensajeroForm ? 'Cancelar' : 'Editar'}
+                                    </Button>
+                                )}
                             </div>
+
+                            {!currentVenta.mensajero && (
+                                <p className="text-xs text-muted-foreground">Esta venta no tiene mensajería asociada.</p>
+                            )}
 
                             {currentVenta.mensajero && !showMensajeroForm && (
                                 <div className="space-y-1 rounded-md bg-sky-50 px-3 py-2 text-sm dark:bg-sky-950">

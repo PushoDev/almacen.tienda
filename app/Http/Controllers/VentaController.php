@@ -1256,6 +1256,10 @@ class VentaController extends Controller
         //     return response()->json(['success' => false, 'message' => 'El mensajero propio requiere especificar la cuenta CUP de donde sale el dinero'], 400);
         // }
 
+        if (!$venta->es_venta_gestor && $venta->total_comision > 0 && (!$venta->comision_cuenta_id || !$venta->comision_tasa)) {
+            return response()->json(['success' => false, 'message' => 'Esta venta tiene comisión pendiente por configurar (falta cuenta o tasa de la comisión del vendedor)'], 400);
+        }
+
         DB::transaction(function () use ($venta) {
             // 1. Cambiar estado a completada
             $venta->update(['estado' => 'completada']);
