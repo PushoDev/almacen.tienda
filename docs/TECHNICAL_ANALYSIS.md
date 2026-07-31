@@ -4,7 +4,7 @@
 
 ### Backend (Laravel 12)
 - **Engine**: PHP 8.2+
-- **Architecture**: Service-Controller-Model pattern.
+- **Architecture**: In practice, mostly **fat controllers → Eloquent Models**, not a layered Service-Controller-Model pattern. `app/Services/` has only 2 classes (`DashboardStatsService`, `NotificationService`); the bulk of business logic (ventas, cierres, compras, transacciones) lives directly in controllers (`VentaController` ~2,050 líneas, `CierreCajaController` ~1,940 líneas).
 - **Key Packages**:
     - `spatie/laravel-permission`: For RBAC.
     - `inertiajs/inertia-laravel`: Glue between Laravel and React.
@@ -42,7 +42,7 @@ $parteFija = $nombre . $marca . $modelo . $capacidad;
 - **Inertia integration**: Seamless transitions with progress indicators and server-side state hydration.
 
 ## 🔐 Security & Permissions
-- **Middleware**: Custom middleware for warehouse-level isolation.
+- **Middleware**: `CheckAlmacenPermission` existe en `app/Http/Middleware/` pero está **comentada/deshabilitada** en `bootstrap/app.php` — no protege ninguna ruta actualmente. El aislamiento por almacén se hace de forma ad hoc dentro de los controladores (ej. `$user->almacenes()` en `VentaController`), no vía middleware.
 - **CSRF & XSS**: Standard Laravel protections enhanced with TypeScript typing for all props.
 
 ## 📊 Database Design Highlights

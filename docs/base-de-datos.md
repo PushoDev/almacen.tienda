@@ -28,13 +28,19 @@
 |---|---|---|
 | `id` | PK | |
 | `nombre_almacen` | string | |
-| `tipo` | enum | `almacen`, `punto_venta`, `transportacion` |
-| `activo` | boolean | |
-| `responsable_nombre` | string nullable | |
-| `responsable_apellido` | string nullable | |
-| `responsable_carnet` | string nullable | |
-| `responsable_telefono` | string nullable | |
+| `tipo_almacen` | enum | `almacen`, `punto_venta`, `transportacion` |
+| `telefono_almacen` | string | único |
+| `correo_almacen` | string nullable | |
+| `provincia_almacen` | string nullable | |
+| `ciudad_almacen` | string nullable | Usado por `Api/CatalogoPublicoController` |
+| `notas_almacen` | text nullable | |
+| `nombre_responsable` | string nullable | |
+| `apellido_responsable` | string nullable | |
+| `carnet_responsable` | string nullable | |
+| `telefono_responsable` | string nullable | |
 | `mensajero_cuenta_id` | FK nullable | Cuenta CUP para pagos de mensajería |
+
+> No existe columna `activo`/`activa` en `almacens`.
 
 **Relaciones:** `belongsToMany(Producto)` via `almacen_producto`, `hasMany(UserAlmacen)`, `belongsTo(Cuenta, 'mensajero_cuenta_id')`
 
@@ -54,18 +60,20 @@
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `id` | PK | |
-| `nombre` | string | |
-| `marca` | string nullable | |
-| `modelo` | string nullable | |
-| `capacidad` | string nullable | |
+| `nombre_producto` | string | (**no** `nombre`) |
+| `marca_producto` | string nullable | (**no** `marca`) |
+| `modelo_producto` | string nullable | (**no** `modelo`) |
+| `capacidad_producto` | string nullable | (**no** `capacidad`) |
 | `color_producto` | string nullable | Agregado 2026-07-15 |
-| `descripcion` | text nullable | |
-| `descripcion_corta` | text nullable | Para e-commerce |
-| `slug` | string nullable | URL amigable para e-commerce |
-| `imagen` | string nullable | Ruta relativa desde `public/` |
+| `descripcion_producto` | text nullable | (**no** `descripcion`) |
+| `codigo_producto` | string nullable unique | Código principal del producto |
+| `barcode_image` | string nullable | Ruta de la imagen de código de barras generada |
+| `imagen_producto` | string nullable | Ruta relativa desde `public/`, default `productos/producto-default.png` |
 | `precio_compra_producto` | decimal | Costo en USD — **solo visible para admin/moderador** |
 | `categoria_id` | FK | |
 | `activo` | boolean | |
+
+> No existen columnas `descripcion_corta` ni `slug` en `productos` pese a mencionarse en otros docs de e-commerce — verificar antes de usarlas en queries.
 
 **Relaciones:** `hasMany(ProductoCodigo)`, `hasMany(AlmacenProducto)`, `hasMany(ProductoVendedor)`, `belongsTo(Categoria)`, `hasMany(CostoHistorial)`, `hasMany(HistorialPrecioCosto)`
 
@@ -76,7 +84,8 @@
 |---|---|---|
 | `id` | PK | |
 | `producto_id` | FK | |
-| `codigo` | string | Código de barras EAN-128 |
+| `codigo_barras` | string | Código de barras EAN-128 (**no** `codigo`) |
+| `imagen_barcode` | string nullable | Imagen generada del código |
 | `cantidad` | int | Unidades que representa este código |
 | `es_default` | boolean | Código principal del producto |
 
@@ -106,7 +115,7 @@
 | `user_id` | FK | Vendedor que creó la venta |
 | `almacen_id` | FK | |
 | `cliente_id` | FK nullable | |
-| `estado` | enum | `solicitud_especial`, `pendiente`, `completada`, `rechazada`, `cancelada` |
+| `estado` | enum | `solicitud_especial`, `pendiente`, `pendiente_precio`, `completada`, `rechazada`, `cancelada` (`pendiente_precio` existe en el ENUM pero no está en uso actualmente en el código) |
 | `motivo_anulacion` | string nullable | Solo en ventas canceladas |
 | `detalle_anulacion` | string nullable | Razón detallada de anulación |
 | `detalles_venta` | text nullable | Notas internas de la venta |
@@ -171,10 +180,11 @@
 | `precio_venta` | decimal | Precio aplicado en esta venta |
 | `precio_base` | decimal nullable | Precio base del producto_vendedors al momento de la venta |
 | `costo_unitario` | decimal | Costo unitario al momento de la venta (campo `costo_unitario` en migración, no `precio_compra`) |
-| `costo` | decimal nullable | Costo total (`costo_unitario × cantidad`) |
 | `subtotal` | decimal | `precio_venta × cantidad` |
 | `ganancia` | decimal | `(precio_venta - costo_unitario) × cantidad` |
 | `comision_unitaria` | decimal | Comisión por unidad calculada |
+
+> No existe columna `costo` (costo total). El costo total se calcula inline (`costo_unitario × cantidad`) donde se necesita, no se persiste.
 
 ---
 
@@ -230,13 +240,15 @@
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `id` | PK | |
-| `nombre_cuenta` | string | |
-| `tipo_instrumento` | enum | `tarjeta`, `efectivo`, `otro` |
+| `nombre_cuenta` | string | único |
+| `tipo` | enum | `caja`, `banco`, `tarjeta`, `efectivo`, `otro` (**no** `tipo_instrumento`) |
 | `tipo_cuenta` | enum | `permanentes` (único valor desde 2026-07-28 — `temporales` unificado) |
 | `tipo_titular` | enum nullable | `externa`, `personal` (agregado 2026-07-28) |
+| `tipo_moneda` | enum | `USD`, `EUR`, `MLC`, `CUP` — campo legado, sigue en `$fillable`, coexiste con `moneda_id` |
 | `moneda_id` | FK | |
 | `saldo_cuenta` | decimal | Saldo actual |
-| `activa` | boolean | |
+| `estado` | enum | `activa`, `inactiva` (**no** existe una columna booleana `activa`) |
+| `notas_cuenta` | text nullable | |
 
 > ⚠️ `temporales` fue unificado a `permanentes` el 2026-07-28. El campo `deuda` fue eliminado de la tabla en esa misma fecha.
 
@@ -274,12 +286,20 @@
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `id` | PK | |
-| `tipo_movimiento_financiero_id` | FK | 1=Gasto, 2=Ingreso, 3=Transferencia |
+| `user_id` | FK | Quién registró el movimiento |
+| `tipo_movimiento_id` | FK | → `tipos_movimiento_financiero` (**no** `tipo_movimiento_financiero_id`) |
 | `cuenta_origen_id` | FK nullable | |
+| `cliente_origen_id` | FK nullable | |
 | `cuenta_destino_id` | FK nullable | |
+| `cliente_destino_id` | FK nullable | |
+| `proveedor_destino_id` | FK nullable | |
 | `monto` | decimal | |
-| `moneda_id` | FK | |
+| `moneda` | enum | `USD`, `EUR`, `MLC`, `CUP` — **no** es FK (`moneda_id`), es un enum plano |
+| `moneda_origen` / `moneda_destino` | string nullable | Monedas al momento del movimiento (transferencias con conversión) |
+| `tasa_cambio_aplicada` | decimal nullable | |
 | `descripcion` | text nullable | |
+| `fecha_operacion` | datetime nullable | |
+| `estado` | enum | `completado`, `pendiente`, `cancelado` |
 | `saldo_anterior_origen` | decimal nullable | Snapshot para auditoría |
 | `saldo_posterior_origen` | decimal nullable | |
 | `saldo_anterior_destino` | decimal nullable | |
@@ -291,9 +311,11 @@
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `id` | PK | |
-| `nombre_cliente` | string | |
-| `tipo` | enum | `fisico`, `asociado` |
-| `telefono` | string nullable | |
+| `nombre_cliente` | string | único |
+| `tipo_cliente` | enum | `fisico`, `asociado` (**no** `tipo`) |
+| `telefono_cliente` | string | único (**no** `telefono`) |
+| `direccion_cliente` | string nullable | |
+| `ciudad_cliente` | string nullable | |
 | `deuda_pago_cliente` | decimal | Deuda acumulada pendiente |
 
 ---
@@ -302,11 +324,14 @@
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `id` | PK | |
-| `almacen_id` | FK | |
-| `proveedor_id` | FK nullable | |
+| `proveedor_id` | FK | |
+| `cuenta_id` | FK nullable | Cuenta desde la que se paga (si aplica) |
 | `cliente_id` | FK nullable | Cuando la fuente es un cliente reseller |
-| `tipo_pago` | enum | `deuda_proveedor`, `pago_cash` |
-| `total` | decimal | |
+| `fecha_compra` | date | |
+| `total_compra` | decimal | (**no** `total`) |
+| `tipo_compra` | string | `deuda_proveedor`, `pago_cash`, `pago_cliente_fisico` (**no** `tipo_pago`; es `string` libre, no ENUM en DB) |
+
+> No existe columna `almacen_id` en `compras`.
 
 **Relaciones:** `hasMany(CompraProducto)`, `hasMany(CompraPago)`
 
@@ -384,14 +409,15 @@ Historial de cambios de tasa de monedas.
 | `user_id` | FK | |
 | `impacto_cuentas` | json nullable | Impacto financiero del cambio |
 
-### `tipo_movimiento_financieros`
-Catálogo de tipos de movimiento financiero.
+### `tipos_movimiento_financiero`
+Catálogo de tipos de movimiento financiero. (**Nombre real de la tabla** — no `tipo_movimiento_financieros`; modelo `TipoMovimientoFinanciero` con `protected $table = 'tipos_movimiento_financiero'`.)
 
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `id` | PK | 1=Gasto, 2=Ingreso, 3=Transferencia |
-| `nombre` | string | |
-| `descripcion` | string nullable | |
+| `nombre` | string | único |
+| `efecto` | enum | `ingreso` (suma al saldo) / `egreso` (resta) |
+| `descripcion` | text nullable | |
 
 ### `destinatario_ventas`
 Destinatario/receptor de una venta.

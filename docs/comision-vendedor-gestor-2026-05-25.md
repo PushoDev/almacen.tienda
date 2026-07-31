@@ -1,5 +1,7 @@
 # Comisión Vendedor y Gestor — Cambios 2026-05-25
 
+> ⚠️ **Snapshot histórico**: para las reglas de comisión vigentes (incluye los casos añadidos después, como venta especial → comisión 0) usar [ventas/contexto-actual.md](ventas/contexto-actual.md), que es el documento actualizado. Este archivo queda como referencia del cambio original.
+
 ## Resumen
 
 Se implementó el tracking de comisiones de vendedor por venta, con soporte correcto para ventas mediante gestor donde el precio sube por encima del precio base del almacén.

@@ -11,7 +11,7 @@
 | PHP | 8.2+ |
 | Composer | 2.x |
 | Node.js | 20+ |
-| MySQL / MariaDB | 8.0+ |
+| MySQL / MariaDB | 8.0+ (producción — ver nota SQLite abajo) |
 
 ---
 
@@ -44,7 +44,14 @@ php artisan storage:link
 # 8. Levantar servidores de desarrollo
 php artisan serve        # backend en :8000
 npm run dev              # Vite en :5173 (hot reload)
+
+# Alternativa: un solo comando (serve + queue:listen + vite en paralelo)
+composer run dev
 ```
+
+> **Nota SQLite**: `composer.json` (`post-create-project-cmd`) crea automáticamente `database/database.sqlite` y corre `migrate --graceful` — el quickstart de `composer create-project` funciona sin configurar MySQL. `.env.example` trae `DB_CONNECTION=sqlite` por defecto (vars de MySQL comentadas). El ejemplo de abajo asume que se cambia a MySQL manualmente.
+>
+> **Cola de notificaciones**: las notificaciones (Telegram, DB) usan `QUEUE_CONNECTION=database` — hace falta `php artisan queue:listen` (o `composer run dev`, que ya lo incluye) corriendo para que se procesen.
 
 ---
 
@@ -107,7 +114,7 @@ php artisan tinker
 # Frontend
 npm run dev        # desarrollo con hot reload
 npm run build      # build de producción
-npm run typecheck  # validar tipos TypeScript
+npm run types      # validar tipos TypeScript (tsc --noEmit) — no "typecheck"
 npm run lint       # corregir estilo de código (ESLint + Prettier)
 npm run format     # formatear código con Prettier
 
@@ -149,6 +156,8 @@ routes/
 - Formularios con `useForm()` de Inertia.
 - Navegación con `router.post/get()` de Inertia (no `fetch` directo para rutas web).
 - Nombres de archivos y componentes en **PascalCase**.
+- **Inputs numéricos nunca deben cambiar de valor con la rueda del mouse.** Ya está resuelto de forma centralizada en `resources/js/components/ui/input.tsx` (`onWheel` hace `blur()` cuando `type="number"`) — no hace falta nada extra al usar `<Input type="number">` en ningún formulario nuevo. Si se crea un input numérico que **no** use el componente `Input` compartido (ej. un `<input>` nativo suelto), replicar el mismo `onWheel`.
+- **Combobox dentro de un `Dialog`/`AlertDialog`**: si el combobox no responde al click con mouse ni al scroll dentro de su propio popup (aunque sí responda al teclado), es el conflicto documentado en [`pendiente-combobox-reemplazo.md`](pendiente-combobox-reemplazo.md#combobox-dentro-de-un-dialog-o-alertdialog) — ir directo ahí, no depurar desde cero.
 
 ### Base de datos
 - Nombres de tablas y columnas en **snake_case español**.

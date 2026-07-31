@@ -69,7 +69,7 @@ class TransferenciaController extends Controller
             $this->validarAccesoVendedor($origen, $request->origen_tipo);
 
             if (auth()->user()->role === 'vendedor' && $request->destino_tipo === 'cuenta') {
-                $cuentasAsignadas = \DB::table('user_cuentas')->pluck('cuenta_id')->toArray();
+                $cuentasAsignadas = auth()->user()->cuentas()->pluck('id')->toArray();
                 if (!in_array((int)$request->destino_id, $cuentasAsignadas)) {
                     throw new \Exception('No tiene permiso para transferir a esta cuenta.');
                 }

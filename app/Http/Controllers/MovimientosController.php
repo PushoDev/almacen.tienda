@@ -458,15 +458,14 @@ class MovimientosController extends Controller
             if ($movimiento->estado === 'en_transito') {
                 foreach ($movimiento->detalles as $detalle) {
                     if ($detalle->cantidad_despachada > 0) {
+                        // enviar() solo reserva cantidad_en_transito; cantidad nunca se
+                        // decrementó en el origen (eso solo pasa en recibir()). Rechazar un
+                        // envío en tránsito debe liberar la reserva, no sumar stock que
+                        // nunca salió.
                         AlmacenProducto::where([
                             'almacen_id' => $movimiento->almacen_origen_id,
                             'producto_id' => $detalle->producto_id
                         ])->decrement('cantidad_en_transito', $detalle->cantidad_despachada);
-
-                        AlmacenProducto::where([
-                            'almacen_id' => $movimiento->almacen_origen_id,
-                            'producto_id' => $detalle->producto_id
-                        ])->increment('cantidad', $detalle->cantidad_despachada);
                     }
                 }
             }

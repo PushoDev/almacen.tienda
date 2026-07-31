@@ -1,11 +1,11 @@
 import { Button } from '@/components/ui/button';
+import { Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
 import axios from 'axios';
 import { DollarSign } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -73,6 +73,19 @@ const PAYMENT_VIAS = [
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, onAddPayment }: PaymentFormProps) {
+    const formRef = useRef<HTMLDivElement>(null);
+    // El AlertDialog (Radix) atrapa el foco en su propio subárbol del DOM. El popup
+    // del Combobox (base-ui) se porta a <body> por defecto, quedando como hermano
+    // —no descendiente— del contenido del diálogo, lo que rompe el click con mouse
+    // dentro del popup. Portarlo dentro del propio AlertDialogContent lo soluciona.
+    const [dialogContainer, setDialogContainer] = useState<HTMLElement | undefined>(undefined);
+    useEffect(() => {
+        const container = formRef.current?.closest('[data-slot="alert-dialog-content"]');
+        if (container instanceof HTMLElement) {
+            setDialogContainer(container);
+        }
+    }, []);
+
     const [currentPayment, setCurrentPayment] = useState({
         method: '' as 'transferencia' | 'efectivo' | '',
         moneda_id: '',
@@ -86,6 +99,7 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
 
     const [cuentasFiltradas, setCuentasFiltradas]   = useState<Cuenta[]>([]);
     const [cargandoCuentas, setCargandoCuentas]     = useState(false);
+    const [destinoSearch, setDestinoSearch]         = useState('');
     const [conversionCalculada, setConversionCalculada] = useState<{
         montoOriginal: number;
         montoUSD: number;
@@ -106,6 +120,29 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
     const selectedCurrencyInfo = currentPayment.moneda_id
         ? currencies.find((c) => c.id.toString() === currentPayment.moneda_id.toString())
         : null;
+
+    // Una sola lista combinada (cuentas + clientes físicos), igual que el patrón de
+    // Movimientos/Index.tsx: un array filtrado, un .map() y un único estado vacío —
+    // nunca mezclar <div> de encabezado como hermanos de ComboboxItem en la misma lista.
+    const opcionesDestino = useMemo(() => {
+        const cuentas = cuentasFiltradas.map((c) => ({
+            value: `cuenta_${c.id}`,
+            label: `🏦 ${c.nombre_cuenta}`,
+            nombre: c.nombre_cuenta,
+        }));
+        const clientes = selectedCurrencyInfo?.code === 'USD'
+            ? clientesFisicos.map((c) => ({
+                  value: `cliente_${c.id}`,
+                  label: `👤 ${c.nombre_cliente}`,
+                  nombre: c.nombre_cliente,
+              }))
+            : [];
+        return [...cuentas, ...clientes];
+    }, [cuentasFiltradas, clientesFisicos, selectedCurrencyInfo]);
+
+    const opcionesDestinoFiltradas = opcionesDestino.filter(
+        (o) => !destinoSearch || o.nombre.toLowerCase().includes(destinoSearch.toLowerCase()),
+    );
 
     // Recalcula conversión cuando cambia monto / moneda / tasa
     useEffect(() => {
@@ -172,6 +209,7 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
             referencia: value === 'efectivo' ? '' : prev.referencia,
             cuenta_id: '',
         }));
+        setDestinoSearch('');
         if (currentPayment.moneda_id) {
             cargarCuentasFiltradas(currentPayment.moneda_id, value);
         }
@@ -191,10 +229,15 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
             cuenta_id:    '',
             cliente_id:   '',
         }));
+        setDestinoSearch('');
         cargarCuentasFiltradas(monedaId, currentPayment.method);
     };
 
-    const handleDestinoChange = (value: string) => {
+    const handleDestinoChange = (value: string | null) => {
+        if (!value) {
+            setCurrentPayment((prev) => ({ ...prev, cuenta_id: '', cliente_id: '' }));
+            return;
+        }
         if (value.startsWith('cuenta_')) {
             setCurrentPayment((prev) => ({ ...prev, cuenta_id: value.replace('cuenta_', ''), cliente_id: '' }));
         } else if (value.startsWith('cliente_')) {
@@ -247,6 +290,7 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
 
         setCurrentPayment({ method: '', moneda_id: '', via: '', amount: '', exchangeRate: '', cuenta_id: '', cliente_id: '', referencia: '' });
         setCuentasFiltradas([]);
+        setDestinoSearch('');
         setConversionCalculada(null);
         toast.success('Pago agregado');
     };
@@ -266,7 +310,7 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
         (!!currentPayment.cuenta_id || !!currentPayment.cliente_id);
 
     return (
-        <div className="space-y-4">
+        <div ref={formRef} className="space-y-4">
             <h4 className="flex items-center gap-2 font-medium">
                 <DollarSign className="text-primary h-4 w-4" />
                 Agregar Pago
@@ -316,41 +360,39 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
 
                 {/* Destino */}
                 <div className="space-y-2">
-                    <Label>Destino del Pago</Label>
-                    <Select value={destinoValue} onValueChange={handleDestinoChange} disabled={!currentPayment.moneda_id}>
-                        <SelectTrigger><SelectValue placeholder="Seleccione destino" /></SelectTrigger>
-                        <SelectContent>
-                            {cuentasFiltradas.length > 0 && (
-                                <>
-                                    <div className="px-2 py-1.5 text-xs font-semibold text-gray-500">🏦 CUENTAS</div>
-                                    {cargandoCuentas ? (
-                                        <div className="px-2 py-3 text-center text-sm text-gray-500">Cargando...</div>
-                                    ) : (
-                                        cuentasFiltradas.map((cuenta) => (
-                                            <SelectItem key={`cuenta_${cuenta.id}`} value={`cuenta_${cuenta.id}`}>
-                                                🏦 {cuenta.nombre_cuenta}
-                                            </SelectItem>
-                                        ))
-                                    )}
-                                </>
-                            )}
-                            {selectedCurrencyInfo?.code === 'USD' && (
-                                <>
-                                    {cuentasFiltradas.length > 0 && <Separator className="my-1" />}
-                                    <div className="px-2 py-1.5 text-xs font-semibold text-gray-500">👤 CLIENTES FÍSICOS</div>
-                                    {clientesFisicos.length === 0 ? (
-                                        <div className="px-2 py-3 text-center text-sm text-gray-500">No hay clientes físicos</div>
-                                    ) : (
-                                        clientesFisicos.map((cliente) => (
-                                            <SelectItem key={`cliente_${cliente.id}`} value={`cliente_${cliente.id}`}>
-                                                👤 {cliente.nombre_cliente}
-                                            </SelectItem>
-                                        ))
-                                    )}
-                                </>
-                            )}
-                        </SelectContent>
-                    </Select>
+                    <Label htmlFor="destino_pago">Destino del Pago</Label>
+                    <Combobox
+                        value={destinoValue || null}
+                        onValueChange={handleDestinoChange}
+                        onInputValueChange={setDestinoSearch}
+                        itemToStringLabel={(id: string) => opcionesDestino.find((o) => o.value === id)?.label ?? ''}
+                    >
+                        <ComboboxInput
+                            id="destino_pago"
+                            className="w-full"
+                            placeholder="Buscar cuenta o cliente..."
+                            showClear
+                            disabled={!currentPayment.moneda_id}
+                        />
+                        <ComboboxContent container={dialogContainer}>
+                            <ComboboxList>
+                                {cargandoCuentas ? (
+                                    <div className="py-2 text-center text-sm text-muted-foreground">Cargando cuentas...</div>
+                                ) : (
+                                    <>
+                                        {opcionesDestinoFiltradas.map((opcion) => (
+                                            <ComboboxItem key={opcion.value} value={opcion.value}>
+                                                <span className="min-w-0 truncate" title={opcion.nombre}>{opcion.label}</span>
+                                            </ComboboxItem>
+                                        ))}
+                                        {opcionesDestinoFiltradas.length === 0 && (
+                                            <div className="py-2 text-center text-sm text-muted-foreground">Sin resultados</div>
+                                        )}
+                                    </>
+                                )}
+                            </ComboboxList>
+                        </ComboboxContent>
+                    </Combobox>
                 </div>
 
                 {/* Vía (solo transferencia) */}
