@@ -1,0 +1,1293 @@
+╭─── Claude Code v2.1.212 ─────────────────────────────────────────────────────╮
+│                                                    │ Tips for getting        │
+│               Welcome back PuchoTech!              │ started                 │
+│                                                    │ Run /init to create a … │
+│                       ▐▛███▜▌                      │ ─────────────────────── │
+│                      ▝▜█████▛▘                     │ What's new              │
+│                        ▘▘ ▝▝                       │ `/fork` now copies you… │
+│      Sonnet 5 · Claude Pro ·                       │ Added `claude auto-mod… │
+│      bethocubans1990@gmail.com's Organization      │ Added a session-wide l… │
+│      /mnt/datos/APP_CREATED/PHP/almacen.tienda     │ /release-notes for more │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+ ▎ Tackle your toughest work with Opus 5. Switch anytime with /model.
+
+❯ Analiza este proyecto, no cambies nada solo analiza para tener un Context     
+  bien definido, puedes anlizar el codigo y esta es la documentacion @docs/ la  
+  cual deb coincidir, no cambies el codigo solo la documentacion ok             
+  ⎿  Listed directory docs/
+
+  Searched for 9 patterns, read 5 files, listed 1 directory, ran 5 shell commands, recalled 2 memories (ctrl+o to expand)
+
+● Explore(Verify docs vs code for remaining modules)
+  ⎿  Backgrounded agent (↓ to manage · ctrl+o to expand)
+
+● Mientras el agente revisa rutas, base de datos, arquitectura y el módulo de
+  Transacciones, sigo verificando yo mismo la lógica de comisiones, mensajero y
+  cierre de caja.
+
+  Searched for 9 patterns, read 1 file, ran 2 shell commands (ctrl+o to expand)
+
+● These docs were last touched today, so I'll wait for the background
+  verification agent's findings before editing anything, since a lot of ground
+  is already fresh. Let me check a couple more targeted things myself in the
+  meantime — the Transacciones module claims, since that's the area with the
+  most recent unreviewed commits.
+
+  Searched for 1 pattern, read 1 file, listed 1 directory, ran 6 shell commands (ctrl+o to expand)
+
+● Ahora esperaré el reporte del agente en segundo plano antes de consolidar
+  todos los hallazgos y editar la documentación.
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● I have enough understanding of the new "es_propio" separation (movements
+  filtered by whether they belong to the current turn's user vs. others). I'll
+  wait for the background agent's completion before writing the doc updates.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● He verificado manualmente varios puntos clave contra el código (modelos,
+  controladores, migraciones, líneas de archivos, lógica de comisiones, cierre
+  de caja, cuentas) y encontré varios desajustes reales entre docs/ y el estado
+  actual del código — incluyendo que las últimas 8 confirmaciones de hoy
+  (cambios sustanciales en CierreCajaController y Cierres/Create.tsx/Show.tsx)
+  no quedaron reflejadas en la documentación, pese a que esta afirma estar
+  alineada. Sigo esperando el resultado del agente en segundo plano que está
+  revisando rutas, base de datos, arquitectura, API pública y el módulo de
+  Transacciones antes de consolidar y aplicar las correcciones a la
+  documentación.
+
+✻ Churned for 4m 7s
+
+❯ sigue esperando el agente, avísame cuando termine                             
+● Entendido, sigo esperando la notificación del agente en segundo plano y te
+  aviso apenas termine.
+
+✻ Worked for 3s
+
+❯ avísame cuando termine                                                        
+
+● Aún no ha terminado — en cuanto reciba la notificación de finalización del
+  agente, te aviso de inmediato.
+
+✻ Cooked for 2s
+
+❯ El agente, que esta haciendo?                                                 
+
+● Está revisando (sin modificar nada) seis áreas de docs/ frente al código real,
+  para detectar afirmaciones desactualizadas:
+
+  1. rutas-y-controladores.md vs routes/web.php y los subdirectorios de rutas —
+  rutas/controladores documentados que ya no existen o que faltan.
+  2. base-de-datos.md vs las migraciones más recientes y los modelos — columnas
+  renombradas/eliminadas, especialmente en cuentas y las tablas de transacciones
+  (área con mucha actividad reciente).
+  3. TECHNICAL_ANALYSIS.md y ARCHITECTURE_DIAGRAM.md vs
+  composer.json/package.json — versiones de stack y patrones de arquitectura.
+  4. API_PUBLIC_CATALOG.md vs Api/CatalogoPublicoController.php — endpoints
+  documentados vs reales.
+  5. guia-desarrollo.md vs scripts de composer.json/package.json.
+  6. Módulo Transacciones (TransaccionController, GastoController,
+  IngresoController, TransferenciaController + vistas React) — si el estado
+  "75%" y las features descritas siguen siendo ciertas, dado que hubo ~10
+  commits recientes ahí ("Mejorando transacciones sections").
+
+  Todavía no ha devuelto resultados. En cuanto lo haga, te aviso.
+
+✻ Cogitated for 8s
+
+● Agent "Verify docs vs code for remaining modules" finished · 7m 41s
+
+● El agente terminó. Encontró bastantes desajustes reales, sobre todo en
+  base-de-datos.md (nombres de columnas que no existen en el código actual). Voy
+  a consolidar todo y aplicar las correcciones a la documentación ahora.
+
+  Searched for 3 patterns, read 1 file, ran 2 shell commands (ctrl+o to expand)
+
+● Confirmado todo contra el código. Ahora aplico las correcciones, empezando por
+  base-de-datos.md que es el archivo con más errores reales.
+
+● Update(docs/base-de-datos.md)
+  ⎿  Added 12 lines, removed 6 lines
+      28  |---|---|---|
+      29  | `id` | PK | |
+      30  | `nombre_almacen` | string | |
+      31 -| `tipo` | enum | `almacen`, `punto_venta`, `transportacion` | 
+      32 -| `activo` | boolean | |                                       
+      33 -| `responsable_nombre` | string nullable | |                   
+      34 -| `responsable_apellido` | string nullable | |                 
+      35 -| `responsable_carnet` | string nullable | |                   
+      36 -| `responsable_telefono` | string nullable | |                 
+      31 +| `tipo_almacen` | enum | `almacen`, `punto_venta`, `transporta
+         +cion` |                                                        
+      32 +| `telefono_almacen` | string | único |                        
+      33 +| `correo_almacen` | string nullable | |                       
+      34 +| `provincia_almacen` | string nullable | |                    
+      35 +| `ciudad_almacen` | string nullable | Usado por `Api/CatalogoP
+         +ublicoController` |                                            
+      36 +| `notas_almacen` | text nullable | |                          
+      37 +| `nombre_responsable` | string nullable | |                   
+      38 +| `apellido_responsable` | string nullable | |                 
+      39 +| `carnet_responsable` | string nullable | |                   
+      40 +| `telefono_responsable` | string nullable | |                 
+      41  | `mensajero_cuenta_id` | FK nullable | Cuenta CUP para pagos d
+          e mensajería |
+      42  
+      43 +> No existe columna `activo`/`activa` en `almacens`.           
+      44 +                                                               
+      45  **Relaciones:** `belongsToMany(Producto)` via `almacen_producto
+          `, `hasMany(UserAlmacen)`, `belongsTo(Cuenta, 'mensajero_cuenta
+          _id')`
+      46  
+      47  ---
+
+● Update(docs/base-de-datos.md)
+  ⎿  Added 2 lines, removed 1 line
+      177  | `precio_venta` | decimal | Precio aplicado en esta venta |
+      178  | `precio_base` | decimal nullable | Precio base del producto_
+           vendedors al momento de la venta |
+      179  | `costo_unitario` | decimal | Costo unitario al momento de la
+            venta (campo `costo_unitario` en migración, no `precio_compra
+           `) |
+      180 -| `costo` | decimal nullable | Costo total (`costo_unitario × 
+          -cantidad`) |                                                  
+      180  | `subtotal` | decimal | `precio_venta × cantidad` |
+      181  | `ganancia` | decimal | `(precio_venta - costo_unitario) × ca
+           ntidad` |
+      182  | `comision_unitaria` | decimal | Comisión por unidad calculad
+           a |
+      183  
+      184 +> No existe columna `costo` (costo total). El costo total se c
+          +alcula inline (`costo_unitario × cantidad`) donde se necesita,
+          + no se persiste.                                              
+      185 +                                                              
+      186  ---
+      187  
+      188  ### `pago_ventas`
+
+● Update(docs/base-de-datos.md)
+  ⎿  Added 1 line, removed 1 line
+      112  | `user_id` | FK | Vendedor que creó la venta |
+      113  | `almacen_id` | FK | |
+      114  | `cliente_id` | FK nullable | |
+      115 -| `estado` | enum | `solicitud_especial`, `pendiente`, `comple
+          -tada`, `rechazada`, `cancelada` |                             
+      115 +| `estado` | enum | `solicitud_especial`, `pendiente`, `pendie
+          +nte_precio`, `completada`, `rechazada`, `cancelada` (`pendient
+          +e_precio` existe en el ENUM pero no está en uso actualmente en
+          + el código) |                                                 
+      116  | `motivo_anulacion` | string nullable | Solo en ventas cancel
+           adas |
+      117  | `detalle_anulacion` | string nullable | Razón detallada de a
+           nulación |
+      118  | `detalles_venta` | text nullable | Notas internas de la vent
+           a |
+
+● Ahora la tabla cuentas:
+
+● Update(docs/base-de-datos.md)
+  ⎿  Added 5 lines, removed 3 lines
+      237  | Campo | Tipo | Descripción |
+      238  |---|---|---|
+      239  | `id` | PK | |
+      240 -| `nombre_cuenta` | string | |                                
+      241 -| `tipo_instrumento` | enum | `tarjeta`, `efectivo`, `otro` | 
+      240 +| `nombre_cuenta` | string | único |                          
+      241 +| `tipo` | enum | `caja`, `banco`, `tarjeta`, `efectivo`, `otr
+          +o` (**no** `tipo_instrumento`) |                              
+      242  | `tipo_cuenta` | enum | `permanentes` (único valor desde 2026
+           -07-28 — `temporales` unificado) |
+      243  | `tipo_titular` | enum nullable | `externa`, `personal` (agre
+           gado 2026-07-28) |
+      244 +| `tipo_moneda` | enum | `USD`, `EUR`, `MLC`, `CUP` — campo le
+          +gado, sigue en `$fillable`, coexiste con `moneda_id` |        
+      245  | `moneda_id` | FK | |
+      246  | `saldo_cuenta` | decimal | Saldo actual |
+      246 -| `activa` | boolean | |                                      
+      247 +| `estado` | enum | `activa`, `inactiva` (**no** existe una co
+          +lumna booleana `activa`) |                                    
+      248 +| `notas_cuenta` | text nullable | |                          
+      249  
+      250  > ⚠️ `temporales` fue unificado a `permanentes` el 2026-07-28. 
+           El campo `deuda` fue eliminado de la tabla en esa misma fecha.
+      251  
+
+● Ahora movimientos_financieros, clientes y compras:
+
+● Update(docs/base-de-datos.md)
+  ⎿  Added 10 lines, removed 2 lines
+      283  | Campo | Tipo | Descripción |
+      284  |---|---|---|
+      285  | `id` | PK | |
+      286 -| `tipo_movimiento_financiero_id` | FK | 1=Gasto, 2=Ingreso, 3
+          -=Transferencia |                                              
+      286 +| `user_id` | FK | Quién registró el movimiento |             
+      287 +| `tipo_movimiento_id` | FK | → `tipos_movimiento_financiero` 
+          +(**no** `tipo_movimiento_financiero_id`) |                    
+      288  | `cuenta_origen_id` | FK nullable | |
+      289 +| `cliente_origen_id` | FK nullable | |                       
+      290  | `cuenta_destino_id` | FK nullable | |
+      291 +| `cliente_destino_id` | FK nullable | |                      
+      292 +| `proveedor_destino_id` | FK nullable | |                    
+      293  | `monto` | decimal | |
+      290 -| `moneda_id` | FK | |                                        
+      294 +| `moneda` | enum | `USD`, `EUR`, `MLC`, `CUP` — **no** es FK 
+          +(`moneda_id`), es un enum plano |                             
+      295 +| `moneda_origen` / `moneda_destino` | string nullable | Moned
+          +as al momento del movimiento (transferencias con conversión) |
+      296 +| `tasa_cambio_aplicada` | decimal nullable | |               
+      297  | `descripcion` | text nullable | |
+      298 +| `fecha_operacion` | datetime nullable | |                   
+      299 +| `estado` | enum | `completado`, `pendiente`, `cancelado` |  
+      300  | `saldo_anterior_origen` | decimal nullable | Snapshot para a
+           uditoría |
+      301  | `saldo_posterior_origen` | decimal nullable | |
+      302  | `saldo_anterior_destino` | decimal nullable | |
+
+● Update(docs/base-de-datos.md)
+  ⎿  Added 12 lines, removed 7 lines
+      308  | Campo | Tipo | Descripción |
+      309  |---|---|---|
+      310  | `id` | PK | |
+      311 -| `nombre_cliente` | string | |                               
+      312 -| `tipo` | enum | `fisico`, `asociado` |                      
+      313 -| `telefono` | string nullable | |                            
+      311 +| `nombre_cliente` | string | único |                         
+      312 +| `tipo_cliente` | enum | `fisico`, `asociado` (**no** `tipo`)
+          + |                                                            
+      313 +| `telefono_cliente` | string | único (**no** `telefono`) |   
+      314 +| `direccion_cliente` | string nullable | |                   
+      315 +| `ciudad_cliente` | string nullable | |                      
+      316  | `deuda_pago_cliente` | decimal | Deuda acumulada pendiente |
+      317  
+      318  ---
+     ...
+      321  | Campo | Tipo | Descripción |
+      322  |---|---|---|
+      323  | `id` | PK | |
+      322 -| `almacen_id` | FK | |                                       
+      323 -| `proveedor_id` | FK nullable | |                            
+      324 +| `proveedor_id` | FK | |                                     
+      325 +| `cuenta_id` | FK nullable | Cuenta desde la que se paga (si 
+          +aplica) |                                                     
+      326  | `cliente_id` | FK nullable | Cuando la fuente es un cliente 
+           reseller |
+      325 -| `tipo_pago` | enum | `deuda_proveedor`, `pago_cash` |       
+      326 -| `total` | decimal | |                                       
+      327 +| `fecha_compra` | date | |                                   
+      328 +| `total_compra` | decimal | (**no** `total`) |               
+      329 +| `tipo_compra` | string | `deuda_proveedor`, `pago_cash`, `pa
+          +go_cliente_fisico` (**no** `tipo_pago`; es `string` libre, no 
+          +ENUM en DB) |                                                 
+      330  
+      331 +> No existe columna `almacen_id` en `compras`.                
+      332 +                                                              
+      333  **Relaciones:** `hasMany(CompraProducto)`, `hasMany(CompraPago
+           )`
+      334  
+      335  ---
+
+● Y la tabla tipo_movimiento_financieros (nombre real de la tabla y campo
+  faltante):
+
+● Update(docs/base-de-datos.md)
+  ⎿  Added 5 lines, removed 4 lines
+      406  | `user_id` | FK | |
+      407  | `impacto_cuentas` | json nullable | Impacto financiero del c
+           ambio |
+      408  
+      409 -### `tipo_movimiento_financieros`                             
+      410 -Catálogo de tipos de movimiento financiero.                   
+      409 +### `tipos_movimiento_financiero`                             
+      410 +Catálogo de tipos de movimiento financiero. (**Nombre real de 
+          +la tabla** — no `tipo_movimiento_financieros`; modelo `TipoMov
+          +imientoFinanciero` con `protected $table = 'tipos_movimiento_f
+          +inanciero'`.)                                                 
+      411  
+      412  | Campo | Tipo | Descripción |
+      413  |---|---|---|
+      414  | `id` | PK | 1=Gasto, 2=Ingreso, 3=Transferencia |
+      415 -| `nombre` | string | |                                       
+      416 -| `descripcion` | string nullable | |                         
+      415 +| `nombre` | string | único |                                 
+      416 +| `efecto` | enum | `ingreso` (suma al saldo) / `egreso` (rest
+          +a) |                                                          
+      417 +| `descripcion` | text nullable | |                           
+      418  
+      419  ### `destinatario_ventas`
+      420  Destinatario/receptor de una venta.
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● base-de-datos.md corregido. Ahora rutas-y-controladores.md.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+● Update(docs/rutas-y-controladores.md)
+  ⎿  Added 2 lines
+      23  | POST | `/ventas/{venta}/especial/rechazar` | `VentaController
+          @rechazarSolicitudEspecial` | JSON |
+      24  | POST | `/ventas/{venta}/decision-notificada` | `VentaControll
+          er@marcarDecisionNotificada` | JSON |
+      25  
+      26 +> ⚠️ **Rutas registradas pero rotas**: `POST /ventas/validar-st
+         +ock` (`ventas.validarStock`) y `POST /ventas/actualizar-tasas` 
+         +(`ventas.actualizarTasas`) están definidas en `routes/shop/punt
+         +oventa.php` pero `VentaController` **no tiene** los métodos `va
+         +lidarStock` ni `actualizarTasas` — llamarlas produce un error f
+         +atal.                                                          
+      27 +                                                               
+      28  ### Endpoints JSON del POS (datos para el frontend)
+      29  
+      30  | Método | Ruta | Qué devuelve |
+
+● Update(docs/rutas-y-controladores.md)
+  ⎿  Added 32 lines
+      129  
+      130  ---
+      131  
+      132 +## Módulo de Categorías                                       
+      133 +                                                              
+      134 +| Método | Ruta | Controlador@Método | Vista / Respuesta |    
+      135 +|--------|------|-------------------|-------------------|     
+      136 +| GET | `/categorias` | `CategoriaController@index` | `Categor
+          +ias/Index` |                                                  
+      137 +| GET | `/categorias/create` | `CategoriaController@create` | 
+          +`Categorias/Create` |                                         
+      138 +| POST | `/categorias` | `CategoriaController@store` | redirec
+          +t |                                                           
+      139 +| GET | `/categorias/{categoria}` | `CategoriaController@show`
+          + | `Categorias/Show` |                                        
+      140 +| GET | `/categorias/{categoria}/edit` | `CategoriaController@
+          +edit` | `Categorias/Edit` |                                   
+      141 +| PUT | `/categorias/{categoria}` | `CategoriaController@updat
+          +e` | redirect |                                               
+      142 +| DELETE | `/categorias/{categoria}` | `CategoriaController@de
+          +stroy` | redirect |                                           
+      143 +                                                              
+      144 +`Route::resource` completo, definido en `routes/crud/categoria
+          +s.php`.                                                       
+      145 +                                                              
+      146 +---                                                           
+      147 +                                                              
+      148 +## Módulo de Proveedores                                      
+      149 +                                                              
+      150 +| Método | Ruta | Controlador@Método | Vista / Respuesta |    
+      151 +|--------|------|-------------------|-------------------|     
+      152 +| GET | `/proveedores` | `ProveedorController@index` | `Provee
+          +dores/Index` |                                                
+      153 +| GET | `/proveedores/create` | `ProveedorController@create` |
+          + `Proveedores/Create` |                                       
+      154 +| POST | `/proveedores` | `ProveedorController@store` | redire
+          +ct |                                                          
+      155 +| GET | `/proveedores/{proveedor}` | `ProveedorController@show
+          +` | `Proveedores/Show` |                                      
+      156 +| GET | `/proveedores/{proveedor}/edit` | `ProveedorController
+          +@edit` | `Proveedores/Edit` |                                 
+      157 +| PUT | `/proveedores/{proveedor}` | `ProveedorController@upda
+          +te` | redirect |                                              
+      158 +| DELETE | `/proveedores/{proveedor}` | `ProveedorController@d
+          +estroy` | redirect |                                          
+      159 +                                                              
+      160 +`Route::resource` completo, definido en `routes/crud/proveedor
+          +es.php`. `ProveedorController` también define `actualizarSaldo
+          +`, `conDeuda`, `conFondo`, `resetearSaldo` — implementados per
+          +o **sin ruta asignada** (código muerto/no expuesto).          
+      161 +                                                              
+      162 +---                                                           
+      163 +                                                              
+      164  ## Módulo de Movimientos de Stock
+      165  
+      166  | Método | Ruta | Controlador@Método | Vista / Respuesta |
+
+● Ahora corrijo la sección de middlewares y agrego una nota sobre la ruta
+  huérfana routes/vendor/vendedor.php:
+
+● Update(docs/rutas-y-controladores.md)
+  ⎿  Added 4 lines, removed 3 lines
+      377  
+      378  | Middleware | Qué protege |
+      379  |-----------|-------------|
+      380 -| `auth` | Todas las rutas web (excepto login) |              
+      381 -| `verified` | Rutas que requieren email verificado (dashboard
+          -, CRUDs, acciones) |                                          
+      380 +| `auth` + `verified` | **Todos** los grupos de rutas en `rout
+          +es/*.php` (web, crud/, acciones/, shop/, empleados/) — no es u
+          +na protección selectiva por módulo, es blanket-wide |         
+      381  | `check.cuenta.permission` | Verifica que el usuario tiene ac
+           ceso a la cuenta en `show`/`edit`/`update`/`destroy` de cuenta
+           s |
+      382  | `HandleInertiaRequests` | Comparte datos globales con Inerti
+           a (usuario, tasas, permisos) |
+      383  | `throttle:60,1` | API pública (60 req/min) |
+      384  
+      386 -> **Nota:** Las clases `EnsureUserIsAdmin`, `EnsureUserIsModer
+          -ator`, `EnsureUserIsVendor` y `CheckAlmacenPermission` existen
+          - en `app/Http/Middleware/` pero **no están registradas ni apli
+          -cadas a ninguna ruta**. La verificación de roles se hace inlin
+          -e en los controladores mediante `$user->isAdmin()`, `$user->is
+          -Moderator()`.                                                 
+      385 +> **Nota (corregida):** `EnsureUserIsAdmin`, `EnsureUserIsMode
+          +rator` y `EnsureUserIsVendor` **sí están registradas** como al
+          +ias de middleware (`admin`, `moderator`, `vendor`) en `bootstr
+          +ap/app.php:37-40`, pero **no se aplican a ninguna ruta**. Solo
+          + `CheckAlmacenPermission` está realmente sin registrar (import
+          +ada pero comentada en `bootstrap/app.php:31`). La verificación
+          + de roles se hace inline en los controladores mediante `$user-
+          +>isAdmin()`, `$user->isModerador()`.                          
+      386 +                                                              
+      387 +> **Ruta huérfana:** `routes/vendor/vendedor.php` (define `GET
+          + /vendedor`) existe pero **no está incluida (`require`) desde 
+          +`routes/web.php`** — es código muerto, inalcanzable.          
+
+● Update(docs/rutas-y-controladores.md)
+  ⎿  Added 1 line
+      204  | GET | `/transacciones/{movimiento}` | `TransaccionController
+           @show` | `Transacciones/Show` |
+      205  | GET | `/transacciones/distribuir-costos/{compra}` | `Transac
+           cionController@mostrarFormularioDistribucion` | Vista |
+      206  | POST | `/transacciones/distribuir-costos-manual` | `Transacc
+           ionController@distribuirCostosManual` | JSON |
+      207 +| POST | `/transacciones/distribuir-costos` | `TransaccionCont
+          +roller@distribuirCostosManual` | JSON — ruta duplicada (mismo 
+          +método, nombre `distribuir.costos.manual`) |                  
+      208  | POST | `/transacciones/gastar` | `GastoController@store` | J
+           SON |
+      209  | GET | `/transacciones/ingreso/data` | `IngresoController@for
+           mData` | JSON |
+      210  | POST | `/transacciones/ingresar` | `IngresoController@store`
+            | JSON |
+
+● rutas-y-controladores.md listo. Ahora TECHNICAL_ANALYSIS.md y
+  ARCHITECTURE_DIAGRAM.md.
+
+  Read 2 files (ctrl+o to expand)
+
+● Update(docs/TECHNICAL_ANALYSIS.md)
+  ⎿  Added 1 line, removed 1 line
+       4  
+       5  ### Backend (Laravel 12)
+       6  - **Engine**: PHP 8.2+
+       7 -- **Architecture**: Service-Controller-Model pattern.          
+       7 +- **Architecture**: In practice, mostly **fat controllers → Elo
+         +quent Models**, not a layered Service-Controller-Model pattern.
+         + `app/Services/` has only 2 classes (`DashboardStatsService`, `
+         +NotificationService`); the bulk of business logic (ventas, cier
+         +res, compras, transacciones) lives directly in controllers (`Ve
+         +ntaController` ~2,050 líneas, `CierreCajaController` ~1,940 lín
+         +eas).                                                          
+       8  - **Key Packages**:
+       9      - `spatie/laravel-permission`: For RBAC.
+      10      - `inertiajs/inertia-laravel`: Glue between Laravel and Rea
+          ct.
+
+● Update(docs/TECHNICAL_ANALYSIS.md)
+  ⎿  Added 1 line, removed 1 line
+      42  - **Inertia integration**: Seamless transitions with progress i
+          ndicators and server-side state hydration.
+      43  
+      44  ## 🔐 Security & Permissions
+      45 -- **Middleware**: Custom middleware for warehouse-level isolati
+         -on.                                                            
+      45 +- **Middleware**: `CheckAlmacenPermission` existe en `app/Http/
+         +Middleware/` pero está **comentada/deshabilitada** en `bootstra
+         +p/app.php` — no protege ninguna ruta actualmente. El aislamient
+         +o por almacén se hace de forma ad hoc dentro de los controlador
+         +es (ej. `$user->almacenes()` en `VentaController`), no vía midd
+         +leware.                                                        
+      46  - **CSRF & XSS**: Standard Laravel protections enhanced with Ty
+          peScript typing for all props.
+      47  
+      48  ## 📊 Database Design Highlights
+
+● Update(docs/ARCHITECTURE_DIAGRAM.md)
+  ⎿  Added 1 line
+      33      Pages <--> Routes
+      34      Routes --> Controllers
+      35      Controllers --> Services
+      36 +    Controllers --> Models                                     
+      37      Services --> Models
+      38      Models <--> DB
+      39      Models --> Storage
+
+● Update(docs/ARCHITECTURE_DIAGRAM.md)
+  ⎿  Added 4 lines
+      46      Inventory --> Finance : "Cost Reconciliation"
+      47  ```
+      48  
+      49 +> **Nota:** El paso `Controllers → Services` es minoritario en 
+         +el código real — solo existen 2 clases en `app/Services/` (`Das
+         +hboardStatsService`, `NotificationService`, ambas de solo-lectu
+         +ra/estadísticas). La mayoría de los controladores (`VentaContro
+         +ller`, `CierreCajaController`, `CompraController`, etc.) van di
+         +recto a Models/`DB::transaction()` sin capa de servicio interme
+         +dia — ver `docs/TECHNICAL_ANALYSIS.md`.                        
+      50 +>                                                              
+      51 +> La base de datos real es **MySQL 8.4** en producción, pero el
+         + entorno local por defecto (`.env.example`, `composer.json` pos
+         +t-create script) usa **SQLite**.                               
+      52 +                                                               
+      53  ## Module Interaction Details
+      54  
+      55  ### 1. Sale Process Flow
+
+● Ahora API_PUBLIC_CATALOG.md — falta documentar el endpoint de búsqueda global
+  de productos.
+
+  Searched for 2 patterns, read 1 file (ctrl+o to expand)
+
+● Confirmado. Agrego la sección faltante:
+
+● Update(docs/API_PUBLIC_CATALOG.md)
+  ⎿  Added 10 lines
+      132  
+      133  ---
+      134  
+      135 +### 3b) Búsqueda global de productos (todos los almacenes)    
+      136 +                                                              
+      137 +**GET** `/api/tienda/productos` — `CatalogoPublicoController@s
+          +earchProductos`                                               
+      138 +                                                              
+      139 +Mismos query params que el endpoint anterior (`q`, `categoria_
+          +id`, `marca`, `precio_min`, `precio_max`, `etiquetas`, `order_
+          +by`, `order_dir`, `per_page`), pero busca en **todo el catálog
+          +o** en lugar de un almacén específico. El `stock_total` devuel
+          +to es la suma de `almacen_producto.cantidad` en todos los alma
+          +cenes.                                                        
+      140 +                                                              
+      141 +> ⚠️ A diferencia de `/almacenes/{id}/productos` (que excluye p
+          +roductos con `stock = 0`), esta búsqueda global **no filtra po
+          +r stock** — puede devolver productos con `stock_total: 0`. Ten
+          +erlo en cuenta al mostrar badges de "disponible".             
+      142 +                                                              
+      143 +---                                                           
+      144 +                                                              
+      145  ### 4) Detalle de producto
+      146  
+      147  **GET** `/api/tienda/productos/{id}`
+
+● Ahora guia-desarrollo.md.
+
+  Searched for 2 patterns, read 1 file (ctrl+o to expand)
+
+● Update(docs/guia-desarrollo.md)
+  ⎿  Added 8 lines, removed 1 line
+      11  | PHP | 8.2+ |
+      12  | Composer | 2.x |
+      13  | Node.js | 20+ |
+      14 -| MySQL / MariaDB | 8.0+ |                                     
+      14 +| MySQL / MariaDB | 8.0+ (producción — ver nota SQLite abajo) |
+      15  
+      16  ---
+      17  
+     ...
+      44  # 8. Levantar servidores de desarrollo
+      45  php artisan serve        # backend en :8000
+      46  npm run dev              # Vite en :5173 (hot reload)
+      47 +                                                               
+      48 +# Alternativa: un solo comando (serve + queue:listen + vite en 
+         +paralelo)                                                      
+      49 +composer run dev                                               
+      50  ```
+      51  
+      52 +> **Nota SQLite**: `composer.json` (`post-create-project-cmd`) 
+         +crea automáticamente `database/database.sqlite` y corre `migrat
+         +e --graceful` — el quickstart de `composer create-project` func
+         +iona sin configurar MySQL. `.env.example` trae `DB_CONNECTION=s
+         +qlite` por defecto (vars de MySQL comentadas). El ejemplo de ab
+         +ajo asume que se cambia a MySQL manualmente.                   
+      53 +>                                                              
+      54 +> **Cola de notificaciones**: las notificaciones (Telegram, DB)
+         + usan `QUEUE_CONNECTION=database` — hace falta `php artisan que
+         +ue:listen` (o `composer run dev`, que ya lo incluye) corriendo 
+         +para que se procesen.                                          
+      55 +                                                               
+      56  ---
+      57  
+      58  ## Variables de entorno clave
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(docs/guia-desarrollo.md)
+  ⎿  Added 1 line, removed 1 line
+      114  # Frontend
+      115  npm run dev        # desarrollo con hot reload
+      116  npm run build      # build de producción
+      117 -npm run typecheck  # validar tipos TypeScript                 
+      117 +npm run types      # validar tipos TypeScript (tsc --noEmit) —
+          + no "typecheck"                                               
+      118  npm run lint       # corregir estilo de código (ESLint + Prett
+           ier)
+      119  npm run format     # formatear código con Prettier
+      120  
+
+● INDEX.md también tiene el mismo comando incorrecto en "Comandos rápidos".
+  Ahora corrijo INDEX.md, ESTADO_DESARROLLO.md, PROJECT_SUMMARY.md y context.md
+  con todos los conteos y el trabajo de sesión no documentado.
+● Update(docs/INDEX.md)
+  ⎿  Added 1 line, removed 1 line
+      169  
+      170  npm run dev                      # frontend con hot reload (Vi
+           te)
+      171  npm run build                    # build de producción
+      172 -npm run typecheck                # validar tipos TypeScript   
+      172 +npm run types                    # validar tipos TypeScript   
+      173  npm run lint                     # corregir estilo de código
+      174  npm run format                   # formatear código con Pretti
+           er
+      175  ```
+
+● Update(docs/INDEX.md)
+  ⎿  Added 5 lines, removed 5 lines
+      49  | Backend | PHP 8.2+, Laravel 12 |
+      50  | Frontend | React 19, Inertia v2, Vite 7, Tailwind v4 |
+      51  | Modelos | 37 |
+      52 -| Controladores | 30 (27 raíz + 3 subdirectorios: Api, Auth, Se
+         -ttings) |                                                      
+      52 +| Controladores | 38 (27 raíz incl. `Controller.php` base + 11 
+         +en subdirectorios: 1 Api, 8 Auth, 2 Settings) |                
+      53  | Migraciones | 94 |
+      54 -| Páginas frontend | ~120 únicas (16 reportes, 8 auth/settings,
+         - ~96 operacionales) |                                          
+      55 -| Middlewares | 7 |                                            
+      56 -| Notificaciones | 7 (4 encoladas) |                           
+      57 -| Comandos artisan | 4 |                                       
+      54 +| Páginas frontend | 117 únicas (16 reportes, 9 auth/settings, 
+         +~92 operacionales) |                                           
+      55 +| Middlewares | 7 (solo 3 aplicados a rutas reales: `HandleIner
+         +tiaRequests`, `HandleAppearance`, `check.cuenta.permission`; `E
+         +nsureUserIsAdmin/Moderator/Vendor` registradas como alias pero 
+         +sin uso, `CheckAlmacenPermission` ni registrada) |             
+      56 +| Notificaciones | 7 (5 encoladas: Cambio, CierreCaja, Movimien
+         +toStock, VentaCreada, MovimientoFinanciero) |                  
+      57 +| Comandos artisan | 5 |                                       
+      58  | Servicios | 2 (`DashboardStatsService` — 8+ métodos públicos/
+          privados para resúmenes, `NotificationService`) |
+      59  | Exports/Imports Excel | 3 exports, 2 imports |
+      60  | Roles | `admin` / `moderador` / `vendedor` |
+
+● Ahora corrijo el archivo de claves por módulo (líneas de CierreCajaController)
+  y el Session Checkpoint con la información real de la última sesión:
+
+● Update(docs/INDEX.md)
+  ⎿  Added 1 line, removed 1 line
+      181  | Módulo | Controlador | Modelos | Páginas frontend |
+      182  |---|---|---|---|
+      183  | **Ventas POS** | `app/Http/Controllers/VentaController.php` 
+           (2053 L) | `Venta`, `VentaDetalle`, `PagoVenta`, `Destinatario
+           Venta` | `Vendor/Index`, `Vendor/Show`, `Vendor/Listado` |
+      184 -| **Cierres** | `CierreCajaController.php` (1923 L) | `CierreC
+          -aja` | `Cierres/Index`, `Cierres/Create`, `Cierres/Show` |    
+      184 +| **Cierres** | `CierreCajaController.php` (~1943 L) | `Cierre
+          +Caja` | `Cierres/Index`, `Cierres/Create`, `Cierres/Show` |   
+      185  | **Compras** | `CompraController.php` (791 L) | `Compra`, `Co
+           mpraProducto`, `CompraPago` | `Comprar/Index`, `Comprar/Show` 
+           |
+      186  | **Productos** | `ProductoController.php` (807 L) | `Producto
+           `, `ProductoCodigo`, `Categoria` | `Productos/Index`, `Product
+           os/Show`, `Productos/Edit` |
+      187  | **Precios vendedor** | `ProductoVendedorController.php` (421
+            L) | `ProductoVendedor`, `PrecioHistorial` | `Productos/Vendo
+           r/*` (4 páginas) |
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Update(docs/INDEX.md)
+  ⎿  Added 2 lines, removed 2 lines
+      10  | Campo | Valor |
+      11  |---|---|---|
+      12  | Rama activa | `feature/desarrollo-caliente` |
+      13 -| Última sesión | 2026-07-30 — **Compras + UX/UI Cierres**: Mej
+         -oras en compras (0.90), arreglos en vistas de Cierres (Create/S
+         -how), ajustes en VentaController y CompraController. Docs actua
+         -lizados alineados con código. |                                
+      13 +| Última sesión | 2026-07-30 — **Compras + UX/UI Cierres**: Mej
+         +oras en compras (0.90) en `CompraController` (commit `e7fc149e`
+         +). Después de esa doc-sync, hubo 8 commits adicionales el mismo
+         + día (14:18→17:02, con mensajes engañosos "Mejorando transaccio
+         +nes sections" que **no tocan** el módulo Transacciones) que amp
+         +liaron `CierreCajaController.php` y `Cierres/Create.tsx`/`Show.
+         +tsx` (~800 líneas): desglose de productos por línea de comisión
+         + PV/Gestor, campo `moneda` en movimientos financieros del cierr
+         +e, deduplicación de transferencias por `movimiento_id`, separac
+         +ión `es_propio` de gastos/ingresos/transferencias, y filtros de
+         + búsqueda para cuentas/clientes en la comparativa. `VentaContro
+         +ller` **no cambió** en esta sesión. |                          
+      14  | Estado general | 12/12 módulos estables, ✓ bugs B1/B2/B3 resu
+          eltos, 4 features pendientes |
+      15 -| Próximo paso | Completar módulo de Transacciones |           
+      15 +| Próximo paso | Completar módulo de Transacciones (sin cambios
+         + desde 2026-07-28 pese a los commits titulados "transacciones" 
+         +del 30/07 — ver nota arriba) |                                 
+      16  
+      17  ### ✅ Bugs resueltos recientemente
+      18  
+
+● Update(docs/ESTADO_DESARROLLO.md)
+  ⎿  Added 1 line, removed 1 line
+      167  
+      168  ### Cierre de Caja
+      169  ```
+      170 -app/Http/Controllers/CierreCajaController.php    ← 1,923 línea
+          -s                                                             
+      170 +app/Http/Controllers/CierreCajaController.php    ← ~1,943 líne
+          +as                                                            
+      171  app/Models/CierreCaja.php
+      172  resources/js/pages/Cierres/Create.tsx
+      173  resources/js/pages/Cierres/Show.tsx
+
+● Update(docs/ESTADO_DESARROLLO.md)
+  ⎿  Added 1 line, removed 1 line
+      136  
+      137  | ID | Descripción | Fecha |
+      138  |---|---|---|
+      139 -| **—** | **Módulo Transacciones (75%)** — Gastos, Ingresos, T
+          -ransferencias con control de saldo, arreglo flujo contable | 2
+          -026-07-28 |                                                   
+      139 +| **—** | **Módulo Transacciones (75%)** — Gastos, Ingresos, T
+          +ransferencias con control de saldo, arreglo flujo contable. ⚠️ 
+          +Sin cambios desde esta fecha: los 8 commits del 2026-07-30 tit
+          +ulados "Mejorando transacciones sections" en realidad modifica
+          +ron `CierreCajaController`/`Cierres/*.tsx`, no los controlador
+          +es de Transacciones — no leer el git log literalmente para est
+          +e módulo. | 2026-07-28 |                                      
+      140  | **—** | **Cuentas — tipo_titular** (externa/personal), elimi
+           nación campo `deuda`, unificación `temporales→permanentes` | 2
+           026-07-28 |
+      141  | **—** | **Cuentas — soporte saldos negativos** detectados co
+           mo deudas, ajustes en UI | 2026-07-28 |
+      142  | **—** | **Logística II** — Expansión con Create/Edit/Show, l
+           ayouts de charts (ComprasVentas, ProductosPorAlmacen) | 2026-0
+           7-27 |
+
+● Ahora agrego la entrada faltante en el historial de cambios (el trabajo real
+  de Cierres que quedó sin documentar):
+
+● Update(docs/ESTADO_DESARROLLO.md)
+  ⎿  Added 2 lines, removed 1 line
+      237  
+      238  | Fecha | Cambio |
+      239  |:---:|---|
+      240 -| 2026-07-30 | **Últimos commits** — "Compras con 0.90", mejor
+          -as UX/UI en Cierres (Create/Show), arreglos en VentaController
+          - y CompraController |                                         
+      240 +| 2026-07-30 | **Cierres — desglose de productos y filtros** (
+          +8 commits, 14:18→17:02, mal etiquetados "transacciones"): `Cie
+          +rreCajaController` agrega `productos` (nombre/marca/modelo/can
+          +tidad) a cada línea de comisión PV y Gestor; campo `moneda` en
+          + movimientos financieros del detalle de cierre; deduplicación 
+          +de transferencias por `movimiento_id`; `Cierres/Show.tsx`/`Cre
+          +ate.tsx` separan gastos/ingresos/transferencias `es_propio` vs
+          + externos y agregan búsqueda/filtro para cuentas y clientes en
+          + la comparativa (~800 líneas modificadas en total) |          
+      241 +| 2026-07-30 | "Compras con 0.90" en `CompraController` (commi
+          +t `e7fc149e`, previo a los 8 commits de Cierres) |            
+      242  | 2026-07-28 | **Transacciones 75%** — Gastos, Ingresos, Trans
+           ferencias funcionales. Arreglos en flujo contable y control de
+            saldos |
+      243  | 2026-07-28 | **Cuentas — `tipo_titular`** (externa/personal)
+           , eliminación campo `deuda`, unificación `temporales→permanent
+           es` vía migración |
+      244  | 2026-07-28 | **Cuentas — soporte saldos negativos** como deu
+           das, ajustes en backend y UI |
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● Update(docs/INDEX.md)
+  ⎿  Added 1 line, removed 1 line
+      187  | **Precios vendedor** | `ProductoVendedorController.php` (421
+            L) | `ProductoVendedor`, `PrecioHistorial` | `Productos/Vendo
+           r/*` (4 páginas) |
+      188  | **Movimientos stock** | `MovimientosController.php` (584 L) 
+           | `Movimiento`, `MovimientoDetalle`, `MovimientoSeguimiento` |
+            `Movimientos/Index`, `Movimientos/Show` |
+      189  | **Finanzas** | `TransaccionController.php`, `GastoController
+           .php`, `IngresoController.php`, `TransferenciaController.php` 
+           | `MovimientoFinanciero`, `Cuenta`, `Moneda`, `TransaccionCuen
+           ta` | `Transacciones/*` (7+ páginas) |
+      190 -| **Reportes** | `ReporteController.php` (847 L) | — | `Report
+          -es/Report/*` (16 vistas) |                                    
+      190 +| **Reportes** | `ReporteController.php` (~845 L) | — | `Repor
+          +tes/Report/*` (16 vistas) |                                   
+      191  | **Telegram Bot** | `TelegramWebhookController.php` (497 L) |
+            — | `routes/api.php` (webhook) |
+      192  | **Dashboard** | `AdminController.php` (545 L) | `TasaCambio`
+           , `TasaCambioMLC`, `HistorialTasaCambio` | `dashboard.tsx` |
+      193  | **Logística** | `LogisticaController.php` (25 L) | — (usa `D
+           ashboardStatsService`) | `Logistica/*` (Index, Create, Edit, S
+           how, +layouts) |
+
+● Agrego una nota sobre los directorios de páginas duplicados (código muerto) y
+  las carpetas de docs/ no indexadas:
+
+● Update(docs/ESTADO_DESARROLLO.md)
+  ⎿  Added 3 lines
+      145  
+      146  ## 📋 Pendientes menores conocidos
+      147  
+      148 +- [ ] **Código muerto — páginas duplicadas en minúscula**: `re
+          +sources/js/pages/almacenes/`, `categorias/`, `proveedores/` (c
+          +on `index.tsx` minúscula) coexisten con `Almacenes/`, `Categor
+          +ias/`, `Proveedores/` (mayúscula, las que realmente usan los c
+          +ontroladores vía `Inertia::render`). Las versiones en minúscul
+          +a no están referenciadas por ningún controlador — sin tocar de
+          + nuevo desde feb/abr/jun 2026. Candidatas a eliminar.         
+      149 +- [ ] **Rutas rotas**: `POST /ventas/validar-stock` y `POST /v
+          +entas/actualizar-tasas` están registradas en `routes/shop/punt
+          +oventa.php` pero `VentaController` no tiene esos métodos — fal
+          +larían si se invocan. Ver `docs/rutas-y-controladores.md`.    
+      150 +- [ ] **Ruta huérfana**: `routes/vendor/vendedor.php` (define 
+          +`/vendedor`) no está incluida desde `routes/web.php` — inalcan
+          +zable.                                                        
+      151  - [ ] Validar que `anularVenta` desde estado `rechazada` no re
+           vierta el stock dos veces (el stock ya fue revertido por `rech
+           azarSolicitudEspecial`). Verificar si la UI expone ese botón p
+           ara ventas rechazadas.
+      152  - [ ] El commando `/reporte` del bot no filtra por almacén del
+            usuario — devuelve todos los almacenes. Considerar filtro par
+           a admins con almacenes asignados.
+      153  - [ ] Ecommerce: vista pública del catálogo está en desarrollo
+           , no vinculada al POS.
+
+● Ahora actualizo el índice INDEX.md para incluir las carpetas de docs/ que no
+  estaban enlazadas:
+
+● Update(docs/INDEX.md)
+  ⎿  Added 4 lines
+      141  |---|---|
+      142  | [cambios-cliente-proveedor.md](cambios-cliente-proveedor.md)
+            | Cambios en el módulo de clientes/proveedores |
+      143  | [newforsale.md](newforsale.md) | Nuevas features para ventas
+            |
+      144 +| [arreglos-pendientes/Propuesta-CierreCaja.md](arreglos-pendi
+          +entes/Propuesta-CierreCaja.md) | Propuesta original que origin
+          +ó los cambios de Cierre de Caja del 2026-07-30 |              
+      145 +| [sections/](./sections/) | Notas de sesión sueltas (`session
+          +-ses_*.md`, `analisisTasa.md`) — no indexadas individualmente,
+          + consultar solo si se busca contexto histórico puntual |      
+      146 +| [code/](./code/) | Snippets/notas técnicas puntuales: `expor
+          +t-pdf.md`, `report-pdf.md`, `vendor.md` |                     
+      147 +| [context-antigravity/contexto_completo.md](context-antigravi
+          +ty/contexto_completo.md) | Contexto generado para otra herrami
+          +enta (Antigravity) — puede estar desalineado con `context.md`,
+          + usar `context.md` como fuente principal |                    
+      148  
+      149  ---
+      150  
+
+● Reviso el doc de comisiones histórico para añadir una referencia cruzada al
+  doc vigente, y confirmo que context.md ya tenía el nombre de tabla correcto
+  (tipos_movimiento_financiero).
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(docs/comision-vendedor-gestor-2026-05-25.md)
+  ⎿  Added 2 lines
+      1  # Comisión Vendedor y Gestor — Cambios 2026-05-25
+      2  
+      3 +> ⚠️ **Snapshot histórico**: para las reglas de comisión vigente
+        +s (incluye los casos añadidos después, como venta especial → com
+        +isión 0) usar [ventas/contexto-actual.md](ventas/contexto-actual
+        +.md), que es el documento actualizado. Este archivo queda como r
+        +eferencia del cambio original.                                  
+      4 +                                                                
+      5  ## Resumen
+      6  
+      7  Se implementó el tracking de comisiones de vendedor por venta, c
+         on soporte correcto para ventas mediante gestor donde el precio 
+         sube por encima del precio base del almacén.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+● Update(docs/ventas/contexto-actual.md)
+  ⎿  Added 1 line, removed 1 line
+      273  
+      274  | Archivo | Rol |
+      275  |---|---|
+      276 -| `app/Http/Controllers/CierreCajaController.php` | Controlado
+          -r del cierre — `create()`, `store()`, `show()`, `obtenerDetall
+          -esCierre()`, `aprobar()` (1,923 líneas) |                     
+      276 +| `app/Http/Controllers/CierreCajaController.php` | Controlado
+          +r del cierre — `create()`, `store()`, `show()`, `obtenerDetall
+          +esCierre()`, `aprobar()` (~1,943 líneas — creció desde la últi
+          +ma edición de este doc con el desglose de productos por comisi
+          +ón y el campo `moneda`) |                                     
+      277  | `app/Models/CierreCaja.php` | Modelo — snapshot financiero d
+           el turno |
+      278  | `resources/js/pages/Cierres/Create.tsx` | Vista de creación 
+           — preview en tiempo real |
+      279  | `resources/js/pages/Cierres/Show.tsx` | Vista histórica de c
+           ierre guardado |
+
+  Searched for 1 pattern, ran 1 shell command (ctrl+o to expand)
+
+● Análisis completo y documentación corregida. No toqué nada de código, solo
+  docs/.
+
+  Resumen de lo encontrado y corregido
+
+  base-de-datos.md (el más desalineado) — varios nombres de columnas eran
+  directamente incorrectos frente a las migraciones/modelos reales:
+  - cuentas: tipo_instrumento → tipo (5 valores, no 3); activa (boolean) no
+  existe → es estado (enum); faltaban notas_cuenta, tipo_moneda
+  - almacens: tipo→tipo_almacen; activo no existe; campos de responsable con
+  orden invertido (nombre_responsable, no responsable_nombre); faltaban 5
+  columnas reales
+  - clientes: tipo→tipo_cliente, telefono→telefono_cliente; faltaban
+  direccion_cliente, ciudad_cliente
+  - compras: no existe almacen_id; tipo_pago→tipo_compra (string, no enum, con 3
+  valores no 2); total→total_compra
+  - movimientos_financieros: tipo_movimiento_financiero_id→tipo_movimiento_id;
+  moneda_id es en realidad un enum plano moneda, no FK; faltaban 9 campos
+  - Tabla tipo_movimiento_financieros → nombre real es
+  tipos_movimiento_financiero; faltaba el campo efecto
+  - venta_detalles.costo no existe (se calcula inline)
+
+  rutas-y-controladores.md — faltaban las secciones de Categorías y Proveedores;
+  nota de middlewares corregida (los alias admin/moderator/vendor sí están
+  registrados, solo no aplicados); documenté 2 rutas rotas (validar-stock,
+  actualizar-tasas sin método en el controlador) y una ruta huérfana
+  (routes/vendor/vendedor.php nunca se incluye).
+
+  INDEX.md / ESTADO_DESARROLLO.md — conteos corregidos (controladores 30→38,
+  comandos artisan 4→5, notificaciones encoladas 4→5), y lo más importante: el
+  "Session Checkpoint" afirmaba que la documentación estaba alineada con el
+  código, pero 8 commits de hoy (mal etiquetados "transacciones", cuando en
+  realidad tocan CierreCajaController y Cierres/*.tsx) habían quedado sin
+  documentar — ya está reflejado.
+
+  TECHNICAL_ANALYSIS.md / ARCHITECTURE_DIAGRAM.md — el patrón
+  "Service-Controller-Model" estaba sobrestimado (solo 2 servicios reales); la
+  nota de middleware de aislamiento por almacén era falsa (está deshabilitada).
+
+  API_PUBLIC_CATALOG.md — faltaba documentar GET /api/tienda/productos (búsqueda
+  global).
+
+  guia-desarrollo.md — npm run typecheck no existe, el script real es npm run 
+  types (corregido también en INDEX.md); agregué la nota de que SQLite es el
+  default real, no MySQL.
+
+  También dejé constancia de código muerto detectado (directorios de páginas
+  duplicados en minúscula sin referenciar) en los pendientes de
+  ESTADO_DESARROLLO.md, por si quieres limpiarlo más adelante.
+
+✻ Brewed for 15m 36s
+
+❯ Bien que crees, para realizar los test, cual me faltan                        
+
+  Searched for 2 patterns, read 1 file, ran 1 shell command (ctrl+o to expand)
+
+● Ahora mismo la cobertura es prácticamente nula fuera de lo genérico: solo hay
+  tests de Auth/Settings (scaffolding de Laravel), un smoke test de Dashboard, y
+  4 casos de Compras. Todo lo demás — que es donde está la lógica de negocio 
+  real — no tiene un solo test.
+
+  Lo que falta, priorizado por riesgo
+
+  🔴 Crítico — Ventas/POS (VentaController, 2053 líneas, 0 tests)
+  Es la lógica más compleja del sistema y la que más ha tenido bugs (B1/B2/B3,
+  ya corregidos pero sin test de regresión — nada impide que vuelvan):
+  - Comisión vendedor: fórmula precio≥base vs precio<base (venta especial) vs
+  venta con gestor
+  - XOR gestor/comisión (bug B2 resuelto): una venta nunca debe descontar de
+  ambas cuentas
+  - Aprobar venta → mueve saldo de cuenta o deuda de cliente
+  - Anular venta → revierte stock y saldos (pendiente vs completada tienen
+  lógica distinta)
+  - Mensajero: pass-through, no debe afectar comisión ni ganancia cambiaria
+  - guardarDistribucion (bug B1 resuelto): retorna saldo_disponible correcto
+  - Stock se descuenta al crear, no al aprobar
+  - Ganancia cambiaria (CUP cobrado vs tasa oficial)
+  - Venta especial: flujo completo solicitud → aprobar/rechazar
+
+  🟠 Alto — Cierre de Caja (CierreCajaController, ~1943 líneas, 0 tests)
+  - Cálculo de saldo_esperado (ventas a cuenta − gastos − transferencias −
+  mensajero)
+  - Snapshot de cuentas/clientes al momento del cierre
+  - Desglose de comisiones PV/Gestor del turno
+
+  🟠 Alto — Movimientos de stock (0 tests)
+  - Enviar → incrementa cantidad_en_transito origen
+  - Recibir completo/parcial → reconciliación de diferencias
+  - Rechazar/cancelar
+
+  🟡 Medio — Transacciones financieras (Gastos/Ingresos/Transferencias, 0 tests)
+  Módulo marcado "75%" y con actividad reciente intensa — sin ningún test que lo
+  respalde:
+  - Transferencia con conversión de moneda
+  - Control de saldo (no permitir negativo salvo que sea deuda válida)
+
+  🟡 Medio — Cuentas
+  - ajustarSaldo requiere contraseña admin
+  - Saldo negativo se interpreta como deuda
+
+  🟢 Bajo — RBAC / permisos por rol
+  - Vendedor no debe ver precio_compra_producto/costo_unitario en JSON
+  - Vendedor limitado a sus almacenes/cuentas asignadas
+  (user_almacens/user_cuentas)
+
+  🟢 Bajo — Productos, Precios por vendedor, Monedas
+  - Único (producto_id, almacen_id) en producto_vendedors
+  - Cambio de tasa de moneda → impacto en cuentas
+
+  Ya existen factories para Venta, VentaDetalle, PagoVenta, Movimiento,
+  Producto, Cuenta, etc. — faltan factories para CierreCaja,
+  MovimientoFinanciero, ProductoVendedor, DestinatarioVenta si se quiere testear
+  esas áreas.
+
+  ¿Quieres que empiece a escribir los tests? Si es así, te recomiendo arrancar
+  por Ventas (XOR gestor/comisión + mensajero pass-through), que es donde ya
+  hubo bugs reales y no hay red de seguridad.
+
+✻ Worked for 55s
+
+❯ Sí, empieza por Ventas y todos lo demas                                       
+  ⎿  Invalid tool parameters
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Encontré otro error en base-de-datos.md que no habíamos capturado (productos
+  usa sufijos como nombre_producto, no nombre) — lo corrijo rápido ya que lo
+  necesito para escribir tests correctos, y luego sigo con Ventas.
+
+● Update(docs/base-de-datos.md)
+  ⎿  Added 10 lines, removed 8 lines
+      60  | Campo | Tipo | Descripción |
+      61  |---|---|---|
+      62  | `id` | PK | |
+      63 -| `nombre` | string | |                                        
+      64 -| `marca` | string nullable | |                                
+      65 -| `modelo` | string nullable | |                               
+      66 -| `capacidad` | string nullable | |                            
+      63 +| `nombre_producto` | string | (**no** `nombre`) |             
+      64 +| `marca_producto` | string nullable | (**no** `marca`) |      
+      65 +| `modelo_producto` | string nullable | (**no** `modelo`) |    
+      66 +| `capacidad_producto` | string nullable | (**no** `capacidad`)
+         + |                                                             
+      67  | `color_producto` | string nullable | Agregado 2026-07-15 |
+      68 -| `descripcion` | text nullable | |                            
+      69 -| `descripcion_corta` | text nullable | Para e-commerce |      
+      70 -| `slug` | string nullable | URL amigable para e-commerce |    
+      71 -| `imagen` | string nullable | Ruta relativa desde `public/` | 
+      68 +| `descripcion_producto` | text nullable | (**no** `descripcion
+         +`) |                                                           
+      69 +| `codigo_producto` | string nullable unique | Código principal
+         + del producto |                                                
+      70 +| `barcode_image` | string nullable | Ruta de la imagen de códi
+         +go de barras generada |                                        
+      71 +| `imagen_producto` | string nullable | Ruta relativa desde `pu
+         +blic/`, default `productos/producto-default.png` |             
+      72  | `precio_compra_producto` | decimal | Costo en USD — **solo vi
+          sible para admin/moderador** |
+      73  | `categoria_id` | FK | |
+      74  | `activo` | boolean | |
+      75  
+      76 +> No existen columnas `descripcion_corta` ni `slug` en `product
+         +os` pese a mencionarse en otros docs de e-commerce — verificar 
+         +antes de usarlas en queries.                                   
+      77 +                                                               
+      78  **Relaciones:** `hasMany(ProductoCodigo)`, `hasMany(AlmacenProd
+          ucto)`, `hasMany(ProductoVendedor)`, `belongsTo(Categoria)`, `h
+          asMany(CostoHistorial)`, `hasMany(HistorialPrecioCosto)`
+      79  
+      80  ---
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● Update(docs/base-de-datos.md)
+  ⎿  Added 2 lines, removed 1 line
+      84  |---|---|---|
+      85  | `id` | PK | |
+      86  | `producto_id` | FK | |
+      87 -| `codigo` | string | Código de barras EAN-128 |               
+      87 +| `codigo_barras` | string | Código de barras EAN-128 (**no** `
+         +codigo`) |                                                     
+      88 +| `imagen_barcode` | string nullable | Imagen generada del códi
+         +go |                                                           
+      89  | `cantidad` | int | Unidades que representa este código |
+      90  | `es_default` | boolean | Código principal del producto |
+      91  
+
+● Ahora sigo con la investigación para los tests: leo VentaController completo y
+  las migraciones/rutas relevantes.
+
+  Searched for 4 patterns, read 2 files (ctrl+o to expand)
+
+● Con todo esto entendido, empiezo a escribir los tests de Ventas.
+
+● Write(tests/Feature/VentaTest.php)
+  ⎿  Wrote 749 lines to tests/Feature/VentaTest.php
+       1 <?php
+       2 
+       3 use App\Models\Almacen;
+       4 use App\Models\AlmacenProducto;
+       5 use App\Models\Categoria;
+       6 use App\Models\Cliente;
+       7 use App\Models\Cuenta;
+       8 use App\Models\Moneda;
+       9 use App\Models\Producto;
+      10 use App\Models\ProductoCodigo;
+     … +905 lines (ctrl+o to expand)
+
+● Ahora corro estos tests para verificar que pasan contra el código real y
+  corrijo lo que falle.
+
+  Searched for 1 pattern, ran 4 shell commands (ctrl+o to expand)
+
+● Update(tests/Feature/VentaTest.php)
+  ⎿  Added 4 lines, removed 1 line
+      48  
+      49  function crearCuentaCup(float $saldo = 10000): Cuenta
+      50  {
+      51 -    $moneda = Moneda::factory()->create(['codigo_moneda' => 'CU
+         -P', 'estado' => true]);                                        
+      51 +    $moneda = Moneda::firstOrCreate(                           
+      52 +        ['codigo_moneda' => 'CUP'],                            
+      53 +        ['nombre_moneda' => 'Peso Cubano', 'simbolo_moneda' => 
+         +'CUP', 'tasa_cambio' => 365, 'estado' => true, 'principal' => f
+         +alse]                                                          
+      54 +    );                                                         
+      55  
+      56      return Cuenta::create([
+      57          'nombre_cuenta' => 'Cuenta CUP ' . uniqid(),
+
+● Update(tests/Feature/VentaTest.php)
+  ⎿  Added 1 line
+      86  
+      87      return [
+      88          'almacen_id' => $almacen->id,
+      89 +        'cliente_id' => null,                                  
+      90          'items' => [
+      91              [
+      92                  'producto_id' => $producto->id,
+● Update(tests/Feature/VentaTest.php)
+  ⎿  Added 5 lines
+      258      $monedaUsd = Moneda::factory()->create(['codigo_moneda' =>
+            'USD', 'estado' => true]);
+      259      // precio_base = 20, comision = 5 → mínimo permitido = 15.
+            Intentamos vender a 14.
+      260      [$producto, $codigo] = crearProductoConPrecio($almacen, co
+           sto: 10, precioVenta: 20, comision: 5);
+      261 +    $cuenta = crearCuentaUsd();                               
+      262  
+      263      $payload = payloadBaseVenta($almacen, $producto, $codigo, 
+           precioVenta: 14, cantidad: 1, monedaPrincipal: $monedaUsd);
+      264 +    $payload['pagos'] = [[                                    
+      265 +        'metodo' => 'efectivo', 'moneda_id' => $monedaUsd->id,
+          + 'monto' => 14,                                               
+      266 +        'tasa_cambio' => 1, 'monto_equivalente' => 14, 'cuenta
+          +_id' => $cuenta->id,                                          
+      267 +    ]];                                                       
+      268  
+      269      $response = $this->postJson(route('ventas.procesar'), $pay
+           load);
+      270  
+
+● Update(tests/Feature/VentaTest.php)
+  ⎿  Added 5 lines, removed 1 line
+      682      $monedaUsd = Moneda::factory()->create(['codigo_moneda' =>
+            'USD', 'estado' => true]);
+      683      [$producto, $codigo] = crearProductoConPrecio($almacen, co
+           sto: 10, precioVenta: 20, comision: 5);
+      684  
+      685 +    $cuenta = crearCuentaUsd();                               
+      686      $payload = payloadBaseVenta($almacen, $producto, $codigo, 
+           precioVenta: 5, cantidad: 1, monedaPrincipal: $monedaUsd);
+      687      $payload['es_venta_especial'] = true;
+      688      $payload['nota_venta_especial'] = 'Cliente frecuente, auto
+           rizado por gerencia';
+      688 -    $payload['pagos'] = [];                                   
+      689 +    $payload['pagos'] = [[                                    
+      690 +        'metodo' => 'efectivo', 'moneda_id' => $monedaUsd->id,
+          + 'monto' => 5,                                                
+      691 +        'tasa_cambio' => 1, 'monto_equivalente' => 5, 'cuenta_
+          +id' => $cuenta->id,                                           
+      692 +    ]];                                                       
+      693  
+      694      $response = $this->postJson(route('ventas.procesar'), $pay
+           load);
+      695      $response->assertJson(['success' => true]);
+
+● Update(tests/Feature/VentaTest.php)
+  ⎿  Added 5 lines
+      751      $almacen = Almacen::factory()->puntoVenta()->create(); // 
+           no asignado al vendedor
+      752      $monedaUsd = Moneda::factory()->create(['codigo_moneda' =>
+            'USD', 'estado' => true]);
+      753      [$producto, $codigo] = crearProductoConPrecio($almacen, co
+           sto: 10, precioVenta: 20, comision: 2);
+      754 +    $cuenta = crearCuentaUsd();                               
+      755  
+      756      $payload = payloadBaseVenta($almacen, $producto, $codigo, 
+           precioVenta: 20, cantidad: 1, monedaPrincipal: $monedaUsd);
+      757 +    $payload['pagos'] = [[                                    
+      758 +        'metodo' => 'efectivo', 'moneda_id' => $monedaUsd->id,
+          + 'monto' => 20,                                               
+      759 +        'tasa_cambio' => 1, 'monto_equivalente' => 20, 'cuenta
+          +_id' => $cuenta->id,                                          
+      760 +    ]];                                                       
+      761  
+      762      $response = $this->postJson(route('ventas.procesar'), $pay
+           load);
+      763  
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Update(tests/Feature/VentaTest.php)
+  ⎿  Added 1 line
+      87      return [
+      88          'almacen_id' => $almacen->id,
+      89          'cliente_id' => null,
+      90 +        'moneda_cobro_id' => null,                             
+      91          'items' => [
+      92              [
+      93                  'producto_id' => $producto->id,
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● 23/24. Solo falta el "no hay stock suficiente" — le falta un pago válido igual
+  que a los otros.
+
+● Update(tests/Feature/VentaTest.php)
+  ⎿  Added 5 lines
+      176      $almacen = Almacen::factory()->puntoVenta()->create();
+      177      $monedaUsd = Moneda::factory()->create(['codigo_moneda' =>
+            'USD', 'estado' => true]);
+      178      [$producto, $codigo] = crearProductoConPrecio($almacen, co
+           sto: 10, precioVenta: 20, comision: 2);
+      179 +    $cuenta = crearCuentaUsd();                               
+      180  
+      181      $payload = payloadBaseVenta($almacen, $producto, $codigo, 
+           precioVenta: 20, cantidad: 500, monedaPrincipal: $monedaUsd);
+      182 +    $payload['pagos'] = [[                                    
+      183 +        'metodo' => 'efectivo', 'moneda_id' => $monedaUsd->id,
+          + 'monto' => 10000,                                            
+      184 +        'tasa_cambio' => 1, 'monto_equivalente' => 10000, 'cue
+          +nta_id' => $cuenta->id,                                       
+      185 +    ]];                                                       
+      186  
+      187      $response = $this->postJson(route('ventas.procesar'), $pay
+           load);
+      188  
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● Update(tests/Feature/VentaTest.php)
+  ⎿  Added 3 lines, removed 1 line
+      186  
+      187      $response = $this->postJson(route('ventas.procesar'), $pay
+           load);
+      188  
+      189 -    $response->assertOk();                                    
+      189 +    // El controlador captura la excepción de negocio y respon
+          +de 500 con success:false                                      
+      190 +    // (no es un error de framework — es el diseño actual de p
+          +rocesarVenta).                                                
+      191 +    $response->assertStatus(500);                             
+      192      $response->assertJson(['success' => false]);
+      193      expect($response->json('message'))->toContain('Stock insuf
+           iciente');
+      194  
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Los 24 tests de Ventas pasan, incluyendo la regresión del bug B2 (XOR g
+  ⎿  Interrupted · What should Claude do instead?

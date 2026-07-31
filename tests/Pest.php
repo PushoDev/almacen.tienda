@@ -41,7 +41,66 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+use App\Models\Cuenta;
+use App\Models\Moneda;
+use App\Models\User;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Crea (o reutiliza) una Moneda activa con el código y tasa dados.
+ * `tasa` se interpreta como "X unidades de esta moneda = 1 USD".
+ */
+function crearMoneda(string $codigo, float $tasa = 1, bool $principal = false): Moneda
 {
-    // ..
+    return Moneda::firstOrCreate(
+        ['codigo_moneda' => $codigo],
+        ['nombre_moneda' => $codigo, 'simbolo_moneda' => $codigo, 'tasa_cambio' => $tasa, 'estado' => true, 'principal' => $principal]
+    );
+}
+
+function crearMonedaUsd(): Moneda
+{
+    return crearMoneda('USD', 1, true);
+}
+
+/**
+ * Crea una Cuenta en la moneda dada. Si se pasa $propietario, la asigna
+ * vía el pivot user_cuentas (requerido para los checks de permiso de vendedor).
+ */
+function crearCuentaEnMoneda(Moneda $moneda, float $saldo = 1000, ?User $propietario = null): Cuenta
+{
+    $cuenta = Cuenta::create([
+        'nombre_cuenta' => 'Cuenta ' . uniqid(),
+        'saldo_cuenta' => $saldo,
+        'tipo_cuenta' => 'permanentes',
+        'tipo' => 'banco',
+        'moneda_id' => $moneda->id,
+        'estado' => 'activa',
+    ]);
+
+    if ($propietario) {
+        $propietario->cuentas()->attach($cuenta->id);
+    }
+
+    return $cuenta;
+}
+
+/**
+ * `tipo_movimiento_id` en `movimientos_financieros` es FK contra
+ * `tipos_movimiento_financiero`. No hay seeder en el proyecto para ese
+ * catálogo (convención de la app: 1=Gasto, 2=Ingreso, 3=Transferencia),
+ * así que los tests que dependen de movimientos financieros lo insertan
+ * manualmente con este helper.
+ */
+function crearTiposMovimientoFinanciero(): void
+{
+    if (DB::table('tipos_movimiento_financiero')->count() > 0) {
+        return;
+    }
+
+    DB::table('tipos_movimiento_financiero')->insert([
+        ['id' => 1, 'nombre' => 'Gasto', 'efecto' => 'egreso', 'created_at' => now(), 'updated_at' => now()],
+        ['id' => 2, 'nombre' => 'Ingreso', 'efecto' => 'ingreso', 'created_at' => now(), 'updated_at' => now()],
+        ['id' => 3, 'nombre' => 'Transferencia', 'efecto' => 'egreso', 'created_at' => now(), 'updated_at' => now()],
+    ]);
 }

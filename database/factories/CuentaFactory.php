@@ -15,8 +15,8 @@ class CuentaFactory extends Factory
             'saldo_cuenta' => fake()->randomFloat(2, 0, 100000),
             'tipo_moneda' => fake()->randomElement(['USD', 'EUR', 'MLC', 'CUP']),
             'moneda_id' => Moneda::factory(),
-            'deuda' => 0,
-            'tipo_cuenta' => fake()->randomElement(['permanentes', 'temporales', 'deudas']),
+            // 'tipo_cuenta' solo acepta 'permanentes' desde 2026-07-28 (unificación temporales→permanentes).
+            'tipo_cuenta' => 'permanentes',
             'estado' => 'activa',
             'notas_cuenta' => fake()->optional()->sentence(),
         ];
@@ -29,10 +29,14 @@ class CuentaFactory extends Factory
         ]);
     }
 
+    /**
+     * El campo `deuda` fue eliminado el 2026-07-28. Desde entonces una cuenta
+     * "con deuda" se representa como saldo_cuenta negativo.
+     */
     public function conDeuda(): static
     {
         return $this->state(fn (array $attributes) => [
-            'deuda' => fake()->randomFloat(2, 100, 10000),
+            'saldo_cuenta' => -1 * fake()->randomFloat(2, 100, 10000),
         ]);
     }
 }

@@ -60,18 +60,20 @@
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `id` | PK | |
-| `nombre` | string | |
-| `marca` | string nullable | |
-| `modelo` | string nullable | |
-| `capacidad` | string nullable | |
+| `nombre_producto` | string | (**no** `nombre`) |
+| `marca_producto` | string nullable | (**no** `marca`) |
+| `modelo_producto` | string nullable | (**no** `modelo`) |
+| `capacidad_producto` | string nullable | (**no** `capacidad`) |
 | `color_producto` | string nullable | Agregado 2026-07-15 |
-| `descripcion` | text nullable | |
-| `descripcion_corta` | text nullable | Para e-commerce |
-| `slug` | string nullable | URL amigable para e-commerce |
-| `imagen` | string nullable | Ruta relativa desde `public/` |
+| `descripcion_producto` | text nullable | (**no** `descripcion`) |
+| `codigo_producto` | string nullable unique | Código principal del producto |
+| `barcode_image` | string nullable | Ruta de la imagen de código de barras generada |
+| `imagen_producto` | string nullable | Ruta relativa desde `public/`, default `productos/producto-default.png` |
 | `precio_compra_producto` | decimal | Costo en USD — **solo visible para admin/moderador** |
 | `categoria_id` | FK | |
 | `activo` | boolean | |
+
+> No existen columnas `descripcion_corta` ni `slug` en `productos` pese a mencionarse en otros docs de e-commerce — verificar antes de usarlas en queries.
 
 **Relaciones:** `hasMany(ProductoCodigo)`, `hasMany(AlmacenProducto)`, `hasMany(ProductoVendedor)`, `belongsTo(Categoria)`, `hasMany(CostoHistorial)`, `hasMany(HistorialPrecioCosto)`
 
@@ -82,7 +84,8 @@
 |---|---|---|
 | `id` | PK | |
 | `producto_id` | FK | |
-| `codigo` | string | Código de barras EAN-128 |
+| `codigo_barras` | string | Código de barras EAN-128 (**no** `codigo`) |
+| `imagen_barcode` | string nullable | Imagen generada del código |
 | `cantidad` | int | Unidades que representa este código |
 | `es_default` | boolean | Código principal del producto |
 
