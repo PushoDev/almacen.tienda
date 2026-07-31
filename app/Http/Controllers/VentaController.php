@@ -1430,9 +1430,27 @@ class VentaController extends Controller
             $query->whereDate('created_at', '<=', $request->fecha_hasta);
         }
 
+        if ($request->has('search') && $request->search) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('id', 'like', "%{$search}%")
+                    ->orWhereHas('cliente', function ($q2) use ($search) {
+                        $q2->where('nombre_cliente', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('almacen', function ($q2) use ($search) {
+                        $q2->where('nombre_almacen', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('destinatario', function ($q2) use ($search) {
+                        $q2->where('nombre', 'like', "%{$search}%")
+                            ->orWhere('apellidos', 'like', "%{$search}%");
+                    });
+            });
+        }
+
         // Ordenar y paginar
         $ventas = $query->orderBy('created_at', 'desc')
             ->paginate(15)
+            ->withQueryString()
             ->through(function ($venta) {
                 return [
                     'id' => $venta->id,
@@ -1513,7 +1531,7 @@ class VentaController extends Controller
 
         return Inertia::render('Vendor/Listado', [
             'ventas' => $ventas,
-            'filters' => $request->only(['estado', 'almacen_id', 'fecha_desde', 'fecha_hasta']),
+            'filters' => $request->only(['estado', 'almacen_id', 'fecha_desde', 'fecha_hasta', 'search']),
             'almacenes' => $almacenes,
             'estados_venta' => [
                 ['value' => 'pendiente',           'label' => 'Pendiente'],

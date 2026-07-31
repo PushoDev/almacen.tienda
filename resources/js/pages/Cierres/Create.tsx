@@ -160,6 +160,7 @@ interface ItemMovimiento {
     id: string;
     desc: string;
     monto: number;
+    moneda?: string;
     hora: string;
     origen: string;
     destino: string;
@@ -453,9 +454,12 @@ export default function Create({
     }, 0);
 
     // Calcular totales de transacciones del turno
-    const totalGastos = (calculos.detalles ?? []).reduce((sum, d) => sum + (d.gastos ?? 0), 0);
-    const totalIngresos = (calculos.detalles ?? []).reduce((sum, d) => sum + (d.ingresos_extra ?? 0), 0);
-    const totalTransferencias = (calculos.detalles ?? []).reduce((sum, d) => sum + (d.transferencias_salientes ?? 0), 0);
+    // d.gastos/d.ingresos_extra/d.transferencias_salientes vienen en la moneda de cada `d` (no en USD).
+    // Hay que dividir por la tasa de esa moneda antes de sumar entre monedas distintas — mismo patrón
+    // que MonedaController::calcularCapitalTotal() y el saldo_esperado del backend ($monto / $tasa).
+    const totalGastos = (calculos.detalles ?? []).reduce((sum, d) => sum + (d.gastos ?? 0) / (d.tasa_cambio > 0 ? d.tasa_cambio : 1), 0);
+    const totalIngresos = (calculos.detalles ?? []).reduce((sum, d) => sum + (d.ingresos_extra ?? 0) / (d.tasa_cambio > 0 ? d.tasa_cambio : 1), 0);
+    const totalTransferencias = (calculos.detalles ?? []).reduce((sum, d) => sum + (d.transferencias_salientes ?? 0) / (d.tasa_cambio > 0 ? d.tasa_cambio : 1), 0);
 
     // NUEVO: Calcular total de comisiones a gestores
     const totalComisionesGestor = calculos.comisiones_gestor_total ?? 0;
@@ -480,90 +484,57 @@ export default function Create({
     const todosIngresos = (calculos.detalles ?? []).flatMap((d) => d.items_ingresos ?? []);
     const todasTransferencias = calculos.transferencias_resumen?.detalles_completos ?? [];
 
-    // Solo las operaciones realizadas por el propio usuario (para Detalle de Transacciones)
-    const todosGastosPropios = useMemo(() => (todosGastos ?? []).filter(g => g.es_propio === true), [todosGastos]);
-    const todosIngresosPropios = useMemo(() => (todosIngresos ?? []).filter(g => g.es_propio === true), [todosIngresos]);
-    const todasTransferenciasPropias = useMemo(() => (todasTransferencias ?? []).filter(t => t.es_propio === true), [todasTransferencias]);
-    const totalGastosPropio = todosGastosPropios.reduce((sum, g) => sum + Number(g.monto), 0);
-    const totalIngresosPropio = todosIngresosPropios.reduce((sum, g) => sum + Number(g.monto), 0);
+    // Sección unificada "Transacciones del Turno" (Gastos/Ingresos/Transferencias, propias + externas)
+    const [busquedaTransacciones, setBusquedaTransacciones] = useState('');
+    const [filtroOrigenTransacciones, setFiltroOrigenTransacciones] = useState<'todas' | 'propias' | 'externas'>('todas');
+    const [filtroMonedaTransacciones, setFiltroMonedaTransacciones] = useState('todas');
 
-    // Transacciones externas: operaciones de otros usuarios que afectan las cuentas del vendedor
-    const transaccionesExternas = useMemo(() => {
-        const externas: Array<{
-            hora: string;
-            tipo: string;
-            desc: string;
-            cuenta: string;
-            usuario_nombre: string;
-            monto: number;
-            moneda: string;
-            es_entrante: boolean;
-            origen?: string;
-            destino?: string;
-        }> = [];
-
-        (todosGastos ?? []).forEach((item) => {
-            if (item.es_propio === false) {
-                externas.push({
-                    hora: item.hora,
-                    tipo: 'Gasto',
-                    desc: item.desc,
-                    cuenta: item.origen || '-',
-                    usuario_nombre: item.usuario_nombre || 'Sistema',
-                    monto: item.monto,
-                    moneda: item.moneda || 'USD',
-                    es_entrante: false,
-                });
-            }
+    // Monedas presentes en los datos del turno (no hardcodeado, se arma según lo que exista)
+    const monedasTransacciones = useMemo(() => {
+        const set = new Set<string>();
+        (todosGastos ?? []).forEach((i) => set.add(i.moneda || 'USD'));
+        (todosIngresos ?? []).forEach((i) => set.add(i.moneda || 'USD'));
+        (todasTransferencias ?? []).forEach((i) => {
+            set.add(i.moneda_origen || 'USD');
+            set.add(i.moneda_destino || 'USD');
         });
-
-        (todosIngresos ?? []).forEach((item) => {
-            if (item.es_propio === false) {
-                externas.push({
-                    hora: item.hora,
-                    tipo: 'Ingreso',
-                    desc: item.desc,
-                    cuenta: item.destino || '-',
-                    usuario_nombre: item.usuario_nombre || 'Sistema',
-                    monto: item.monto,
-                    moneda: item.moneda || 'USD',
-                    es_entrante: true,
-                });
-            }
-        });
-
-        (todasTransferencias ?? []).forEach((item) => {
-            if (item.es_propio === false) {
-                externas.push({
-                    hora: item.hora,
-                    tipo: item.tipo === 'entrante' ? 'Transferencia Entrante' : 'Transferencia Saliente',
-                    desc: item.desc,
-                    cuenta: item.tipo === 'entrante' ? item.destino_nombre : item.origen_nombre,
-                    origen: item.origen_nombre || '-',
-                    destino: item.destino_nombre || '-',
-                    origen_tipo: item.origen_tipo || '',
-                    destino_tipo: item.destino_tipo || '',
-                    monto_origen: item.monto_origen,
-                    moneda_origen: item.moneda_origen || 'USD',
-                    monto_destino: item.monto_destino ?? 0,
-                    moneda_destino: item.moneda_destino || 'USD',
-                    tasa_cambio: item.tasa_cambio ?? 1,
-                    usuario_nombre: item.usuario_nombre || 'Sistema',
-                    monto: item.tipo === 'entrante' ? (item.monto_destino ?? item.monto_origen) : item.monto_origen,
-                    moneda: item.tipo === 'entrante' ? (item.moneda_destino || item.moneda_origen || 'USD') : (item.moneda_origen || 'USD'),
-                    es_entrante: item.tipo === 'entrante',
-                });
-            }
-        });
-
-        externas.sort((a, b) => a.hora.localeCompare(b.hora));
-        return externas;
+        return ['todas', ...Array.from(set).sort()];
     }, [todosGastos, todosIngresos, todasTransferencias]);
 
-    const [busquedaExternas, setBusquedaExternas] = useState('');
-    const gastosExternos = useMemo(() => transaccionesExternas.filter(i => i.tipo === 'Gasto' && (!busquedaExternas || i.desc.toLowerCase().includes(busquedaExternas.toLowerCase()) || i.cuenta.toLowerCase().includes(busquedaExternas.toLowerCase()))), [transaccionesExternas, busquedaExternas]);
-    const ingresosExternos = useMemo(() => transaccionesExternas.filter(i => i.tipo === 'Ingreso' && (!busquedaExternas || i.desc.toLowerCase().includes(busquedaExternas.toLowerCase()) || i.cuenta.toLowerCase().includes(busquedaExternas.toLowerCase()))), [transaccionesExternas, busquedaExternas]);
-    const transferenciasExternas = useMemo(() => transaccionesExternas.filter(i => (i.tipo === 'Transferencia Saliente' || i.tipo === 'Transferencia Entrante') && (!busquedaExternas || i.desc.toLowerCase().includes(busquedaExternas.toLowerCase()) || i.cuenta.toLowerCase().includes(busquedaExternas.toLowerCase()) || (i.origen && i.origen.toLowerCase().includes(busquedaExternas.toLowerCase())) || (i.destino && i.destino.toLowerCase().includes(busquedaExternas.toLowerCase())))), [transaccionesExternas, busquedaExternas]);
+    const coincideFiltrosTransaccion = (esPropio: boolean | undefined, texto: string, monedasItem: string[]) => {
+        const matchOrigen =
+            filtroOrigenTransacciones === 'todas' ||
+            (filtroOrigenTransacciones === 'propias' ? esPropio === true : esPropio === false);
+        const matchMoneda = filtroMonedaTransacciones === 'todas' || monedasItem.includes(filtroMonedaTransacciones);
+        const matchTexto = !busquedaTransacciones || texto.toLowerCase().includes(busquedaTransacciones.toLowerCase());
+        return matchOrigen && matchMoneda && matchTexto;
+    };
+
+    const gastosFiltrados = useMemo(
+        () =>
+            (todosGastos ?? []).filter((i) =>
+                coincideFiltrosTransaccion(i.es_propio, `${i.desc} ${i.origen ?? ''}`, [i.moneda || 'USD']),
+            ),
+        [todosGastos, busquedaTransacciones, filtroOrigenTransacciones, filtroMonedaTransacciones],
+    );
+    const ingresosFiltrados = useMemo(
+        () =>
+            (todosIngresos ?? []).filter((i) =>
+                coincideFiltrosTransaccion(i.es_propio, `${i.desc} ${i.destino ?? ''}`, [i.moneda || 'USD']),
+            ),
+        [todosIngresos, busquedaTransacciones, filtroOrigenTransacciones, filtroMonedaTransacciones],
+    );
+    const transferenciasFiltradas = useMemo(
+        () =>
+            (todasTransferencias ?? []).filter((i) =>
+                coincideFiltrosTransaccion(
+                    i.es_propio,
+                    `${i.desc} ${i.origen_nombre ?? ''} ${i.destino_nombre ?? ''}`,
+                    [i.moneda_origen || 'USD', i.moneda_destino || 'USD'],
+                ),
+            ),
+        [todasTransferencias, busquedaTransacciones, filtroOrigenTransacciones, filtroMonedaTransacciones],
+    );
 
     // Filtros para Comparativa
     const [busquedaCuentas, setBusquedaCuentas] = useState('');
@@ -1184,7 +1155,7 @@ export default function Create({
                             <CardContent className="p-3 text-center">
                                 <ArrowUp className="mx-auto mb-1 h-5 w-5 text-red-600" />
                                 <p className="text-muted-foreground text-[10px] uppercase">Gastos</p>
-                                <p className="text-lg font-bold text-red-700">${Number(totalGastos).toFixed(2)}</p>
+                                <p className="text-lg font-bold text-red-700">${Number(totalGastos).toFixed(2)} USD</p>
                                 <p className="text-muted-foreground text-[9px]">{todosGastos.length} oper.</p>
                             </CardContent>
                         </Card>
@@ -1193,7 +1164,7 @@ export default function Create({
                             <CardContent className="p-3 text-center">
                                 <ArrowDown className="mx-auto mb-1 h-5 w-5 text-green-600" />
                                 <p className="text-muted-foreground text-[10px] uppercase">Ingresos</p>
-                                <p className="text-lg font-bold text-green-700">${Number(totalIngresos).toFixed(2)}</p>
+                                <p className="text-lg font-bold text-green-700">${Number(totalIngresos).toFixed(2)} USD</p>
                                 <p className="text-muted-foreground text-[9px]">{todosIngresos.length} oper.</p>
                             </CardContent>
                         </Card>
@@ -1202,7 +1173,7 @@ export default function Create({
                             <CardContent className="p-3 text-center">
                                 <TrendingUp className="mx-auto mb-1 h-5 w-5 text-blue-600" />
                                 <p className="text-muted-foreground text-[10px] uppercase">Transfer.</p>
-                                <p className="text-lg font-bold text-blue-700">${Number(totalTransferencias).toFixed(2)}</p>
+                                <p className="text-lg font-bold text-blue-700">${Number(totalTransferencias).toFixed(2)} USD</p>
                                 <p className="text-muted-foreground text-[9px]">{todasTransferencias.length} oper.</p>
                             </CardContent>
                         </Card>
@@ -1228,119 +1199,164 @@ export default function Create({
                     </div>
                 </div>
 
+                {/* Transacciones del Turno: Gastos, Ingresos, Transferencias — propias y externas, unificado */}
                 <Card>
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-base">
                             <TrendingUp className="h-5 w-5 text-blue-600" />
-                            Detalle de Transacciones Locales
+                            Transacciones del Turno
                         </CardTitle>
+                        <CardDescription>
+                            Gastos, ingresos y transferencias del turno — propias y de otros usuarios sobre tus cuentas. Las filas resaltadas son de otros usuarios.
+                        </CardDescription>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="space-y-4">
+                        <div className="relative">
+                            <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+                            <Input
+                                placeholder="Buscar en transacciones..."
+                                value={busquedaTransacciones}
+                                onChange={(e) => setBusquedaTransacciones(e.target.value)}
+                                className="pl-9"
+                            />
+                        </div>
+                        <div className="flex flex-wrap items-center gap-4">
+                            <div className="flex flex-wrap items-center gap-1">
+                                <span className="text-muted-foreground mr-1 text-xs font-medium">Origen:</span>
+                                {(['todas', 'propias', 'externas'] as const).map((opt) => (
+                                    <Button
+                                        key={opt}
+                                        variant={filtroOrigenTransacciones === opt ? 'default' : 'outline'}
+                                        size="sm"
+                                        onClick={() => setFiltroOrigenTransacciones(opt)}
+                                        className="h-7 text-xs"
+                                    >
+                                        {opt === 'todas' ? 'Todas' : opt === 'propias' ? 'Mías' : 'Externas'}
+                                    </Button>
+                                ))}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1">
+                                <span className="text-muted-foreground mr-1 text-xs font-medium">Moneda:</span>
+                                {monedasTransacciones.map((m) => (
+                                    <Button
+                                        key={m}
+                                        variant={filtroMonedaTransacciones === m ? 'default' : 'outline'}
+                                        size="sm"
+                                        onClick={() => setFiltroMonedaTransacciones(m)}
+                                        className="h-7 text-xs"
+                                    >
+                                        {m === 'todas' ? 'Todas' : m}
+                                    </Button>
+                                ))}
+                            </div>
+                        </div>
+
                         <Tabs defaultValue="gastos" className="w-full">
-                            <TabsList className="mb-4 grid w-full grid-cols-3">
-                                <TabsTrigger value="gastos">Gastos ({todosGastosPropios.length})</TabsTrigger>
-                                <TabsTrigger value="ingresos">Ingresos ({todosIngresosPropios.length})</TabsTrigger>
-                                <TabsTrigger value="transferencias">Transferencias ({todasTransferenciasPropias.length})</TabsTrigger>
+                            <TabsList className="grid w-full grid-cols-3">
+                                <TabsTrigger value="gastos">Gastos ({gastosFiltrados.length})</TabsTrigger>
+                                <TabsTrigger value="ingresos">Ingresos ({ingresosFiltrados.length})</TabsTrigger>
+                                <TabsTrigger value="transferencias">Transferencias ({transferenciasFiltradas.length})</TabsTrigger>
                             </TabsList>
 
-                            <TabsContent value="gastos" className="mt-0">
-                                {todosGastosPropios.length > 0 ? (
-                                    <div className="rounded-md border">
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead className="w-16">Hora</TableHead>
-                                                    <TableHead>Descripción</TableHead>
-                                                    <TableHead>Cuenta de Operación</TableHead>
-                                                    <TableHead className="w-28 text-right">Monto</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {todosGastosPropios.map((item, idx) => (
-                                                    <TableRow key={idx}>
+                            <TabsContent value="gastos" className="mt-4">
+                                <div className="rounded-md border">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead className="w-16">Hora</TableHead>
+                                                <TableHead>Descripción</TableHead>
+                                                <TableHead>Cuenta de Operación</TableHead>
+                                                <TableHead className="w-28">Creado por</TableHead>
+                                                <TableHead className="w-28 text-right">Monto</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {gastosFiltrados.length > 0 ? (
+                                                gastosFiltrados.map((item, idx) => (
+                                                    <TableRow key={idx} className={!item.es_propio ? 'bg-orange-50/60 dark:bg-orange-950/20' : undefined}>
                                                         <TableCell className="font-mono text-xs">{item.hora}</TableCell>
                                                         <TableCell className="text-sm">{item.desc}</TableCell>
                                                         <TableCell className="text-muted-foreground text-xs">{item.origen || '-'}</TableCell>
+                                                        <TableCell className="text-xs">
+                                                            {item.es_propio ? <span className="font-semibold">Tú</span> : item.usuario_nombre || 'Sistema'}
+                                                        </TableCell>
                                                         <TableCell className="text-right font-mono font-medium text-red-600">
                                                             -${Number(item.monto).toFixed(2)} {item.moneda || 'USD'}
                                                         </TableCell>
                                                     </TableRow>
-                                                ))}
-                                            </TableBody>
-                                            <TableFooter>
+                                                ))
+                                            ) : (
                                                 <TableRow>
-                                                    <TableCell colSpan={3} className="font-bold">
-                                                        Total Gastos
-                                                    </TableCell>
-                                                    <TableCell className="text-right font-bold text-red-600">
-                                                        ${Number(totalGastosPropio).toFixed(2)}
+                                                    <TableCell colSpan={5} className="text-muted-foreground py-8 text-center italic">
+                                                        {busquedaTransacciones || filtroOrigenTransacciones !== 'todas' || filtroMonedaTransacciones !== 'todas'
+                                                            ? 'No se encontraron resultados con los filtros aplicados'
+                                                            : 'No hay gastos registrados en este turno.'}
                                                     </TableCell>
                                                 </TableRow>
-                                            </TableFooter>
-                                        </Table>
-                                    </div>
-                                ) : (
-                                    <p className="text-muted-foreground py-12 text-center italic">No hay gastos registrados en este turno.</p>
-                                )}
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </div>
                             </TabsContent>
-                            
-                            <TabsContent value="ingresos" className="mt-0">
-                                {todosIngresosPropios.length > 0 ? (
-                                    <div className="rounded-md border">
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead className="w-16">Hora</TableHead>
-                                                    <TableHead>Descripción</TableHead>
-                                                    <TableHead>Cuenta de Operación</TableHead>
-                                                    <TableHead className="w-28 text-right">Monto</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {todosIngresosPropios.map((item, idx) => (
-                                                    <TableRow key={idx}>
+
+                            <TabsContent value="ingresos" className="mt-4">
+                                <div className="rounded-md border">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead className="w-16">Hora</TableHead>
+                                                <TableHead>Descripción</TableHead>
+                                                <TableHead>Cuenta de Operación</TableHead>
+                                                <TableHead className="w-28">Creado por</TableHead>
+                                                <TableHead className="w-28 text-right">Monto</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {ingresosFiltrados.length > 0 ? (
+                                                ingresosFiltrados.map((item, idx) => (
+                                                    <TableRow key={idx} className={!item.es_propio ? 'bg-orange-50/60 dark:bg-orange-950/20' : undefined}>
                                                         <TableCell className="font-mono text-xs">{item.hora}</TableCell>
                                                         <TableCell className="text-sm">{item.desc}</TableCell>
                                                         <TableCell className="text-muted-foreground text-xs">{item.destino || '-'}</TableCell>
+                                                        <TableCell className="text-xs">
+                                                            {item.es_propio ? <span className="font-semibold">Tú</span> : item.usuario_nombre || 'Sistema'}
+                                                        </TableCell>
                                                         <TableCell className="text-right font-mono font-medium text-green-600">
                                                             +${Number(item.monto).toFixed(2)} {item.moneda || 'USD'}
                                                         </TableCell>
                                                     </TableRow>
-                                                ))}
-                                            </TableBody>
-                                            <TableFooter>
+                                                ))
+                                            ) : (
                                                 <TableRow>
-                                                    <TableCell colSpan={3} className="font-bold">
-                                                        Total Ingresos
-                                                    </TableCell>
-                                                    <TableCell className="text-right font-bold text-green-600">
-                                                        ${Number(totalIngresosPropio).toFixed(2)}
+                                                    <TableCell colSpan={5} className="text-muted-foreground py-8 text-center italic">
+                                                        {busquedaTransacciones || filtroOrigenTransacciones !== 'todas' || filtroMonedaTransacciones !== 'todas'
+                                                            ? 'No se encontraron resultados con los filtros aplicados'
+                                                            : 'No hay ingresos registrados en este turno.'}
                                                     </TableCell>
                                                 </TableRow>
-                                            </TableFooter>
-                                        </Table>
-                                    </div>
-                                ) : (
-                                    <p className="text-muted-foreground py-12 text-center italic">No hay ingresos registrados en este turno.</p>
-                                )}
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </div>
                             </TabsContent>
 
-                            <TabsContent value="transferencias" className="mt-0">
-                                {todasTransferenciasPropias.length > 0 ? (
-                                    <div className="rounded-md border">
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead className="w-16">Hora</TableHead>
-                                                    <TableHead>Descripción</TableHead>
-                                                    <TableHead>Origen</TableHead>
-                                                    <TableHead>Destino</TableHead>
-                                                    <TableHead className="w-40 text-right">Monto</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {todasTransferenciasPropias.map((item, idx) => (
-                                                    <TableRow key={idx}>
+                            <TabsContent value="transferencias" className="mt-4">
+                                <div className="rounded-md border">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead className="w-16">Hora</TableHead>
+                                                <TableHead>Descripción</TableHead>
+                                                <TableHead>Origen</TableHead>
+                                                <TableHead>Destino</TableHead>
+                                                <TableHead className="w-28">Creado por</TableHead>
+                                                <TableHead className="w-40 text-right">Monto</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {transferenciasFiltradas.length > 0 ? (
+                                                transferenciasFiltradas.map((item, idx) => (
+                                                    <TableRow key={idx} className={!item.es_propio ? 'bg-orange-50/60 dark:bg-orange-950/20' : undefined}>
                                                         <TableCell className="font-mono text-xs">{item.hora}</TableCell>
                                                         <TableCell className="max-w-xs truncate text-sm">{item.desc}</TableCell>
                                                         <TableCell className="text-muted-foreground text-xs">
@@ -1352,6 +1368,9 @@ export default function Create({
                                                             <div className="max-w-[120px] truncate" title={`${item.destino_tipo}: ${item.destino_nombre}`}>
                                                                 <span className="capitalize">{item.destino_tipo}:</span> {item.destino_nombre}
                                                             </div>
+                                                        </TableCell>
+                                                        <TableCell className="text-xs">
+                                                            {item.es_propio ? <span className="font-semibold">Tú</span> : item.usuario_nombre || 'Sistema'}
                                                         </TableCell>
                                                         <TableCell className="text-right font-mono text-xs">
                                                             <div>
@@ -1369,135 +1388,21 @@ export default function Create({
                                                             </div>
                                                         </TableCell>
                                                     </TableRow>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
-                                    </div>
-                                ) : (
-                                    <p className="text-muted-foreground py-12 text-center italic">
-                                        No hay transferencias registradas en este turno.
-                                    </p>
-                                )}
+                                                ))
+                                            ) : (
+                                                <TableRow>
+                                                    <TableCell colSpan={6} className="text-muted-foreground py-8 text-center italic">
+                                                        {busquedaTransacciones || filtroOrigenTransacciones !== 'todas' || filtroMonedaTransacciones !== 'todas'
+                                                            ? 'No se encontraron resultados con los filtros aplicados'
+                                                            : 'No hay transferencias registradas en este turno.'}
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </div>
                             </TabsContent>
                         </Tabs>
-                    </CardContent>
-                </Card>
-
-                {/* Transacciones Externas */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-base">
-                            <TrendingUp className="h-5 w-5 text-orange-600" />
-                            Detalles Transacciones Externas
-                        </CardTitle>
-                        <CardDescription>
-                            Operaciones realizadas por otros usuarios en tus cuentas durante este turno
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        {transaccionesExternas.length === 0 ? (
-                            <p className="text-muted-foreground py-12 text-center italic">
-                                No hay operaciones registradas en este turno.
-                            </p>
-                        ) : (
-                            <div className="contents">
-                                <div className="relative">
-                                    <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                                    <Input
-                                        placeholder="Buscar en transacciones externas..."
-                                        value={busquedaExternas}
-                                        onChange={(e) => setBusquedaExternas(e.target.value)}
-                                        className="pl-9"
-                                    />
-                                </div>
-                                <Tabs defaultValue="gastos">
-                                    <TabsList className="grid w-full grid-cols-3">
-                                        <TabsTrigger value="gastos">Gastos ({gastosExternos.length})</TabsTrigger>
-                                        <TabsTrigger value="ingresos">Ingresos ({ingresosExternos.length})</TabsTrigger>
-                                        <TabsTrigger value="transferencias">Transferencias ({transferenciasExternas.length})</TabsTrigger>
-                                    </TabsList>
-                                    {[
-                                        { value: 'gastos', items: gastosExternos, esGasto: true },
-                                        { value: 'ingresos', items: ingresosExternos, esGasto: false },
-                                        { value: 'transferencias', items: transferenciasExternas, esGasto: false },
-                                    ].map((tab) => (
-                                        <TabsContent key={tab.value} value={tab.value} className="mt-4">
-                                            <div className="rounded-md border">
-                                                <Table>
-                                                    <TableHeader>
-                                                    <TableRow>
-                                                        <TableHead className="w-16">Hora</TableHead>
-                                                        <TableHead>Descripción</TableHead>
-                                                        {tab.value === 'transferencias' ? (
-                                                            <>
-                                                                <TableHead>Origen</TableHead>
-                                                                <TableHead>Destino</TableHead>
-                                                            </>
-                                                        ) : (
-                                                            <TableHead>Cuenta de Operación</TableHead>
-                                                        )}
-                                                        <TableHead className="w-28">Creado por</TableHead>
-                                                        <TableHead className="w-40 text-right">Monto</TableHead>
-                                                    </TableRow>
-                                                    </TableHeader>
-                                                    <TableBody>
-                                                        {tab.items.length > 0 ? tab.items.map((item, idx) => (
-                                                            <TableRow key={idx}>
-                                                                <TableCell className="font-mono text-xs">{item.hora}</TableCell>
-                                                                <TableCell className="max-w-xs truncate text-sm" title={item.desc}>{item.desc}</TableCell>
-                                                                {tab.value === 'transferencias' ? (
-                                                                    <>
-                                                                        <TableCell className="text-muted-foreground text-xs">
-                                                                            <div className="max-w-[120px] truncate" title={`${item.origen_tipo}: ${item.origen}`}>
-                                                                                {item.origen_tipo ? <span className="capitalize">{item.origen_tipo}:</span> : ''} {item.origen}
-                                                                            </div>
-                                                                        </TableCell>
-                                                                        <TableCell className="text-muted-foreground text-xs">
-                                                                            <div className="max-w-[120px] truncate" title={`${item.destino_tipo}: ${item.destino}`}>
-                                                                                {item.destino_tipo ? <span className="capitalize">{item.destino_tipo}:</span> : ''} {item.destino}
-                                                                            </div>
-                                                                        </TableCell>
-                                                                    </>
-                                                                ) : (
-                                                                    <TableCell className="text-muted-foreground text-xs">{item.cuenta}</TableCell>
-                                                                )}
-                                                                <TableCell className="text-muted-foreground text-xs">{item.usuario_nombre}</TableCell>
-                                                                <TableCell className="text-right font-mono text-xs">
-                                                                    {tab.value === 'transferencias' ? (
-                                                                        <div>
-                                                                            <span className={item.es_entrante ? 'text-green-600' : 'text-blue-600'}>
-                                                                                {item.es_entrante ? '+' : '-'}${Number(item.monto).toFixed(2)} {item.moneda}
-                                                                            </span>
-                                                                            {(item.moneda_origen && item.moneda_destino && item.moneda_origen !== item.moneda_destino) && (
-                                                                                <div className="text-muted-foreground mt-0.5 text-[10px] leading-tight whitespace-nowrap">
-                                                                                    ≈ ${Number(item.es_entrante ? item.monto_origen : item.monto_destino).toFixed(2)}{' '}
-                                                                                    {item.es_entrante ? item.moneda_origen : item.moneda_destino}
-                                                                                    <span className="ml-0.5">@ {Number(item.tasa_cambio).toFixed(2)}</span>
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                    ) : (
-                                                                        <span className={tab.esGasto ? 'text-red-600' : 'text-green-600'}>
-                                                                            {tab.esGasto ? '-' : '+'}${Number(item.monto).toFixed(2)} {item.moneda}
-                                                                        </span>
-                                                                    )}
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        )) : (
-                                                            <TableRow>
-                                                                <TableCell colSpan={tab.value === 'transferencias' ? 6 : 5} className="text-muted-foreground py-8 text-center italic">
-                                                                    {busquedaExternas ? 'No se encontraron resultados' : 'No hay operaciones de este tipo'}
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        )}
-                                                    </TableBody>
-                                                </Table>
-                                            </div>
-                                        </TabsContent>
-                                    ))}
-                                </Tabs>
-                            </div>
-                        )}
                     </CardContent>
                 </Card>
 

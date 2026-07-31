@@ -37,7 +37,7 @@ import {
     Users,
     XCircle,
 } from 'lucide-react';
-import { FormEvent, useState } from 'react';
+import { useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -127,27 +127,30 @@ export default function ListadoVentas() {
 
     const [localFilters, setLocalFilters] = useState<Filters>(filters || {});
 
-    const handleFilterChange = (key: keyof Filters, value: string) => {
-        setLocalFilters(prev => ({ ...prev, [key]: value }));
-    };
-
-    const applyFilters = () => {
-        router.get(route('ventas.listado'), localFilters as Record<string, string>, {
+    // Filtro tradicional: cada cambio actualiza el estado y dispara la búsqueda de inmediato
+    // (sin debounce, sin botón "Aplicar"). Se manda el valor recién calculado directo a
+    // router.get en vez de depender de `localFilters` del closure, para que nunca quede
+    // desfasado un cambio respecto a la petición que se envía.
+    const applyFilter = (key: keyof Filters, value: string) => {
+        const next = { ...localFilters, [key]: value };
+        setLocalFilters(next);
+        router.get(route('ventas.listado'), next as Record<string, string>, {
             preserveState: true,
             preserveScroll: true,
+            replace: true,
         });
     };
 
     const clearFilters = () => {
         setLocalFilters({});
-        router.get(
-            route('ventas.listado'),
-            {},
-            {
-                preserveState: true,
-                preserveScroll: true,
-            },
-        );
+        router.get(route('ventas.listado'), {}, { preserveState: true, preserveScroll: true, replace: true });
+    };
+
+    const hasActiveFilters = Object.values(localFilters).some((value) => !!value);
+
+    const goToPage = (url: string | null) => {
+        if (!url) return;
+        router.get(url, {}, { preserveState: true, preserveScroll: true });
     };
 
     const getEstadoBadge = (estado: string) => {
@@ -223,15 +226,14 @@ export default function ListadoVentas() {
                                 <Input
                                     placeholder="Buscar por ID, cliente, almacén, receptor..."
                                     value={localFilters.search || ''}
-                                    onChange={(e) => handleFilterChange('search', e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
+                                    onChange={(e) => applyFilter('search', e.target.value)}
                                     className="pl-10"
                                 />
                             </div>
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
                                 <div className="space-y-1">
                                     <Label htmlFor="estado" className="text-xs">Estado</Label>
-                                    <Select value={localFilters.estado || ''} onValueChange={(v) => handleFilterChange('estado', v)}>
+                                    <Select value={localFilters.estado || ''} onValueChange={(v) => applyFilter('estado', v)}>
                                         <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
                                         <SelectContent>
                                             {estados_venta.map((e) => (<SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>))}
@@ -240,7 +242,7 @@ export default function ListadoVentas() {
                                 </div>
                                 <div className="space-y-1">
                                      <Label htmlFor="almacen" className="text-xs">Almacén</Label>
-                                    <Select value={localFilters.almacen_id || ''} onValueChange={(v) => handleFilterChange('almacen_id', v)}>
+                                    <Select value={localFilters.almacen_id || ''} onValueChange={(v) => applyFilter('almacen_id', v)}>
                                         <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
                                         <SelectContent>
                                             {almacenes.map((a) => (<SelectItem key={a.id} value={a.id.toString()}>{a.nombre_almacen}</SelectItem>))}
@@ -249,15 +251,14 @@ export default function ListadoVentas() {
                                 </div>
                                 <div className="space-y-1">
                                     <Label htmlFor="fecha_desde" className="text-xs">Desde</Label>
-                                    <Input id="fecha_desde" type="date" value={localFilters.fecha_desde || ''} onChange={e => handleFilterChange('fecha_desde', e.target.value)} />
+                                    <Input id="fecha_desde" type="date" value={localFilters.fecha_desde || ''} onChange={e => applyFilter('fecha_desde', e.target.value)} />
                                 </div>
                                 <div className="space-y-1">
                                     <Label htmlFor="fecha_hasta" className="text-xs">Hasta</Label>
-                                    <Input id="fecha_hasta" type="date" value={localFilters.fecha_hasta || ''} onChange={e => handleFilterChange('fecha_hasta', e.target.value)} />
+                                    <Input id="fecha_hasta" type="date" value={localFilters.fecha_hasta || ''} onChange={e => applyFilter('fecha_hasta', e.target.value)} />
                                 </div>
                                 <div className="flex items-end gap-2">
-                                    <Button onClick={applyFilters} className="w-full sm:w-auto"><Search className="mr-2 h-4 w-4" />Aplicar</Button>
-                                    <Button variant="ghost" onClick={clearFilters} className="w-full sm:w-auto"><XCircle className="mr-2 h-4 w-4" />Limpiar</Button>
+                                    <Button variant="ghost" onClick={clearFilters} disabled={!hasActiveFilters} className="w-full sm:w-auto"><XCircle className="mr-2 h-4 w-4" />Limpiar</Button>
                                 </div>
                             </div>
                         </div>
@@ -340,16 +341,29 @@ export default function ListadoVentas() {
                 {ventas.data.length > 0 && (
                     <Pagination>
                         <PaginationContent>
-                            {ventas.links.map((link, index) => (
-                                <PaginationItem key={index}>
-                                    <PaginationLink
-                                        href={link.url || '#'}
-                                        isActive={link.active}
-                                        dangerouslySetInnerHTML={{ __html: link.label }}
-                                        className={!link.url ? 'pointer-events-none opacity-50' : ''}
-                                     />
-                                </PaginationItem>
-                            ))}
+                            {ventas.links.map((link, index) => {
+                                const displayLabel = link.label
+                                    .replace('&laquo;', '«')
+                                    .replace('&raquo;', '»')
+                                    .replace('pagination.previous', '«')
+                                    .replace('pagination.next', '»');
+
+                                return (
+                                    <PaginationItem key={index}>
+                                        <PaginationLink
+                                            href={link.url || '#'}
+                                            isActive={link.active}
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                goToPage(link.url);
+                                            }}
+                                            className={!link.url ? 'pointer-events-none opacity-50' : ''}
+                                        >
+                                            {displayLabel}
+                                        </PaginationLink>
+                                    </PaginationItem>
+                                );
+                            })}
                         </PaginationContent>
                     </Pagination>
                 )}

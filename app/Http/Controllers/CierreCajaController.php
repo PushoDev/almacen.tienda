@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Inertia\Inertia;
 use App\Models\Almacen;
+use App\Models\User;
 
 class CierreCajaController extends Controller
 {
@@ -26,29 +27,51 @@ class CierreCajaController extends Controller
     public function index(Request $request)
     {
         $user = Auth::user();
+        $esAdminOModerador = $user->isAdmin() || $user->isModerator();
 
         $query = CierreCaja::with(['usuario', 'revisor'])
             ->orderBy('fecha_cierre', 'desc');
 
         // Si no es admin/moderador, solo ve sus propios cierres
-        if (! $user->isAdmin() && ! $user->isModerator()) {
+        if (! $esAdminOModerador) {
             $query->where('user_id', $user->id);
         }
 
         // Filtros
-        if ($request->has('fecha')) {
-            $query->whereDate('fecha_cierre', $request->fecha);
+        if ($request->has('fecha_desde') && $request->fecha_desde) {
+            $query->whereDate('fecha_cierre', '>=', $request->fecha_desde);
         }
 
-        if ($request->has('estado') && $request->estado !== 'todos') {
-            $query->where('estado', $request->estado);
+        if ($request->has('fecha_hasta') && $request->fecha_hasta) {
+            $query->whereDate('fecha_cierre', '<=', $request->fecha_hasta);
+        }
+
+        // Filtro por vendedor — relevante para admin/moderador (un vendedor ya está
+        // restringido a los suyos arriba, pero no molesta aplicarlo igual si llega).
+        if ($request->has('user_id') && $request->user_id) {
+            $query->where('user_id', $request->user_id);
+        }
+
+        // "Cuadre": si el cierre coincidió (saldo_contado vs saldo_esperado) o no.
+        // Mismo umbral que CierreCaja::tieneDiferencia() (0.01) — no filtrar por `estado`,
+        // ya que store() lo crea siempre como 'aprobado' y ese filtro nunca distingue nada real.
+        if ($request->has('cuadre') && $request->cuadre !== 'todos') {
+            if ($request->cuadre === 'cuadrado') {
+                $query->whereRaw('ABS(diferencia) <= 0.01');
+            } elseif ($request->cuadre === 'descuadrado') {
+                $query->whereRaw('ABS(diferencia) > 0.01');
+            }
         }
 
         $cierres = $query->paginate(20);
 
         return Inertia::render('Cierres/Index', [
             'cierres' => $cierres,
-            'filters' => $request->all(['fecha', 'estado']),
+            'filters' => $request->all(['fecha_desde', 'fecha_hasta', 'user_id', 'cuadre']),
+            'vendedores' => $esAdminOModerador
+                ? User::whereIn('id', CierreCaja::select('user_id')->distinct())->orderBy('name')->get(['id', 'name'])
+                : [],
+            'es_admin_o_moderador' => $esAdminOModerador,
         ]);
     }
 
