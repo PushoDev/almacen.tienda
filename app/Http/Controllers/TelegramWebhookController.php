@@ -6,6 +6,7 @@ use App\Models\AlmacenProducto;
 use App\Models\Almacen;
 use App\Models\CierreCaja;
 use App\Models\HistorialStock;
+use App\Models\MovimientoFinanciero;
 use App\Models\ProductoCodigo;
 use App\Models\User;
 use App\Models\Venta;
@@ -58,9 +59,10 @@ class TelegramWebhookController extends Controller
 
         match (true) {
             str_starts_with($text, '/start')   => $this->cmdStart($chatId, $admin),
-            str_starts_with($text, '/reporte') => $this->cmdReporte($chatId),
-            str_starts_with($text, '/cierres') => $this->cmdCierres($chatId),
-            str_starts_with($text, '/ayuda')   => $this->cmdAyuda($chatId),
+            str_starts_with($text, '/reporte')     => $this->cmdReporte($chatId),
+            str_starts_with($text, '/cierres')     => $this->cmdCierres($chatId),
+            str_starts_with($text, '/movimientos') => $this->cmdMovimientos($chatId),
+            str_starts_with($text, '/ayuda')       => $this->cmdAyuda($chatId),
             default => $this->sendMessage($chatId, "Comando no reconocido. Escribe /ayuda."),
         };
 
@@ -116,6 +118,7 @@ class TelegramWebhookController extends Controller
             "📋 <b>Comandos disponibles:</b>\n\n" .
             "/reporte — Ventas del día por almacén\n" .
             "/cierres — Ver cierres de caja por usuario\n" .
+            "/movimientos — Ver gastos, ingresos y transferencias\n" .
             "/ayuda — Ver esta ayuda"
         );
     }
@@ -189,6 +192,34 @@ class TelegramWebhookController extends Controller
         }
     }
 
+    private function cmdMovimientos(int|string $chatId): void
+    {
+        $keyboard = [
+            [
+                ['text' => '📅 Hoy',      'callback_data' => 'mf:hoy'],
+                ['text' => '📅 3 días',   'callback_data' => 'mf:3d'],
+            ],
+            [
+                ['text' => '📅 5 días',   'callback_data' => 'mf:5d'],
+                ['text' => '📅 Este mes', 'callback_data' => 'mf:mes'],
+            ],
+            [
+                ['text' => '📋 Todos',    'callback_data' => 'mf:todo'],
+            ],
+        ];
+
+        try {
+            Telegram::sendMessage([
+                'chat_id'      => $chatId,
+                'text'         => "💰 <b>Movimientos Financieros</b>\n\nSelecciona el período:",
+                'parse_mode'   => 'HTML',
+                'reply_markup' => json_encode(['inline_keyboard' => $keyboard]),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Telegram cmdMovimientos error: ' . $e->getMessage());
+        }
+    }
+
     // ─── Botones (callback_query) ─────────────────────────────────────────────
 
     private function handleCallbackQuery(array $callbackQuery)
@@ -213,6 +244,12 @@ class TelegramWebhookController extends Controller
         // Cierres — paso 2: filtro seleccionado
         if (str_starts_with($data, 'cf:')) {
             $this->handleCierresFiltro($data, $chatId, $messageId, $callbackId);
+            return response()->json(['ok' => true]);
+        }
+
+        // Movimientos financieros — filtro seleccionado
+        if (str_starts_with($data, 'mf:')) {
+            $this->handleMovimientosFiltro($data, $chatId, $messageId, $callbackId);
             return response()->json(['ok' => true]);
         }
 
@@ -381,6 +418,94 @@ class TelegramWebhookController extends Controller
             ]);
         } catch (\Exception $e) {
             // Si el mensaje es demasiado largo, enviarlo como nuevo
+            $this->sendMessage($chatId, $texto);
+        }
+
+        Telegram::answerCallbackQuery(['callback_query_id' => $callbackId]);
+    }
+
+    private function handleMovimientosFiltro(string $data, int|string $chatId, int $messageId, string $callbackId): void
+    {
+        $filtro = substr($data, 3); // quitar "mf:"
+
+        $labels = [
+            'hoy'  => 'Hoy',
+            '3d'   => 'Últimos 3 días',
+            '5d'   => 'Últimos 5 días',
+            'mes'  => 'Este mes',
+            'todo' => 'Todos',
+        ];
+
+        $query = MovimientoFinanciero::with(['user', 'cuentaOrigen', 'cuentaDestino', 'clienteOrigen', 'clienteDestino', 'proveedorDestino'])
+            ->orderBy('created_at', 'desc');
+
+        match ($filtro) {
+            'hoy'   => $query->whereDate('created_at', Carbon::today()),
+            '3d'    => $query->where('created_at', '>=', Carbon::now()->subDays(3)->startOfDay()),
+            '5d'    => $query->where('created_at', '>=', Carbon::now()->subDays(5)->startOfDay()),
+            'mes'   => $query->whereMonth('created_at', Carbon::now()->month)
+                             ->whereYear('created_at', Carbon::now()->year),
+            default => null,
+        };
+
+        $movimientos = $query->limit(10)->get();
+        $label       = $labels[$filtro] ?? $filtro;
+
+        if ($movimientos->isEmpty()) {
+            try {
+                Telegram::editMessageText([
+                    'chat_id'    => $chatId,
+                    'message_id' => $messageId,
+                    'text'       => "💰 <b>Movimientos Financieros</b> — {$label}\n\nNo hay movimientos en este período.",
+                    'parse_mode' => 'HTML',
+                ]);
+            } catch (\Exception $e) {
+                Log::error('Telegram handleMovimientosFiltro (vacío) error: ' . $e->getMessage());
+            }
+            Telegram::answerCallbackQuery(['callback_query_id' => $callbackId]);
+            return;
+        }
+
+        $texto = "💰 <b>Movimientos Financieros</b> — {$label}\n\n";
+
+        foreach ($movimientos as $mov) {
+            [$icon, $tipo] = match ((int) $mov->tipo_movimiento_id) {
+                1       => ['🔴', 'Gasto'],
+                2       => ['🟢', 'Ingreso'],
+                3       => ['🔄', 'Transferencia'],
+                default => ['❔', 'Movimiento'],
+            };
+
+            $origen  = $mov->cuentaOrigen->nombre_cuenta ?? $mov->clienteOrigen->nombre_cliente ?? null;
+            $destino = $mov->cuentaDestino->nombre_cuenta ?? $mov->clienteDestino->nombre_cliente
+                ?? $mov->proveedorDestino->nombre_proveedor ?? null;
+
+            $texto .= "{$icon} <b>{$tipo}</b> — $ " . number_format($mov->monto, 2) . " {$mov->moneda}\n";
+            if ($origen) {
+                $texto .= "   📤 {$origen}\n";
+            }
+            if ($destino) {
+                $texto .= "   📥 {$destino}\n";
+            }
+            $texto .= "   👤 {$mov->user->name} — " . $mov->created_at->format('d/m H:i') . "\n";
+            $texto .= "━━━━━━━━━━━━━━\n";
+        }
+
+        $count  = $movimientos->count();
+        $sufijo = $count >= 10
+            ? "\n<i>Mostrando los últimos 10 movimientos.</i>"
+            : "\n<i>Total: {$count} movimiento(s)</i>";
+
+        $texto .= $sufijo;
+
+        try {
+            Telegram::editMessageText([
+                'chat_id'    => $chatId,
+                'message_id' => $messageId,
+                'text'       => $texto,
+                'parse_mode' => 'HTML',
+            ]);
+        } catch (\Exception $e) {
             $this->sendMessage($chatId, $texto);
         }
 
