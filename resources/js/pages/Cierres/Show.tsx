@@ -175,6 +175,7 @@ interface ComisionGestorItem {
     monto: number;
     moneda_codigo: string;
     monto_usd: number;
+    tasa?: number | null;
     cuenta_nombre: string;
     cuenta_tipo: string;
     comentario: string;
@@ -273,7 +274,10 @@ interface MensajeroDetalleItemShow {
     venta_id: number;
     monto_usd: number;
     monto_cup: number;
+    tasa?: number | null;
     tipo: string;
+    total_venta?: number;
+    productos?: ProductoItem[];
 }
 
 const MOTIVO_LABELS: Record<string, string> = {
@@ -1937,6 +1941,7 @@ export default function Show({
                                                     <TableHead className="text-xs w-[80px]">Venta</TableHead>
                                                     <TableHead className="text-right text-xs w-[100px]">Total Venta</TableHead>
                                                     <TableHead className="text-xs">Productos</TableHead>
+                                                    <TableHead className="text-right text-xs">Tasa</TableHead>
                                                     <TableHead className="text-right text-xs w-[140px]">Comisión</TableHead>
                                                 </TableRow>
                                             </TableHeader>
@@ -1974,6 +1979,9 @@ export default function Show({
                                                                 <span className="text-muted-foreground">Sin productos</span>
                                                             )}
                                                         </TableCell>
+                                                        <TableCell className="text-right text-xs text-muted-foreground">
+                                                            {d.tasa ? d.tasa.toLocaleString('es-ES', { minimumFractionDigits: 2 }) : '—'}
+                                                        </TableCell>
                                                         <TableCell className="text-right text-xs whitespace-nowrap">
                                                             <span className="font-medium">${d.monto_usd.toFixed(2)}</span>
                                                             {' / '}
@@ -1989,6 +1997,7 @@ export default function Show({
                                             <TableFooter>
                                                 <TableRow>
                                                     <TableCell className="text-xs font-bold">Total</TableCell>
+                                                    <TableCell />
                                                     <TableCell />
                                                     <TableCell />
                                                     <TableCell className="text-right text-xs font-bold whitespace-nowrap">
@@ -2044,7 +2053,7 @@ export default function Show({
                         {/* Dialog detalles de mensajería */}
                         {mensajero_count > 0 && (
                             <Dialog open={showMensajeriaDialog} onOpenChange={setShowMensajeriaDialog}>
-                                <DialogContent className="sm:max-w-md">
+                                <DialogContent className="sm:max-w-3xl">
                                     <DialogHeader>
                                         <DialogTitle className="text-sky-700 dark:text-sky-300">
                                             Mensajería del Turno ({mensajero_count})
@@ -2058,8 +2067,11 @@ export default function Show({
                                         <Table>
                                             <TableHeader>
                                                 <TableRow>
-                                                    <TableHead className="text-xs">Venta</TableHead>
+                                                    <TableHead className="text-xs w-[80px]">Venta</TableHead>
+                                                    <TableHead className="text-right text-xs w-[100px]">Total Venta</TableHead>
+                                                    <TableHead className="text-xs">Productos</TableHead>
                                                     <TableHead className="text-right text-xs">USD cobrado</TableHead>
+                                                    <TableHead className="text-right text-xs">Tasa</TableHead>
                                                     <TableHead className="text-right text-xs">CUP pagado</TableHead>
                                                 </TableRow>
                                             </TableHeader>
@@ -2067,7 +2079,40 @@ export default function Show({
                                                 {mensajero_detalles.map((d) => (
                                                     <TableRow key={d.venta_id}>
                                                         <TableCell className="text-xs font-medium">#{d.venta_id}</TableCell>
+                                                        <TableCell className="text-right text-xs">
+                                                            {d.total_venta != null ? `$${d.total_venta.toFixed(2)}` : '—'}
+                                                        </TableCell>
+                                                        <TableCell className="text-xs max-w-[260px]">
+                                                            {d.productos && d.productos.length > 0 ? (
+                                                                <TooltipProvider>
+                                                                    <Tooltip>
+                                                                        <TooltipTrigger asChild>
+                                                                            <span className="cursor-default truncate block">
+                                                                                {d.productos.map((p) =>
+                                                                                    [p.nombre, p.marca, p.modelo].filter(Boolean).join(' ') + ' x' + p.cantidad
+                                                                                ).join(', ')}
+                                                                            </span>
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent side="bottom" align="start" className="max-w-md">
+                                                                            <ul className="list-disc list-inside space-y-0.5">
+                                                                                {d.productos.map((p, i) => (
+                                                                                    <li key={i}>
+                                                                                        {[p.nombre, p.marca, p.modelo].filter(Boolean).join(' ')}
+                                                                                        {' '}x{p.cantidad}
+                                                                                    </li>
+                                                                                ))}
+                                                                            </ul>
+                                                                        </TooltipContent>
+                                                                    </Tooltip>
+                                                                </TooltipProvider>
+                                                            ) : (
+                                                                <span className="text-muted-foreground">Sin productos</span>
+                                                            )}
+                                                        </TableCell>
                                                         <TableCell className="text-right text-xs">${d.monto_usd.toFixed(2)}</TableCell>
+                                                        <TableCell className="text-right text-xs text-muted-foreground">
+                                                            {d.tasa ? d.tasa.toLocaleString('es-ES', { minimumFractionDigits: 2 }) : '—'}
+                                                        </TableCell>
                                                         <TableCell className="text-right text-xs font-semibold text-sky-700 dark:text-sky-300">
                                                             {d.monto_cup.toLocaleString('es-ES', { minimumFractionDigits: 2 })}
                                                         </TableCell>
@@ -2077,7 +2122,10 @@ export default function Show({
                                             <TableFooter>
                                                 <TableRow>
                                                     <TableCell className="text-xs font-bold">Total</TableCell>
+                                                    <TableCell />
+                                                    <TableCell />
                                                     <TableCell className="text-right text-xs font-bold">${Number(mensajero_total_usd).toFixed(2)}</TableCell>
+                                                    <TableCell />
                                                     <TableCell className="text-right text-xs font-bold text-sky-700 dark:text-sky-300">
                                                         {Number(mensajero_total_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
                                                     </TableCell>
@@ -2187,6 +2235,7 @@ export default function Show({
                                                         </span>
                                                         <span className="text-muted-foreground ml-2 text-xs">
                                                             ≈ ${Number(mensajeroItem.monto_usd).toFixed(2)}
+                                                            {mensajeroItem.tasa ? ` · tasa ${Number(mensajeroItem.tasa).toLocaleString('es-ES', { minimumFractionDigits: 2 })}` : ''}
                                                         </span>
                                                     </div>
                                                 </div>
