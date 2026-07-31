@@ -10,6 +10,8 @@
 
 ## Patrón de conversión
 
+**Referencia canónica**: `Movimientos/Index.tsx` (selectores de Almacén Origen/Destino). Cualquier conversión nueva debe copiar exactamente esta forma — no introducir variantes (p. ej. no usar `ComboboxEmpty` en vez del div manual, no comparar ids con `==` en vez de `.toString() ===`) salvo que se decida explícitamente cambiar el patrón de referencia.
+
 De Select:
 ```tsx
 <Select value={x} onValueChange={setX}>
@@ -22,20 +24,54 @@ De Select:
 
 A Combobox:
 ```tsx
+// 1. Un state para la selección (string, nunca number — el primitive trabaja con ids como string)
+//    y OTRO state separado para el texto de búsqueda. No compartir el mismo state para ambas cosas.
+const [xId, setXId] = useState<string>('')
 const [xSearch, setXSearch] = useState('')
 
-<Combobox value={x} onValueChange={setX} onInputValueChange={setXSearch}
-  itemToStringLabel={(id) => items.find(i => i.id == id)?.nombre ?? ''}>
-  <ComboboxInput placeholder="..." showClear />
-  <ComboboxContent>
-    <ComboboxList>
-      {items.filter(i => !xSearch || i.nombre.toLowerCase().includes(xSearch.toLowerCase())).map(i => (
-        <ComboboxItem key={i.id} value={i.id}>{i.nombre}</ComboboxItem>
-      ))}
-    </ComboboxList>
-  </ComboboxContent>
-</Combobox>
+// 2. Si la lista de opciones depende de permisos (rol) o de otra selección (exclusión mutua,
+//    dependencia entre campos), encadenar esos filtros ANTES del filtro de texto:
+const itemsPermitidos = esRestringido ? items.filter(i => idsPermitidos.includes(i.id)) : items
+const itemsFiltrados = itemsPermitidos.filter(i => !xSearch || i.nombre.toLowerCase().includes(xSearch.toLowerCase()))
+
+<div className="flex flex-col space-y-1.5">
+  <Label htmlFor="x_id">Etiqueta del campo</Label>
+  <Combobox
+    value={xId || null}
+    onValueChange={(value) => {
+      // onValueChange recibe string | null (null al limpiar con el botón X).
+      // Si seleccionar este campo debe disparar un efecto (ej. cargar datos
+      // dependientes con fetch/router), hacerlo aquí, no en un useEffect aparte.
+      if (!value) {
+        setXId('')
+        return
+      }
+      setXId(value)
+    }}
+    onInputValueChange={setXSearch}
+    itemToStringLabel={(id: string) => items.find(i => i.id.toString() === id)?.nombre ?? ''}
+  >
+    <ComboboxInput id="x_id" className="w-full" placeholder="Buscar..." showClear />
+    <ComboboxContent>
+      <ComboboxList>
+        {itemsFiltrados.map(i => (
+          <ComboboxItem key={i.id} value={i.id.toString()}>{i.nombre}</ComboboxItem>
+        ))}
+        {itemsFiltrados.length === 0 && (
+          <div className="py-2 text-center text-sm text-muted-foreground">Sin resultados</div>
+        )}
+      </ComboboxList>
+    </ComboboxContent>
+  </Combobox>
+</div>
 ```
+
+**Puntos que no son opcionales al convertir:**
+- `value={xId || null}` — el primitive espera `string | null`, nunca `''`.
+- `value={i.id.toString()}` en cada `ComboboxItem` — los ids numéricos del modelo siempre van como string.
+- `itemToStringLabel` compara con `.toString() ===`, no con `==` — evita falsos positivos de coerción.
+- El estado vacío (`Sin resultados`) se renderiza a mano como `<div>` condicional, dentro de `ComboboxList`, después del `.map()` — no usar `ComboboxEmpty`, para mantener consistencia con el patrón ya validado.
+- Si el campo tiene reglas de qué opciones puede ver el usuario (rol) o depende de otro campo ya seleccionado (exclusión mutua, filtrado en cascada), ese filtrado va **antes** del filtro de texto, como una lista base separada (ver `almacenesOrigen`/`almacenesDestino` en `Movimientos/Index.tsx`).
 
 ## Prioridades
 
