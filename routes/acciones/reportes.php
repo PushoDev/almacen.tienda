@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ReporteController;
+use App\Http\Controllers\Reportes\RastreoOperacionesController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -28,6 +29,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/historial-precios', [ReporteController::class, 'historialPrecios'])->name('historial_precios');
         Route::get('/historial-costo-precio', [ReporteController::class, 'historialCostoPrecio'])->name('historial_costo_precio');
         Route::get('/movimientos-financieros', [ReporteController::class, 'movimientosFinancieros'])->name('movimientos_financieros');
-        Route::get('/rastreo-operaciones', [ReporteController::class, 'rastreoOperaciones'])->name('rastreo_operaciones');
+        Route::get('/rastreo-operaciones', RastreoOperacionesController::class)->name('rastreo_operaciones');
     });
 });
