@@ -1362,9 +1362,9 @@ export default function Create({
                                         <TableHeader>
                                             <TableRow>
                                                 <TableHead className="w-16">Hora</TableHead>
-                                                <TableHead>Descripción</TableHead>
-                                                <TableHead>Origen</TableHead>
-                                                <TableHead>Destino</TableHead>
+                                                <TableHead className="max-w-[160px]">Descripción</TableHead>
+                                                <TableHead className="w-[170px]">Origen</TableHead>
+                                                <TableHead className="w-[170px]">Destino</TableHead>
                                                 <TableHead className="w-28">Creado por</TableHead>
                                                 <TableHead className="w-40 text-right">Monto</TableHead>
                                             </TableRow>
@@ -1376,14 +1376,14 @@ export default function Create({
                                                     return (
                                                     <TableRow key={idx} className={!item.es_propio ? 'bg-orange-50/60 dark:bg-orange-950/20' : undefined}>
                                                         <TableCell className="font-mono text-xs">{item.hora}</TableCell>
-                                                        <TableCell className="max-w-xs truncate text-sm">{item.desc}</TableCell>
+                                                        <TableCell className="max-w-[160px] truncate text-sm">{item.desc}</TableCell>
                                                         <TableCell className="text-muted-foreground text-xs">
-                                                            <div className="max-w-[120px] truncate" title={`${item.origen_tipo}: ${item.origen_nombre}`}>
+                                                            <div className="max-w-[170px] truncate" title={`${item.origen_tipo}: ${item.origen_nombre}`}>
                                                                 <span className="capitalize">{item.origen_tipo}:</span> {item.origen_nombre}
                                                             </div>
                                                         </TableCell>
                                                         <TableCell className="text-muted-foreground text-xs">
-                                                            <div className="max-w-[120px] truncate" title={`${item.destino_tipo}: ${item.destino_nombre}`}>
+                                                            <div className="max-w-[170px] truncate" title={`${item.destino_tipo}: ${item.destino_nombre}`}>
                                                                 <span className="capitalize">{item.destino_tipo}:</span> {item.destino_nombre}
                                                             </div>
                                                         </TableCell>
