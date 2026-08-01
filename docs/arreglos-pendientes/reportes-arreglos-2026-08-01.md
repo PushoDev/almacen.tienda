@@ -8,6 +8,8 @@ Control de acceso: `routes/acciones/reportes.php` solo exige `['auth','verified'
 
 Tests: **ninguno de los 21 métodos del controller tiene test**. Al arreglar cada reporte, evaluar si conviene agregar uno (mismo patrón que se viene usando en el resto del proyecto).
 
+**Arquitectura (decisión 2026-08-01):** cada reporte pasa a tener su propio controller en `App\Http\Controllers\Reportes\` (namespace nuevo, mismo patrón que ya usa el proyecto para `Api/`, `Auth/`, `Settings/`) — el usuario pidió esto explícitamente para evitar "ligas y conflictos" entre 21 métodos no relacionados viviendo juntos en un solo `ReporteController.php` de ~900 líneas. **Se hace de forma incremental**: cada vez que se trabaja un reporte de esta lista, ese método se extrae a su propio controller (`app/Http/Controllers/Reportes/<Nombre>Controller.php`) como parte del trabajo — no es un refactor masivo de los 21 de una sola vez. Actualizar la ruta correspondiente en `routes/acciones/reportes.php` al migrar cada uno.
+
 ---
 
 ## Compras e Inventario
@@ -98,12 +100,12 @@ Tests: **ninguno de los 21 métodos del controller tiene test**. Al arreglar cad
 
 ## Auditoría y Rastreo
 
-### 12. Rastreo de Operaciones
-- [ ] Pendiente
+### 12. Rastreo de Operaciones — 🔴 EN PROGRESO, es el que le interesa al cliente
+- [ ] En progreso — **ver plan detallado en `rastreo-operaciones-rediseno-2026-08-01.md`** (rediseño grande, por fases: separar Gasto/Ingreso/Transferencia, filas colapsables Venta/Compra con detalle de productos, columna de stock final, drill-down, fix del bug de bindings, etc.)
 - **Ruta:** `GET /reportes/rastreo-operaciones` (`reportes.rastreo_operaciones`)
 - **Controller:** `ReporteController::rastreoOperaciones()` — línea 732
 - **Frontend:** `resources/js/pages/Reportes/Report/RastreoOperaciones.tsx`
-- **Hallazgos:** ⚠️ usa `CONCAT()` (líneas ~756, 770, 799) sobre un `UNION ALL` de 4 subconsultas (Ventas+Compras+Movimientos+Cierres) envuelto en subquery derivada — no portable a SQLite, mismo patrón de riesgo de bindings que mordió a Cuentas hoy (bug B9, ver memoria/`ESTADO_DESARROLLO.md`). Expone auditoría financiera global sin chequeo de rol. Si el orden de los `where` condicionales de las 4 subconsultas cambia, hay que revisar el orden de bindings de `mergeBindings()` con cuidado (mismo gotcha).
+- **Hallazgos:** ⚠️ usa `CONCAT()` (líneas ~756, 770, 799) sobre un `UNION ALL` de 4 subconsultas (Ventas+Compras+Movimientos+Cierres) envuelto en subquery derivada — no portable a SQLite. **Bug confirmado en vivo** (reproducido con `DB::listen()`): `mergeBindings($query)` + `->where('tipo', ...)` posterior corrompe el orden de bindings cuando hay filtro de fecha/usuario simultáneo con filtro de tipo — mismo patrón que B9 en Cuentas. Expone auditoría financiera global sin chequeo de rol.
 
 ---
 
