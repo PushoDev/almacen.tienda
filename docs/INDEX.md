@@ -10,9 +10,9 @@
 | Campo | Valor |
 |---|---|---|
 | Rama activa | `feature/desarrollo-caliente` |
-| Última sesión | 2026-07-31 — **Tests Pest + frontend Combobox**: 100 tests nuevos (`VentaTest`, `CierreCajaTest`, `MovimientoTest`, `TransaccionFinancieraTest`), 3 bugs reales encontrados y corregidos (B6/B7/B8, ver `ESTADO_DESARROLLO.md`). En frontend: campo "Destino del Pago" del POS migrado a `Combobox` (con bug de Radix `AlertDialog` vs `@base-ui/react` resuelto de forma genérica en `combobox.tsx`), e inputs numéricos ya no cambian de valor con la rueda del mouse (fix centralizado en `input.tsx`). |
-| Estado general | 12/12 módulos estables, ✓ bugs B1/B2/B3/B6/B7/B8 resueltos, ver lista de tareas priorizada en `ESTADO_DESARROLLO.md` |
-| Próximo paso | Ver "🎯 Lista de tareas priorizada" en `ESTADO_DESARROLLO.md` — alta prioridad: tests de Cuentas, Combobox en `Vendor/Index.tsx` (POS), validar doble reversión de stock en `anularVenta` |
+| Última sesión | 2026-08-01 — **Cuentas: historial + acceso vendedor**, fix transferencias Cierres. `Cuentas/Show.tsx` ganó historial real de operaciones en 3 Cards (Compras/Ventas/Transacciones, estilo `Proveedores`/`Clientes`) con búsqueda + filtro por tipo + rango de fechas, cada una paginada y enlazando al registro real (venta/transacción/compra); `vendedor` ahora puede ver el detalle de sus propias cuentas (antes solo admin). Se encontró y corrigió un bug real de orden de bindings de Laravel al filtrar sobre una query `UNION ALL` embebida (B9, ver `ESTADO_DESARROLLO.md`). En `Cierres/*`: fix de deduplicación de transferencias entre monedas distintas, y el widget "Resumen Financiero del Turno" ahora se oculta a `vendedor`. 10 tests nuevos en `CuentaTest.php`. |
+| Estado general | 12/12 módulos estables, ✓ bugs B1/B2/B3/B6/B7/B8/B9 resueltos, ver lista de tareas priorizada en `ESTADO_DESARROLLO.md` |
+| Próximo paso | Ver "🎯 Lista de tareas priorizada" en `ESTADO_DESARROLLO.md` — alta prioridad: completar tests de Cuentas (`ajustarSaldo`, saldo negativo), Combobox en `Vendor/Index.tsx` (POS), validar doble reversión de stock en `anularVenta` |
 
 ### ✅ Bugs resueltos recientemente
 
@@ -24,6 +24,7 @@
 | **B6** | `MovimientosController::rechazar()` | Duplicaba stock fantasma al rechazar un movimiento en tránsito | ✅ Resuelto (2026-07-31) |
 | **B7** | Migraciones enum `estado` (movimientos) | Gateadas solo a MySQL — rotas en SQLite (default del quickstart) | ✅ Resuelto (2026-07-31) |
 | **B8** | `TransferenciaController::store()` | Vendedor podía transferir a cuenta de otro vendedor (check sin filtrar por usuario) | ✅ Resuelto (2026-07-31) |
+| **B9** | `CuentaController::obtenerHistorialVentas()` | `mergeBindings()` + `->where()` sobre subquery UNION cruda corrompía el orden de bindings — el filtro por tipo devolvía filas de otro tipo | ✅ Resuelto (2026-08-01) |
 
 ### 🐛 Bugs activos pendientes
 

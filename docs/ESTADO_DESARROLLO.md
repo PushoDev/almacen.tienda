@@ -1,7 +1,7 @@
 # Estado del Desarrollo — almacen.tienda
 
 > **Actualizar este archivo cada vez que se resuelva un bug, se complete una feature o aparezca algo nuevo.**
-> Fecha de última actualización: 2026-07-31
+> Fecha de última actualización: 2026-08-01
 
 ---
 
@@ -17,7 +17,7 @@
 
 ### Alta prioridad
 - [ ] **`Cierres/Create.tsx` — no existe conteo físico real de caja**: `saldo_contado` se inicializa como `calculos.saldo_esperado_global` y **no hay ningún `<Input>` en el formulario que permita al usuario escribirlo** (se verificó: no hay `setData('saldo_contado', ...)` en todo el archivo). Consecuencia: `saldo_contado` siempre queda igual a `saldo_esperado`, y por lo tanto `diferencia` (calculada en `store()`) **siempre es 0**. El concepto central de un cierre de caja (comparar lo contado físicamente contra lo esperado) no está implementado en la UI, aunque el backend sí lo soporta completo (`saldo_contado`, `diferencia`, `CierreCaja::tieneDiferencia()`). Hay un array `DENOMINACIONES` (billetes USD/CUP) declarado en `Create.tsx` y nunca usado — parece ser el resto de una calculadora de conteo por denominación que quedó sin terminar. Por esto, la columna/filtro "Cuadre" de `Cierres/Index.tsx` se ocultó temporalmente (2026-07-31) — el filtro backend (`whereRaw('ABS(diferencia)...')`) se dejó implementado y listo, solo falta reconectarlo cuando exista el input real. Encontrado 2026-07-31.
-- [ ] **Tests — módulo Cuentas**: `ajustarSaldo` (requiere contraseña admin), saldo negativo interpretado como deuda. Siguiente módulo en la cola de tests (ver memoria `tests_progreso` de la sesión).
+- [ ] **Tests — módulo Cuentas (parcial)**: `Cuentas/Show` (acceso por rol + historial de 3 fuentes) ya tiene 10 tests (`tests/Feature/CuentaTest.php`, 2026-08-01). Falta: `ajustarSaldo` (requiere contraseña admin), saldo negativo interpretado como deuda.
 - [ ] **Combobox — `Vendor/Index.tsx`** (selectores Cliente y Almacén del POS): todavía usa la API antigua declarativa (`items` + objeto completo como `value`), no el patrón validado de `Movimientos/Index.tsx`. Este selector vive fuera de cualquier Dialog, así que la conversión es directa (ver `pendiente-combobox-reemplazo.md`).
 - [ ] **Bug a validar**: `anularVenta` desde estado `rechazada` podría revertir el stock dos veces (el stock ya se revirtió en `rechazarSolicitudEspecial`). Verificar si la UI expone ese botón para ventas rechazadas y si el controlador tiene guardia.
 
@@ -50,7 +50,7 @@
 | Compras | Registro, pagos múltiples, distribución de costos, relación proveedor/cliente |
 | Movimientos de stock | Traslados entre almacenes, estados, discrepancias, auditoría |
 | Categorías / Proveedores / Clientes | CRUD completo |
-| Cuentas financieras | CRUD, control de saldo con contraseña, tipos de instrumento |
+| Cuentas financieras | CRUD, control de saldo con contraseña, tipos de instrumento, historial de operaciones (Compras/Ventas/Transacciones) con filtros, acceso de vendedor a sus propias cuentas (2026-08-01) |
 | Monedas y tasas | CRUD, historial de cambio de tasa, impacto en cuentas |
 | Transacciones financieras | Gastos, ingresos, transferencias bidireccionales |
 | Reportes | Inventario, ventas, compras, ganancias, historial, rastreo |
@@ -130,6 +130,7 @@
 | **B6** | `MovimientosController::rechazar()` | Rechazar un movimiento `en_transito` incrementaba `cantidad` en el origen además de liberar `cantidad_en_transito` — pero `cantidad` nunca se decrementa en `enviar()` (solo en `recibir()`). Duplicaba stock fantasma en cada rechazo | Corregido 2026-07-31: se quitó el `increment('cantidad', ...)` indebido |
 | **B7** | Migraciones `estado` enum (`movimientos`, `movimiento_seguimientos`) | Las migraciones que agregan `pendiente_confirmacion` al enum están gateadas a `if (driver === 'mysql')` — en SQLite (default del quickstart) cualquier creación de movimiento fallaba con `CHECK constraint` | Corregido 2026-07-31: nueva migración solo-SQLite (`2026_07_31_141334_fix_movimientos_estado_enum_sqlite.php`), no-op en MySQL |
 | **B8** | `TransferenciaController::store()` | El check de permiso de vendedor sobre la cuenta destino usaba `DB::table('user_cuentas')->pluck('cuenta_id')` sin filtrar por el usuario actual — un vendedor podía transferir a la cuenta de OTRO vendedor | Corregido 2026-07-31: `auth()->user()->cuentas()->pluck('id')`, igual patrón que el check de origen |
+| **B9** | `CuentaController::obtenerHistorialVentas()` | Al agregar filtros (`->where('fuente', ...)`) sobre una query armada con `UNION ALL` embebida como subquery cruda (`DB::raw()`), usar `mergeBindings($query)` y luego encadenar `->where()` corrompe el orden de los bindings — Laravel compila el bucket `where` ANTES que `union`, así que el binding del filtro nuevo se cuela en medio de los bindings del UNION en vez de ir al final (donde está su `?` real en el SQL de texto). Filtrar por "Comisión Gestor" devolvía filas de "Pago de venta" | Corregido 2026-08-01: reemplazar `mergeBindings($query)` por `addBinding($query->getBindings(), 'where')`, que aplana todo en un solo bucket en el orden real del SQL. Regresión cubierta por 2 tests nuevos en `CuentaTest.php` |
 
 ## 🐛 Bugs activos pendientes
 
@@ -273,6 +274,10 @@ resources/js/pages/Transacciones/layout/*      ← Movimientos, forms varios
 
 | Fecha | Cambio |
 |:---:|---|
+| 2026-08-01 | **Cuentas — historial de operaciones en `Cuentas/Show.tsx`**: nuevo, antes solo mostraba datos estáticos. `CuentaController` agrega 3 métodos (`obtenerHistorialTransacciones`/`Ventas`/`Compras`) que arman el historial real combinando 4 fuentes que tocan `saldo_cuenta` (`movimientos_financieros`, `pago_ventas`, `ventas` directo para comisión PV/gestor/mensajería, `compra_pago` — las últimas 3 NO quedan logueadas en `movimientos_financieros`, ver B9 para el bug de bindings encontrado al agregar filtros). Frontend: 3 Cards separadas (Compras/Ventas/Transacciones, estilo `Proveedores/Show.tsx` y `Clientes/Show.tsx`) con badge de conteo, botón "Detalle" que enlaza al registro real (`ventas.show`/`transacciones.show`/`comprar.show`), buscador + filtro por tipo + rango de fechas por Card (paginación real, `pagina_transacciones`/`pagina_ventas`/`pagina_compras` como nombres de página independientes). Compras se oculta a `vendedor` (mismo criterio que `precio_compra`). 10 tests nuevos en `tests/Feature/CuentaTest.php` |
+| 2026-08-01 | **Cuentas — acceso de `vendedor` a `Cuentas/Show`**: antes solo `admin` (middleware `check.cuenta.permission` binario). Ahora `admin`/`moderador` siempre, `vendedor` solo si la cuenta está en `auth()->user()->cuentas()` (mismo patrón que Gasto/Ingreso/Transferencia). La ruta `show` salió del middleware compartido; el chequeo vive en `CuentaController::show()`. `Cuentas/Index.tsx` muestra "Ver detalles" también a vendedor (antes oculto); "Editar"/"Eliminar" siguen admin-only |
+| 2026-08-01 | **Cierres — fix de transferencias entre monedas distintas**: `CierreCajaController::obtenerResumenTransferencias()` deduplicaba por `movimiento_id` con un `$seenMovimientos` declarado DENTRO del loop por moneda — para una transferencia que cruza de moneda (ej. CUP→USD) el "lado saliente" y el "lado entrante" caen en buckets de moneda distintos, así que nunca se deduplicaban entre sí y la transferencia salía duplicada en el historial. Fix: el mapa de vistos se movió fuera del loop (alcance global a la función). Frontend (`Cierres/Show.tsx`/`Create.tsx`): al filtrar por una moneda específica, la fila ahora se muestra desde la perspectiva de esa moneda (signo correcto) en vez del `tipo` canónico fijo |
+| 2026-08-01 | **Widget "Resumen Financiero del Turno" oculto para `vendedor`** en `Cierres/Show.tsx`/`Create.tsx` — mostraba ganancia de la agencia, dato que no le corresponde ver a ese rol |
 | 2026-07-31 | **Tests Pest** — 100 tests nuevos: `VentaTest.php` (24), `CierreCajaTest.php` (13), `MovimientoTest.php` (15), `TransaccionFinancieraTest.php` (17). En el proceso se encontraron y corrigieron 3 bugs reales (B6, B7, B8, ver arriba) y se arreglaron factories desactualizadas (`CuentaFactory`, referenciaba columna `deuda` eliminada) y faltantes (`MovimientoFinancieroFactory`, nueva) |
 | 2026-07-31 | **Frontend — Combobox en `PaymentForm.tsx`** (campo "Destino del Pago" en el POS): convertido de `<Select>` a `<Combobox>` con lista combinada cuentas+clientes físicos, búsqueda por texto, truncado con tooltip. Encontrado y arreglado un bug de conflicto Radix `AlertDialog` vs `@base-ui/react` Combobox (portal fuera del focus-trap rompía click y scroll con mouse) — fix genérico en `combobox.tsx` (`ComboboxContent` acepta `container`), documentado en `pendiente-combobox-reemplazo.md` |
 | 2026-07-31 | **Frontend — Inputs numéricos sin scroll-to-change**: fix centralizado en `resources/js/components/ui/input.tsx` (`onWheel` hace `blur()` cuando `type="number"`), cubre automáticamente todos los `<Input type="number">` del proyecto |
