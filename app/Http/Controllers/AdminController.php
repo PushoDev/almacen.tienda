@@ -111,6 +111,7 @@ class AdminController extends Controller
         if ($cuentas->isEmpty()) {
             return [];
         }
+        
 
         // Agrupar cuentas por moneda
         $cuentasPorMoneda = $cuentas->groupBy('moneda.codigo_moneda');

@@ -1879,6 +1879,41 @@ class CierreCajaController extends Controller
             'detalles_completos' => [],
         ];
 
+        // Deduplicado global por movimiento_id: una transferencia entre monedas distintas
+        // genera un item "saliente" en el bucket de la moneda origen y un item "entrante" en
+        // el bucket de la moneda destino (ver procesarTransferenciaBidireccional). Si el mapa
+        // de vistos se reiniciara en cada vuelta del foreach de abajo, ambos items sobrevivirían
+        // como 2 filas separadas en detalles_completos para la misma operación.
+        $seenMovimientos = [];
+
+        $agregarDetalle = function (array $transferencia, string $tipo) use (&$resumenTransferencias, &$seenMovimientos) {
+            $id = $transferencia['id'] ?? '';
+            $baseId = str_replace(['t_entrada_', 't_'], '', $id);
+
+            if (isset($seenMovimientos[$baseId])) return;
+
+            $seenMovimientos[$baseId] = true;
+
+            $resumenTransferencias['detalles_completos'][] = [
+                'id' => $id,
+                'desc' => $transferencia['desc'] ?? '',
+                'monto_origen' => $transferencia['monto_origen'] ?? 0,
+                'moneda_origen' => $transferencia['moneda_origen'] ?? 'USD',
+                'origen_tipo' => $transferencia['origen_tipo'] ?? '',
+                'origen_nombre' => $transferencia['origen_nombre'] ?? '',
+                'monto_destino' => $transferencia['monto_destino'] ?? 0,
+                'moneda_destino' => $transferencia['moneda_destino'] ?? 'USD',
+                'destino_tipo' => $transferencia['destino_tipo'] ?? '',
+                'destino_nombre' => $transferencia['destino_nombre'] ?? '',
+                'tasa_cambio' => $transferencia['tasa_cambio'] ?? 1,
+                'hora' => $transferencia['hora'] ?? '',
+                'afecta_saldo_usuario' => $transferencia['afecta_saldo_usuario'] ?? false,
+                'es_propio' => $transferencia['es_propio'] ?? true,
+                'usuario_nombre' => $transferencia['usuario_nombre'] ?? 'Sistema',
+                'tipo' => $tipo,
+            ];
+        };
+
         foreach ($detalles as $monedaData) {
             $codigo = $monedaData['moneda'] ?? 'USD';
 
@@ -1900,37 +1935,6 @@ class CierreCajaController extends Controller
                     'items_entrantes' => $monedaData['items_transferencias_entrantes'] ?? [],
                 ];
             }
-
-            // Agregar detalles completos para vista (deduplicados por movimiento_id)
-            $seenMovimientos = [];
-
-            $agregarDetalle = function (array $transferencia, string $tipo) use (&$resumenTransferencias, &$seenMovimientos) {
-                $id = $transferencia['id'] ?? '';
-                $baseId = str_replace(['t_entrada_', 't_'], '', $id);
-
-                if (isset($seenMovimientos[$baseId])) return;
-
-                $seenMovimientos[$baseId] = true;
-
-                $resumenTransferencias['detalles_completos'][] = [
-                    'id' => $id,
-                    'desc' => $transferencia['desc'] ?? '',
-                    'monto_origen' => $transferencia['monto_origen'] ?? 0,
-                    'moneda_origen' => $transferencia['moneda_origen'] ?? 'USD',
-                    'origen_tipo' => $transferencia['origen_tipo'] ?? '',
-                    'origen_nombre' => $transferencia['origen_nombre'] ?? '',
-                    'monto_destino' => $transferencia['monto_destino'] ?? 0,
-                    'moneda_destino' => $transferencia['moneda_destino'] ?? 'USD',
-                    'destino_tipo' => $transferencia['destino_tipo'] ?? '',
-                    'destino_nombre' => $transferencia['destino_nombre'] ?? '',
-                    'tasa_cambio' => $transferencia['tasa_cambio'] ?? 1,
-                    'hora' => $transferencia['hora'] ?? '',
-                    'afecta_saldo_usuario' => $transferencia['afecta_saldo_usuario'] ?? false,
-                    'es_propio' => $transferencia['es_propio'] ?? true,
-                    'usuario_nombre' => $transferencia['usuario_nombre'] ?? 'Sistema',
-                    'tipo' => $tipo,
-                ];
-            };
 
             if (! empty($monedaData['items_transferencias_salientes'])) {
                 foreach ($monedaData['items_transferencias_salientes'] as $transferencia) {

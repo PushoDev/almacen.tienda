@@ -631,6 +631,18 @@ export default function Show({
         [todasTransferencias, busquedaTransacciones, filtroOrigenTransacciones, filtroMonedaTransacciones],
     );
 
+    // Cuando se filtra por una moneda específica, mostrar la transferencia desde la
+    // perspectiva de esa moneda (signo/monto principal) en vez del `tipo` canónico
+    // que trae el backend (pensado solo para la vista "Todas").
+    const tipoEfectivoTransferencia = (item: TransferenciaCompleta): 'entrante' | 'saliente' => {
+        if (filtroMonedaTransacciones === 'todas' || item.moneda_origen === item.moneda_destino) {
+            return item.tipo;
+        }
+        if (filtroMonedaTransacciones === item.moneda_origen) return 'saliente';
+        if (filtroMonedaTransacciones === item.moneda_destino) return 'entrante';
+        return item.tipo;
+    };
+
     // Filtros para Comparativa
     const [busquedaCuentas, setBusquedaCuentas] = useState('');
     const [filtroTipoCuentas, setFiltroTipoCuentas] = useState('todos');
@@ -1393,26 +1405,28 @@ export default function Show({
                                         <TableHeader>
                                             <TableRow>
                                                 <TableHead className="w-16">Hora</TableHead>
-                                                <TableHead>Descripción</TableHead>
-                                                <TableHead>Origen</TableHead>
-                                                <TableHead>Destino</TableHead>
+                                                <TableHead className="max-w-[160px]">Descripción</TableHead>
+                                                <TableHead className="w-[170px]">Origen</TableHead>
+                                                <TableHead className="w-[170px]">Destino</TableHead>
                                                 <TableHead className="w-28">Creado por</TableHead>
                                                 <TableHead className="w-40 text-right">Monto</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
                                             {transferenciasFiltradas.length > 0 ? (
-                                                transferenciasFiltradas.map((item, idx) => (
+                                                transferenciasFiltradas.map((item, idx) => {
+                                                    const tEfectivo = tipoEfectivoTransferencia(item);
+                                                    return (
                                                     <TableRow key={idx} className={!item.es_propio ? 'bg-orange-50/60 dark:bg-orange-950/20' : undefined}>
                                                         <TableCell className="font-mono text-xs">{item.hora}</TableCell>
-                                                        <TableCell className="max-w-xs truncate text-sm">{item.desc}</TableCell>
+                                                        <TableCell className="max-w-[160px] truncate text-sm">{item.desc}</TableCell>
                                                         <TableCell className="text-muted-foreground text-xs">
-                                                            <div className="max-w-[120px] truncate" title={`${item.origen_tipo}: ${item.origen_nombre}`}>
+                                                            <div className="max-w-[170px] truncate" title={`${item.origen_tipo}: ${item.origen_nombre}`}>
                                                                 <span className="capitalize">{item.origen_tipo}:</span> {item.origen_nombre}
                                                             </div>
                                                         </TableCell>
                                                         <TableCell className="text-muted-foreground text-xs">
-                                                            <div className="max-w-[120px] truncate" title={`${item.destino_tipo}: ${item.destino_nombre}`}>
+                                                            <div className="max-w-[170px] truncate" title={`${item.destino_tipo}: ${item.destino_nombre}`}>
                                                                 <span className="capitalize">{item.destino_tipo}:</span> {item.destino_nombre}
                                                             </div>
                                                         </TableCell>
@@ -1421,21 +1435,22 @@ export default function Show({
                                                         </TableCell>
                                                         <TableCell className="text-right font-mono text-xs">
                                                             <div>
-                                                                <span className={item.tipo === 'entrante' ? 'text-green-600' : 'text-blue-600'}>
-                                                                    {item.tipo === 'entrante' ? '+' : '-'}${Number(item.tipo === 'entrante' ? item.monto_destino : item.monto_origen).toFixed(2)}{' '}
-                                                                    {item.tipo === 'entrante' ? item.moneda_destino : item.moneda_origen}
+                                                                <span className={tEfectivo === 'entrante' ? 'text-green-600' : 'text-blue-600'}>
+                                                                    {tEfectivo === 'entrante' ? '+' : '-'}${Number(tEfectivo === 'entrante' ? item.monto_destino : item.monto_origen).toFixed(2)}{' '}
+                                                                    {tEfectivo === 'entrante' ? item.moneda_destino : item.moneda_origen}
                                                                 </span>
                                                                 {(item.moneda_origen ?? item.moneda_destino) && item.moneda_origen !== item.moneda_destino && (
                                                                     <div className="text-muted-foreground mt-0.5 text-[10px] leading-tight whitespace-nowrap">
-                                                                        ≈ ${Number(item.tipo === 'entrante' ? item.monto_origen : item.monto_destino).toFixed(2)}{' '}
-                                                                        {item.tipo === 'entrante' ? item.moneda_origen : item.moneda_destino}
+                                                                        ≈ ${Number(tEfectivo === 'entrante' ? item.monto_origen : item.monto_destino).toFixed(2)}{' '}
+                                                                        {tEfectivo === 'entrante' ? item.moneda_origen : item.moneda_destino}
                                                                         <span className="ml-0.5">@ {Number(item.tasa_cambio).toFixed(2)}</span>
                                                                     </div>
                                                                 )}
                                                             </div>
                                                         </TableCell>
                                                     </TableRow>
-                                                ))
+                                                    );
+                                                })
                                             ) : (
                                                 <TableRow>
                                                     <TableCell colSpan={6} className="text-muted-foreground py-8 text-center italic">
