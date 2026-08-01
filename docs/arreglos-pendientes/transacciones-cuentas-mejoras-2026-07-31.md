@@ -26,18 +26,25 @@ Se trabaja por fases, en orden. Marcar cada ítem al completarlo.
 
 ## Fase 2 — Historial de movimientos en `Cuentas/Show.tsx`
 
-- [ ] Actualmente `Cuentas/Show.tsx` solo muestra datos estáticos de la cuenta (nombre, tipo, moneda, saldo, notas) — **no hay historial de operaciones**. `CuentaController::show()` (líneas 200-227) tampoco carga ningún `MovimientoFinanciero`.
-- [ ] Agregar al controller: cargar los `MovimientoFinanciero` donde la cuenta sea origen o destino (mismo patrón de query ya usado en `CierreCajaController::obtenerDetallesCierre()` para "movimientos que afectan las cuentas del usuario").
-- [ ] Agregar a la vista: tabla/listado de operaciones (tipo, monto, moneda, usuario, fecha), idealmente paginado o con filtro de fecha — revisar el gotcha ya documentado en memoria sobre paginación + filtros de Inertia antes de implementar.
+**Completa (backend + frontend + test), 2026-08-01.**
+
+- [x] **Hallazgo que amplió el alcance**: `saldo_cuenta` no se toca solo desde `MovimientoFinanciero` (Gasto/Ingreso/Transferencia) — `VentaController::aprobarVenta()` y `CompraController::store()` también hacen `increment`/`decrement` directo sin loguear nada en `movimientos_financieros`. Un historial que solo mirara esa tabla habría quedado incompleto (silenciosamente sin pagos de venta, comisiones PV/gestor, mensajería ni pagos de compra).
+- [x] `CuentaController::obtenerHistorialCuenta()` (privado, llamado desde `show()`) arma el historial combinando **4 fuentes** vía `UNION ALL` + paginación real (`DB::table(...)->paginate(15)->withQueryString()`, mismo patrón que `ReporteController::rastreoOperaciones()`): `movimientos_financieros` (usa el delta `saldo_posterior - saldo_anterior` del lado que corresponda, no reconvierte monedas a mano), `pago_ventas` (solo ventas `estado='completada'`), `ventas` directo (comisión PV / comisión gestor / mensajería externa, mismo filtro `completada`), y `compra_pago`.
+- [x] **Compras se excluye para `vendedor`** (decisión del usuario, 2026-08-01): mismo criterio que `precio_compra`/costo, ya ocultos a ese rol en el resto del sistema. La subquery de `compra_pago` ni siquiera se agrega al `UNION` cuando el rol no es admin/moderador — no es solo un filtro de display.
+- [x] Evité `CONCAT()`/`||` en el SQL crudo (a diferencia de `ReporteController::rastreoOperaciones()`, que usa `CONCAT()` y por eso probablemente nunca tuvo test — production es MySQL pero los tests corren en SQLite, donde `CONCAT()` no existe). Los textos tipo "Venta #123" se arman en PHP después de paginar (`->getCollection()->transform()`), no en SQL.
+- [x] Test: `tests/Feature/CuentaTest.php` (8 tests) — cubre acceso (Fase 3) + que cada una de las 4 fuentes aparece con el signo/monto correcto, que ventas no-completadas se excluyen, y que compras se oculta a vendedor pero no a admin.
+- [x] `Cuentas/Show.tsx` ahora consume `historial` — tabla + paginación vía `router.get()` (mismo patrón que `Cierres/Index.tsx`). Verificado en navegador con datos reales: 23 resultados, 15/página, botones 1/2 funcionando sin recarga completa.
 
 ---
 
 ## Fase 3 — Acceso del vendedor a `Cuentas/Show`
 
-- [ ] **Bug de permisos existente a resolver de paso**: el middleware `CheckCuentaPermission` (línea 16) solo permite `role === 'admin'` (`User::isAdmin()`), pero `Cuentas/Index.tsx` (línea 494) muestra el botón "Ver detalles" también a `moderador`, que al hacer clic recibe un 403. Decidir: ¿moderador debe tener acceso también?
-- [ ] Dar acceso a `vendedor` **solo a sus propias cuentas** (`User::cuentas()`, relación many-to-many vía `user_cuentas`, ya usada en Gasto/Ingreso/Telegram) — no a todas las cuentas del sistema.
-- [ ] Actualizar `CheckCuentaPermission` (o el controller) para permitir vendedor cuando la cuenta solicitada esté en `auth()->user()->cuentas()`.
-- [ ] Mostrar el botón "Ver detalles" en `Cuentas/Index.tsx` para vendedor, pero probablemente **filtrando el listado** para que solo vea sus propias cuentas asignadas (revisar si `Index.tsx`/`CuentaController::index()` ya filtra así para vendedor o si hay que agregarlo).
+**Completa (backend + frontend + test), 2026-08-01.**
+
+- [x] **Decisión tomada**: `moderador` tiene acceso pleno (igual que admin) — mismo criterio que el resto del sistema (`moderador` = "admin sin destructivos", ver acciones ya existentes en `CuentaController::index()`). Resuelve el bug de que `Index.tsx` mostraba el botón a moderador pero el middleware daba 403.
+- [x] `vendedor` accede solo si la cuenta está en `auth()->user()->cuentas()` — mismo patrón ya usado en Gasto/Ingreso/Transferencia.
+- [x] La ruta `cuentas/{cuenta}` (`show`) se sacó del grupo de middleware `check.cuenta.permission` (que sigue siendo admin-only, sin cambios, para `edit`/`update`/`destroy`) — el chequeo de acceso ahora vive dentro de `CuentaController::show()` directamente (`abort(403)` si no es admin/moderador y la cuenta no está en sus cuentas asignadas).
+- [x] `Cuentas/Index.tsx`: el botón "Ver detalles" ahora se muestra también a `vendedor` (columna "Acciones" ya no se oculta entera); `Editar`/`Eliminar` siguen ocultos para ese rol. `Cuentas/Show.tsx` oculta "Editar Cuenta" con el prop `puedeEditar`. Verificado en navegador logueado como vendedor: ve el ícono de detalle, no ve editar, no ve mención a "pagos de compra" en el historial.
 
 ---
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Cuenta;
 use App\Models\Moneda;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class CuentaController extends Controller
@@ -197,8 +198,16 @@ class CuentaController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(Cuenta $cuenta)
+    public function show(Request $request, Cuenta $cuenta)
     {
+        $user = auth()->user();
+        $esAdminOModerador = in_array($user->role, ['admin', 'moderador']);
+
+        // Vendedor solo puede ver el detalle de sus propias cuentas asignadas
+        if (!$esAdminOModerador && !$user->cuentas()->where('cuentas.id', $cuenta->id)->exists()) {
+            abort(403);
+        }
+
         $cuenta->load('moneda'); // Cargar la relación
 
         return Inertia::render('Cuentas/Show', [
@@ -223,7 +232,255 @@ class CuentaController extends Controller
                 'created_at' => $cuenta->created_at->format('Y-m-d H:i:s'),
                 'updated_at' => $cuenta->updated_at->format('Y-m-d H:i:s'),
             ],
+            'puedeEditar' => $esAdminOModerador,
+            'historialTransacciones' => $this->obtenerHistorialTransacciones($cuenta, $request),
+            'historialVentas' => $this->obtenerHistorialVentas($cuenta, $request),
+            'historialCompras' => $esAdminOModerador
+                ? $this->obtenerHistorialCompras($cuenta, $request)
+                : new \Illuminate\Pagination\LengthAwarePaginator([], 0, 15, null, ['path' => request()->url()]),
+            'filtros' => [
+                'transacciones' => $request->only(['q_transacciones', 'tipo_transacciones', 'desde_transacciones', 'hasta_transacciones']),
+                'ventas' => $request->only(['q_ventas', 'tipo_ventas', 'desde_ventas', 'hasta_ventas']),
+                'compras' => $request->only(['q_compras', 'desde_compras', 'hasta_compras']),
+            ],
         ]);
+    }
+
+    /**
+     * Historial de Gasto/Ingreso/Transferencia — la única fuente que sí queda
+     * registrada en `movimientos_financieros`.
+     */
+    private function obtenerHistorialTransacciones(Cuenta $cuenta, Request $request)
+    {
+        $cuentaId = $cuenta->id;
+
+        $query = DB::table('movimientos_financieros as mf')
+            ->join('tipos_movimiento_financiero as tmf', 'mf.tipo_movimiento_id', '=', 'tmf.id')
+            ->join('users', 'mf.user_id', '=', 'users.id')
+            ->leftJoin('cuentas as c_origen', 'mf.cuenta_origen_id', '=', 'c_origen.id')
+            ->leftJoin('cuentas as c_destino', 'mf.cuenta_destino_id', '=', 'c_destino.id')
+            ->leftJoin('clientes as cl_origen', 'mf.cliente_origen_id', '=', 'cl_origen.id')
+            ->leftJoin('clientes as cl_destino', 'mf.cliente_destino_id', '=', 'cl_destino.id')
+            ->leftJoin('proveedors as p_destino', 'mf.proveedor_destino_id', '=', 'p_destino.id')
+            ->where(function ($q) use ($cuentaId) {
+                $q->where('mf.cuenta_origen_id', $cuentaId)->orWhere('mf.cuenta_destino_id', $cuentaId);
+            });
+
+        if ($tipo = $request->query('tipo_transacciones')) {
+            $query->where('tmf.nombre', $tipo);
+        }
+        if ($busqueda = $request->query('q_transacciones')) {
+            $query->where(function ($q) use ($busqueda) {
+                $q->where('mf.descripcion', 'like', "%{$busqueda}%")
+                    ->orWhere('users.name', 'like', "%{$busqueda}%");
+            });
+        }
+        if ($desde = $request->query('desde_transacciones')) {
+            $query->whereDate('mf.fecha_operacion', '>=', $desde);
+        }
+        if ($hasta = $request->query('hasta_transacciones')) {
+            $query->whereDate('mf.fecha_operacion', '<=', $hasta);
+        }
+
+        return $query->select(
+                'mf.id as referencia_id',
+                'mf.fecha_operacion as fecha',
+                'tmf.nombre as tipo',
+                DB::raw("CASE WHEN mf.cuenta_origen_id = {$cuentaId} THEN (mf.saldo_posterior_origen - mf.saldo_anterior_origen) ELSE (mf.saldo_posterior_destino - mf.saldo_anterior_destino) END as monto"),
+                DB::raw("CASE WHEN mf.cuenta_origen_id = {$cuentaId} THEN mf.moneda_origen ELSE mf.moneda_destino END as moneda"),
+                'mf.descripcion as descripcion',
+                DB::raw("CASE WHEN mf.cuenta_origen_id = {$cuentaId} THEN COALESCE(c_destino.nombre_cuenta, cl_destino.nombre_cliente, p_destino.nombre_proveedor) ELSE COALESCE(c_origen.nombre_cuenta, cl_origen.nombre_cliente) END as contraparte"),
+                'users.name as usuario',
+                DB::raw("'movimiento_financiero' as fuente")
+            )
+            ->orderByDesc('mf.fecha_operacion')
+            ->paginate(15, ['*'], 'pagina_transacciones')
+            ->withQueryString();
+    }
+
+    /**
+     * Historial de operaciones de venta que afectaron esta cuenta: pagos de
+     * venta, comisión PV, comisión gestor y mensajería externa. Ninguna de
+     * estas 4 queda registrada en `movimientos_financieros` — VentaController
+     * mueve `saldo_cuenta` directo en `aprobarVenta()` sin loguearlo ahí.
+     */
+    private function obtenerHistorialVentas(Cuenta $cuenta, Request $request)
+    {
+        $cuentaId = $cuenta->id;
+
+        $pagosVenta = DB::table('pago_ventas as pv')
+            ->join('ventas as v', 'pv.venta_id', '=', 'v.id')
+            ->join('users', 'v.user_id', '=', 'users.id')
+            ->leftJoin('monedas as m', 'pv.moneda_id', '=', 'm.id')
+            ->leftJoin('clientes as cl', 'v.cliente_id', '=', 'cl.id')
+            ->where('pv.cuenta_id', $cuentaId)
+            ->where('v.estado', 'completada')
+            ->select(
+                'v.id as referencia_id',
+                'v.updated_at as fecha',
+                DB::raw("'Pago de venta' as tipo"),
+                'pv.monto as monto',
+                DB::raw("COALESCE(m.codigo_moneda, 'USD') as moneda"),
+                DB::raw("NULL as descripcion"),
+                DB::raw("COALESCE(cl.nombre_cliente, 'Cliente POS') as contraparte"),
+                'users.name as usuario',
+                DB::raw("'venta_pago' as fuente")
+            );
+
+        $comisionesPV = DB::table('ventas as v')
+            ->join('users', 'v.user_id', '=', 'users.id')
+            ->leftJoin('clientes as cl', 'v.cliente_id', '=', 'cl.id')
+            ->where('v.comision_cuenta_id', $cuentaId)
+            ->where('v.estado', 'completada')
+            ->where('v.es_venta_gestor', false)
+            ->where('v.total_comision', '>', 0)
+            ->where('v.comision_tasa', '>', 0)
+            ->select(
+                'v.id as referencia_id',
+                'v.updated_at as fecha',
+                DB::raw("'Comisión vendedor' as tipo"),
+                DB::raw('-(v.total_comision * v.comision_tasa) as monto'),
+                DB::raw("'CUP' as moneda"),
+                DB::raw("NULL as descripcion"),
+                DB::raw("COALESCE(cl.nombre_cliente, 'Cliente POS') as contraparte"),
+                'users.name as usuario',
+                DB::raw("'venta_comision' as fuente")
+            );
+
+        $comisionesGestor = DB::table('ventas as v')
+            ->join('users', 'v.user_id', '=', 'users.id')
+            ->leftJoin('clientes as cl', 'v.cliente_id', '=', 'cl.id')
+            ->where('v.gestor_cuenta_id', $cuentaId)
+            ->where('v.estado', 'completada')
+            ->where('v.es_venta_gestor', true)
+            ->where('v.gestor_monto', '>', 0)
+            ->select(
+                'v.id as referencia_id',
+                'v.updated_at as fecha',
+                DB::raw("'Comisión gestor' as tipo"),
+                DB::raw('-v.gestor_monto as monto'),
+                DB::raw("'CUP' as moneda"),
+                DB::raw("NULL as descripcion"),
+                DB::raw("COALESCE(cl.nombre_cliente, 'Cliente POS') as contraparte"),
+                'users.name as usuario',
+                DB::raw("'venta_gestor' as fuente")
+            );
+
+        $mensajeria = DB::table('ventas as v')
+            ->join('users', 'v.user_id', '=', 'users.id')
+            ->leftJoin('clientes as cl', 'v.cliente_id', '=', 'cl.id')
+            ->where('v.mensajero_cuenta_id', $cuentaId)
+            ->where('v.estado', 'completada')
+            ->where('v.mensajero_tipo', 'externo')
+            ->where('v.mensajero_monto', '>', 0)
+            ->select(
+                'v.id as referencia_id',
+                'v.updated_at as fecha',
+                DB::raw("'Mensajería' as tipo"),
+                DB::raw('-COALESCE(NULLIF(v.mensajero_monto_final_cup, 0), v.mensajero_monto_original) as monto'),
+                DB::raw("'CUP' as moneda"),
+                DB::raw("NULL as descripcion"),
+                DB::raw("COALESCE(cl.nombre_cliente, 'Cliente POS') as contraparte"),
+                'users.name as usuario',
+                DB::raw("'venta_mensajero' as fuente")
+            );
+
+        $query = $pagosVenta->unionAll($comisionesPV)
+            ->unionAll($comisionesGestor)
+            ->unionAll($mensajeria);
+
+        // OJO: mergeBindings() reparte los bindings del $query original en sus
+        // buckets originales (where/union), pero ese bucket 'where' se compila
+        // ANTES que 'union' — así que cualquier ->where() agregado después de
+        // mergeBindings() en $finalQuery se cuela ANTES de los bindings del
+        // UNION en vez de ir al final, donde realmente está su placeholder "?"
+        // en el SQL de texto. addBinding(getBindings(), 'where') aplana todo
+        // en un solo bucket 'where', en el orden real del SQL embebido, para
+        // que cualquier ->where()/->whereDate() posterior quede en su lugar.
+        $finalQuery = DB::table(DB::raw("({$query->toSql()}) as historial_ventas"))
+            ->addBinding($query->getBindings(), 'where');
+
+        if ($tipo = $request->query('tipo_ventas')) {
+            $finalQuery->where('fuente', $tipo);
+        }
+        if ($busqueda = $request->query('q_ventas')) {
+            $finalQuery->where(function ($q) use ($busqueda) {
+                $q->where('contraparte', 'like', "%{$busqueda}%")
+                    ->orWhere('usuario', 'like', "%{$busqueda}%");
+            });
+        }
+        if ($desde = $request->query('desde_ventas')) {
+            $finalQuery->whereDate('fecha', '>=', $desde);
+        }
+        if ($hasta = $request->query('hasta_ventas')) {
+            $finalQuery->whereDate('fecha', '<=', $hasta);
+        }
+
+        $historial = $finalQuery->orderByDesc('fecha')->paginate(15, ['*'], 'pagina_ventas')->withQueryString();
+
+        $historial->getCollection()->transform(function ($item) {
+            $item->descripcion = match ($item->fuente) {
+                'venta_pago' => "Pago de venta #{$item->referencia_id}",
+                'venta_comision' => "Comisión de venta #{$item->referencia_id}",
+                'venta_gestor' => "Comisión de gestor - venta #{$item->referencia_id}",
+                'venta_mensajero' => "Mensajería - venta #{$item->referencia_id}",
+                default => $item->descripcion,
+            };
+            return $item;
+        });
+
+        return $historial;
+    }
+
+    /**
+     * Historial de pagos de compra hechos desde esta cuenta. Solo se llama
+     * para admin/moderador — vendedor no ve compras (mismo criterio que
+     * precio_compra/costo, ya oculto a ese rol en el resto del sistema).
+     */
+    private function obtenerHistorialCompras(Cuenta $cuenta, Request $request)
+    {
+        $cuentaId = $cuenta->id;
+
+        $query = DB::table('compra_pago as cp')
+            ->join('compras as c', 'cp.compra_id', '=', 'c.id')
+            ->leftJoin('proveedors as p', 'c.proveedor_id', '=', 'p.id')
+            ->leftJoin('clientes as cl', 'c.cliente_id', '=', 'cl.id')
+            ->where('cp.cuenta_id', $cuentaId);
+
+        if ($busqueda = $request->query('q_compras')) {
+            $query->where(function ($q) use ($busqueda) {
+                $q->where('p.nombre_proveedor', 'like', "%{$busqueda}%")
+                    ->orWhere('cl.nombre_cliente', 'like', "%{$busqueda}%");
+            });
+        }
+        if ($desde = $request->query('desde_compras')) {
+            $query->whereDate('c.fecha_compra', '>=', $desde);
+        }
+        if ($hasta = $request->query('hasta_compras')) {
+            $query->whereDate('c.fecha_compra', '<=', $hasta);
+        }
+
+        $historial = $query->select(
+                'c.id as referencia_id',
+                'c.fecha_compra as fecha',
+                DB::raw("'Pago de compra' as tipo"),
+                DB::raw('-cp.monto as monto'),
+                DB::raw("'USD' as moneda"),
+                DB::raw("NULL as descripcion"),
+                DB::raw("COALESCE(p.nombre_proveedor, cl.nombre_cliente, 'Proveedor') as contraparte"),
+                DB::raw("'Sistema' as usuario"),
+                DB::raw("'compra_pago' as fuente")
+            )
+            ->orderByDesc('c.fecha_compra')
+            ->paginate(15, ['*'], 'pagina_compras')
+            ->withQueryString();
+
+        $historial->getCollection()->transform(function ($item) {
+            $item->descripcion = "Pago de compra #{$item->referencia_id}";
+            return $item;
+        });
+
+        return $historial;
     }
 
     public function edit(Cuenta $cuenta)

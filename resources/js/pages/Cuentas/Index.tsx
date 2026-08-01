@@ -427,7 +427,7 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                     <TableHead className="text-white">Saldo</TableHead>
                                     <TableHead className="text-white">Tipo Activo</TableHead>
                                     <TableHead className="text-white">Tipo Titular</TableHead>
-                                    {!isVendedor && <TableHead className="text-right text-white">Acciones</TableHead>}
+                                    <TableHead className="text-right text-white">Acciones</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -491,58 +491,60 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                                 <span className="text-muted-foreground inline-flex items-center gap-1 text-xs"><Minus size={12} /> Sin asignar</span>
                                             )}
                                         </TableCell>
-                                        {!isVendedor && (
-                                            <TableCell className="text-right">
-                                                <div className="flex justify-end gap-1">
-                                                    <TooltipProvider>
-                                                        <Tooltip>
-                                                            <TooltipTrigger asChild>
-                                                                <Link href={route('cuentas.show', { cuenta: cuenta.id })}>
-                                                                    <Button variant="outline" size="sm" className="h-8 w-8 cursor-pointer p-0 hover:bg-blue-50 hover:text-blue-600"><Eye size={14} /></Button>
-                                                                </Link>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent><p>Ver detalles</p></TooltipContent>
-                                                        </Tooltip>
-                                                    </TooltipProvider>
-                                                    <TooltipProvider>
-                                                        <Tooltip>
-                                                            <TooltipTrigger asChild>
-                                                                <Link href={route('cuentas.edit', { cuenta: cuenta.id })}>
-                                                                    <Button variant="outline" size="sm" className="h-8 w-8 cursor-pointer p-0 hover:bg-green-50 hover:text-green-600"><Edit3 size={14} /></Button>
-                                                                </Link>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent><p>Editar cuenta</p></TooltipContent>
-                                                        </Tooltip>
-                                                    </TooltipProvider>
-                                                    <AlertDialog>
+                                        <TableCell className="text-right">
+                                            <div className="flex justify-end gap-1">
+                                                <TooltipProvider>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Link href={route('cuentas.show', { cuenta: cuenta.id })}>
+                                                                <Button variant="outline" size="sm" className="h-8 w-8 cursor-pointer p-0 hover:bg-blue-50 hover:text-blue-600"><Eye size={14} /></Button>
+                                                            </Link>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent><p>Ver detalles</p></TooltipContent>
+                                                    </Tooltip>
+                                                </TooltipProvider>
+                                                {!isVendedor && (
+                                                    <>
                                                         <TooltipProvider>
                                                             <Tooltip>
                                                                 <TooltipTrigger asChild>
-                                                                    <AlertDialogTrigger asChild>
-                                                                        <Button variant="outline" size="sm"
-                                                                            className="h-8 w-8 cursor-pointer p-0 text-red-600 hover:bg-red-50 hover:text-red-700"
-                                                                            onClick={(e) => { if (!isAdmin) { e.preventDefault(); toast.error('ud no tiene acceso para esta acción'); } }}>
-                                                                            <Trash2 size={14} />
-                                                                        </Button>
-                                                                    </AlertDialogTrigger>
+                                                                    <Link href={route('cuentas.edit', { cuenta: cuenta.id })}>
+                                                                        <Button variant="outline" size="sm" className="h-8 w-8 cursor-pointer p-0 hover:bg-green-50 hover:text-green-600"><Edit3 size={14} /></Button>
+                                                                    </Link>
                                                                 </TooltipTrigger>
-                                                                <TooltipContent><p>Eliminar cuenta</p></TooltipContent>
+                                                                <TooltipContent><p>Editar cuenta</p></TooltipContent>
                                                             </Tooltip>
                                                         </TooltipProvider>
-                                                        <AlertDialogContent>
-                                                            <AlertDialogHeader>
-                                                                <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
-                                                                <AlertDialogDescription>Esta acción eliminará permanentemente la cuenta "{cuenta.nombre_cuenta}". Esta acción no se puede deshacer.</AlertDialogDescription>
-                                                            </AlertDialogHeader>
-                                                            <AlertDialogFooter>
-                                                                <AlertDialogCancel className="cursor-pointer">Cancelar</AlertDialogCancel>
-                                                                <AlertDialogAction onClick={() => deleteCuenta(cuenta.id)} className="cursor-pointer bg-red-600 hover:bg-red-700">Eliminar</AlertDialogAction>
-                                                            </AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
-                                                </div>
-                                            </TableCell>
-                                        )}
+                                                        <AlertDialog>
+                                                            <TooltipProvider>
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                        <AlertDialogTrigger asChild>
+                                                                            <Button variant="outline" size="sm"
+                                                                                className="h-8 w-8 cursor-pointer p-0 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                                                                onClick={(e) => { if (!isAdmin) { e.preventDefault(); toast.error('ud no tiene acceso para esta acción'); } }}>
+                                                                                <Trash2 size={14} />
+                                                                            </Button>
+                                                                        </AlertDialogTrigger>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent><p>Eliminar cuenta</p></TooltipContent>
+                                                                </Tooltip>
+                                                            </TooltipProvider>
+                                                            <AlertDialogContent>
+                                                                <AlertDialogHeader>
+                                                                    <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                                                                    <AlertDialogDescription>Esta acción eliminará permanentemente la cuenta "{cuenta.nombre_cuenta}". Esta acción no se puede deshacer.</AlertDialogDescription>
+                                                                </AlertDialogHeader>
+                                                                <AlertDialogFooter>
+                                                                    <AlertDialogCancel className="cursor-pointer">Cancelar</AlertDialogCancel>
+                                                                    <AlertDialogAction onClick={() => deleteCuenta(cuenta.id)} className="cursor-pointer bg-red-600 hover:bg-red-700">Eliminar</AlertDialogAction>
+                                                                </AlertDialogFooter>
+                                                            </AlertDialogContent>
+                                                        </AlertDialog>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </TableCell>
                                     </TableRow>
                                 ))}
                                 {cuentasPagina.length === 0 && (
@@ -558,7 +560,7 @@ export default function CuentasPage({ cuentas, monedaPrincipal, resumen }: { cue
                                         <TableCell colSpan={2} className="font-medium">Total de cuentas filtradas</TableCell>
                                         <TableCell className="font-medium">{cuentasFiltradas.length}</TableCell>
                                         <TableCell colSpan={2} className="font-medium text-right text-emerald-600">{simbolo}: {totalFiltrado.toFixed(2)}</TableCell>
-                                        {!isVendedor && <TableCell />}
+                                        <TableCell />
                                     </TableRow>
                             </TableFooter>
                         </Table>
