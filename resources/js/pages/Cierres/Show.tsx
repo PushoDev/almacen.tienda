@@ -1290,7 +1290,7 @@ export default function Show({
                                         onClick={() => setFiltroOrigenTransacciones(opt)}
                                         className="h-7 text-xs"
                                     >
-                                        {opt === 'todas' ? 'Todas' : opt === 'propias' ? 'Mías' : 'Externas'}
+                                        {opt === 'todas' ? 'Todas' : opt === 'propias' ? 'Internas' : 'Externas'}
                                     </Button>
                                 ))}
                             </div>
@@ -1706,7 +1706,7 @@ export default function Show({
                             )}
 
                             {/* Resumen Financiero del Turno */}
-                            {ventas_brutas_usd > 0 && (
+                            {userRole !== 'vendedor' && ventas_brutas_usd > 0 && (
                                 <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-950">
                                     <p className="text-muted-foreground mb-2 text-xs font-bold uppercase">Resumen Financiero del Turno</p>
                                     <div className="space-y-1.5 text-xs">
