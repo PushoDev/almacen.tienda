@@ -569,12 +569,23 @@ export default function Show({
     const todosGastos = (calculos.detalles ?? []).flatMap((d) => d.items_gastos ?? []);
     const todosIngresos = (calculos.detalles ?? []).flatMap((d) => d.items_ingresos ?? []);
 
+    // Deduplicado por movimiento_id: cada transferencia genera un item "saliente" en el
+    // bucket de su moneda origen y un item "entrante" en el bucket de su moneda destino
+    // (mismos datos, vistos desde cada lado) — sin esto se listaría cada una 2 veces.
+    // Mismo criterio que CierreCajaController::obtenerResumenTransferencias() en PHP.
+    const vistosTransferencias = new Set<string>();
     const todasTransferencias: TransferenciaCompleta[] = [];
     (calculos.detalles ?? []).forEach((d) => {
         (d.items_transferencias_salientes ?? []).forEach((t) => {
+            const baseId = String(t.id ?? '').replace('t_entrada_', '').replace('t_', '');
+            if (vistosTransferencias.has(baseId)) return;
+            vistosTransferencias.add(baseId);
             todasTransferencias.push({ ...t, tipo: 'saliente' });
         });
         (d.items_transferencias_entrantes ?? []).forEach((t) => {
+            const baseId = String(t.id ?? '').replace('t_entrada_', '').replace('t_', '');
+            if (vistosTransferencias.has(baseId)) return;
+            vistosTransferencias.add(baseId);
             todasTransferencias.push({ ...t, tipo: 'entrante' });
         });
     });
