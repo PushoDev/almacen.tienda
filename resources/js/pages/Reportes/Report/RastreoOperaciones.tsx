@@ -1,4 +1,5 @@
 import HeadingSmall from '@/components/heading-small';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -108,6 +109,23 @@ interface DetalleVenta {
     };
 }
 
+interface EntidadMovimiento {
+    tipo: 'cuenta' | 'cliente' | 'proveedor';
+    nombre: string;
+    saldo_anterior: number | null;
+    saldo_posterior: number | null;
+    moneda: string | null;
+}
+
+interface DetalleMovimiento {
+    info_general: {
+        fecha: string;
+        estado: string;
+    };
+    origen: EntidadMovimiento | null;
+    destino: EntidadMovimiento | null;
+}
+
 interface Operacion {
     id: number;
     fecha: string;
@@ -119,6 +137,7 @@ interface Operacion {
     referencia: string;
     descripcion: string;
     detalle_venta: DetalleVenta | null;
+    detalle_movimiento: DetalleMovimiento | null;
 }
 
 interface PaginatedOperaciones {
@@ -149,18 +168,20 @@ const fmt = (n: number | null | undefined, sufijo = '') => (n === null || n === 
 // no asumir que un número sin sigla es USD.
 const formatMonto = (monto: number, moneda: string) => `${moneda} ${monto.toFixed(2)}`;
 
+// Mismo esquema de badge de color por tipo que ya usa el proyecto en
+// Cuentas/Show.tsx (getFuenteColorClase) — para que se vea consistente en todo el sistema.
 const colorTipo = (tipo: string) => {
     switch (tipo) {
         case 'Venta':
-            return 'text-emerald-500';
+            return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300';
         case 'Gasto':
-            return 'text-rose-500';
+            return 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300';
         case 'Ingreso':
-            return 'text-sky-500';
+            return 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/20 dark:text-sky-300';
         case 'Transferencia':
-            return 'text-amber-500';
+            return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300';
         default:
-            return 'text-foreground';
+            return 'border-border bg-muted text-foreground';
     }
 };
 
@@ -367,24 +388,91 @@ const DetalleVentaExpandido = ({ detalle }: { detalle: DetalleVenta }) => (
     </div>
 );
 
+// ─── Componente: DetalleMovimientoExpandido (Gasto / Ingreso, sin tasa de cambio —
+// Gasto/Ingreso son de una sola moneda y un solo lado, no hay conversión que mostrar) ──
+
+const EntidadMovimientoCard = ({ titulo, entidad }: { titulo: string; entidad: EntidadMovimiento }) => (
+    <Card className="bg-background/60">
+        <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-semibold uppercase">
+                {titulo} — {entidad.tipo === 'cuenta' ? 'Cuenta' : entidad.tipo === 'cliente' ? 'Cliente' : 'Proveedor'}
+            </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-1 text-xs">
+            <p><strong>Nombre:</strong> {entidad.nombre}</p>
+            <p>
+                <strong>Saldo Anterior:</strong>{' '}
+                {entidad.saldo_anterior !== null ? formatMonto(entidad.saldo_anterior, entidad.moneda ?? '') : '—'}
+            </p>
+            <p>
+                <strong>Saldo Posterior:</strong>{' '}
+                {entidad.saldo_posterior !== null ? formatMonto(entidad.saldo_posterior, entidad.moneda ?? '') : '—'}
+            </p>
+        </CardContent>
+    </Card>
+);
+
+const DetalleMovimientoExpandido = ({
+    detalle,
+    monto,
+    moneda,
+    descripcion,
+    usuario,
+}: {
+    detalle: DetalleMovimiento;
+    monto: number;
+    moneda: string;
+    descripcion: string;
+    usuario: string;
+}) => (
+    <div className="space-y-4 py-2">
+        <div className="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 text-xs">
+            <span>
+                <strong className="text-foreground">Fecha y Hora:</strong> {new Date(detalle.info_general.fecha).toLocaleString()}
+            </span>
+            <span>
+                <strong className="text-foreground">Estado:</strong> {detalle.info_general.estado}
+            </span>
+            <span>
+                <strong className="text-foreground">Registrado por:</strong> {usuario}
+            </span>
+        </div>
+
+        {/*
+            Gasto/Ingreso solo llenan un lado (origen o destino), así que la card de
+            entidad y la de Monto y Detalle caben juntas en una sola fila de 2 columnas.
+            Transferencia (cuando se agregue) llena origen Y destino a la vez, así que
+            esta misma grilla pasa a 2 filas de 2 (origen+destino, y monto abajo) sin
+            tener que tocar este layout.
+        */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {detalle.origen && <EntidadMovimientoCard titulo="Origen" entidad={detalle.origen} />}
+            {detalle.destino && <EntidadMovimientoCard titulo="Destino" entidad={detalle.destino} />}
+            <Card className="bg-background/60">
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-xs font-semibold uppercase">Monto y Detalle</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-1 text-xs">
+                    <p><strong>Monto:</strong> {formatMonto(monto, moneda)}</p>
+                    <p><strong>Descripción:</strong> {descripcion || '—'}</p>
+                </CardContent>
+            </Card>
+        </div>
+    </div>
+);
+
 // ─── Página Principal ────────────────────────────────────────────────────────
 
 export default function RastreoOperacionesPage({ operaciones, usuarios, filtros, puedeVerCosto }: RastreoOperacionesPageProps) {
     const [startDate, setStartDate] = useState(filtros.start_date || '');
     const [endDate, setEndDate] = useState(filtros.end_date || '');
     const [userId, setUserId] = useState(filtros.user_id || 'all');
-    const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+    const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
+    // Solo una fila abierta a la vez — evita que la pantalla se llene si el
+    // usuario expande varias operaciones seguidas.
     const toggleRow = (key: string) => {
-        setExpandedRows((prev) => {
-            const next = new Set(prev);
-            if (next.has(key)) {
-                next.delete(key);
-            } else {
-                next.add(key);
-            }
-            return next;
-        });
+        setExpandedRow((prev) => (prev === key ? null : key));
     };
 
     const buildParams = (page: number = 1) => ({
@@ -560,15 +648,15 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                                     ) : (
                                         ops.map((op, idx) => {
                                             const rowKey = `${op.tipo}-${op.id}-${idx}`;
-                                            const esColapsable = Boolean(op.detalle_venta);
-                                            const expandida = expandedRows.has(rowKey);
+                                            const esColapsable = Boolean(op.detalle_venta) || Boolean(op.detalle_movimiento);
+                                            const expandida = expandedRow === rowKey;
                                             return (
                                                 <React.Fragment key={rowKey}>
                                                     <tr
                                                         className={`hover:bg-sidebar-accent/30 transition-colors ${esColapsable ? 'cursor-pointer' : ''}`}
                                                         onClick={() => esColapsable && toggleRow(rowKey)}
                                                     >
-                                                        <td className={`px-6 py-4 text-sm font-bold whitespace-nowrap ${colorTipo(op.tipo)}`}>
+                                                        <td className="px-6 py-4 text-sm whitespace-nowrap">
                                                             <div className="flex items-center gap-1.5">
                                                                 {esColapsable ? (
                                                                     expandida ? (
@@ -579,7 +667,9 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                                                                 ) : (
                                                                     <span className="w-4" />
                                                                 )}
-                                                                {op.tipo}
+                                                                <Badge variant="outline" className={colorTipo(op.tipo)}>
+                                                                    {op.tipo}
+                                                                </Badge>
                                                             </div>
                                                         </td>
                                                         <td className="px-6 py-4 text-sm whitespace-nowrap">
@@ -598,10 +688,20 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                                                             {op.descripcion || '-'}
                                                         </td>
                                                     </tr>
-                                                    {esColapsable && expandida && op.detalle_venta && (
+                                                    {esColapsable && expandida && (
                                                         <tr>
                                                             <td colSpan={6} className="bg-sidebar-accent/20 px-6 py-3">
-                                                                <DetalleVentaExpandido detalle={op.detalle_venta} />
+                                                                {op.detalle_venta ? (
+                                                                    <DetalleVentaExpandido detalle={op.detalle_venta} />
+                                                                ) : op.detalle_movimiento ? (
+                                                                    <DetalleMovimientoExpandido
+                                                                        detalle={op.detalle_movimiento}
+                                                                        monto={parseFloat(op.monto.toString())}
+                                                                        moneda={op.moneda}
+                                                                        descripcion={op.descripcion}
+                                                                        usuario={op.usuario}
+                                                                    />
+                                                                ) : null}
                                                             </td>
                                                         </tr>
                                                     )}

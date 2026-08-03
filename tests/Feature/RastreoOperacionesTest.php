@@ -110,3 +110,60 @@ test('el filtro por rango de fechas en el reporte aplica a Venta, Gasto e Ingres
     expect($operaciones)->toHaveCount(3);
     expect($operaciones->pluck('tipo')->sort()->values()->all())->toBe(['Gasto', 'Ingreso', 'Venta']);
 });
+
+test('el detalle colapsable de un Gasto trae la cuenta origen y sus saldos antes/después', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
+
+    $gasto = MovimientoFinanciero::factory()->gasto()->create([
+        'cuenta_origen_id' => $cuenta->id,
+        'monto' => 80,
+        'moneda' => 'USD',
+        'saldo_anterior_origen' => 1000,
+        'saldo_posterior_origen' => 920,
+        'moneda_origen' => 'USD',
+        'descripcion' => 'Compra de insumos',
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $fila = collect($response->json('props.operaciones.data'))->firstWhere('id', $gasto->id);
+
+    expect($fila['detalle_venta'])->toBeNull();
+    expect($fila['detalle_movimiento'])->not->toBeNull();
+    expect($fila['detalle_movimiento']['origen']['tipo'])->toBe('cuenta');
+    expect($fila['detalle_movimiento']['origen']['nombre'])->toBe($cuenta->nombre_cuenta);
+    expect($fila['detalle_movimiento']['origen']['saldo_anterior'])->toEqual(1000.0);
+    expect($fila['detalle_movimiento']['origen']['saldo_posterior'])->toEqual(920.0);
+    expect($fila['detalle_movimiento']['destino'])->toBeNull();
+});
+
+test('el detalle colapsable de un Ingreso trae la cuenta destino y sus saldos antes/después', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
+
+    $ingreso = MovimientoFinanciero::factory()->ingreso()->create([
+        'cuenta_destino_id' => $cuenta->id,
+        'monto' => 150,
+        'moneda' => 'USD',
+        'saldo_anterior_destino' => 500,
+        'saldo_posterior_destino' => 650,
+        'moneda_destino' => 'USD',
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $fila = collect($response->json('props.operaciones.data'))->firstWhere('id', $ingreso->id);
+
+    expect($fila['detalle_movimiento']['destino']['tipo'])->toBe('cuenta');
+    expect($fila['detalle_movimiento']['destino']['nombre'])->toBe($cuenta->nombre_cuenta);
+    expect($fila['detalle_movimiento']['destino']['saldo_anterior'])->toEqual(500.0);
+    expect($fila['detalle_movimiento']['destino']['saldo_posterior'])->toEqual(650.0);
+    expect($fila['detalle_movimiento']['origen'])->toBeNull();
+});

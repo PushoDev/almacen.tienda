@@ -83,10 +83,14 @@ class RastreoOperacionesController extends Controller
             'detalles.producto',
         ])->whereIn('id', $ventaIds)->get()->keyBy('id');
 
-        $movimientosPorId = MovimientoFinanciero::with('user')
-            ->whereIn('id', $movimientoIds)
-            ->get()
-            ->keyBy('id');
+        $movimientosPorId = MovimientoFinanciero::with([
+            'user',
+            'cuentaOrigen',
+            'cuentaDestino',
+            'clienteOrigen',
+            'clienteDestino',
+            'proveedorDestino',
+        ])->whereIn('id', $movimientoIds)->get()->keyBy('id');
 
         $operaciones = $filas->map(function ($fila) use ($ventasPorId, $movimientosPorId, $puedeVerCosto) {
             if ($fila->tipo === 'Venta') {
@@ -119,6 +123,46 @@ class RastreoOperacionesController extends Controller
             'referencia' => "{$tipo} #{$mov->id}",
             'descripcion' => $mov->descripcion,
             'detalle_venta' => null,
+            'detalle_movimiento' => [
+                'info_general' => [
+                    'fecha' => $mov->fecha_operacion,
+                    'estado' => $mov->estado,
+                ],
+                // Gasto solo llena origen, Ingreso solo destino — null si no aplica.
+                // Diseñado para servir tal cual a Transferencia (llena ambos) más adelante.
+                'origen' => $this->entidadMovimiento(
+                    $mov->cuentaOrigen,
+                    $mov->clienteOrigen,
+                    null,
+                    $mov->saldo_anterior_origen,
+                    $mov->saldo_posterior_origen,
+                    $mov->moneda_origen,
+                ),
+                'destino' => $this->entidadMovimiento(
+                    $mov->cuentaDestino,
+                    $mov->clienteDestino,
+                    $mov->proveedorDestino,
+                    $mov->saldo_anterior_destino,
+                    $mov->saldo_posterior_destino,
+                    $mov->moneda_destino,
+                ),
+            ],
+        ];
+    }
+
+    private function entidadMovimiento($cuenta, $cliente, $proveedor, $saldoAnterior, $saldoPosterior, ?string $moneda): ?array
+    {
+        $nombre = $cuenta?->nombre_cuenta ?? $cliente?->nombre_cliente ?? $proveedor?->nombre_proveedor;
+        if ($nombre === null) {
+            return null;
+        }
+
+        return [
+            'tipo' => $cuenta ? 'cuenta' : ($cliente ? 'cliente' : 'proveedor'),
+            'nombre' => $nombre,
+            'saldo_anterior' => $saldoAnterior !== null ? (float) $saldoAnterior : null,
+            'saldo_posterior' => $saldoPosterior !== null ? (float) $saldoPosterior : null,
+            'moneda' => $moneda,
         ];
     }
 
@@ -220,6 +264,7 @@ class RastreoOperacionesController extends Controller
                     'ganancia_agencia' => $puedeVerCosto ? $gananciaAgencia : null,
                 ],
             ],
+            'detalle_movimiento' => null,
         ];
     }
 }
