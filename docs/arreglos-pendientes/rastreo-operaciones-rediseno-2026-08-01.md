@@ -28,16 +28,25 @@ Archivos involucrados:
 
 ## Fase 0 — Extraer a su propio controller
 
-- [ ] Crear `app/Http/Controllers/Reportes/RastreoOperacionesController.php` (namespace `App\Http\Controllers\Reportes`), mover ahí el método `rastreoOperaciones()` (renombrado a `__invoke()` o `index()`, a decidir).
-- [ ] Actualizar `routes/acciones/reportes.php` para apuntar al nuevo controller.
-- [ ] Confirmar que `ReporteController.php` no rompe nada al quitarle este método (no hay otros métodos que lo llamen internamente — verificado, es independiente).
-- [ ] No tocar los otros 20 métodos de `ReporteController.php` todavía — se migran cuando les toque su turno en la lista de 15.
+- [x] Crear `app/Http/Controllers/Reportes/RastreoOperacionesController.php` (namespace `App\Http\Controllers\Reportes`), mover ahí el método `rastreoOperaciones()` (renombrado a `__invoke()`).
+- [x] Actualizar `routes/acciones/reportes.php` para apuntar al nuevo controller.
+- [x] Confirmar que `ReporteController.php` no rompe nada al quitarle este método (no hay otros métodos que lo llamen internamente — verificado, es independiente).
+- [x] No tocar los otros 20 métodos de `ReporteController.php` todavía — se migran cuando les toque su turno en la lista de 15.
+
+También ya se implementó (antes de Fase 1, junto con Fase 0): Venta como fila colapsable con detalle completo (receptor, comisión PV, mensajero, gestor, pagos, resumen financiero, productos) — ver `transformarVenta()` en el controller.
 
 ## Fase 1 — Quitar Compras + separar Gasto/Ingreso/Transferencia (en vez de "Finanzas")
 
-- [ ] Backend: eliminar la subconsulta de `compras` del `UNION ALL` en `rastreoOperaciones()`.
-- [ ] Backend: la subconsulta de `movimientos_financieros` deja de etiquetarse `'Finanzas' as tipo` fijo — usa el nombre real del tipo (`tipos_movimiento_financiero.nombre`, 1=Gasto/2=Ingreso/3=Transferencia). Mismo patrón ya usado en `CuentaController::obtenerHistorialTransacciones()`.
-- [ ] Frontend: el `<Select>` de "Tipo de Operación" pasa de 4 opciones (Venta/Compra/Finanzas/Cierre) a Venta/Gasto/Ingreso/Transferencia (+ Cierre según ⚠️1).
+**Nota de implementación (2026-08-03):** como el controller ya no arma un `UNION ALL` de texto crudo (se reescribió a Eloquent en Fase 0), esta fase se implementó re-introduciendo un UNION pero con `DB::query()->fromSub()` en vez de `mergeBindings()` + `DB::raw()` — `fromSub()` ancla los bindings del subquery al bucket `from`, que compila antes que cualquier `where`/`orderBy` de la query externa, evitando desde el diseño el bug de orden de bindings (B9). Se paginan Venta+Gasto ya combinados y ordenados por fecha real a nivel SQL (25 filas mixtas por página, no 25 de cada tipo por separado), y luego se hidrata cada fila con su modelo completo (`Venta::with(...)` / `MovimientoFinanciero::with(['user','tipoMovimiento'])`).
+
+- [x] Backend: **Gasto** agregado al UNION con Venta, usando el nombre real del tipo (`tipos_movimiento_financiero.nombre`) — fila simple sin expandir. El transformer se generalizó a `transformarMovimiento()` (ya no `transformarGasto()`) para servir a cualquier `MovimientoFinanciero`, no solo Gasto.
+- [x] Backend: **Ingreso** (`tipo_movimiento_id = 2`) agregado al mismo UNION — reutiliza `transformarMovimiento()` sin cambios, solo se sumó `$ingresosSub` al `unionAll()`.
+  - Test de regresión: `tests/Feature/RastreoOperacionesTest.php` (orden mixto Venta/Gasto/Ingreso por fecha, filtro por usuario, filtro por rango de fechas). Suite completa (113 tests, 319 assertions) sigue en verde.
+- [ ] Backend: agregar **Transferencia** (`tipo_movimiento_id = 3`) al mismo UNION.
+- [ ] Backend: eliminar la subconsulta de `compras` — no aplica, ya no existe desde la reescritura de Fase 0 (Compras nunca se reintrodujo).
+- [x] Frontend: Venta/Gasto/Ingreso ya se pintan juntos en `RastreoOperaciones.tsx` (2026-08-03) — `Operacion.tipo` pasó de literal `'Venta'` a `string`, se agregó `moneda` a la fila mostrada siempre explícita (`formatMonto()`: `"USD 74.00"`, `"CUP 87750.00"`, nunca un número pelado), y color por tipo (`colorTipo()`: verde Venta, rojo Gasto, celeste Ingreso, ámbar Transferencia cuando exista). Verificado en vivo contra datos reales de producción (navegador, `https://almacen-tienda.test/reportes/rastreo-operaciones`).
+  - **2 bugs reales encontrados y corregidos, señalados por el usuario viendo los datos reales**: (1) `tipos_movimiento_financiero.nombre` es texto libre editable — en la BD de este cliente el id 2 quedó guardado como "Ingreso por Venta" aunque `IngresoController` no tiene nada que ver con ventas (es un ingreso manual genérico a cuenta/cliente/proveedor); ese texto libre no es confiable para mostrar. Fix: el backend ya NO usa `tmf.nombre` — hardcodea la etiqueta por `tipo_movimiento_id` directamente en el SQL (`'Gasto'`/`'Ingreso'` literal, misma convención 1/2/3 que ya usan `GastoController`/`IngresoController`/`TransferenciaController`), y ya no hace falta el join a `tipos_movimiento_financiero` ni cargar la relación `tipoMovimiento`. (2) Los montos en USD solo mostraban el número con `$`, sin sigla — ahora todos los montos muestran la moneda explícita (`formatMonto()` ya no distingue USD como caso especial).
+- [ ] Frontend: el `<Select>` de "Tipo de Operación" (agregar filtro por tipo) — pendiente, no existe hoy en el frontend ni el backend lo soporta todavía (los filtros actuales son solo Desde/Hasta/Usuario). Se hace cuando el backend tenga los 3 tipos de movimiento completos (falta Transferencia).
 
 ## Fase 2 — Arreglar el bug de bindings (mismo patrón que B9 en Cuentas)
 

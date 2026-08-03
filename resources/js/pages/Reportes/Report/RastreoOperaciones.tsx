@@ -111,13 +111,14 @@ interface DetalleVenta {
 interface Operacion {
     id: number;
     fecha: string;
-    tipo: 'Venta';
+    tipo: string;
     monto: number;
+    moneda: string;
     usuario: string;
     user_id: number | null;
     referencia: string;
     descripcion: string;
-    detalle_venta: DetalleVenta;
+    detalle_venta: DetalleVenta | null;
 }
 
 interface PaginatedOperaciones {
@@ -142,6 +143,26 @@ interface RastreoOperacionesPageProps {
 }
 
 const fmt = (n: number | null | undefined, sufijo = '') => (n === null || n === undefined ? '—' : `$${n.toFixed(2)}${sufijo}`);
+
+// El detalle de Venta siempre está en USD; Gasto/Ingreso/Transferencia pueden ser
+// USD/CUP/MLC según la cuenta origen/destino — mostrar siempre la moneda explícita,
+// no asumir que un número sin sigla es USD.
+const formatMonto = (monto: number, moneda: string) => `${moneda} ${monto.toFixed(2)}`;
+
+const colorTipo = (tipo: string) => {
+    switch (tipo) {
+        case 'Venta':
+            return 'text-emerald-500';
+        case 'Gasto':
+            return 'text-rose-500';
+        case 'Ingreso':
+            return 'text-sky-500';
+        case 'Transferencia':
+            return 'text-amber-500';
+        default:
+            return 'text-foreground';
+    }
+};
 
 // ─── Componente: DetalleVentaExpandido (contenido de la fila colapsable) ─────
 
@@ -424,7 +445,7 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                 op.tipo,
                 op.referencia,
                 op.usuario,
-                `$${parseFloat(op.monto.toString()).toFixed(2)}`,
+                formatMonto(parseFloat(op.monto.toString()), op.moneda),
                 op.descripcion || '-',
             ]);
 
@@ -454,7 +475,7 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                 <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     <HeadingSmall
                         title="Auditoría General de Operaciones"
-                        description="Ventas del sistema, con detalle de productos por venta. Gastos, ingresos, transferencias y otras operaciones se agregan en fases siguientes."
+                        description="Ventas del sistema con detalle de productos, más Gastos e Ingresos. Transferencias, cierres de caja y compras se agregan en fases siguientes."
                     />
                     <History
                         size={70}
@@ -547,7 +568,7 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                                                         className={`hover:bg-sidebar-accent/30 transition-colors ${esColapsable ? 'cursor-pointer' : ''}`}
                                                         onClick={() => esColapsable && toggleRow(rowKey)}
                                                     >
-                                                        <td className="px-6 py-4 text-sm font-bold whitespace-nowrap text-emerald-500">
+                                                        <td className={`px-6 py-4 text-sm font-bold whitespace-nowrap ${colorTipo(op.tipo)}`}>
                                                             <div className="flex items-center gap-1.5">
                                                                 {esColapsable ? (
                                                                     expandida ? (
@@ -571,13 +592,13 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                                                             {op.usuario}
                                                         </td>
                                                         <td className="px-6 py-4 text-sm font-mono whitespace-nowrap">
-                                                            ${parseFloat(op.monto.toString()).toFixed(2)}
+                                                            {formatMonto(parseFloat(op.monto.toString()), op.moneda)}
                                                         </td>
                                                         <td className="px-6 py-4 text-sm text-muted-foreground">
                                                             {op.descripcion || '-'}
                                                         </td>
                                                     </tr>
-                                                    {esColapsable && expandida && (
+                                                    {esColapsable && expandida && op.detalle_venta && (
                                                         <tr>
                                                             <td colSpan={6} className="bg-sidebar-accent/20 px-6 py-3">
                                                                 <DetalleVentaExpandido detalle={op.detalle_venta} />
