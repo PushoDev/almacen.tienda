@@ -121,6 +121,9 @@ interface DetalleMovimiento {
     info_general: {
         fecha: string;
         estado: string;
+        // Solo viene con valor en Transferencia cuando origen y destino usan monedas
+        // distintas — Gasto/Ingreso son de un solo lado y una sola moneda, sin conversión.
+        tasa_cambio_aplicada: number | null;
     };
     origen: EntidadMovimiento | null;
     destino: EntidadMovimiento | null;
@@ -436,12 +439,17 @@ const DetalleMovimientoExpandido = ({
             <span>
                 <strong className="text-foreground">Registrado por:</strong> {usuario}
             </span>
+            {detalle.info_general.tasa_cambio_aplicada !== null && (
+                <span>
+                    <strong className="text-foreground">Tasa de Cambio:</strong> {detalle.info_general.tasa_cambio_aplicada}
+                </span>
+            )}
         </div>
 
         {/*
             Gasto/Ingreso solo llenan un lado (origen o destino), así que la card de
             entidad y la de Monto y Detalle caben juntas en una sola fila de 2 columnas.
-            Transferencia (cuando se agregue) llena origen Y destino a la vez, así que
+            Transferencia llena origen Y destino a la vez, así que
             esta misma grilla pasa a 2 filas de 2 (origen+destino, y monto abajo) sin
             tener que tocar este layout.
         */}
@@ -563,7 +571,7 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                 <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     <HeadingSmall
                         title="Auditoría General de Operaciones"
-                        description="Ventas del sistema con detalle de productos, más Gastos e Ingresos. Transferencias, cierres de caja y compras se agregan en fases siguientes."
+                        description="Ventas, Gastos, Ingresos y Transferencias del sistema, con detalle completo por operación. Cierres de caja y compras se agregan en fases siguientes."
                     />
                     <History
                         size={70}

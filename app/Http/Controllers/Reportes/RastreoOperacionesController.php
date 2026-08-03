@@ -15,9 +15,8 @@ class RastreoOperacionesController extends Controller
      * Reporte de Rastreo de Operaciones (Auditoría General).
      *
      * En construcción por fases (ver docs/arreglos-pendientes/rastreo-operaciones-rediseno-2026-08-01.md):
-     * Venta (fila colapsable, mismo nivel de detalle que VentaController::show()) y
-     * Gasto/Ingreso (fila simple, sin expandir) ya están. Transferencia, Cierres y
-     * Compras se agregan en fases siguientes.
+     * Venta, Gasto, Ingreso y Transferencia (todas fila colapsable) ya están.
+     * Cierres y Compras se agregan en fases siguientes.
      */
     public function __invoke(Request $request)
     {
@@ -59,8 +58,15 @@ class RastreoOperacionesController extends Controller
             ->when($request->filled('end_date'), fn ($q) => $q->whereDate('mf.fecha_operacion', '<=', $request->input('end_date')))
             ->when($request->filled('user_id'), fn ($q) => $q->where('mf.user_id', $request->input('user_id')));
 
+        $transferenciasSub = DB::table('movimientos_financieros as mf')
+            ->where('mf.tipo_movimiento_id', 3)
+            ->select('mf.id', 'mf.fecha_operacion as fecha', DB::raw("'Transferencia' as tipo"))
+            ->when($request->filled('start_date'), fn ($q) => $q->whereDate('mf.fecha_operacion', '>=', $request->input('start_date')))
+            ->when($request->filled('end_date'), fn ($q) => $q->whereDate('mf.fecha_operacion', '<=', $request->input('end_date')))
+            ->when($request->filled('user_id'), fn ($q) => $q->where('mf.user_id', $request->input('user_id')));
+
         $pagina = DB::query()
-            ->fromSub($ventasSub->unionAll($gastosSub)->unionAll($ingresosSub), 'operaciones_u')
+            ->fromSub($ventasSub->unionAll($gastosSub)->unionAll($ingresosSub)->unionAll($transferenciasSub), 'operaciones_u')
             ->orderByDesc('fecha')
             ->paginate(25)
             ->withQueryString();
@@ -127,9 +133,14 @@ class RastreoOperacionesController extends Controller
                 'info_general' => [
                     'fecha' => $mov->fecha_operacion,
                     'estado' => $mov->estado,
+                    // Gasto/Ingreso son de un solo lado y una sola moneda (no hay conversión
+                    // que mostrar). Transferencia sí puede cambiar de moneda origen -> destino
+                    // (ej. USD -> CUP) — mostramos la tasa solo cuando eso pasa de verdad.
+                    'tasa_cambio_aplicada' => ($mov->moneda_origen && $mov->moneda_destino && $mov->moneda_origen !== $mov->moneda_destino)
+                        ? (float) $mov->tasa_cambio_aplicada
+                        : null,
                 ],
-                // Gasto solo llena origen, Ingreso solo destino — null si no aplica.
-                // Diseñado para servir tal cual a Transferencia (llena ambos) más adelante.
+                // Gasto solo llena origen, Ingreso solo destino, Transferencia llena ambos.
                 'origen' => $this->entidadMovimiento(
                     $mov->cuentaOrigen,
                     $mov->clienteOrigen,
