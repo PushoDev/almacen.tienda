@@ -121,9 +121,10 @@ interface DetalleMovimiento {
     info_general: {
         fecha: string;
         estado: string;
-        // Solo viene con valor en Transferencia cuando origen y destino usan monedas
+        // Solo vienen con valor en Transferencia cuando origen y destino usan monedas
         // distintas — Gasto/Ingreso son de un solo lado y una sola moneda, sin conversión.
         tasa_cambio_aplicada: number | null;
+        monto_destino: number | null;
     };
     origen: EntidadMovimiento | null;
     destino: EntidadMovimiento | null;
@@ -157,9 +158,10 @@ interface RastreoOperacionesPageProps {
     operaciones: PaginatedOperaciones;
     usuarios: User[];
     filtros: {
-        start_date?: string;
-        end_date?: string;
+        fecha?: string;
         user_id?: string;
+        tipo?: string;
+        buscar?: string;
     };
     puedeVerCosto: boolean;
 }
@@ -462,6 +464,12 @@ const DetalleMovimientoExpandido = ({
                 </CardHeader>
                 <CardContent className="space-y-1 text-xs">
                     <p><strong>Monto:</strong> {formatMonto(monto, moneda)}</p>
+                    {detalle.info_general.monto_destino !== null && detalle.destino?.moneda && (
+                        <p className="text-muted-foreground">
+                            <strong>Monto Destino:</strong> ≈ {formatMonto(detalle.info_general.monto_destino, detalle.destino.moneda)}
+                            {detalle.info_general.tasa_cambio_aplicada !== null && ` @ ${detalle.info_general.tasa_cambio_aplicada}`}
+                        </p>
+                    )}
                     <p><strong>Descripción:</strong> {descripcion || '—'}</p>
                 </CardContent>
             </Card>
@@ -472,9 +480,10 @@ const DetalleMovimientoExpandido = ({
 // ─── Página Principal ────────────────────────────────────────────────────────
 
 export default function RastreoOperacionesPage({ operaciones, usuarios, filtros, puedeVerCosto }: RastreoOperacionesPageProps) {
-    const [startDate, setStartDate] = useState(filtros.start_date || '');
-    const [endDate, setEndDate] = useState(filtros.end_date || '');
+    const [fecha, setFecha] = useState(filtros.fecha || '');
     const [userId, setUserId] = useState(filtros.user_id || 'all');
+    const [tipo, setTipo] = useState(filtros.tipo || 'all');
+    const [buscar, setBuscar] = useState(filtros.buscar || '');
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
     // Solo una fila abierta a la vez — evita que la pantalla se llene si el
@@ -484,9 +493,10 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
     };
 
     const buildParams = (page: number = 1) => ({
-        start_date: startDate,
-        end_date: endDate,
+        fecha,
         user_id: userId === 'all' ? '' : userId,
+        tipo: tipo === 'all' ? '' : tipo,
+        buscar,
         page,
     });
 
@@ -532,8 +542,8 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
 
             doc.setFontSize(10);
             doc.text(`Generado el: ${new Date().toLocaleString()}`, 20, 30);
-            if (startDate || endDate) {
-                doc.text(`Periodo: ${startDate || 'Inicio'} al ${endDate || 'Fin'}`, 20, 35);
+            if (fecha) {
+                doc.text(`Fecha: ${fecha}`, 20, 35);
             }
 
             const tableData = operaciones.data.map((op) => [
@@ -586,24 +596,40 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                         <CardTitle className="text-sm font-medium">Filtros de Búsqueda</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="start_date">Desde</Label>
+                        <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-3 lg:grid-cols-6">
+                            <div className="space-y-2 lg:col-span-2">
+                                <Label htmlFor="buscar">Buscar</Label>
                                 <Input
-                                    id="start_date"
-                                    type="date"
-                                    value={startDate}
-                                    onChange={(e) => setStartDate(e.target.value)}
+                                    id="buscar"
+                                    placeholder="Descripción, usuario, cuenta, cliente..."
+                                    value={buscar}
+                                    onChange={(e) => setBuscar(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleFilter()}
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="end_date">Hasta</Label>
+                                <Label htmlFor="fecha">Fecha</Label>
                                 <Input
-                                    id="end_date"
+                                    id="fecha"
                                     type="date"
-                                    value={endDate}
-                                    onChange={(e) => setEndDate(e.target.value)}
+                                    value={fecha}
+                                    onChange={(e) => setFecha(e.target.value)}
                                 />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Tipo de Operación</Label>
+                                <Select value={tipo} onValueChange={setTipo}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Todos" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">Todos los tipos</SelectItem>
+                                        <SelectItem value="Venta">Venta</SelectItem>
+                                        <SelectItem value="Gasto">Gasto</SelectItem>
+                                        <SelectItem value="Ingreso">Ingreso</SelectItem>
+                                        <SelectItem value="Transferencia">Transferencia</SelectItem>
+                                    </SelectContent>
+                                </Select>
                             </div>
                             <div className="space-y-2">
                                 <Label>Usuario</Label>

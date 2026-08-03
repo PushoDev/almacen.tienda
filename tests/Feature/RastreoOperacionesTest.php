@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\Cuenta;
+use App\Models\DestinatarioVenta;
 use App\Models\MovimientoFinanciero;
 use App\Models\User;
 use App\Models\Venta;
@@ -118,7 +120,7 @@ test('el filtro por usuario en el reporte aplica a Venta, Gasto, Ingreso y Trans
     expect($operaciones->pluck('user_id')->unique()->all())->toBe([$vendedorA->id]);
 });
 
-test('el filtro por rango de fechas en el reporte aplica a Venta, Gasto, Ingreso y Transferencia', function () {
+test('el filtro por fecha (un solo día) en el reporte aplica a Venta, Gasto, Ingreso y Transferencia', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
 
@@ -144,11 +146,81 @@ test('el filtro por rango de fechas en el reporte aplica a Venta, Gasto, Ingreso
         'cuenta_destino_id' => crearCuentaEnMoneda(crearMonedaUsd())->id,
     ]);
 
-    $response = $this->get(route('reportes.rastreo_operaciones', ['start_date' => '2026-07-01']), ['X-Inertia' => 'true']);
+    $response = $this->get(route('reportes.rastreo_operaciones', ['fecha' => '2026-07-30']), ['X-Inertia' => 'true']);
     $operaciones = collect($response->json('props.operaciones.data'));
 
     expect($operaciones)->toHaveCount(4);
     expect($operaciones->pluck('tipo')->sort()->values()->all())->toBe(['Gasto', 'Ingreso', 'Transferencia', 'Venta']);
+});
+
+test('el filtro por tipo de operación aísla un solo tipo del listado mezclado', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $cuentaUsd = crearCuentaEnMoneda(crearMonedaUsd());
+
+    Venta::factory()->create();
+    MovimientoFinanciero::factory()->gasto()->create();
+    MovimientoFinanciero::factory()->ingreso()->create();
+    MovimientoFinanciero::factory()->transferencia()->create([
+        'cuenta_origen_id' => $cuentaUsd->id,
+        'cuenta_destino_id' => crearCuentaEnMoneda(crearMonedaUsd())->id,
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones', ['tipo' => 'Transferencia']), ['X-Inertia' => 'true']);
+    $operaciones = collect($response->json('props.operaciones.data'));
+
+    expect($operaciones)->toHaveCount(1);
+    expect($operaciones->first()['tipo'])->toBe('Transferencia');
+});
+
+test('el buscador encuentra un Gasto por el nombre de la cuenta origen', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $cuentaBuscada = crearCuentaEnMoneda(crearMonedaUsd(), 1000);
+    Cuenta::where('id', $cuentaBuscada->id)->update(['nombre_cuenta' => 'Caja Fuerte Central']);
+
+    $gasto = MovimientoFinanciero::factory()->gasto()->create([
+        'cuenta_origen_id' => $cuentaBuscada->id,
+        'descripcion' => 'Pago de electricidad',
+    ]);
+
+    MovimientoFinanciero::factory()->gasto()->create([
+        'descripcion' => 'Otro gasto sin relación',
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones', ['buscar' => 'Caja Fuerte']), ['X-Inertia' => 'true']);
+    $operaciones = collect($response->json('props.operaciones.data'));
+
+    expect($operaciones)->toHaveCount(1);
+    expect($operaciones->first()['id'])->toBe($gasto->id);
+});
+
+test('el buscador encuentra una Venta por el nombre del destinatario', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $ventaBuscada = Venta::factory()->create();
+    DestinatarioVenta::create([
+        'venta_id' => $ventaBuscada->id,
+        'nombre' => 'Ramoncito',
+        'apellidos' => 'Perez Lopez',
+    ]);
+
+    Venta::factory()->create();
+
+    $response = $this->get(route('reportes.rastreo_operaciones', ['buscar' => 'Ramoncito']), ['X-Inertia' => 'true']);
+    $operaciones = collect($response->json('props.operaciones.data'));
+
+    expect($operaciones)->toHaveCount(1);
+    expect($operaciones->first()['id'])->toBe($ventaBuscada->id);
 });
 
 test('el detalle colapsable de un Gasto trae la cuenta origen y sus saldos antes/después', function () {
@@ -239,6 +311,7 @@ test('el detalle colapsable de una Transferencia trae origen y destino a la vez,
     expect($fila['detalle_movimiento']['destino']['nombre'])->toBe($cuentaDestino->nombre_cuenta);
     expect($fila['detalle_movimiento']['destino']['saldo_posterior'])->toEqual(300.0);
     expect($fila['detalle_movimiento']['info_general']['tasa_cambio_aplicada'])->toBeNull();
+    expect($fila['detalle_movimiento']['info_general']['monto_destino'])->toBeNull();
 });
 
 test('el detalle colapsable de una Transferencia muestra la tasa de cambio cuando origen y destino usan monedas distintas', function () {
@@ -268,4 +341,7 @@ test('el detalle colapsable de una Transferencia muestra la tasa de cambio cuand
     $fila = collect($response->json('props.operaciones.data'))->firstWhere('id', $transferencia->id);
 
     expect($fila['detalle_movimiento']['info_general']['tasa_cambio_aplicada'])->toEqual(380.0);
+    // 39000 CUP - 1000 CUP = 38000 CUP realmente acreditados en el destino — no los
+    // "100" del monto origen (esos están en USD, el otro lado de la conversión).
+    expect($fila['detalle_movimiento']['info_general']['monto_destino'])->toEqual(38000.0);
 });
