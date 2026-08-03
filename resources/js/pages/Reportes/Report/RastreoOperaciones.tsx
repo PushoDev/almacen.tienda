@@ -1,4 +1,5 @@
 import HeadingSmall from '@/components/heading-small';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -108,16 +109,39 @@ interface DetalleVenta {
     };
 }
 
+interface EntidadMovimiento {
+    tipo: 'cuenta' | 'cliente' | 'proveedor';
+    nombre: string;
+    saldo_anterior: number | null;
+    saldo_posterior: number | null;
+    moneda: string | null;
+}
+
+interface DetalleMovimiento {
+    info_general: {
+        fecha: string;
+        estado: string;
+        // Solo vienen con valor en Transferencia cuando origen y destino usan monedas
+        // distintas — Gasto/Ingreso son de un solo lado y una sola moneda, sin conversión.
+        tasa_cambio_aplicada: number | null;
+        monto_destino: number | null;
+    };
+    origen: EntidadMovimiento | null;
+    destino: EntidadMovimiento | null;
+}
+
 interface Operacion {
     id: number;
     fecha: string;
-    tipo: 'Venta';
+    tipo: string;
     monto: number;
+    moneda: string;
     usuario: string;
     user_id: number | null;
     referencia: string;
     descripcion: string;
-    detalle_venta: DetalleVenta;
+    detalle_venta: DetalleVenta | null;
+    detalle_movimiento: DetalleMovimiento | null;
 }
 
 interface PaginatedOperaciones {
@@ -134,14 +158,37 @@ interface RastreoOperacionesPageProps {
     operaciones: PaginatedOperaciones;
     usuarios: User[];
     filtros: {
-        start_date?: string;
-        end_date?: string;
+        fecha?: string;
         user_id?: string;
+        tipo?: string;
+        buscar?: string;
     };
     puedeVerCosto: boolean;
 }
 
 const fmt = (n: number | null | undefined, sufijo = '') => (n === null || n === undefined ? '—' : `$${n.toFixed(2)}${sufijo}`);
+
+// El detalle de Venta siempre está en USD; Gasto/Ingreso/Transferencia pueden ser
+// USD/CUP/MLC según la cuenta origen/destino — mostrar siempre la moneda explícita,
+// no asumir que un número sin sigla es USD.
+const formatMonto = (monto: number, moneda: string) => `${moneda} ${monto.toFixed(2)}`;
+
+// Mismo esquema de badge de color por tipo que ya usa el proyecto en
+// Cuentas/Show.tsx (getFuenteColorClase) — para que se vea consistente en todo el sistema.
+const colorTipo = (tipo: string) => {
+    switch (tipo) {
+        case 'Venta':
+            return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300';
+        case 'Gasto':
+            return 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300';
+        case 'Ingreso':
+            return 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/20 dark:text-sky-300';
+        case 'Transferencia':
+            return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300';
+        default:
+            return 'border-border bg-muted text-foreground';
+    }
+};
 
 // ─── Componente: DetalleVentaExpandido (contenido de la fila colapsable) ─────
 
@@ -346,30 +393,110 @@ const DetalleVentaExpandido = ({ detalle }: { detalle: DetalleVenta }) => (
     </div>
 );
 
+// ─── Componente: DetalleMovimientoExpandido (Gasto / Ingreso, sin tasa de cambio —
+// Gasto/Ingreso son de una sola moneda y un solo lado, no hay conversión que mostrar) ──
+
+const EntidadMovimientoCard = ({ titulo, entidad }: { titulo: string; entidad: EntidadMovimiento }) => (
+    <Card className="bg-background/60">
+        <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-semibold uppercase">
+                {titulo} — {entidad.tipo === 'cuenta' ? 'Cuenta' : entidad.tipo === 'cliente' ? 'Cliente' : 'Proveedor'}
+            </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-1 text-xs">
+            <p><strong>Nombre:</strong> {entidad.nombre}</p>
+            <p>
+                <strong>Saldo Anterior:</strong>{' '}
+                {entidad.saldo_anterior !== null ? formatMonto(entidad.saldo_anterior, entidad.moneda ?? '') : '—'}
+            </p>
+            <p>
+                <strong>Saldo Posterior:</strong>{' '}
+                {entidad.saldo_posterior !== null ? formatMonto(entidad.saldo_posterior, entidad.moneda ?? '') : '—'}
+            </p>
+        </CardContent>
+    </Card>
+);
+
+const DetalleMovimientoExpandido = ({
+    detalle,
+    monto,
+    moneda,
+    descripcion,
+    usuario,
+}: {
+    detalle: DetalleMovimiento;
+    monto: number;
+    moneda: string;
+    descripcion: string;
+    usuario: string;
+}) => (
+    <div className="space-y-4 py-2">
+        <div className="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 text-xs">
+            <span>
+                <strong className="text-foreground">Fecha y Hora:</strong> {new Date(detalle.info_general.fecha).toLocaleString()}
+            </span>
+            <span>
+                <strong className="text-foreground">Estado:</strong> {detalle.info_general.estado}
+            </span>
+            <span>
+                <strong className="text-foreground">Registrado por:</strong> {usuario}
+            </span>
+            {detalle.info_general.tasa_cambio_aplicada !== null && (
+                <span>
+                    <strong className="text-foreground">Tasa de Cambio:</strong> {detalle.info_general.tasa_cambio_aplicada}
+                </span>
+            )}
+        </div>
+
+        {/*
+            Gasto/Ingreso solo llenan un lado (origen o destino), así que la card de
+            entidad y la de Monto y Detalle caben juntas en una sola fila de 2 columnas.
+            Transferencia llena origen Y destino a la vez, así que
+            esta misma grilla pasa a 2 filas de 2 (origen+destino, y monto abajo) sin
+            tener que tocar este layout.
+        */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {detalle.origen && <EntidadMovimientoCard titulo="Origen" entidad={detalle.origen} />}
+            {detalle.destino && <EntidadMovimientoCard titulo="Destino" entidad={detalle.destino} />}
+            <Card className="bg-background/60">
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-xs font-semibold uppercase">Monto y Detalle</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-1 text-xs">
+                    <p><strong>Monto:</strong> {formatMonto(monto, moneda)}</p>
+                    {detalle.info_general.monto_destino !== null && detalle.destino?.moneda && (
+                        <p className="text-muted-foreground">
+                            <strong>Monto Destino:</strong> ≈ {formatMonto(detalle.info_general.monto_destino, detalle.destino.moneda)}
+                            {detalle.info_general.tasa_cambio_aplicada !== null && ` @ ${detalle.info_general.tasa_cambio_aplicada}`}
+                        </p>
+                    )}
+                    <p><strong>Descripción:</strong> {descripcion || '—'}</p>
+                </CardContent>
+            </Card>
+        </div>
+    </div>
+);
+
 // ─── Página Principal ────────────────────────────────────────────────────────
 
 export default function RastreoOperacionesPage({ operaciones, usuarios, filtros, puedeVerCosto }: RastreoOperacionesPageProps) {
-    const [startDate, setStartDate] = useState(filtros.start_date || '');
-    const [endDate, setEndDate] = useState(filtros.end_date || '');
+    const [fecha, setFecha] = useState(filtros.fecha || '');
     const [userId, setUserId] = useState(filtros.user_id || 'all');
-    const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+    const [tipo, setTipo] = useState(filtros.tipo || 'all');
+    const [buscar, setBuscar] = useState(filtros.buscar || '');
+    const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
+    // Solo una fila abierta a la vez — evita que la pantalla se llene si el
+    // usuario expande varias operaciones seguidas.
     const toggleRow = (key: string) => {
-        setExpandedRows((prev) => {
-            const next = new Set(prev);
-            if (next.has(key)) {
-                next.delete(key);
-            } else {
-                next.add(key);
-            }
-            return next;
-        });
+        setExpandedRow((prev) => (prev === key ? null : key));
     };
 
     const buildParams = (page: number = 1) => ({
-        start_date: startDate,
-        end_date: endDate,
+        fecha,
         user_id: userId === 'all' ? '' : userId,
+        tipo: tipo === 'all' ? '' : tipo,
+        buscar,
         page,
     });
 
@@ -415,8 +542,8 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
 
             doc.setFontSize(10);
             doc.text(`Generado el: ${new Date().toLocaleString()}`, 20, 30);
-            if (startDate || endDate) {
-                doc.text(`Periodo: ${startDate || 'Inicio'} al ${endDate || 'Fin'}`, 20, 35);
+            if (fecha) {
+                doc.text(`Fecha: ${fecha}`, 20, 35);
             }
 
             const tableData = operaciones.data.map((op) => [
@@ -424,7 +551,7 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                 op.tipo,
                 op.referencia,
                 op.usuario,
-                `$${parseFloat(op.monto.toString()).toFixed(2)}`,
+                formatMonto(parseFloat(op.monto.toString()), op.moneda),
                 op.descripcion || '-',
             ]);
 
@@ -454,7 +581,7 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                 <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     <HeadingSmall
                         title="Auditoría General de Operaciones"
-                        description="Ventas del sistema, con detalle de productos por venta. Gastos, ingresos, transferencias y otras operaciones se agregan en fases siguientes."
+                        description="Ventas, Gastos, Ingresos y Transferencias del sistema, con detalle completo por operación. Cierres de caja y compras se agregan en fases siguientes."
                     />
                     <History
                         size={70}
@@ -469,24 +596,40 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                         <CardTitle className="text-sm font-medium">Filtros de Búsqueda</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="start_date">Desde</Label>
+                        <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-3 lg:grid-cols-6">
+                            <div className="space-y-2 lg:col-span-2">
+                                <Label htmlFor="buscar">Buscar</Label>
                                 <Input
-                                    id="start_date"
-                                    type="date"
-                                    value={startDate}
-                                    onChange={(e) => setStartDate(e.target.value)}
+                                    id="buscar"
+                                    placeholder="Descripción, usuario, cuenta, cliente..."
+                                    value={buscar}
+                                    onChange={(e) => setBuscar(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleFilter()}
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="end_date">Hasta</Label>
+                                <Label htmlFor="fecha">Fecha</Label>
                                 <Input
-                                    id="end_date"
+                                    id="fecha"
                                     type="date"
-                                    value={endDate}
-                                    onChange={(e) => setEndDate(e.target.value)}
+                                    value={fecha}
+                                    onChange={(e) => setFecha(e.target.value)}
                                 />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Tipo de Operación</Label>
+                                <Select value={tipo} onValueChange={setTipo}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Todos" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">Todos los tipos</SelectItem>
+                                        <SelectItem value="Venta">Venta</SelectItem>
+                                        <SelectItem value="Gasto">Gasto</SelectItem>
+                                        <SelectItem value="Ingreso">Ingreso</SelectItem>
+                                        <SelectItem value="Transferencia">Transferencia</SelectItem>
+                                    </SelectContent>
+                                </Select>
                             </div>
                             <div className="space-y-2">
                                 <Label>Usuario</Label>
@@ -539,15 +682,15 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                                     ) : (
                                         ops.map((op, idx) => {
                                             const rowKey = `${op.tipo}-${op.id}-${idx}`;
-                                            const esColapsable = Boolean(op.detalle_venta);
-                                            const expandida = expandedRows.has(rowKey);
+                                            const esColapsable = Boolean(op.detalle_venta) || Boolean(op.detalle_movimiento);
+                                            const expandida = expandedRow === rowKey;
                                             return (
                                                 <React.Fragment key={rowKey}>
                                                     <tr
                                                         className={`hover:bg-sidebar-accent/30 transition-colors ${esColapsable ? 'cursor-pointer' : ''}`}
                                                         onClick={() => esColapsable && toggleRow(rowKey)}
                                                     >
-                                                        <td className="px-6 py-4 text-sm font-bold whitespace-nowrap text-emerald-500">
+                                                        <td className="px-6 py-4 text-sm whitespace-nowrap">
                                                             <div className="flex items-center gap-1.5">
                                                                 {esColapsable ? (
                                                                     expandida ? (
@@ -558,7 +701,9 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                                                                 ) : (
                                                                     <span className="w-4" />
                                                                 )}
-                                                                {op.tipo}
+                                                                <Badge variant="outline" className={colorTipo(op.tipo)}>
+                                                                    {op.tipo}
+                                                                </Badge>
                                                             </div>
                                                         </td>
                                                         <td className="px-6 py-4 text-sm whitespace-nowrap">
@@ -571,7 +716,7 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                                                             {op.usuario}
                                                         </td>
                                                         <td className="px-6 py-4 text-sm font-mono whitespace-nowrap">
-                                                            ${parseFloat(op.monto.toString()).toFixed(2)}
+                                                            {formatMonto(parseFloat(op.monto.toString()), op.moneda)}
                                                         </td>
                                                         <td className="px-6 py-4 text-sm text-muted-foreground">
                                                             {op.descripcion || '-'}
@@ -580,7 +725,17 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                                                     {esColapsable && expandida && (
                                                         <tr>
                                                             <td colSpan={6} className="bg-sidebar-accent/20 px-6 py-3">
-                                                                <DetalleVentaExpandido detalle={op.detalle_venta} />
+                                                                {op.detalle_venta ? (
+                                                                    <DetalleVentaExpandido detalle={op.detalle_venta} />
+                                                                ) : op.detalle_movimiento ? (
+                                                                    <DetalleMovimientoExpandido
+                                                                        detalle={op.detalle_movimiento}
+                                                                        monto={parseFloat(op.monto.toString())}
+                                                                        moneda={op.moneda}
+                                                                        descripcion={op.descripcion}
+                                                                        usuario={op.usuario}
+                                                                    />
+                                                                ) : null}
                                                             </td>
                                                         </tr>
                                                     )}
