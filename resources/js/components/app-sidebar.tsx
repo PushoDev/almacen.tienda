@@ -111,7 +111,7 @@ const allNavItems: NavItem[] = [
         title: 'Reportes',
         href: '/reportes',
         icon: FileText,
-        roles: ['admin', 'moderador'],
+        roles: ['admin', 'moderador', 'vendedor'],
     },
     {
         title: 'Empleados',

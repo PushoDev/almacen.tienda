@@ -92,12 +92,14 @@ interface DetalleVenta {
         total_venta: number;
         total_pagado: number;
         restante: number;
-        ganancia_operacional: number;
+        // null para roles sin puedeVerCosto (ej. vendedor) — mismo gate que ya
+        // aplica productos_footer a estos mismos valores.
+        ganancia_operacional: number | null;
         comision_pv_usd: number;
         comision_pv_cup: number | null;
-        ganancia_agencia: number;
-        ganancia_perdida_cambiaria: number;
-        ganancia_real_total: number;
+        ganancia_agencia: number | null;
+        ganancia_perdida_cambiaria: number | null;
+        ganancia_real_total: number | null;
         tasa_cambio_principal: number;
     };
     productos: DetalleProducto[];

@@ -314,6 +314,107 @@ test('el detalle colapsable de una Transferencia trae origen y destino a la vez,
     expect($fila['detalle_movimiento']['info_general']['monto_destino'])->toBeNull();
 });
 
+test('un vendedor solo ve sus propias operaciones, incluso si intenta pedir user_id de otro por query string', function () {
+    $vendedorA = User::factory()->vendedor()->create();
+    $vendedorB = User::factory()->vendedor()->create();
+    $this->actingAs($vendedorA);
+
+    crearTiposMovimientoFinanciero();
+
+    $cuentaUsd = crearCuentaEnMoneda(crearMonedaUsd());
+
+    Venta::factory()->create(['user_id' => $vendedorA->id]);
+    MovimientoFinanciero::factory()->gasto()->create(['user_id' => $vendedorA->id]);
+
+    Venta::factory()->create(['user_id' => $vendedorB->id]);
+    MovimientoFinanciero::factory()->gasto()->create(['user_id' => $vendedorB->id]);
+    MovimientoFinanciero::factory()->transferencia()->create([
+        'user_id' => $vendedorB->id,
+        'cuenta_origen_id' => $cuentaUsd->id,
+        'cuenta_destino_id' => crearCuentaEnMoneda(crearMonedaUsd())->id,
+    ]);
+
+    // Intenta forzar ver las operaciones de vendedorB por query string — el backend debe
+    // ignorarlo y quedarse con el propio id del usuario autenticado.
+    $response = $this->get(route('reportes.rastreo_operaciones', ['user_id' => $vendedorB->id]), ['X-Inertia' => 'true']);
+    $response->assertOk();
+
+    $operaciones = collect($response->json('props.operaciones.data'));
+
+    expect($operaciones)->toHaveCount(2);
+    expect($operaciones->pluck('user_id')->unique()->all())->toBe([$vendedorA->id]);
+    expect($response->json('props.usuarios'))->toBe([]);
+});
+
+test('un admin sigue viendo las operaciones de todos los usuarios sin restricción', function () {
+    $admin = User::factory()->admin()->create();
+    $vendedorA = User::factory()->vendedor()->create();
+    $vendedorB = User::factory()->vendedor()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    Venta::factory()->create(['user_id' => $vendedorA->id]);
+    Venta::factory()->create(['user_id' => $vendedorB->id]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $operaciones = collect($response->json('props.operaciones.data'));
+
+    expect($operaciones)->toHaveCount(2);
+    expect($operaciones->pluck('user_id')->unique()->sort()->values()->all())
+        ->toBe(collect([$vendedorA->id, $vendedorB->id])->sort()->values()->all());
+    expect($response->json('props.usuarios'))->not->toBeEmpty();
+});
+
+test('el resumen financiero de una Venta oculta ganancia/margen a roles sin puedeVerCosto, pero muestra montos de transacción', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    crearTiposMovimientoFinanciero();
+
+    Venta::factory()->create([
+        'user_id' => $vendedor->id,
+        'total' => 500,
+        'total_ganancia' => 120,
+        'total_comision' => 30,
+        'ganancia_perdida_cambiaria' => 5,
+        'ganancia_real_total' => 125,
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $resumen = collect($response->json('props.operaciones.data'))->first()['detalle_venta']['resumen_financiero'];
+
+    // Margen/ganancia: oculto para un rol sin puedeVerCosto.
+    expect($resumen['ganancia_operacional'])->toBeNull();
+    expect($resumen['ganancia_agencia'])->toBeNull();
+    expect($resumen['ganancia_perdida_cambiaria'])->toBeNull();
+    expect($resumen['ganancia_real_total'])->toBeNull();
+    // Montos de la transacción en sí (no son costo/margen interno): siguen visibles.
+    expect($resumen['total_venta'])->toEqual(500.0);
+    expect($resumen['comision_pv_usd'])->toEqual(30.0);
+});
+
+test('el resumen financiero de una Venta muestra ganancia/margen completo a admin/moderador', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    Venta::factory()->create([
+        'total' => 500,
+        'total_ganancia' => 120,
+        'ganancia_perdida_cambiaria' => 5,
+        'ganancia_real_total' => 125,
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $resumen = collect($response->json('props.operaciones.data'))->first()['detalle_venta']['resumen_financiero'];
+
+    expect($resumen['ganancia_operacional'])->toEqual(120.0);
+    expect($resumen['ganancia_perdida_cambiaria'])->toEqual(5.0);
+    expect($resumen['ganancia_real_total'])->toEqual(125.0);
+});
+
 test('el detalle colapsable de una Transferencia muestra la tasa de cambio cuando origen y destino usan monedas distintas', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
