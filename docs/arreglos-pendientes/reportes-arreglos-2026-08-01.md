@@ -100,12 +100,12 @@ Tests: **ninguno de los 21 métodos del controller tiene test**. Al arreglar cad
 
 ## Auditoría y Rastreo
 
-### 12. Rastreo de Operaciones — 🔴 EN PROGRESO, es el que le interesa al cliente
-- [ ] En progreso — **ver plan detallado en `rastreo-operaciones-rediseno-2026-08-01.md`** (rediseño grande, por fases: separar Gasto/Ingreso/Transferencia, filas colapsables Venta/Compra con detalle de productos, columna de stock final, drill-down, fix del bug de bindings, etc.)
+### 12. Rastreo de Operaciones — 🟡 EN PROGRESO, es el que le interesa al cliente. Fases 0-3 y 5 (Receptor) cerradas + fixes de seguridad; quedan Fase 4 (stock final), resto de Fase 6 (drill-down, PDF completo, rol de acceso a nivel de ruta) y Fase 7 (Compras)
+- **Ver plan y estado detallado, actualizado 2026-08-04, en `rastreo-operaciones-rediseno-2026-08-01.md`** — no repetir el análisis acá, ese doc es la fuente de verdad para este reporte.
 - **Ruta:** `GET /reportes/rastreo-operaciones` (`reportes.rastreo_operaciones`)
-- **Controller:** `ReporteController::rastreoOperaciones()` — línea 732
+- **Controller:** `app/Http/Controllers/Reportes/RastreoOperacionesController.php` — propio, separado de `ReporteController` desde la Fase 0.
 - **Frontend:** `resources/js/pages/Reportes/Report/RastreoOperaciones.tsx`
-- **Hallazgos:** ⚠️ usa `CONCAT()` (líneas ~756, 770, 799) sobre un `UNION ALL` de 4 subconsultas (Ventas+Compras+Movimientos+Cierres) envuelto en subquery derivada — no portable a SQLite. **Bug confirmado en vivo** (reproducido con `DB::listen()`): `mergeBindings($query)` + `->where('tipo', ...)` posterior corrompe el orden de bindings cuando hay filtro de fecha/usuario simultáneo con filtro de tipo — mismo patrón que B9 en Cuentas. Expone auditoría financiera global sin chequeo de rol.
+- **Estado real (2026-08-04):** Venta/Gasto/Ingreso/Transferencia unificados con filas colapsables (incl. detalle de productos con marca/modelo/capacidad/color/código), filtros por fecha/tipo/usuario/búsqueda, widgets KPI de conteo por tipo, gate de costo/margen por rol y scope de vendedor a sus propias operaciones. Los hallazgos viejos de esta fila (`CONCAT()`, bug de bindings B9) ya no aplican — resueltos. Pendiente real: rol de acceso a nivel de ruta (⚠️4), stock final (Fase 4), drill-down y exportar PDF completo (Fase 6), Compras (Fase 7).
 
 ---
 
