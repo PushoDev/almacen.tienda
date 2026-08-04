@@ -4,7 +4,7 @@
 
 15 reportes, uno por uno. **El usuario indica el orden** — no asumir prioridad propia. No tocar código hasta que se confirme cuál reporte toca. Marcar `[ ]` → `[x]` al completar cada uno y anotar qué se hizo (igual que `transacciones-cuentas-mejoras-2026-07-31.md`).
 
-Control de acceso: `routes/acciones/reportes.php` solo exige `['auth','verified']` — **sin chequeo de rol** en casi todo el módulo (única excepción: `historialCostoPrecio()`, que sí hace `abort(403)` si no es admin/moderador). Cuando toque cada reporte, decidir puntualmente si necesita el mismo tipo de protección — no se asume una regla global todavía.
+Control de acceso: **resuelto a nivel de módulo (2026-08-04).** `routes/acciones/reportes.php` ahora agrupa los 14 reportes de costo/margen/finanzas (todos salvo `index` y `rastreo_operaciones`) bajo `Route::middleware('admin')` (alias existente → `EnsureUserIsAdmin`, permite `admin` y `moderador`) — mismo criterio que ya usaba `historialCostoPrecio()` con su `abort(403)` manual, que se dejó intacto como segunda capa. `index` y `rastreo_operaciones` quedan abiertos a todos los roles a propósito (Rastreo ya filtra internamente por rol/scope). Ver detalle en `rastreo-operaciones-rediseno-2026-08-01.md`, Fase 6.
 
 Tests: **ninguno de los 21 métodos del controller tiene test**. Al arreglar cada reporte, evaluar si conviene agregar uno (mismo patrón que se viene usando en el resto del proyecto).
 
@@ -100,12 +100,12 @@ Tests: **ninguno de los 21 métodos del controller tiene test**. Al arreglar cad
 
 ## Auditoría y Rastreo
 
-### 12. Rastreo de Operaciones — 🟡 EN PROGRESO, es el que le interesa al cliente. Fases 0-3 y 5 (Receptor) cerradas + fixes de seguridad; quedan Fase 4 (stock final), resto de Fase 6 (drill-down, PDF completo, rol de acceso a nivel de ruta) y Fase 7 (Compras)
+### 12. Rastreo de Operaciones — 🟡 EN PROGRESO, es el que le interesa al cliente. Fases 0-3 y 5 (Receptor) cerradas + fixes de seguridad; quedan Fase 4 (stock final), 2 ítems de Fase 6 (drill-down, PDF completo) y Fase 7 (Compras) — todo baja prioridad
 - **Ver plan y estado detallado, actualizado 2026-08-04, en `rastreo-operaciones-rediseno-2026-08-01.md`** — no repetir el análisis acá, ese doc es la fuente de verdad para este reporte.
 - **Ruta:** `GET /reportes/rastreo-operaciones` (`reportes.rastreo_operaciones`)
 - **Controller:** `app/Http/Controllers/Reportes/RastreoOperacionesController.php` — propio, separado de `ReporteController` desde la Fase 0.
 - **Frontend:** `resources/js/pages/Reportes/Report/RastreoOperaciones.tsx`
-- **Estado real (2026-08-04):** Venta/Gasto/Ingreso/Transferencia unificados con filas colapsables (incl. detalle de productos con marca/modelo/capacidad/color/código), filtros por fecha/tipo/usuario/búsqueda, widgets KPI de conteo por tipo, gate de costo/margen por rol y scope de vendedor a sus propias operaciones. Los hallazgos viejos de esta fila (`CONCAT()`, bug de bindings B9) ya no aplican — resueltos. Pendiente real: rol de acceso a nivel de ruta (⚠️4), stock final (Fase 4), drill-down y exportar PDF completo (Fase 6), Compras (Fase 7).
+- **Estado real (2026-08-04):** Venta/Gasto/Ingreso/Transferencia unificados con filas colapsables (incl. detalle de productos con marca/modelo/capacidad/color/código), filtros por fecha/tipo/usuario/búsqueda, widgets KPI de conteo por tipo, gate de costo/margen por rol, scope de vendedor a sus propias operaciones, y **rol de acceso a nivel de ruta ya cerrado para todo el módulo** (ver nota general arriba). Los hallazgos viejos de esta fila (`CONCAT()`, bug de bindings B9) ya no aplican — resueltos. Pendiente real, baja prioridad: stock final (Fase 4), drill-down y exportar PDF completo (Fase 6), Compras (Fase 7).
 
 ---
 
