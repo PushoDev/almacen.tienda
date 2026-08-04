@@ -66,6 +66,18 @@ class RastreoOperacionesController extends Controller
         $ingresosSub = $this->construirSubqueryMovimiento($request, 2, 'Ingreso', $buscar, $userIdFiltro);
         $transferenciasSub = $this->construirSubqueryMovimiento($request, 3, 'Transferencia', $buscar, $userIdFiltro);
 
+        // Conteo por tipo para los widgets sobre el filtro — respeta fecha/usuario/buscar
+        // pero NO el filtro de tipo (si no, al filtrar por "Venta" los otros 3 se irían a
+        // cero y dejarían de servir como resumen). Clonamos cada subquery ANTES de
+        // consumirla en unionAll() de más abajo. distinct() + contar el id evita inflar el
+        // conteo por los leftJoin (ej. destinatarios_venta no tiene unique en venta_id).
+        $conteoPorTipo = [
+            'Venta' => (clone $ventasSub)->distinct()->count('ventas.id'),
+            'Gasto' => (clone $gastosSub)->distinct()->count('mf.id'),
+            'Ingreso' => (clone $ingresosSub)->distinct()->count('mf.id'),
+            'Transferencia' => (clone $transferenciasSub)->distinct()->count('mf.id'),
+        ];
+
         $pagina = DB::query()
             ->fromSub($ventasSub->unionAll($gastosSub)->unionAll($ingresosSub)->unionAll($transferenciasSub), 'operaciones_u')
             ->when($request->filled('tipo'), fn ($q) => $q->where('tipo', $request->input('tipo')))
@@ -117,6 +129,7 @@ class RastreoOperacionesController extends Controller
             'usuarios' => $puedeVerCosto ? DB::table('users')->select('id', 'name')->get() : [],
             'filtros' => $request->except('page'),
             'puedeVerCosto' => $puedeVerCosto,
+            'conteoPorTipo' => $conteoPorTipo,
         ]);
     }
 
@@ -305,6 +318,11 @@ class RastreoOperacionesController extends Controller
                 'productos' => $venta->detalles->map(fn ($d) => [
                     'producto' => $d->producto?->nombre_producto ?? 'Producto #' . $d->producto_id,
                     'imagen_url' => $d->producto?->imagen_url,
+                    'marca' => $d->producto?->marca_producto,
+                    'modelo' => $d->producto?->modelo_producto,
+                    'capacidad' => $d->producto?->capacidad_producto,
+                    'color' => $d->producto?->color_producto,
+                    'codigo' => $d->producto?->codigo_producto,
                     'cantidad' => (int) $d->cantidad,
                     'precio' => (float) $d->precio_venta,
                     'costo_unitario' => $puedeVerCosto ? (float) $d->costo_unitario : null,

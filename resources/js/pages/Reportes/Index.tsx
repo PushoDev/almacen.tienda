@@ -5,7 +5,7 @@ import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
 import { ChartsReportePage } from '@/layouts/charts/ChartReportesGral';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import {
     AlertTriangle,
     Archive,
@@ -198,6 +198,13 @@ const ReportSection: React.FC<{ title: string; reports: ReportCardProps[] }> = (
 );
 
 export default function ReportesPage() {
+    const { props } = usePage();
+    const usuario = props.auth?.user as any;
+    // Vendedor solo ve la auditoría de sus propias operaciones (Rastreo de Operaciones ya
+    // se restringe a eso en el backend) — el resto de reportes (rentabilidad, inventario,
+    // finanzas generales) son vista de negocio completa, no le corresponde a este rol.
+    const isVendedor = usuario?.role === 'vendedor';
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Reportes" />
@@ -217,16 +224,24 @@ export default function ReportesPage() {
                 <Separator className="col-span-4" />
 
                 <div className="grid auto-rows-min gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    <ReportSection title="Compras e Inventario" reports={reportesComprasInventario} />
-                    <ReportSection title="Ventas y Rentabilidad" reports={reportesVentasRentabilidad} />
                     <ReportSection title="Auditoría y Rastreo" reports={reportesAuditoria} />
-                    <ReportSection title="Finanzas y Otros" reports={reportesFinanzasOtros} />
+                    {!isVendedor && (
+                        <>
+                            <ReportSection title="Compras e Inventario" reports={reportesComprasInventario} />
+                            <ReportSection title="Ventas y Rentabilidad" reports={reportesVentasRentabilidad} />
+                            <ReportSection title="Finanzas y Otros" reports={reportesFinanzasOtros} />
+                        </>
+                    )}
                 </div>
 
-                <Separator className="col-span-4" />
-                <div>
-                    <ChartsReportePage />
-                </div>
+                {!isVendedor && (
+                    <>
+                        <Separator className="col-span-4" />
+                        <div>
+                            <ChartsReportePage />
+                        </div>
+                    </>
+                )}
             </div>
         </AppLayout>
     );

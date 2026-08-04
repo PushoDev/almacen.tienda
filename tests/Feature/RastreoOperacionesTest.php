@@ -3,8 +3,10 @@
 use App\Models\Cuenta;
 use App\Models\DestinatarioVenta;
 use App\Models\MovimientoFinanciero;
+use App\Models\Producto;
 use App\Models\User;
 use App\Models\Venta;
+use App\Models\VentaDetalle;
 
 // crearTiposMovimientoFinanciero() está declarada globalmente en tests/Pest.php.
 
@@ -445,4 +447,73 @@ test('el detalle colapsable de una Transferencia muestra la tasa de cambio cuand
     // 39000 CUP - 1000 CUP = 38000 CUP realmente acreditados en el destino — no los
     // "100" del monto origen (esos están en USD, el otro lado de la conversión).
     expect($fila['detalle_movimiento']['info_general']['monto_destino'])->toEqual(38000.0);
+});
+
+test('el detalle de productos de una Venta incluye marca, modelo, capacidad, color y código', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $producto = Producto::factory()->create([
+        'nombre_producto' => 'Refrigerador Doble Puerta',
+        'marca_producto' => 'Samsung',
+        'modelo_producto' => 'RS-500',
+        'capacidad_producto' => '500L',
+        'color_producto' => 'Acero Inoxidable',
+        'codigo_producto' => '7501234567890',
+    ]);
+
+    $venta = Venta::factory()->create();
+    VentaDetalle::factory()->create([
+        'venta_id' => $venta->id,
+        'producto_id' => $producto->id,
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $fila = collect($response->json('props.operaciones.data'))->firstWhere('id', $venta->id);
+    $detalleProducto = $fila['detalle_venta']['productos'][0];
+
+    expect($detalleProducto['producto'])->toBe('Refrigerador Doble Puerta');
+    expect($detalleProducto['marca'])->toBe('Samsung');
+    expect($detalleProducto['modelo'])->toBe('RS-500');
+    expect($detalleProducto['capacidad'])->toBe('500L');
+    expect($detalleProducto['color'])->toBe('Acero Inoxidable');
+    expect($detalleProducto['codigo'])->toBe('7501234567890');
+});
+
+test('conteoPorTipo cuenta cada tipo por separado y no se colapsa al filtrar por tipo', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $cuentaUsd = crearCuentaEnMoneda(crearMonedaUsd());
+
+    Venta::factory()->count(3)->create();
+    MovimientoFinanciero::factory()->gasto()->create();
+    MovimientoFinanciero::factory()->ingreso()->count(2)->create();
+    MovimientoFinanciero::factory()->transferencia()->create([
+        'cuenta_origen_id' => $cuentaUsd->id,
+        'cuenta_destino_id' => crearCuentaEnMoneda(crearMonedaUsd())->id,
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    expect($response->json('props.conteoPorTipo'))->toBe([
+        'Venta' => 3,
+        'Gasto' => 1,
+        'Ingreso' => 2,
+        'Transferencia' => 1,
+    ]);
+
+    // Filtrar por tipo=Venta no debe "colapsar" el conteo de los otros 3 tipos a cero —
+    // los widgets siguen siendo un resumen de todo lo que hay bajo fecha/usuario/buscar.
+    $responseFiltrada = $this->get(route('reportes.rastreo_operaciones', ['tipo' => 'Venta']), ['X-Inertia' => 'true']);
+    expect($responseFiltrada->json('props.conteoPorTipo'))->toBe([
+        'Venta' => 3,
+        'Gasto' => 1,
+        'Ingreso' => 2,
+        'Transferencia' => 1,
+    ]);
+    expect(collect($responseFiltrada->json('props.operaciones.data')))->toHaveCount(3);
 });

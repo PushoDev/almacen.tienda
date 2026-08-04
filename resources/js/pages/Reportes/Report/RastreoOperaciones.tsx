@@ -18,7 +18,7 @@ import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem, User } from '@/types';
 import { Head, router } from '@inertiajs/react';
-import { ChevronDown, ChevronRight, FileText, History, Search } from 'lucide-react';
+import { ArrowLeftRight, ChevronDown, ChevronRight, FileText, History, Search, ShoppingBag, TrendingDown, TrendingUp } from 'lucide-react';
 import React, { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -36,6 +36,11 @@ const breadcrumbs: BreadcrumbItem[] = [
 interface DetalleProducto {
     producto: string;
     imagen_url: string | null;
+    marca: string | null;
+    modelo: string | null;
+    capacidad: string | null;
+    color: string | null;
+    codigo: string | null;
     cantidad: number;
     precio: number;
     costo_unitario: number | null;
@@ -166,6 +171,12 @@ interface RastreoOperacionesPageProps {
         buscar?: string;
     };
     puedeVerCosto: boolean;
+    conteoPorTipo: {
+        Venta: number;
+        Gasto: number;
+        Ingreso: number;
+        Transferencia: number;
+    };
 }
 
 const fmt = (n: number | null | undefined, sufijo = '') => (n === null || n === undefined ? '—' : `$${n.toFixed(2)}${sufijo}`);
@@ -191,6 +202,16 @@ const colorTipo = (tipo: string) => {
             return 'border-border bg-muted text-foreground';
     }
 };
+
+// Widgets informativos sobre el filtro: mismo orden fijo y familia de color que colorTipo()
+// arriba, solo que como ícono en vez de texto (el valor grande se queda en tinta neutra —
+// el color identifica la categoría, no decora el número).
+const resumenTipos = [
+    { tipo: 'Venta' as const, label: 'Ventas', icon: ShoppingBag, iconClass: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400' },
+    { tipo: 'Gasto' as const, label: 'Gastos', icon: TrendingDown, iconClass: 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400' },
+    { tipo: 'Ingreso' as const, label: 'Ingresos', icon: TrendingUp, iconClass: 'bg-sky-50 text-sky-600 dark:bg-sky-950/30 dark:text-sky-400' },
+    { tipo: 'Transferencia' as const, label: 'Transferencias', icon: ArrowLeftRight, iconClass: 'bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400' },
+];
 
 // ─── Componente: DetalleVentaExpandido (contenido de la fila colapsable) ─────
 
@@ -294,7 +315,7 @@ const DetalleVentaExpandido = ({ detalle }: { detalle: DetalleVenta }) => (
                                 <th className="px-4 py-1.5 text-left font-medium uppercase">Monto Original</th>
                                 <th className="px-4 py-1.5 text-left font-medium uppercase">Equiv. USD</th>
                                 <th className="px-4 py-1.5 text-left font-medium uppercase">Tasa Cambio</th>
-                                <th className="px-4 py-1.5 text-left font-medium uppercase">Destino</th>
+                                <th className="px-4 py-1.5 text-left font-medium uppercase">Cuenta Destino</th>
                                 <th className="px-4 py-1.5 text-left font-medium uppercase">Vía</th>
                             </tr>
                         </thead>
@@ -356,11 +377,24 @@ const DetalleVentaExpandido = ({ detalle }: { detalle: DetalleVenta }) => (
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-sidebar-border/40">
-                        {detalle.productos.map((d, i) => (
+                        {detalle.productos.map((d, i) => {
+                            // Marca/Modelo y Capacidad/Color solo se muestran si el producto los
+                            // tiene cargados — mismo criterio que ya usa Productos/Index.tsx, sin
+                            // "Sin marca"/"N/A" de relleno acá porque es una fila compacta.
+                            const marcaModelo = [d.marca, d.modelo].filter(Boolean).join(' - ');
+                            const capacidadColor = [d.capacidad, d.color].filter(Boolean).join(' · ');
+                            const subtitulo = [marcaModelo, capacidadColor].filter(Boolean).join(' | ');
+                            return (
                             <tr key={i}>
-                                <td className="flex items-center gap-2 px-4 py-1.5">
-                                    {d.imagen_url && <img src={d.imagen_url} alt="" className="h-6 w-6 rounded object-cover" />}
-                                    {d.producto}
+                                    <td className="px-4 py-1.5">
+                                        <div className="flex items-center gap-2">
+                                            {d.imagen_url && <img src={d.imagen_url} alt="" className="h-6 w-6 shrink-0 rounded object-cover" />}
+                                            <div>
+                                                <div>{d.producto}</div>
+                                                {subtitulo && <div className="text-muted-foreground text-[11px]">{subtitulo}</div>}
+                                                {d.codigo && <div className="text-muted-foreground font-mono text-[10px]">{d.codigo}</div>}
+                                            </div>
+                                        </div>
                                 </td>
                                 <td className="px-4 py-1.5">{d.cantidad}</td>
                                 <td className="px-4 py-1.5 font-mono">{fmt(d.precio)}</td>
@@ -369,7 +403,8 @@ const DetalleVentaExpandido = ({ detalle }: { detalle: DetalleVenta }) => (
                                 <td className="px-4 py-1.5 font-mono text-amber-500">{fmt(d.comision_unitaria)}</td>
                                 <td className="px-4 py-1.5 font-mono">{fmt(d.subtotal)}</td>
                             </tr>
-                        ))}
+                            );
+                        })}
                     </tbody>
                     <tfoot className="border-t border-sidebar-border/60 font-semibold">
                         <tr>
@@ -481,7 +516,7 @@ const DetalleMovimientoExpandido = ({
 
 // ─── Página Principal ────────────────────────────────────────────────────────
 
-export default function RastreoOperacionesPage({ operaciones, usuarios, filtros, puedeVerCosto }: RastreoOperacionesPageProps) {
+export default function RastreoOperacionesPage({ operaciones, usuarios, filtros, puedeVerCosto, conteoPorTipo }: RastreoOperacionesPageProps) {
     const [fecha, setFecha] = useState(filtros.fecha || '');
     const [userId, setUserId] = useState(filtros.user_id || 'all');
     const [tipo, setTipo] = useState(filtros.tipo || 'all');
@@ -591,6 +626,25 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                     />
                 </div>
                 <Separator className="col-span-4" />
+
+                {/* Widgets informativos: cantidad por tipo de operación (respeta fecha/usuario/
+                    buscar, no el filtro de Tipo, para que sigan sirviendo como resumen aunque
+                    la tabla esté filtrada a un solo tipo) */}
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                    {resumenTipos.map(({ tipo, label, icon: Icon, iconClass }) => (
+                        <Card key={tipo}>
+                            <CardContent className="flex items-center gap-3 p-4">
+                                <div className={`rounded-lg p-2 ${iconClass}`}>
+                                    <Icon className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">{label}</p>
+                                    <p className="text-2xl font-semibold">{conteoPorTipo[tipo]}</p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
 
                 {/* Filtros */}
                 <Card>
