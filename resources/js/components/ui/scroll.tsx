@@ -45,7 +45,7 @@ function ScrollProgress({
                     progressProps?.className,
                 )}
             />
-            {containerRef && (
+            {children && (
                 <div
                     ref={containerRef}
                     data-slot="scroll-progress-container"
