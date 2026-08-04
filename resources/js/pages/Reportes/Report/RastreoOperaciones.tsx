@@ -179,6 +179,8 @@ interface RastreoOperacionesPageProps {
     };
 }
 
+// $ fijo: solo para montos que son SIEMPRE USD (detalle de Venta, comisiones, equivalente_usd).
+// Para montos que pueden estar en otra moneda (ej. pagos.monto_original), usar formatMonto().
 const fmt = (n: number | null | undefined, sufijo = '') => (n === null || n === undefined ? '—' : `$${n.toFixed(2)}${sufijo}`);
 
 // El detalle de Venta siempre está en USD; Gasto/Ingreso/Transferencia pueden ser
@@ -324,7 +326,9 @@ const DetalleVentaExpandido = ({ detalle }: { detalle: DetalleVenta }) => (
                                 <tr key={i}>
                                     <td className="px-4 py-1.5 capitalize">{p.metodo}</td>
                                     <td className="px-4 py-1.5">{p.moneda ?? '—'}</td>
-                                    <td className="px-4 py-1.5 font-mono">{fmt(p.monto_original)}</td>
+                                    <td className="px-4 py-1.5 font-mono">
+                                        {p.moneda ? formatMonto(p.monto_original, p.moneda) : fmt(p.monto_original)}
+                                    </td>
                                     <td className="px-4 py-1.5 font-mono">{fmt(p.equivalente_usd)}</td>
                                     <td className="px-4 py-1.5">{p.tasa_cambio}</td>
                                     <td className="px-4 py-1.5">{p.destino}</td>

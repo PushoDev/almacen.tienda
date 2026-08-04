@@ -71,10 +71,26 @@ Ya confirmado en vivo (ver conversación): `mergeBindings($query)` + `->where('t
 - [x] **Resuelto por diseño, no hizo falta el fix manual** — la Fase 1 no reintrodujo `mergeBindings()`+`DB::raw()`, se implementó con `DB::query()->fromSub($queryA->unionAll($queryB)..., 'alias')` (ver nota en Fase 1), que ancla los bindings del subquery al bucket `from` y nunca los deja en el orden ambiguo que causaba B9.
 - [x] **Actualización (2026-08-03):** ahora SÍ hay un `->where('tipo', ...)` posterior al UNION (filtro nuevo de Tipo de Operación) — pero se aplica con el builder fluido normal de Laravel sobre la query externa que ya devolvió `fromSub()` (`DB::query()->fromSub(...)->when(...)->where('tipo', ...)`), no con `mergeBindings()` manual. Laravel ordena los buckets de bindings automáticamente en ese flujo; el bug B9 era específicamente por mezclar bindings a mano. Confirmado con test de filtro de tipo + los tests de fecha/usuario ya existentes, todos combinando fecha+usuario+tipo sin corromper resultados.
 
-## Fase 3 — Filas colapsables para Venta, con detalle de productos
+## Fase 3 — Filas colapsables para Venta, con detalle de productos — CERRADA
 
-- [ ] Backend: para cada fila de tipo Venta, cargar sus `venta_detalles` (producto, cantidad, precio_venta, subtotal). Evaluar costo de performance — son queries adicionales por fila visible (25/página), no un problema serio a esa escala, pero revisar si conviene eager-load en bloque en vez de N+1.
-- [ ] Frontend: fila padre (Venta) con ícono de expandir/colapsar; al expandir, sub-tabla con columnas Nombre_Producto, Cantidad, Precio, Subtotal. Gasto/Ingreso/Transferencia quedan como fila simple, sin expandir.
+- [x] Backend: cada fila de tipo Venta trae su detalle completo vía `transformarVenta()` — `venta->detalles.producto` viene eager-cargado sobre el batch ya paginado (no N+1 por fila visible).
+- [x] Frontend: fila padre (Venta) con ícono de expandir/colapsar (`DetalleVentaExpandido`); al expandir, sub-tabla "Productos Vendidos" con Producto, Cantidad, Precio Unitario, Costo Unitario, Ganancia Unitaria, Comisión Unit., Subtotal (7 columnas admin/moderador, 5 para vendedor — costo/ganancia gateados por `puedeVerCosto`, ver fixes de seguridad abajo). Gasto/Ingreso/Transferencia quedan como fila simple sin tabla de productos, pero sí tienen su propio detalle colapsable (`DetalleMovimientoExpandido`, Fase 1).
+- [x] Enriquecido (2026-08-04, pedido explícito tras ver la vista en vivo): cada producto muestra además Marca/Modelo/Capacidad/Color (línea chica bajo el nombre) y Código (mono), mismo criterio visual que `Productos/Index.tsx`. Sin gate de rol — es identificación del producto, no costo/margen.
+
+## Auditoría de código y fixes de seguridad (2026-08-04)
+
+No es una fase nueva del plan original — surgió de pedir explícitamente una revisión de código del controller/frontend ya escrito. Encontrado y arreglado en la misma sesión:
+
+- [x] **Bug de control de acceso — gate incompleto en `resumen_financiero`.** `transformarVenta()` gateaba costo/ganancia por producto (`productos_footer`) pero el bloque `resumen_financiero` (ganancia_operacional, ganancia_agencia, ganancia_perdida_cambiaria, ganancia_real_total) se mandaba sin gate — un `vendedor` no veía el margen por producto pero sí veía el margen agregado de la venta en la card de arriba. Fix: mismo `$puedeVerCosto ? ... : null` en los 4 campos. Tests: gate oculto para vendedor / visible para admin.
+- [x] **Scope por rol — vendedor solo ve sus propias operaciones.** `$userIdFiltro = $puedeVerCosto ? $request->input('user_id') : $request->user()->id` fuerza el propio id e ignora cualquier `user_id` pasado por query string (test cubre el intento de bypass explícito). Aplica a los 4 tipos vía `construirSubqueryMovimiento()`. El prop `usuarios` (lista completa de nombres para el filtro) ahora solo se manda si `$puedeVerCosto`.
+- [x] `Reportes/Index.tsx`: "Auditoría y Rastreo" pasó a ser la primera sección para todos los roles; para `vendedor` se ocultan las demás secciones y el widget de gráficos (`ChartsReportePage`, datos de ejemplo hardcodeados) — vendedor solo ve la card de Rastreo de Operaciones. **Caveat:** esto es solo UI, no reemplaza el gate de ruta que sigue pendiente (⚠️4 / Fase 6).
+- [x] Bug de `ScrollProgress` encontrado en el camino (`resources/js/components/ui/scroll.tsx`) — `{containerRef && (...)}` siempre era verdadero porque `containerRef` es un objeto ref, no el valor de `children`; fix: `{children && (...)}`. Corregía un hueco visual en las ~28 páginas que usan `<ScrollProgress />` sin children, verificado que no rompe el único uso con children (`Vendor/Show.tsx`).
+- [x] **Bug de moneda incorrecta en "Monto Original" (2026-08-04):** la tabla "Detalles de Pago" (dentro del detalle colapsable de Venta) mostraba `fmt(p.monto_original)`, que antepone `$` fijo sin mirar la moneda real del pago — si un cliente pagó en CUP, la fila mostraba "$500.00" en vez de "CUP 500.00", contradiciendo la columna "Moneda" de al lado. Mismo tipo de ambigüedad que ya se había resuelto en la tabla principal con `formatMonto()`, pero esa tabla de pagos usaba el helper viejo y no quedó cubierta por ese fix. Corregido: usa `formatMonto(p.monto_original, p.moneda)` cuando la moneda viene informada.
+- [x] **Limpieza de eager-loads muertos (2026-08-04):** `mensajeroMoneda` y la parte `.moneda` de `mensajeroCuenta.moneda` se cargaban en el controller pero no se usan en ningún lado de `transformarVenta()` (el bloque `mensajero` solo lee `mensajeroCuenta?->nombre_cuenta`). Quitados; `gestorCuenta.moneda` se dejó igual porque sí se usa (`gestorCuenta?->moneda?->codigo_moneda`).
+
+**Widgets KPI (2026-08-04, pedido emergente, no estaba en el plan original de fases):** 4 stat tiles (Ventas/Gastos/Ingresos/Transferencias, conteo por tipo) arriba de la sección de Filtros. Backend clona las 4 subqueries antes de que `unionAll()` las consuma y cuenta con `->distinct()->count()` (evita inflar por los `leftJoin`). Respeta fecha/usuario/buscar pero no el filtro de tipo, a propósito, para que sigan sirviendo de resumen aunque la tabla esté filtrada a un solo tipo.
+
+Suite al cierre de esta sesión: 126 tests, 375 assertions, todos en verde. Type-check limpio.
 
 ## Fase 4 — "Stock final" (según decisión ⚠️2)
 
@@ -83,18 +99,18 @@ Si se elige la opción (A) recomendada:
 - [ ] `VentaController` (al crear venta) graba el stock del producto en ese almacén **después** de aplicar el movimiento — mismo momento en que ya se hace `decrement` de `AlmacenProducto.cantidad`.
 - [ ] El reporte muestra ese valor para ventas nuevas; para las anteriores a este cambio, la columna queda vacía/"No disponible" — comunicarlo así, no inventar un valor.
 
-## Fase 5 — Resto de columnas (Receptor, Observaciones/Detalles)
+## Fase 5 — Resto de columnas (Receptor, Observaciones/Detalles) — Receptor cerrado, Observaciones a medias
 
-- [ ] Receptor: usar `venta.destinatario` (ya existe — nombre, carnet, teléfono, dirección).
-- [ ] Observaciones/Detalles: según decisión ⚠️3.
+- [x] Receptor: `venta.destinatario` (nombre completo, carnet, teléfono, dirección) — card "Receptor Registrado" en el detalle colapsable, visible para todos los roles (no es dato de costo/margen).
+- [ ] Observaciones/Detalles: sigue sin un campo de nota libre nuevo — hoy la columna "Detalles" muestra `venta.estado` (para Venta) o `mf.descripcion` (para Gasto/Ingreso/Transferencia), no una observación dedicada. Podría considerarse resuelto por la opción "derivable" (⚠️3), o seguir abierto — no se decidió explícitamente con el cliente todavía.
 
-## Fase 6 — Resto de hallazgos ya identificados (limpieza)
+## Fase 6 — Resto de hallazgos ya identificados (limpieza) — 3 de 5 cerrados
 
-- [ ] `CONCAT()` en las subconsultas de Venta/Cierre → reemplazar por construcción del texto en PHP después de paginar (mismo patrón usado en Cuentas para evitar el problema de portabilidad SQLite/MySQL).
-- [ ] Drill-down real: cada fila enlaza al registro de origen (`ventas.show`, `transacciones.show`) — mismo patrón implementado en Cuentas.
-- [ ] Monto: distinguir moneda (USD/CUP/MLC) en vez de mostrar el número crudo sin símbolo.
-- [ ] Exportar PDF: hoy solo exporta la página actual (25 filas) sin avisar — decidir si se deja así con una aclaración en el botón, o se cambia para exportar todos los resultados filtrados (requiere traer todo el resultset sin paginar en el momento de exportar).
-- [ ] Rol de acceso, según decisión ⚠️4.
+- [x] `CONCAT()` — ya no existe en el controller actual (confirmado con grep 2026-08-04); el texto de destinatario se arma con `trim()` en PHP después de paginar, mismo patrón usado en Cuentas.
+- [ ] Drill-down real: cada fila enlaza al registro de origen (`ventas.show`, `transacciones.show`) — confirmado que sigue sin implementar (sin `Link`/`href` a `ventas.show`, las filas solo colapsan).
+- [x] Monto: moneda explícita — resuelto en Fase 1 (`formatMonto()` antepone el código de moneda siempre, `"USD 74.00"` / `"CUP 87750.00"`, nunca un número pelado).
+- [ ] Exportar PDF: sigue exportando solo `operaciones.data` (la página actual, 25 filas) sin avisar — decidir si se deja así con una aclaración en el botón, o se cambia para exportar todos los resultados filtrados.
+- [x] **Rol de acceso — cerrado (2026-08-04).** Con los gates de campo/scope ya resueltos, quedaba el hueco de que los otros 14 reportes del módulo (no Rastreo de Operaciones, que ya tiene su propio scope interno) eran alcanzables por cualquier usuario autenticado con solo escribir la URL. Fix en `routes/acciones/reportes.php`: se agrupan esos 14 (+`compras_por_proveedor`, que no está en el menú pero comparte el mismo problema) bajo `Route::middleware('admin')` — alias ya existente en `bootstrap/app.php` → `EnsureUserIsAdmin`, que pese al nombre permite `admin` **y** `moderador` (`in_array(role, ['admin','moderador'])`), el mismo criterio que `puedeVerCosto` usa en todo el módulo. Un vendedor que entre por URL directa ahora recibe 403 (peticiones Inertia/JSON) o redirect a `route('vendedor')` (peticiones normales) — mismo comportamiento que ya tenían otras zonas admin-only del sistema. `index` y `rastreo_operaciones` quedan fuera del gate a propósito (todos los roles deben poder entrar a la página principal de Reportes y a Rastreo de Operaciones, que ya filtra internamente). No se tocó `ReporteController.php` — el `abort(403)` que ya tenía `historialCostoPrecio()` queda como una segunda capa redundante, sin necesidad de quitarlo.
 
 ## Fase 7 (prioridad media, emergente) — Reintegrar Compras
 
