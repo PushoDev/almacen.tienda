@@ -234,6 +234,7 @@ class CompraController extends Controller
             $total = collect($validated['productos'])->sum(fn($p) => $p['cantidad'] * $p['precio']);
 
             $compraData = [
+                'user_id' => $request->user()->id,
                 'proveedor_id' => $tipoProveedor === 'proveedor' ? $proveedor->id : null,
                 'cliente_id' => $tipoProveedor === 'cliente' ? $cliente->id : null,
                 'fecha_compra' => $validated['fecha'],

@@ -18,7 +18,7 @@ import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
 import { BreadcrumbItem, User } from '@/types';
 import { Head, router } from '@inertiajs/react';
-import { ArrowLeftRight, ChevronDown, ChevronRight, FileText, History, Search, ShoppingBag, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowLeftRight, ChevronDown, ChevronRight, FileText, History, PackagePlus, Search, ShoppingBag, TrendingDown, TrendingUp } from 'lucide-react';
 import React, { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -137,6 +137,39 @@ interface DetalleMovimiento {
     destino: EntidadMovimiento | null;
 }
 
+interface DetallePagoCompra {
+    tipo_pago: string;
+    monto: number;
+    // Nombre de la cuenta o cliente que pagó — '—' cuando tipo_pago es 'deuda_proveedor'
+    // (esa fila de compra_pago no representa una cuenta/cliente real, ver render de la fila).
+    origen: string;
+}
+
+interface DetalleProductoCompra {
+    producto: string;
+    imagen_url: string | null;
+    marca: string | null;
+    modelo: string | null;
+    capacidad: string | null;
+    color: string | null;
+    codigo: string | null;
+    cantidad: number;
+    precio: number;
+    subtotal: number;
+}
+
+interface DetalleCompra {
+    info_general: {
+        fecha: string;
+        tipo_compra: string;
+    };
+    // Quién recibió el pago — solo uno de los dos, nunca ambos.
+    proveedor: string | null;
+    cliente: string | null;
+    pagos: DetallePagoCompra[];
+    productos: DetalleProductoCompra[];
+}
+
 interface Operacion {
     id: number;
     fecha: string;
@@ -149,6 +182,7 @@ interface Operacion {
     descripcion: string;
     detalle_venta: DetalleVenta | null;
     detalle_movimiento: DetalleMovimiento | null;
+    detalle_compra: DetalleCompra | null;
 }
 
 interface PaginatedOperaciones {
@@ -176,6 +210,9 @@ interface RastreoOperacionesPageProps {
         Gasto: number;
         Ingreso: number;
         Transferencia: number;
+        // Ausente por completo para vendedor (Compra es admin/moderador-only) — nunca 0
+        // implícito, la clave simplemente no viene en el payload.
+        Compra?: number;
     };
 }
 
@@ -200,6 +237,8 @@ const colorTipo = (tipo: string) => {
             return 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/20 dark:text-sky-300';
         case 'Transferencia':
             return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300';
+        case 'Compra':
+            return 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/20 dark:text-indigo-300';
         default:
             return 'border-border bg-muted text-foreground';
     }
@@ -248,6 +287,19 @@ const coloresPago = [
 ];
 const colorPago = (index: number) => coloresPago[index % coloresPago.length];
 
+// Compra: quién pagó — badges por pago cuando es pago_cash (puede ser varias cuentas y/o
+// clientes a la vez, el mismo caso de "varios orígenes en una operación" que ya resolvimos
+// para venta.pagos, aplicado acá al lado que sale en vez del que entra). compra_pago sí
+// guarda una fila con tipo_pago 'deuda_proveedor' cuando la compra es a crédito, pero esa
+// fila no representa una cuenta/cliente real que pagó — se filtra, deuda_proveedor no
+// llena "Cuenta Envía" (no salió dinero de ninguna cuenta del sistema).
+const pagosCompraConOrigen = (op: Operacion) => (op.detalle_compra?.pagos ?? []).filter((p) => p.tipo_pago !== 'deuda_proveedor');
+
+// Cuenta que Recibe / Monto para Compra: quien recibe el pago es siempre uno solo
+// (proveedor o cliente-proveedor), a diferencia de "Cuenta Envía" que puede ser varios —
+// no hace falta badges acá, un nombre y el total alcanzan.
+const cuentaRecibeCompra = (op: Operacion) => op.detalle_compra?.proveedor ?? op.detalle_compra?.cliente ?? '—';
+
 // Widgets informativos sobre el filtro: mismo orden fijo y familia de color que colorTipo()
 // arriba, solo que como ícono en vez de texto (el valor grande se queda en tinta neutra —
 // el color identifica la categoría, no decora el número).
@@ -256,6 +308,7 @@ const resumenTipos = [
     { tipo: 'Gasto' as const, label: 'Gastos', icon: TrendingDown, iconClass: 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400' },
     { tipo: 'Ingreso' as const, label: 'Ingresos', icon: TrendingUp, iconClass: 'bg-sky-50 text-sky-600 dark:bg-sky-950/30 dark:text-sky-400' },
     { tipo: 'Transferencia' as const, label: 'Transferencias', icon: ArrowLeftRight, iconClass: 'bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400' },
+    { tipo: 'Compra' as const, label: 'Compras', icon: PackagePlus, iconClass: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/30 dark:text-indigo-400' },
 ];
 
 // ─── Componente: DetalleVentaExpandido (contenido de la fila colapsable) ─────
@@ -561,6 +614,113 @@ const DetalleMovimientoExpandido = ({
     </div>
 );
 
+// ─── Componente: DetalleCompraExpandido (sin costo/ganancia — la compra ES el costo) ──
+
+const DetalleCompraExpandido = ({ detalle, monto, usuario }: { detalle: DetalleCompra; monto: number; usuario: string }) => (
+    <div className="space-y-4 py-2">
+        <div className="text-muted-foreground flex flex-wrap gap-x-6 gap-y-1 text-xs">
+            <span>
+                <strong className="text-foreground">Fecha:</strong> {new Date(detalle.info_general.fecha).toLocaleDateString()}
+            </span>
+            <span>
+                <strong className="text-foreground">Tipo de Compra:</strong>{' '}
+                {detalle.info_general.tipo_compra === 'deuda_proveedor' ? 'Deuda con proveedor' : 'Pago al contado'}
+            </span>
+            <span>
+                <strong className="text-foreground">Registrado por:</strong> {usuario}
+            </span>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Card className="bg-background/60">
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-xs font-semibold uppercase">Proveedor / Cliente</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-1 text-xs">
+                    <p><strong>Nombre:</strong> {detalle.proveedor ?? detalle.cliente ?? '—'}</p>
+                    <p><strong>Total Compra:</strong> {fmt(monto)}</p>
+                </CardContent>
+            </Card>
+        </div>
+
+        {detalle.pagos.length > 0 && (
+            <Card className="bg-background/60">
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-xs font-semibold uppercase">Métodos de Pago</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                    <table className="min-w-full text-xs">
+                        <thead>
+                            <tr className="text-muted-foreground">
+                                <th className="px-4 py-1.5 text-left font-medium uppercase">Tipo</th>
+                                <th className="px-4 py-1.5 text-left font-medium uppercase">Origen</th>
+                                <th className="px-4 py-1.5 text-left font-medium uppercase">Monto</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-sidebar-border/40">
+                            {detalle.pagos.map((p, i) => (
+                                <tr key={i}>
+                                    <td className="px-4 py-1.5 capitalize">{p.tipo_pago === 'deuda_proveedor' ? 'Deuda proveedor' : p.tipo_pago}</td>
+                                    <td className="px-4 py-1.5">{p.origen}</td>
+                                    <td className="px-4 py-1.5 font-mono">{fmt(p.monto)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </CardContent>
+            </Card>
+        )}
+
+        <Card className="bg-background/60">
+            <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-semibold uppercase">Productos Comprados</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+                <table className="min-w-full text-xs">
+                    <thead>
+                        <tr className="text-muted-foreground">
+                            <th className="px-4 py-1.5 text-left font-medium uppercase">Producto</th>
+                            <th className="px-4 py-1.5 text-left font-medium uppercase">Cantidad</th>
+                            <th className="px-4 py-1.5 text-left font-medium uppercase">Precio Unitario</th>
+                            <th className="px-4 py-1.5 text-left font-medium uppercase">Subtotal</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-sidebar-border/40">
+                        {detalle.productos.map((p, i) => {
+                            const marcaModelo = [p.marca, p.modelo].filter(Boolean).join(' - ');
+                            const capacidadColor = [p.capacidad, p.color].filter(Boolean).join(' · ');
+                            const subtitulo = [marcaModelo, capacidadColor].filter(Boolean).join(' | ');
+                            return (
+                                <tr key={i}>
+                                    <td className="px-4 py-1.5">
+                                        <div className="flex items-center gap-2">
+                                            {p.imagen_url && <img src={p.imagen_url} alt="" className="h-6 w-6 shrink-0 rounded object-cover" />}
+                                            <div>
+                                                <div>{p.producto}</div>
+                                                {subtitulo && <div className="text-muted-foreground text-[11px]">{subtitulo}</div>}
+                                                {p.codigo && <div className="text-muted-foreground font-mono text-[10px]">{p.codigo}</div>}
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-4 py-1.5">{p.cantidad}</td>
+                                    <td className="px-4 py-1.5 font-mono">{fmt(p.precio)}</td>
+                                    <td className="px-4 py-1.5 font-mono">{fmt(p.subtotal)}</td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                    <tfoot className="border-t border-sidebar-border/60 font-semibold">
+                        <tr>
+                            <td colSpan={3} className="px-4 py-1.5 text-right">Total Compra:</td>
+                            <td className="px-4 py-1.5 font-mono">{fmt(monto)}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </CardContent>
+        </Card>
+    </div>
+);
+
 // ─── Página Principal ────────────────────────────────────────────────────────
 
 export default function RastreoOperacionesPage({ operaciones, usuarios, filtros, puedeVerCosto, conteoPorTipo }: RastreoOperacionesPageProps) {
@@ -665,7 +825,11 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                 <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     <HeadingSmall
                         title="Auditoría General de Operaciones"
-                        description="Ventas, Gastos, Ingresos y Transferencias del sistema, con detalle completo por operación. Cierres de caja y compras se agregan en fases siguientes."
+                        description={
+                            puedeVerCosto
+                                ? 'Ventas, Gastos, Ingresos, Transferencias y Compras del sistema, con detalle completo por operación. Cierres de caja se agregan en fases siguientes.'
+                                : 'Ventas, Gastos, Ingresos y Transferencias del sistema, con detalle completo por operación. Cierres de caja se agregan en fases siguientes.'
+                        }
                     />
                     <History
                         size={70}
@@ -676,9 +840,12 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
 
                 {/* Widgets informativos: cantidad por tipo de operación (respeta fecha/usuario/
                     buscar, no el filtro de Tipo, para que sigan sirviendo como resumen aunque
-                    la tabla esté filtrada a un solo tipo) */}
-                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                    {resumenTipos.map(({ tipo, label, icon: Icon, iconClass }) => (
+                    la tabla esté filtrada a un solo tipo). Compra solo se muestra a
+                    admin/moderador — conteoPorTipo.Compra ni viene en el payload para
+                    vendedor (ver RastreoOperacionesController), mismo gate que el resto de
+                    los datos de Compra en este reporte. */}
+                <div className={`grid grid-cols-2 gap-4 md:grid-cols-4 ${puedeVerCosto ? 'lg:grid-cols-5' : ''}`}>
+                    {resumenTipos.filter(({ tipo }) => tipo !== 'Compra' || puedeVerCosto).map(({ tipo, label, icon: Icon, iconClass }) => (
                         <Card key={tipo}>
                             <CardContent className="flex items-center gap-3 p-4">
                                 <div className={`rounded-lg p-2 ${iconClass}`}>
@@ -731,6 +898,7 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                                         <SelectItem value="Gasto">Gasto</SelectItem>
                                         <SelectItem value="Ingreso">Ingreso</SelectItem>
                                         <SelectItem value="Transferencia">Transferencia</SelectItem>
+                                        {puedeVerCosto && <SelectItem value="Compra">Compra</SelectItem>}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -786,7 +954,7 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                                     ) : (
                                         ops.map((op, idx) => {
                                             const rowKey = `${op.tipo}-${op.id}-${idx}`;
-                                            const esColapsable = Boolean(op.detalle_venta) || Boolean(op.detalle_movimiento);
+                                            const esColapsable = Boolean(op.detalle_venta) || Boolean(op.detalle_movimiento) || Boolean(op.detalle_compra);
                                             const expandida = expandedRow === rowKey;
                                             return (
                                                 <React.Fragment key={rowKey}>
@@ -811,10 +979,34 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                                                             </div>
                                                         </td>
                                                         <td className="px-6 py-4 text-sm whitespace-nowrap">
-                                                            {cuentaEnvia(op)}
+                                                            {op.tipo === 'Compra' ? (
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {pagosCompraConOrigen(op).length > 0
+                                                                        ? pagosCompraConOrigen(op).map((p, i) => (
+                                                                              <Badge key={i} variant="outline" className={`font-normal whitespace-nowrap ${colorPago(i)}`}>
+                                                                                  {p.origen}
+                                                                              </Badge>
+                                                                          ))
+                                                                        : '—'}
+                                                                </div>
+                                                            ) : (
+                                                                cuentaEnvia(op)
+                                                            )}
                                                         </td>
                                                         <td className="px-6 py-4 text-sm font-mono whitespace-nowrap">
-                                                            {montoEnvia(op)}
+                                                            {op.tipo === 'Compra' ? (
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {pagosCompraConOrigen(op).length > 0
+                                                                        ? pagosCompraConOrigen(op).map((p, i) => (
+                                                                              <Badge key={i} variant="outline" className={`font-normal whitespace-nowrap ${colorPago(i)}`}>
+                                                                                  {formatMonto(p.monto, 'USD')}
+                                                                              </Badge>
+                                                                          ))
+                                                                        : '—'}
+                                                                </div>
+                                                            ) : (
+                                                                montoEnvia(op)
+                                                            )}
                                                         </td>
                                                         <td className="px-6 py-4 text-sm">
                                                             {op.tipo === 'Venta' ? (
@@ -825,6 +1017,8 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                                                                         </Badge>
                                                                     ))}
                                                                 </div>
+                                                            ) : op.tipo === 'Compra' ? (
+                                                                cuentaRecibeCompra(op)
                                                             ) : (
                                                                 cuentaRecibeMovimiento(op)
                                                             )}
@@ -838,6 +1032,8 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                                                                         </Badge>
                                                                     ))}
                                                                 </div>
+                                                            ) : op.tipo === 'Compra' ? (
+                                                                formatMonto(op.monto, op.moneda)
                                                             ) : (
                                                                 montoRecibeMovimiento(op)
                                                             )}
@@ -870,6 +1066,12 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                                                                         monto={parseFloat(op.monto.toString())}
                                                                         moneda={op.moneda}
                                                                         descripcion={op.descripcion}
+                                                                        usuario={op.usuario}
+                                                                    />
+                                                                ) : op.detalle_compra ? (
+                                                                    <DetalleCompraExpandido
+                                                                        detalle={op.detalle_compra}
+                                                                        monto={parseFloat(op.monto.toString())}
                                                                         usuario={op.usuario}
                                                                     />
                                                                 ) : null}

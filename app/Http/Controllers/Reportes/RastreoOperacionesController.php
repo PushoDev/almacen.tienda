@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Reportes;
 
 use App\Http\Controllers\Controller;
+use App\Models\Compra;
 use App\Models\MovimientoFinanciero;
 use App\Models\Venta;
 use Illuminate\Http\Request;
@@ -23,7 +24,7 @@ class RastreoOperacionesController extends Controller
         $request->validate([
             'fecha' => 'nullable|date',
             'user_id' => 'nullable|exists:users,id',
-            'tipo' => 'nullable|in:Venta,Gasto,Ingreso,Transferencia',
+            'tipo' => 'nullable|in:Venta,Gasto,Ingreso,Transferencia,Compra',
             'buscar' => 'nullable|string|max:255',
         ]);
 
@@ -66,6 +67,15 @@ class RastreoOperacionesController extends Controller
         $ingresosSub = $this->construirSubqueryMovimiento($request, 2, 'Ingreso', $buscar, $userIdFiltro);
         $transferenciasSub = $this->construirSubqueryMovimiento($request, 3, 'Transferencia', $buscar, $userIdFiltro);
 
+        // Compra es admin/moderador-only dentro de este reporte (mismo criterio que ya
+        // aplica Cuentas/Show para ocultar Compras a vendedor — es dato de costo). A
+        // diferencia de los otros 4 tipos, no se puede acotar "solo lo mío" para vendedor
+        // sin este gate: compras.user_id recién existe desde 2026-08-06 (ver migración
+        // add_user_id_to_compras_table) y, aunque existiera, vendedor no debería ver costos
+        // de compra en absoluto. Por eso el subquery ni se arma cuando !$puedeVerCosto —
+        // así ?tipo=Compra por URL directa devuelve vacío en vez de filtrar nada.
+        $comprasSub = $puedeVerCosto ? $this->construirSubqueryCompra($request, $buscar, $userIdFiltro) : null;
+
         // Conteo por tipo para los widgets sobre el filtro — respeta fecha/usuario/buscar
         // pero NO el filtro de tipo (si no, al filtrar por "Venta" los otros 3 se irían a
         // cero y dejarían de servir como resumen). Clonamos cada subquery ANTES de
@@ -77,9 +87,17 @@ class RastreoOperacionesController extends Controller
             'Ingreso' => (clone $ingresosSub)->distinct()->count('mf.id'),
             'Transferencia' => (clone $transferenciasSub)->distinct()->count('mf.id'),
         ];
+        if ($comprasSub) {
+            $conteoPorTipo['Compra'] = (clone $comprasSub)->distinct()->count('compras.id');
+        }
+
+        $unionQuery = $ventasSub->unionAll($gastosSub)->unionAll($ingresosSub)->unionAll($transferenciasSub);
+        if ($comprasSub) {
+            $unionQuery->unionAll($comprasSub);
+        }
 
         $pagina = DB::query()
-            ->fromSub($ventasSub->unionAll($gastosSub)->unionAll($ingresosSub)->unionAll($transferenciasSub), 'operaciones_u')
+            ->fromSub($unionQuery, 'operaciones_u')
             ->when($request->filled('tipo'), fn ($q) => $q->where('tipo', $request->input('tipo')))
             ->orderByDesc('fecha')
             ->paginate(25)
@@ -87,7 +105,8 @@ class RastreoOperacionesController extends Controller
 
         $filas = collect($pagina->items());
         $ventaIds = $filas->where('tipo', 'Venta')->pluck('id')->all();
-        $movimientoIds = $filas->where('tipo', '!=', 'Venta')->pluck('id')->all();
+        $compraIds = $filas->where('tipo', 'Compra')->pluck('id')->all();
+        $movimientoIds = $filas->whereNotIn('tipo', ['Venta', 'Compra'])->pluck('id')->all();
 
         $ventasPorId = Venta::with([
             'usuario',
@@ -111,9 +130,22 @@ class RastreoOperacionesController extends Controller
             'proveedorDestino',
         ])->whereIn('id', $movimientoIds)->get()->keyBy('id');
 
-        $operaciones = $filas->map(function ($fila) use ($ventasPorId, $movimientosPorId, $puedeVerCosto) {
+        $comprasPorId = Compra::with([
+            'usuario',
+            'proveedor',
+            'cliente',
+            'productos',
+            'pagos.cuenta',
+            'pagos.cliente',
+        ])->whereIn('id', $compraIds)->get()->keyBy('id');
+
+        $operaciones = $filas->map(function ($fila) use ($ventasPorId, $movimientosPorId, $comprasPorId, $puedeVerCosto) {
             if ($fila->tipo === 'Venta') {
                 return $this->transformarVenta($ventasPorId[$fila->id], $puedeVerCosto);
+            }
+
+            if ($fila->tipo === 'Compra') {
+                return $this->transformarCompra($comprasPorId[$fila->id]);
             }
 
             return $this->transformarMovimiento($movimientosPorId[$fila->id], $fila->tipo);
@@ -162,6 +194,27 @@ class RastreoOperacionesController extends Controller
             }));
     }
 
+    /**
+     * Subquery de compras — solo se invoca cuando $puedeVerCosto (ver comentario en __invoke).
+     * A diferencia de movimientos_financieros, compras.tipo_compra no distingue "Gasto vs
+     * Ingreso vs Transferencia" — todas las compras son un único tipo 'Compra', así que no
+     * hace falta el patrón de un tipo_movimiento_id por llamada.
+     */
+    private function construirSubqueryCompra(Request $request, ?string $buscar, $userIdFiltro)
+    {
+        return DB::table('compras')
+            ->leftJoin('proveedors', 'proveedors.id', '=', 'compras.proveedor_id')
+            ->leftJoin('clientes', 'clientes.id', '=', 'compras.cliente_id')
+            ->select('compras.id', 'compras.fecha_compra as fecha', DB::raw("'Compra' as tipo"))
+            ->when($request->filled('fecha'), fn ($q) => $q->whereDate('compras.fecha_compra', $request->input('fecha')))
+            ->when($userIdFiltro, fn ($q) => $q->where('compras.user_id', $userIdFiltro))
+            ->when($buscar, fn ($q) => $q->where(function ($qq) use ($buscar) {
+                $qq->where('proveedors.nombre_proveedor', 'like', "%{$buscar}%")
+                    ->orWhere('clientes.nombre_cliente', 'like', "%{$buscar}%")
+                    ->orWhere('compras.tipo_compra', 'like', "%{$buscar}%");
+            }));
+    }
+
     private function transformarMovimiento(MovimientoFinanciero $mov, string $tipo): array
     {
         // Transferencia es el único de los 3 que puede cambiar de moneda origen -> destino
@@ -179,6 +232,7 @@ class RastreoOperacionesController extends Controller
             'referencia' => "{$tipo} #{$mov->id}",
             'descripcion' => $mov->descripcion,
             'detalle_venta' => null,
+            'detalle_compra' => null,
             'detalle_movimiento' => [
                 'info_general' => [
                     'fecha' => $mov->fecha_operacion,
@@ -337,6 +391,64 @@ class RastreoOperacionesController extends Controller
                 ],
             ],
             'detalle_movimiento' => null,
+        ];
+    }
+
+    /**
+     * Compra no tiene ni el patrón "pagos con tasa/conversión" de Venta ni el patrón
+     * "origen/destino único" de movimiento — es su propia forma: un proveedor/cliente que
+     * recibe el pago, uno o varios métodos de pago (compra_pago) que salieron del sistema
+     * (o ninguno, si es deuda_proveedor), y una lista de productos comprados. No hay
+     * costo/ganancia que calcular acá — la compra ES el costo.
+     */
+    private function transformarCompra(Compra $compra): array
+    {
+        return [
+            'id' => $compra->id,
+            'fecha' => $compra->fecha_compra,
+            'tipo' => 'Compra',
+            'monto' => (float) $compra->total_compra,
+            'moneda' => 'USD',
+            // Nullable: compras registradas antes de 2026-08-06 no capturaron quién las hizo
+            // (ver migración add_user_id_to_compras_table) — no hay forma de recuperar ese dato.
+            'usuario' => $compra->usuario?->name ?? '—',
+            'user_id' => $compra->user_id,
+            'referencia' => "Compra #{$compra->id}",
+            // compras no tiene columna de descripción/estado propia — el tipo de compra
+            // (deuda_proveedor | pago_cash) es el dato más cercano a "detalle" disponible.
+            'descripcion' => $compra->tipo_compra === 'deuda_proveedor' ? 'Deuda con proveedor' : 'Pago al contado',
+            'detalle_venta' => null,
+            'detalle_movimiento' => null,
+            'detalle_compra' => [
+                'info_general' => [
+                    'fecha' => $compra->fecha_compra,
+                    'tipo_compra' => $compra->tipo_compra,
+                ],
+                // Quién recibió el pago — siempre uno solo (proveedor O cliente-proveedor),
+                // a diferencia de "pagos" abajo que sí puede ser múltiple (varias cuentas).
+                'proveedor' => $compra->proveedor?->nombre_proveedor,
+                'cliente' => $compra->cliente?->nombre_cliente,
+                // Vacío en deuda_proveedor (no sale dinero de ninguna cuenta); una o varias
+                // cuentas/clientes en pago_cash — mismo caso de "varios orígenes en una sola
+                // operación" que ya resolvimos para venta.pagos, aplicado acá al lado que sale.
+                'pagos' => $compra->pagos->map(fn ($pago) => [
+                    'tipo_pago' => $pago->tipo_pago,
+                    'monto' => (float) $pago->monto,
+                    'origen' => $pago->cuenta?->nombre_cuenta ?? $pago->cliente?->nombre_cliente ?? '—',
+                ])->values(),
+                'productos' => $compra->productos->map(fn ($p) => [
+                    'producto' => $p->nombre_producto,
+                    'imagen_url' => $p->imagen_url,
+                    'marca' => $p->marca_producto,
+                    'modelo' => $p->modelo_producto,
+                    'capacidad' => $p->capacidad_producto,
+                    'color' => $p->color_producto,
+                    'codigo' => $p->codigo_producto,
+                    'cantidad' => (int) $p->pivot->cantidad,
+                    'precio' => (float) $p->pivot->precio,
+                    'subtotal' => round((float) $p->pivot->cantidad * (float) $p->pivot->precio, 2),
+                ])->values(),
+            ],
         ];
     }
 }

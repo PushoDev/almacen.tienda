@@ -10,6 +10,7 @@ class Compra extends Model
     use HasFactory;
 
     protected $fillable = [
+        'user_id',
         'proveedor_id',
         'cuenta_id',
         'cliente_id',
@@ -17,6 +18,13 @@ class Compra extends Model
         'total_compra',
         'tipo_compra',
     ];
+
+    // Relación con el usuario que registró la compra (nullable — compras
+    // anteriores a 2026-08-06 no tienen este dato, ver migración add_user_id_to_compras_table)
+    public function usuario()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
 
     // Relación con proveedor
     public function proveedor()
