@@ -235,6 +235,19 @@ const tasaOperacion = (op: Operacion) => {
     return tasa !== null && tasa !== undefined ? tasa : '—';
 };
 
+// Colores de badge por pago dentro de una Venta — sin relación con colorTipo(), sirven
+// para identificar visualmente el mismo pago entre las columnas Cuenta que Recibe / Monto /
+// Tasa de la Operación (mismo índice de pago = mismo color). Cicla si hay más de 6 pagos.
+const coloresPago = [
+    'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/20 dark:text-violet-300',
+    'border-pink-200 bg-pink-50 text-pink-700 dark:border-pink-800 dark:bg-pink-950/20 dark:text-pink-300',
+    'border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-800 dark:bg-cyan-950/20 dark:text-cyan-300',
+    'border-lime-200 bg-lime-50 text-lime-700 dark:border-lime-800 dark:bg-lime-950/20 dark:text-lime-300',
+    'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/20 dark:text-orange-300',
+    'border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700 dark:border-fuchsia-800 dark:bg-fuchsia-950/20 dark:text-fuchsia-300',
+];
+const colorPago = (index: number) => coloresPago[index % coloresPago.length];
+
 // Widgets informativos sobre el filtro: mismo orden fijo y familia de color que colorTipo()
 // arriba, solo que como ícono en vez de texto (el valor grande se queda en tinta neutra —
 // el color identifica la categoría, no decora el número).
@@ -807,8 +820,8 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                                                             {op.tipo === 'Venta' ? (
                                                                 <div className="flex flex-wrap gap-1">
                                                                     {op.detalle_venta?.pagos.map((p, i) => (
-                                                                        <Badge key={i} variant="secondary" className="font-normal whitespace-nowrap">
-                                                                            {p.destino}: {p.moneda ? formatMonto(p.monto_original, p.moneda) : fmt(p.monto_original)}
+                                                                        <Badge key={i} variant="outline" className={`font-normal whitespace-nowrap ${colorPago(i)}`}>
+                                                                            {p.destino}
                                                                         </Badge>
                                                                     ))}
                                                                 </div>
@@ -816,11 +829,31 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                                                                 cuentaRecibeMovimiento(op)
                                                             )}
                                                         </td>
-                                                        <td className="px-6 py-4 text-sm font-mono whitespace-nowrap">
-                                                            {op.tipo === 'Venta' ? '—' : montoRecibeMovimiento(op)}
+                                                        <td className="px-6 py-4 text-sm font-mono">
+                                                            {op.tipo === 'Venta' ? (
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {op.detalle_venta?.pagos.map((p, i) => (
+                                                                        <Badge key={i} variant="outline" className={`font-normal whitespace-nowrap ${colorPago(i)}`}>
+                                                                            {p.moneda ? formatMonto(p.monto_original, p.moneda) : fmt(p.monto_original)}
+                                                                        </Badge>
+                                                                    ))}
+                                                                </div>
+                                                            ) : (
+                                                                montoRecibeMovimiento(op)
+                                                            )}
                                                         </td>
-                                                        <td className="px-6 py-4 text-sm whitespace-nowrap">
-                                                            {tasaOperacion(op)}
+                                                        <td className="px-6 py-4 text-sm">
+                                                            {op.tipo === 'Venta' ? (
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {op.detalle_venta?.pagos.map((p, i) => (
+                                                                        <Badge key={i} variant="outline" className={`font-normal whitespace-nowrap ${colorPago(i)}`}>
+                                                                            {p.tasa_cambio}
+                                                                        </Badge>
+                                                                    ))}
+                                                                </div>
+                                                            ) : (
+                                                                tasaOperacion(op)
+                                                            )}
                                                         </td>
                                                         <td className="px-6 py-4 text-sm text-muted-foreground">
                                                             {op.descripcion || '-'}
