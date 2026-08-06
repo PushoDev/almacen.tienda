@@ -205,6 +205,36 @@ const colorTipo = (tipo: string) => {
     }
 };
 
+// Cuenta Envía / Cuenta que Recibe (columnas de la tabla, no del detalle expandido):
+// Gasto solo llena origen, Ingreso solo destino, Transferencia llena ambos — mismo dato que
+// ya arma detalle_movimiento.origen/destino en el backend, acá solo se lee para la fila
+// compacta. Venta no tiene "cuenta envía" (el dinero entra de un cliente, no sale de una
+// cuenta del sistema); su "Cuenta que Recibe" se arma aparte con un badge por cada pago,
+// directo desde detalle_venta.pagos, ver el render de la celda.
+const cuentaEnvia = (op: Operacion) => op.detalle_movimiento?.origen?.nombre ?? '—';
+
+const montoEnvia = (op: Operacion) => (op.detalle_movimiento?.origen ? formatMonto(op.monto, op.moneda) : '—');
+
+const cuentaRecibeMovimiento = (op: Operacion) => op.detalle_movimiento?.destino?.nombre ?? '—';
+
+// Transferencia con conversión real: el monto que llegó al destino es monto_destino (ya en
+// la moneda del destino), no 'op.monto' (ese es el lado origen). Sin conversión, o en
+// Ingreso, es el mismo monto de siempre.
+const montoRecibeMovimiento = (op: Operacion) => {
+    const destino = op.detalle_movimiento?.destino;
+    if (!destino) return '—';
+    const monto = op.detalle_movimiento?.info_general.monto_destino ?? op.monto;
+    return formatMonto(monto, destino.moneda ?? op.moneda);
+};
+
+// Solo Transferencia puede tener una tasa de conversión propia de la operación — Gasto/
+// Ingreso son de una sola moneda, y Venta es la suma de varios pagos que ya llevan su
+// propia tasa individual en el detalle (mostrarla acá sería ambigua con más de un pago).
+const tasaOperacion = (op: Operacion) => {
+    const tasa = op.detalle_movimiento?.info_general.tasa_cambio_aplicada;
+    return tasa !== null && tasa !== undefined ? tasa : '—';
+};
+
 // Widgets informativos sobre el filtro: mismo orden fijo y familia de color que colorTipo()
 // arriba, solo que como ícono en vez de texto (el valor grande se queda en tinta neutra —
 // el color identifica la categoría, no decora el número).
@@ -724,18 +754,19 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                             <table className="min-w-full divide-y divide-sidebar-border">
                                 <thead className="bg-sidebar-accent/50">
                                     <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Tipo</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Fecha / Hora</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Referencia</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Usuario</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Cuenta Envía</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Monto</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Cuenta que Recibe</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Monto</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Tasa de la Operación</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Detalles</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-sidebar-border">
                                     {ops.length === 0 ? (
                                         <tr>
-                                            <td colSpan={6} className="px-6 py-10 text-center text-muted-foreground">
+                                            <td colSpan={7} className="px-6 py-10 text-center text-muted-foreground">
                                                 No se encontraron operaciones con los filtros seleccionados.
                                             </td>
                                         </tr>
@@ -762,21 +793,34 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                                                                     <span className="w-4" />
                                                                 )}
                                                                 <Badge variant="outline" className={colorTipo(op.tipo)}>
-                                                                    {op.tipo}
+                                                                    {op.referencia}
                                                                 </Badge>
                                                             </div>
                                                         </td>
                                                         <td className="px-6 py-4 text-sm whitespace-nowrap">
-                                                            {new Date(op.fecha).toLocaleString()}
-                                                        </td>
-                                                        <td className="px-6 py-4 text-sm font-medium whitespace-nowrap">
-                                                            {op.referencia}
-                                                        </td>
-                                                        <td className="px-6 py-4 text-sm whitespace-nowrap">
-                                                            {op.usuario}
+                                                            {cuentaEnvia(op)}
                                                         </td>
                                                         <td className="px-6 py-4 text-sm font-mono whitespace-nowrap">
-                                                            {formatMonto(parseFloat(op.monto.toString()), op.moneda)}
+                                                            {montoEnvia(op)}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-sm">
+                                                            {op.tipo === 'Venta' ? (
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {op.detalle_venta?.pagos.map((p, i) => (
+                                                                        <Badge key={i} variant="secondary" className="font-normal whitespace-nowrap">
+                                                                            {p.destino}: {p.moneda ? formatMonto(p.monto_original, p.moneda) : fmt(p.monto_original)}
+                                                                        </Badge>
+                                                                    ))}
+                                                                </div>
+                                                            ) : (
+                                                                cuentaRecibeMovimiento(op)
+                                                            )}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-sm font-mono whitespace-nowrap">
+                                                            {op.tipo === 'Venta' ? '—' : montoRecibeMovimiento(op)}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-sm whitespace-nowrap">
+                                                            {tasaOperacion(op)}
                                                         </td>
                                                         <td className="px-6 py-4 text-sm text-muted-foreground">
                                                             {op.descripcion || '-'}
@@ -784,7 +828,7 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                                                     </tr>
                                                     {esColapsable && expandida && (
                                                         <tr>
-                                                            <td colSpan={6} className="bg-sidebar-accent/20 px-6 py-3">
+                                                            <td colSpan={7} className="bg-sidebar-accent/20 px-6 py-3">
                                                                 {op.detalle_venta ? (
                                                                     <DetalleVentaExpandido detalle={op.detalle_venta} />
                                                                 ) : op.detalle_movimiento ? (

@@ -1,0 +1,10 @@
+domains:
+  - almacen-tienda
+php_version: "8.4"
+framework: laravel
+framework_version: "12"
+secured: true
+services:
+  - mailpit
+  - mysql
+  - redis
