@@ -2,6 +2,18 @@ import HeadingSmall from '@/components/heading-small';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Combobox,
+    ComboboxChip,
+    ComboboxChips,
+    ComboboxChipsInput,
+    ComboboxCollection,
+    ComboboxContent,
+    ComboboxEmpty,
+    ComboboxItem,
+    ComboboxList,
+    useComboboxAnchor,
+} from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -185,6 +197,13 @@ interface Operacion {
     detalle_compra: DetalleCompra | null;
 }
 
+// Forma mínima que manda el backend para los combobox de filtro (id + nombre) — no hace
+// falta el resto de campos de ClienteProps/ProveedorProps/CuentaProps de @/types acá.
+interface EntidadFiltro {
+    id: number;
+    nombre: string;
+}
+
 interface PaginatedOperaciones {
     data: Operacion[];
     current_page: number;
@@ -198,11 +217,20 @@ interface PaginatedOperaciones {
 interface RastreoOperacionesPageProps {
     operaciones: PaginatedOperaciones;
     usuarios: User[];
+    clientes: EntidadFiltro[];
+    proveedores: EntidadFiltro[];
+    cuentas: EntidadFiltro[];
     filtros: {
         fecha?: string;
         user_id?: string;
         tipo?: string;
         buscar?: string;
+        cliente_ids?: string[];
+        proveedor_ids?: string[];
+        cuenta_ids?: string[];
+        cliente_direccion?: Direccion;
+        proveedor_direccion?: Direccion;
+        cuenta_direccion?: Direccion;
     };
     puedeVerCosto: boolean;
     conteoPorTipo: {
@@ -721,14 +749,102 @@ const DetalleCompraExpandido = ({ detalle, monto, usuario }: { detalle: DetalleC
     </div>
 );
 
+// ─── Componente: ComboboxFiltro (multiselect con chips, para Cliente/Proveedor/Cuenta) ──
+// Volúmenes chicos (decenas de registros) — se manda la lista completa como prop y este
+// componente filtra en el cliente, sin necesidad de un endpoint de búsqueda aparte.
+
+type Direccion = 'envia' | 'recibe' | 'cualquiera';
+
+function ComboboxFiltro({
+    label,
+    items,
+    selected,
+    onChange,
+    direccion,
+    onDireccionChange,
+    placeholder,
+}: {
+    label: string;
+    items: { value: number; label: string }[];
+    selected: number[];
+    onChange: (ids: number[]) => void;
+    direccion: Direccion;
+    onDireccionChange: (d: Direccion) => void;
+    placeholder: string;
+}) {
+    const anchor = useComboboxAnchor();
+    return (
+        <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+                <Label>{label}</Label>
+                {/* Envía/Recibe acota a un solo lado de la operación (mismo concepto que las
+                    columnas "Cuenta Envía"/"Cuenta que Recibe" de la tabla) — Cualquiera
+                    (default) es el comportamiento de antes, coincide en cualquier lado. */}
+                <Select value={direccion} onValueChange={(v) => onDireccionChange(v as Direccion)}>
+                    <SelectTrigger className="h-6 w-auto gap-1 border-none bg-transparent px-1 text-xs text-muted-foreground shadow-none hover:bg-accent">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent align="end">
+                        <SelectItem value="cualquiera">Cualquiera</SelectItem>
+                        <SelectItem value="envia">Envía</SelectItem>
+                        <SelectItem value="recibe">Recibe</SelectItem>
+                    </SelectContent>
+                </Select>
+            </div>
+            <Combobox multiple items={items} value={selected} onValueChange={onChange}>
+                <div ref={anchor}>
+                    <ComboboxChips>
+                        {selected.map((id) => {
+                            const item = items.find((i) => i.value === id);
+                            return item ? <ComboboxChip key={id}>{item.label}</ComboboxChip> : null;
+                        })}
+                        <ComboboxChipsInput placeholder={placeholder} />
+                    </ComboboxChips>
+                </div>
+                <ComboboxContent anchor={anchor}>
+                    <ComboboxEmpty>Sin resultados</ComboboxEmpty>
+                    <ComboboxList>
+                        <ComboboxCollection>
+                            {(item: { value: number; label: string }) => (
+                                <ComboboxItem key={item.value} value={item.value}>
+                                    {item.label}
+                                </ComboboxItem>
+                            )}
+                        </ComboboxCollection>
+                    </ComboboxList>
+                </ComboboxContent>
+            </Combobox>
+        </div>
+    );
+}
+
 // ─── Página Principal ────────────────────────────────────────────────────────
 
-export default function RastreoOperacionesPage({ operaciones, usuarios, filtros, puedeVerCosto, conteoPorTipo }: RastreoOperacionesPageProps) {
+export default function RastreoOperacionesPage({
+    operaciones,
+    usuarios,
+    clientes,
+    proveedores,
+    cuentas,
+    filtros,
+    puedeVerCosto,
+    conteoPorTipo,
+}: RastreoOperacionesPageProps) {
     const [fecha, setFecha] = useState(filtros.fecha || '');
     const [userId, setUserId] = useState(filtros.user_id || 'all');
     const [tipo, setTipo] = useState(filtros.tipo || 'all');
     const [buscar, setBuscar] = useState(filtros.buscar || '');
+    const [clienteIds, setClienteIds] = useState<number[]>((filtros.cliente_ids || []).map(Number));
+    const [proveedorIds, setProveedorIds] = useState<number[]>((filtros.proveedor_ids || []).map(Number));
+    const [cuentaIds, setCuentaIds] = useState<number[]>((filtros.cuenta_ids || []).map(Number));
+    const [clienteDireccion, setClienteDireccion] = useState<Direccion>(filtros.cliente_direccion || 'cualquiera');
+    const [proveedorDireccion, setProveedorDireccion] = useState<Direccion>(filtros.proveedor_direccion || 'cualquiera');
+    const [cuentaDireccion, setCuentaDireccion] = useState<Direccion>(filtros.cuenta_direccion || 'cualquiera');
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
+
+    const clienteItems = clientes.map((c) => ({ value: c.id, label: c.nombre }));
+    const proveedorItems = proveedores.map((p) => ({ value: p.id, label: p.nombre }));
+    const cuentaItems = cuentas.map((c) => ({ value: c.id, label: c.nombre }));
 
     // Solo una fila abierta a la vez — evita que la pantalla se llene si el
     // usuario expande varias operaciones seguidas.
@@ -741,6 +857,12 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
         user_id: userId === 'all' ? '' : userId,
         tipo: tipo === 'all' ? '' : tipo,
         buscar,
+        cliente_ids: clienteIds,
+        proveedor_ids: proveedorIds,
+        cuenta_ids: cuentaIds,
+        cliente_direccion: clienteDireccion,
+        proveedor_direccion: proveedorDireccion,
+        cuenta_direccion: cuentaDireccion,
         page,
     });
 
@@ -866,12 +988,12 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                         <CardTitle className="text-sm font-medium">Filtros de Búsqueda</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-3 lg:grid-cols-6">
-                            <div className="space-y-2 lg:col-span-2">
+                        <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-2 lg:grid-cols-4">
+                            <div className="space-y-2 md:col-span-2">
                                 <Label htmlFor="buscar">Buscar</Label>
                                 <Input
                                     id="buscar"
-                                    placeholder="Descripción, usuario, cuenta, cliente..."
+                                    placeholder="Descripción, usuario, cuenta, cliente, o el número de referencia (ej. 34)..."
                                     value={buscar}
                                     onChange={(e) => setBuscar(e.target.value)}
                                     onKeyDown={(e) => e.key === 'Enter' && handleFilter()}
@@ -916,6 +1038,33 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                                     </SelectContent>
                                 </Select>
                             </div>
+                            <ComboboxFiltro
+                                label="Cliente"
+                                items={clienteItems}
+                                selected={clienteIds}
+                                onChange={setClienteIds}
+                                direccion={clienteDireccion}
+                                onDireccionChange={setClienteDireccion}
+                                placeholder="Buscar cliente..."
+                            />
+                            <ComboboxFiltro
+                                label="Proveedor"
+                                items={proveedorItems}
+                                selected={proveedorIds}
+                                onChange={setProveedorIds}
+                                direccion={proveedorDireccion}
+                                onDireccionChange={setProveedorDireccion}
+                                placeholder="Buscar proveedor..."
+                            />
+                            <ComboboxFiltro
+                                label="Cuenta"
+                                items={cuentaItems}
+                                selected={cuentaIds}
+                                onChange={setCuentaIds}
+                                direccion={cuentaDireccion}
+                                onDireccionChange={setCuentaDireccion}
+                                placeholder="Buscar cuenta..."
+                            />
                             <div className="flex gap-2">
                                 <Button onClick={handleFilter} className="w-full">
                                     <Search className="mr-2 h-4 w-4" /> Filtrar

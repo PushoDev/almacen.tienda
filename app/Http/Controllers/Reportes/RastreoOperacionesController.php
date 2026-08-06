@@ -26,10 +26,34 @@ class RastreoOperacionesController extends Controller
             'user_id' => 'nullable|exists:users,id',
             'tipo' => 'nullable|in:Venta,Gasto,Ingreso,Transferencia,Compra',
             'buscar' => 'nullable|string|max:255',
+            'cliente_ids' => 'nullable|array',
+            'cliente_ids.*' => 'integer|exists:clientes,id',
+            'proveedor_ids' => 'nullable|array',
+            'proveedor_ids.*' => 'integer|exists:proveedors,id',
+            'cuenta_ids' => 'nullable|array',
+            'cuenta_ids.*' => 'integer|exists:cuentas,id',
+            'cliente_direccion' => 'nullable|in:envia,recibe,cualquiera',
+            'proveedor_direccion' => 'nullable|in:envia,recibe,cualquiera',
+            'cuenta_direccion' => 'nullable|in:envia,recibe,cualquiera',
         ]);
 
         $puedeVerCosto = in_array($request->user()->role, ['admin', 'moderador']);
         $buscar = $request->input('buscar');
+        // "34" debe encontrar "Venta #34" sin que el usuario tenga que saber de antemano
+        // qué tipo es — match exacto por id, además del texto libre de siempre. ctype_digit
+        // en vez de is_numeric: un id nunca tiene signo/decimales, y "34" no debería
+        // interpretarse como floats/notación científica.
+        $buscarId = ($buscar !== null && ctype_digit($buscar)) ? (int) $buscar : null;
+        $clienteIds = $request->input('cliente_ids', []);
+        $proveedorIds = $request->input('proveedor_ids', []);
+        $cuentaIds = $request->input('cuenta_ids', []);
+        // Dirección de cada filtro — "cualquiera" (default) es el comportamiento de antes
+        // (coincide en cualquier lado). "envia"/"recibe" acotan a un solo lado de la
+        // operación: quién mandó el dinero vs. quién lo recibió, mismo concepto que ya
+        // distinguen las columnas "Cuenta Envía" / "Cuenta que Recibe" de la tabla.
+        $clienteDireccion = $request->input('cliente_direccion', 'cualquiera');
+        $proveedorDireccion = $request->input('proveedor_direccion', 'cualquiera');
+        $cuentaDireccion = $request->input('cuenta_direccion', 'cualquiera');
 
         // Vendedor solo ve sus propias operaciones — mismo patrón ya usado en
         // TransaccionController/ReporteController (role === 'vendedor' fuerza el scope a su
@@ -50,12 +74,55 @@ class RastreoOperacionesController extends Controller
             ->select('ventas.id', 'ventas.created_at as fecha', DB::raw("'Venta' as tipo"))
             ->when($request->filled('fecha'), fn ($q) => $q->whereDate('ventas.created_at', $request->input('fecha')))
             ->when($userIdFiltro, fn ($q) => $q->where('ventas.user_id', $userIdFiltro))
-            ->when($buscar, fn ($q) => $q->where(function ($qq) use ($buscar) {
+            ->when($buscar, fn ($q) => $q->where(function ($qq) use ($buscar, $buscarId) {
                 $qq->where('users.name', 'like', "%{$buscar}%")
                     ->orWhere('destinatarios_venta.nombre', 'like', "%{$buscar}%")
                     ->orWhere('destinatarios_venta.apellidos', 'like', "%{$buscar}%")
-                    ->orWhere('ventas.estado', 'like', "%{$buscar}%");
-            }));
+                    ->orWhere('ventas.estado', 'like', "%{$buscar}%")
+                    ->when($buscarId, fn ($q2) => $q2->orWhere('ventas.id', $buscarId));
+            }))
+            // Cliente: la venta puede tener su propio cliente_id (ventas.cliente_id) y/o
+            // clientes distintos por cada pago (pago_ventas.cliente_id, cuando un pago se
+            // cobra contra la deuda de un cliente en vez de una cuenta) — cualquiera de los
+            // dos cuenta como "esta venta involucra a este cliente". whereExists en vez de
+            // join para no duplicar filas cuando una venta tiene varios pagos. En Venta el
+            // cliente SIEMPRE está del lado "recibe" (recibe el pago/cobro de la venta) — no
+            // existe un cliente "envía" acá, así que direccion=envia da cero resultados.
+            ->when($clienteIds, function ($q) use ($clienteIds, $clienteDireccion) {
+                if ($clienteDireccion === 'envia') {
+                    $q->whereRaw('1 = 0');
+                    return;
+                }
+                $q->where(function ($qq) use ($clienteIds) {
+                    $qq->whereIn('ventas.cliente_id', $clienteIds)
+                        ->orWhereExists(function ($sub) use ($clienteIds) {
+                            $sub->select(DB::raw(1))
+                                ->from('pago_ventas')
+                                ->whereColumn('pago_ventas.venta_id', 'ventas.id')
+                                ->whereIn('pago_ventas.cliente_id', $clienteIds);
+                        });
+                });
+            })
+            // Cuenta: solo vive en pago_ventas (una venta no tiene cuenta propia, solo la de
+            // cada pago) — puede haber varias cuentas en una sola venta, igual que clientes.
+            // Mismo caso que Cliente: la cuenta de una venta siempre "recibe" el cobro, nunca
+            // "envía" (Venta no tiene lado que sale, ver columna Cuenta Envía siempre en '—').
+            ->when($cuentaIds, function ($q) use ($cuentaIds, $cuentaDireccion) {
+                if ($cuentaDireccion === 'envia') {
+                    $q->whereRaw('1 = 0');
+                    return;
+                }
+                $q->whereExists(function ($sub) use ($cuentaIds) {
+                    $sub->select(DB::raw(1))
+                        ->from('pago_ventas')
+                        ->whereColumn('pago_ventas.venta_id', 'ventas.id')
+                        ->whereIn('pago_ventas.cuenta_id', $cuentaIds);
+                });
+            })
+            // Venta nunca involucra un proveedor — si el filtro está activo, ninguna venta
+            // puede calificar (no "no aplicar el filtro", sino "cero resultados de este tipo"),
+            // sin importar la dirección elegida.
+            ->when($proveedorIds, fn ($q) => $q->whereRaw('1 = 0'));
 
         // El nombre de tipos_movimiento_financiero.nombre es texto libre editable (en la
         // BD de este cliente, el id 2 está guardado como "Ingreso por Venta", aunque
@@ -63,9 +130,9 @@ class RastreoOperacionesController extends Controller
         // mostrar. Usamos la etiqueta fija por tipo_movimiento_id que ya es la convención
         // del código (1=Gasto/2=Ingreso/3=Transferencia, ver GastoController/IngresoController/
         // TransferenciaController) en vez de confiar en ese campo.
-        $gastosSub = $this->construirSubqueryMovimiento($request, 1, 'Gasto', $buscar, $userIdFiltro);
-        $ingresosSub = $this->construirSubqueryMovimiento($request, 2, 'Ingreso', $buscar, $userIdFiltro);
-        $transferenciasSub = $this->construirSubqueryMovimiento($request, 3, 'Transferencia', $buscar, $userIdFiltro);
+        $gastosSub = $this->construirSubqueryMovimiento($request, 1, 'Gasto', $buscar, $buscarId, $userIdFiltro, $clienteIds, $proveedorIds, $cuentaIds, $clienteDireccion, $proveedorDireccion, $cuentaDireccion);
+        $ingresosSub = $this->construirSubqueryMovimiento($request, 2, 'Ingreso', $buscar, $buscarId, $userIdFiltro, $clienteIds, $proveedorIds, $cuentaIds, $clienteDireccion, $proveedorDireccion, $cuentaDireccion);
+        $transferenciasSub = $this->construirSubqueryMovimiento($request, 3, 'Transferencia', $buscar, $buscarId, $userIdFiltro, $clienteIds, $proveedorIds, $cuentaIds, $clienteDireccion, $proveedorDireccion, $cuentaDireccion);
 
         // Compra es admin/moderador-only dentro de este reporte (mismo criterio que ya
         // aplica Cuentas/Show para ocultar Compras a vendedor — es dato de costo). A
@@ -74,7 +141,7 @@ class RastreoOperacionesController extends Controller
         // add_user_id_to_compras_table) y, aunque existiera, vendedor no debería ver costos
         // de compra en absoluto. Por eso el subquery ni se arma cuando !$puedeVerCosto —
         // así ?tipo=Compra por URL directa devuelve vacío en vez de filtrar nada.
-        $comprasSub = $puedeVerCosto ? $this->construirSubqueryCompra($request, $buscar, $userIdFiltro) : null;
+        $comprasSub = $puedeVerCosto ? $this->construirSubqueryCompra($request, $buscar, $buscarId, $userIdFiltro, $clienteIds, $proveedorIds, $cuentaIds, $clienteDireccion, $proveedorDireccion, $cuentaDireccion) : null;
 
         // Conteo por tipo para los widgets sobre el filtro — respeta fecha/usuario/buscar
         // pero NO el filtro de tipo (si no, al filtrar por "Venta" los otros 3 se irían a
@@ -158,6 +225,13 @@ class RastreoOperacionesController extends Controller
             // Vendedor no puede filtrar por usuario (siempre ve solo lo suyo), así que
             // tampoco hace falta mandarle la lista completa de nombres del sistema.
             'usuarios' => $puedeVerCosto ? DB::table('users')->select('id', 'name')->get() : [],
+            // Cliente/Proveedor/Cuenta para los combobox multiselect de filtro — a diferencia
+            // de 'usuarios', son solo nombres (no dato de costo), así que se mandan a todos
+            // los roles por igual; los volúmenes son chicos (decenas, no miles), no hace
+            // falta un endpoint de búsqueda aparte, se filtran en el cliente.
+            'clientes' => DB::table('clientes')->select('id', 'nombre_cliente as nombre')->orderBy('nombre_cliente')->get(),
+            'proveedores' => DB::table('proveedors')->select('id', 'nombre_proveedor as nombre')->orderBy('nombre_proveedor')->get(),
+            'cuentas' => DB::table('cuentas')->select('id', 'nombre_cuenta as nombre')->orderBy('nombre_cuenta')->get(),
             'filtros' => $request->except('page'),
             'puedeVerCosto' => $puedeVerCosto,
             'conteoPorTipo' => $conteoPorTipo,
@@ -170,8 +244,20 @@ class RastreoOperacionesController extends Controller
      * destino, además de descripción/usuario. Gasto/Ingreso/Transferencia comparten esta
      * misma forma — solo cambia el id de tipo y la etiqueta fija.
      */
-    private function construirSubqueryMovimiento(Request $request, int $tipoMovimientoId, string $etiqueta, ?string $buscar, $userIdFiltro)
-    {
+    private function construirSubqueryMovimiento(
+        Request $request,
+        int $tipoMovimientoId,
+        string $etiqueta,
+        ?string $buscar,
+        ?int $buscarId,
+        $userIdFiltro,
+        array $clienteIds,
+        array $proveedorIds,
+        array $cuentaIds,
+        string $clienteDireccion,
+        string $proveedorDireccion,
+        string $cuentaDireccion,
+    ) {
         return DB::table('movimientos_financieros as mf')
             ->leftJoin('users', 'users.id', '=', 'mf.user_id')
             ->leftJoin('cuentas as cuenta_origen', 'cuenta_origen.id', '=', 'mf.cuenta_origen_id')
@@ -183,15 +269,44 @@ class RastreoOperacionesController extends Controller
             ->select('mf.id', 'mf.fecha_operacion as fecha', DB::raw("'{$etiqueta}' as tipo"))
             ->when($request->filled('fecha'), fn ($q) => $q->whereDate('mf.fecha_operacion', $request->input('fecha')))
             ->when($userIdFiltro, fn ($q) => $q->where('mf.user_id', $userIdFiltro))
-            ->when($buscar, fn ($q) => $q->where(function ($qq) use ($buscar) {
+            ->when($buscar, fn ($q) => $q->where(function ($qq) use ($buscar, $buscarId) {
                 $qq->where('mf.descripcion', 'like', "%{$buscar}%")
                     ->orWhere('users.name', 'like', "%{$buscar}%")
                     ->orWhere('cuenta_origen.nombre_cuenta', 'like', "%{$buscar}%")
                     ->orWhere('cuenta_destino.nombre_cuenta', 'like', "%{$buscar}%")
                     ->orWhere('cliente_origen.nombre_cliente', 'like', "%{$buscar}%")
                     ->orWhere('cliente_destino.nombre_cliente', 'like', "%{$buscar}%")
-                    ->orWhere('proveedor_destino.nombre_proveedor', 'like', "%{$buscar}%");
-            }));
+                    ->orWhere('proveedor_destino.nombre_proveedor', 'like', "%{$buscar}%")
+                    ->when($buscarId, fn ($q2) => $q2->orWhere('mf.id', $buscarId));
+            }))
+            // Cliente/Cuenta pueden estar del lado origen (envía) O destino (recibe) — Gasto
+            // solo llena origen, Ingreso solo destino, Transferencia ambos. direccion=envia
+            // acota a origen, recibe a destino, cualquiera (default) a los dos.
+            ->when($clienteIds, fn ($q) => $q->where(function ($qq) use ($clienteIds, $clienteDireccion) {
+                if ($clienteDireccion !== 'recibe') {
+                    $qq->orWhereIn('cliente_origen.id', $clienteIds);
+                }
+                if ($clienteDireccion !== 'envia') {
+                    $qq->orWhereIn('cliente_destino.id', $clienteIds);
+                }
+            }))
+            ->when($cuentaIds, fn ($q) => $q->where(function ($qq) use ($cuentaIds, $cuentaDireccion) {
+                if ($cuentaDireccion !== 'recibe') {
+                    $qq->orWhereIn('cuenta_origen.id', $cuentaIds);
+                }
+                if ($cuentaDireccion !== 'envia') {
+                    $qq->orWhereIn('cuenta_destino.id', $cuentaIds);
+                }
+            }))
+            // Proveedor solo puede ser destino (proveedor_origen_id no existe en el esquema)
+            // — direccion=envia no tiene nada que calzar, cero resultados.
+            ->when($proveedorIds, function ($q) use ($proveedorIds, $proveedorDireccion) {
+                if ($proveedorDireccion === 'envia') {
+                    $q->whereRaw('1 = 0');
+                    return;
+                }
+                $q->whereIn('proveedor_destino.id', $proveedorIds);
+            });
     }
 
     /**
@@ -200,19 +315,73 @@ class RastreoOperacionesController extends Controller
      * Ingreso vs Transferencia" — todas las compras son un único tipo 'Compra', así que no
      * hace falta el patrón de un tipo_movimiento_id por llamada.
      */
-    private function construirSubqueryCompra(Request $request, ?string $buscar, $userIdFiltro)
-    {
+    private function construirSubqueryCompra(
+        Request $request,
+        ?string $buscar,
+        ?int $buscarId,
+        $userIdFiltro,
+        array $clienteIds,
+        array $proveedorIds,
+        array $cuentaIds,
+        string $clienteDireccion,
+        string $proveedorDireccion,
+        string $cuentaDireccion,
+    ) {
         return DB::table('compras')
             ->leftJoin('proveedors', 'proveedors.id', '=', 'compras.proveedor_id')
             ->leftJoin('clientes', 'clientes.id', '=', 'compras.cliente_id')
             ->select('compras.id', 'compras.fecha_compra as fecha', DB::raw("'Compra' as tipo"))
             ->when($request->filled('fecha'), fn ($q) => $q->whereDate('compras.fecha_compra', $request->input('fecha')))
             ->when($userIdFiltro, fn ($q) => $q->where('compras.user_id', $userIdFiltro))
-            ->when($buscar, fn ($q) => $q->where(function ($qq) use ($buscar) {
+            ->when($buscar, fn ($q) => $q->where(function ($qq) use ($buscar, $buscarId) {
                 $qq->where('proveedors.nombre_proveedor', 'like', "%{$buscar}%")
                     ->orWhere('clientes.nombre_cliente', 'like', "%{$buscar}%")
-                    ->orWhere('compras.tipo_compra', 'like', "%{$buscar}%");
-            }));
+                    ->orWhere('compras.tipo_compra', 'like', "%{$buscar}%")
+                    ->when($buscarId, fn ($q2) => $q2->orWhere('compras.id', $buscarId));
+            }))
+            // Cliente tiene dos roles distintos en Compra, opuestos entre sí:
+            // - compras.cliente_id ("recibe"): el cliente físico actúa como proveedor, es
+            //   quien recibió el pago de la compra.
+            // - compra_pago.cliente_id ("envía"): el cliente financió/pagó la compra con su
+            //   deuda — mismo rol que un vendedor "envía" dinero desde una cuenta.
+            // direccion=cualquiera junta los dos, igual que antes de este cambio.
+            ->when($clienteIds, fn ($q) => $q->where(function ($qq) use ($clienteIds, $clienteDireccion) {
+                if ($clienteDireccion !== 'envia') {
+                    $qq->orWhereIn('compras.cliente_id', $clienteIds);
+                }
+                if ($clienteDireccion !== 'recibe') {
+                    $qq->orWhereExists(function ($sub) use ($clienteIds) {
+                        $sub->select(DB::raw(1))
+                            ->from('compra_pago')
+                            ->whereColumn('compra_pago.compra_id', 'compras.id')
+                            ->whereIn('compra_pago.cliente_id', $clienteIds);
+                    });
+                }
+            }))
+            // Proveedor siempre "recibe" en Compra — no existe un proveedor que "envíe".
+            ->when($proveedorIds, function ($q) use ($proveedorIds, $proveedorDireccion) {
+                if ($proveedorDireccion === 'envia') {
+                    $q->whereRaw('1 = 0');
+                    return;
+                }
+                $q->whereIn('compras.proveedor_id', $proveedorIds);
+            })
+            // Cuenta solo vive en compra_pago (siempre "envía" — paga la compra, no hay
+            // concepto de "cuenta que recibe" en Compra, eso lo cubre Proveedor/Cliente).
+            // compras.cuenta_id es un campo legacy (el primer pago nada más) que
+            // compra_pago ya cubre por completo, no hace falta consultarlo aparte.
+            ->when($cuentaIds, function ($q) use ($cuentaIds, $cuentaDireccion) {
+                if ($cuentaDireccion === 'recibe') {
+                    $q->whereRaw('1 = 0');
+                    return;
+                }
+                $q->whereExists(function ($sub) use ($cuentaIds) {
+                    $sub->select(DB::raw(1))
+                        ->from('compra_pago')
+                        ->whereColumn('compra_pago.compra_id', 'compras.id')
+                        ->whereIn('compra_pago.cuenta_id', $cuentaIds);
+                });
+            });
     }
 
     private function transformarMovimiento(MovimientoFinanciero $mov, string $tipo): array
