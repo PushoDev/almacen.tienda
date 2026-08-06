@@ -1,9 +1,14 @@
 <?php
 
+use App\Models\Cliente;
+use App\Models\Compra;
+use App\Models\CompraPago;
 use App\Models\Cuenta;
 use App\Models\DestinatarioVenta;
 use App\Models\MovimientoFinanciero;
+use App\Models\PagoVenta;
 use App\Models\Producto;
+use App\Models\Proveedor;
 use App\Models\User;
 use App\Models\Venta;
 use App\Models\VentaDetalle;
@@ -504,6 +509,9 @@ test('conteoPorTipo cuenta cada tipo por separado y no se colapsa al filtrar por
         'Gasto' => 1,
         'Ingreso' => 2,
         'Transferencia' => 1,
+        // Admin ve la clave Compra aunque no haya ninguna — a diferencia de vendedor, que
+        // no la ve en absoluto (ver test de acceso de Compra más abajo).
+        'Compra' => 0,
     ]);
 
     // Filtrar por tipo=Venta no debe "colapsar" el conteo de los otros 3 tipos a cero —
@@ -514,6 +522,325 @@ test('conteoPorTipo cuenta cada tipo por separado y no se colapsa al filtrar por
         'Gasto' => 1,
         'Ingreso' => 2,
         'Transferencia' => 1,
+        'Compra' => 0,
     ]);
     expect(collect($responseFiltrada->json('props.operaciones.data')))->toHaveCount(3);
+});
+
+test('el reporte incluye Compra en el listado combinado, con proveedor, pagos y productos en el detalle', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $proveedor = \App\Models\Proveedor::factory()->create(['nombre_proveedor' => 'Distribuidora El Sol']);
+    $producto = Producto::factory()->create(['nombre_producto' => 'Panel Solar 620W']);
+
+    $compra = Compra::factory()->create([
+        'user_id' => $admin->id,
+        'proveedor_id' => $proveedor->id,
+        'cliente_id' => null,
+        'cuenta_id' => null,
+        'tipo_compra' => 'deuda_proveedor',
+        'total_compra' => 1500,
+        'fecha_compra' => now()->toDateString(),
+    ]);
+    $compra->productos()->attach($producto->id, ['cantidad' => 5, 'precio' => 300]);
+    CompraPago::create([
+        'compra_id' => $compra->id,
+        'cuenta_id' => null,
+        'cliente_id' => null,
+        'monto' => 1500,
+        'tipo_pago' => 'deuda_proveedor',
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $response->assertOk();
+
+    $fila = collect($response->json('props.operaciones.data'))->firstWhere('id', $compra->id);
+
+    expect($fila)->not->toBeNull();
+    expect($fila['tipo'])->toBe('Compra');
+    expect($fila['monto'])->toEqual(1500.0);
+    expect($fila['referencia'])->toBe("Compra #{$compra->id}");
+    expect($fila['usuario'])->toBe($admin->name);
+    expect($fila['detalle_venta'])->toBeNull();
+    expect($fila['detalle_movimiento'])->toBeNull();
+    expect($fila['detalle_compra'])->not->toBeNull();
+    expect($fila['detalle_compra']['proveedor'])->toBe('Distribuidora El Sol');
+    expect($fila['detalle_compra']['info_general']['tipo_compra'])->toBe('deuda_proveedor');
+    expect($fila['detalle_compra']['productos'][0]['producto'])->toBe('Panel Solar 620W');
+    expect($fila['detalle_compra']['productos'][0]['cantidad'])->toBe(5);
+    expect($fila['detalle_compra']['productos'][0]['subtotal'])->toEqual(1500.0);
+    expect($fila['detalle_compra']['pagos'][0]['tipo_pago'])->toBe('deuda_proveedor');
+});
+
+test('una Compra pago_cash con varios métodos de pago muestra cada uno con su cuenta/cliente de origen', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
+    $cliente = \App\Models\Cliente::factory()->create(['nombre_cliente' => 'Cliente Financia Compra']);
+
+    $compra = Compra::factory()->create([
+        'user_id' => $admin->id,
+        'proveedor_id' => \App\Models\Proveedor::factory()->create()->id,
+        'cliente_id' => null,
+        'cuenta_id' => $cuenta->id,
+        'tipo_compra' => 'pago_cash',
+        'total_compra' => 100,
+    ]);
+    CompraPago::create([
+        'compra_id' => $compra->id,
+        'cuenta_id' => $cuenta->id,
+        'cliente_id' => null,
+        'monto' => 60,
+        'tipo_pago' => 'cuenta',
+    ]);
+    CompraPago::create([
+        'compra_id' => $compra->id,
+        'cuenta_id' => null,
+        'cliente_id' => $cliente->id,
+        'monto' => 40,
+        'tipo_pago' => 'cliente',
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $fila = collect($response->json('props.operaciones.data'))->firstWhere('id', $compra->id);
+
+    $pagos = collect($fila['detalle_compra']['pagos']);
+    expect($pagos)->toHaveCount(2);
+    expect($pagos->firstWhere('tipo_pago', 'cuenta')['origen'])->toBe($cuenta->nombre_cuenta);
+    expect($pagos->firstWhere('tipo_pago', 'cuenta')['monto'])->toEqual(60.0);
+    expect($pagos->firstWhere('tipo_pago', 'cliente')['origen'])->toBe('Cliente Financia Compra');
+    expect($pagos->firstWhere('tipo_pago', 'cliente')['monto'])->toEqual(40.0);
+});
+
+test('Compra es visible solo para admin/moderador — vendedor no la ve ni puede forzarla con ?tipo=Compra', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    crearTiposMovimientoFinanciero();
+
+    Compra::factory()->create([
+        'user_id' => $vendedor->id,
+        'tipo_compra' => 'deuda_proveedor',
+    ]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $response->assertOk();
+
+    expect(collect($response->json('props.operaciones.data')))->toHaveCount(0);
+    expect($response->json('props.conteoPorTipo'))->not->toHaveKey('Compra');
+
+    // Intento de bypass por URL directa — debe seguir sin devolver nada, no un 403 con fuga
+    // de conteo ni datos parciales.
+    $responseForzada = $this->get(route('reportes.rastreo_operaciones', ['tipo' => 'Compra']), ['X-Inertia' => 'true']);
+    $responseForzada->assertOk();
+    expect(collect($responseForzada->json('props.operaciones.data')))->toHaveCount(0);
+});
+
+test('un moderador sí ve las Compras en el reporte, igual que admin', function () {
+    $moderador = User::factory()->moderador()->create();
+    $this->actingAs($moderador);
+
+    crearTiposMovimientoFinanciero();
+
+    $compra = Compra::factory()->create(['tipo_compra' => 'deuda_proveedor']);
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+    $operaciones = collect($response->json('props.operaciones.data'));
+
+    expect($operaciones->pluck('id'))->toContain($compra->id);
+    expect($response->json('props.conteoPorTipo.Compra'))->toBe(1);
+});
+
+test('el buscador encuentra por número de referencia (id) sin importar el tipo, aunque no se recuerde cuál era', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    // En una BD de test recién migrada, el primer registro de cada tabla arranca en id=1 —
+    // aprovechamos eso para que Venta #1 y Gasto #1 compartan el mismo número, el caso real
+    // que motivó el pedido del cliente ("ni yo mismo sé qué tipo es esa operación").
+    $venta = Venta::factory()->create();
+    $gasto = MovimientoFinanciero::factory()->gasto()->create();
+    expect($venta->id)->toBe($gasto->id);
+
+    $response = $this->get(route('reportes.rastreo_operaciones', ['buscar' => (string) $venta->id]), ['X-Inertia' => 'true']);
+    $tipos = collect($response->json('props.operaciones.data'))->pluck('tipo')->sort()->values()->all();
+
+    expect($tipos)->toBe(['Gasto', 'Venta']);
+});
+
+test('el filtro por cliente_ids encuentra una Venta por su cliente directo y por el cliente de un pago', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $clienteDirecto = Cliente::factory()->create();
+    $ventaDirecta = Venta::factory()->create(['cliente_id' => $clienteDirecto->id]);
+
+    $clientePago = Cliente::factory()->create();
+    $ventaConPago = Venta::factory()->create(['cliente_id' => null]);
+    PagoVenta::factory()->create(['venta_id' => $ventaConPago->id, 'cliente_id' => $clientePago->id, 'cuenta_id' => null]);
+
+    $ventaSinRelacion = Venta::factory()->create(['cliente_id' => null]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones', [
+        'cliente_ids' => [$clienteDirecto->id, $clientePago->id],
+    ]), ['X-Inertia' => 'true']);
+    $ids = collect($response->json('props.operaciones.data'))->pluck('id');
+
+    expect($ids)->toContain($ventaDirecta->id);
+    expect($ids)->toContain($ventaConPago->id);
+    expect($ids)->not->toContain($ventaSinRelacion->id);
+});
+
+test('el filtro por proveedor_ids nunca incluye Venta (no tiene proveedor) y sí incluye Compra', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $proveedor = Proveedor::factory()->create();
+    $compra = Compra::factory()->create(['proveedor_id' => $proveedor->id, 'tipo_compra' => 'deuda_proveedor']);
+    Venta::factory()->create();
+
+    $response = $this->get(route('reportes.rastreo_operaciones', ['proveedor_ids' => [$proveedor->id]]), ['X-Inertia' => 'true']);
+    $operaciones = collect($response->json('props.operaciones.data'));
+
+    expect($operaciones->pluck('id'))->toContain($compra->id);
+    expect($operaciones->pluck('tipo')->unique()->all())->not->toContain('Venta');
+});
+
+test('el filtro por cuenta_ids encuentra una Venta pagada con esa cuenta (vía pago_ventas)', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
+    $venta = Venta::factory()->create();
+    PagoVenta::factory()->create(['venta_id' => $venta->id, 'cuenta_id' => $cuenta->id, 'cliente_id' => null]);
+
+    Venta::factory()->create();
+
+    $response = $this->get(route('reportes.rastreo_operaciones', ['cuenta_ids' => [$cuenta->id]]), ['X-Inertia' => 'true']);
+    $ids = collect($response->json('props.operaciones.data'))->pluck('id');
+
+    expect($ids)->toContain($venta->id);
+});
+
+test('las listas de clientes, proveedores y cuentas para los combobox de filtro se mandan a todos los roles', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    crearTiposMovimientoFinanciero();
+
+    Cliente::factory()->create();
+    Proveedor::factory()->create();
+    crearCuentaEnMoneda(crearMonedaUsd());
+
+    $response = $this->get(route('reportes.rastreo_operaciones'), ['X-Inertia' => 'true']);
+
+    expect($response->json('props.clientes'))->not->toBeEmpty();
+    expect($response->json('props.proveedores'))->not->toBeEmpty();
+    expect($response->json('props.cuentas'))->not->toBeEmpty();
+});
+
+test('cuenta_direccion=envia excluye Venta (su cuenta siempre "recibe") y encuentra un Gasto que pagó con esa cuenta', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
+
+    $venta = Venta::factory()->create();
+    PagoVenta::factory()->create(['venta_id' => $venta->id, 'cuenta_id' => $cuenta->id, 'cliente_id' => null]);
+
+    $gasto = MovimientoFinanciero::factory()->gasto()->create(['cuenta_origen_id' => $cuenta->id]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones', [
+        'cuenta_ids' => [$cuenta->id],
+        'cuenta_direccion' => 'envia',
+    ]), ['X-Inertia' => 'true']);
+    $operaciones = collect($response->json('props.operaciones.data'));
+
+    // Venta y Gasto son secuencias de id independientes — pueden coincidir en número, así
+    // que hay que comparar el par (id, tipo), no el id solo.
+    expect($operaciones->contains(fn ($op) => $op['id'] === $gasto->id && $op['tipo'] === 'Gasto'))->toBeTrue();
+    expect($operaciones->contains(fn ($op) => $op['id'] === $venta->id && $op['tipo'] === 'Venta'))->toBeFalse();
+});
+
+test('cuenta_direccion=recibe excluye una Compra pago_cash (su cuenta siempre "envía") y encuentra la Venta que cobró con esa cuenta', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $cuenta = crearCuentaEnMoneda(crearMonedaUsd());
+
+    $venta = Venta::factory()->create();
+    PagoVenta::factory()->create(['venta_id' => $venta->id, 'cuenta_id' => $cuenta->id, 'cliente_id' => null]);
+
+    $compra = Compra::factory()->create(['tipo_compra' => 'pago_cash']);
+    CompraPago::create(['compra_id' => $compra->id, 'cuenta_id' => $cuenta->id, 'cliente_id' => null, 'monto' => 10, 'tipo_pago' => 'cuenta']);
+
+    $response = $this->get(route('reportes.rastreo_operaciones', [
+        'cuenta_ids' => [$cuenta->id],
+        'cuenta_direccion' => 'recibe',
+    ]), ['X-Inertia' => 'true']);
+    $operaciones = collect($response->json('props.operaciones.data'));
+
+    // Venta y Compra son secuencias de id independientes — pueden coincidir en número, así
+    // que hay que comparar el par (id, tipo), no el id solo.
+    expect($operaciones->contains(fn ($op) => $op['id'] === $venta->id && $op['tipo'] === 'Venta'))->toBeTrue();
+    expect($operaciones->contains(fn ($op) => $op['id'] === $compra->id && $op['tipo'] === 'Compra'))->toBeFalse();
+});
+
+test('cliente_direccion=envia solo encuentra una Compra financiada por ese cliente, nunca una Venta', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $cliente = Cliente::factory()->create();
+
+    $venta = Venta::factory()->create(['cliente_id' => $cliente->id]);
+
+    $compra = Compra::factory()->create(['tipo_compra' => 'pago_cash']);
+    CompraPago::create(['compra_id' => $compra->id, 'cuenta_id' => null, 'cliente_id' => $cliente->id, 'monto' => 10, 'tipo_pago' => 'cliente']);
+
+    $response = $this->get(route('reportes.rastreo_operaciones', [
+        'cliente_ids' => [$cliente->id],
+        'cliente_direccion' => 'envia',
+    ]), ['X-Inertia' => 'true']);
+    $operaciones = collect($response->json('props.operaciones.data'));
+
+    expect($operaciones->contains(fn ($op) => $op['id'] === $compra->id && $op['tipo'] === 'Compra'))->toBeTrue();
+    expect($operaciones->pluck('tipo'))->not->toContain('Venta');
+});
+
+test('proveedor_direccion=envia siempre da cero resultados, sin importar el tipo (un proveedor nunca "envía")', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    crearTiposMovimientoFinanciero();
+
+    $proveedor = Proveedor::factory()->create();
+    Compra::factory()->create(['proveedor_id' => $proveedor->id, 'tipo_compra' => 'deuda_proveedor']);
+    MovimientoFinanciero::factory()->gasto()->create(['proveedor_destino_id' => $proveedor->id]);
+
+    $response = $this->get(route('reportes.rastreo_operaciones', [
+        'proveedor_ids' => [$proveedor->id],
+        'proveedor_direccion' => 'envia',
+    ]), ['X-Inertia' => 'true']);
+
+    expect(collect($response->json('props.operaciones.data')))->toHaveCount(0);
 });
