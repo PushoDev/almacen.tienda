@@ -996,13 +996,22 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                                                         <td className="px-6 py-4 text-sm font-mono whitespace-nowrap">
                                                             {op.tipo === 'Compra' ? (
                                                                 <div className="flex flex-wrap gap-1">
-                                                                    {pagosCompraConOrigen(op).length > 0
-                                                                        ? pagosCompraConOrigen(op).map((p, i) => (
-                                                                              <Badge key={i} variant="outline" className={`font-normal whitespace-nowrap ${colorPago(i)}`}>
-                                                                                  {formatMonto(p.monto, 'USD')}
-                                                                              </Badge>
-                                                                          ))
-                                                                        : '—'}
+                                                                    {pagosCompraConOrigen(op).length > 0 ? (
+                                                                        pagosCompraConOrigen(op).map((p, i) => (
+                                                                            <Badge key={i} variant="outline" className={`font-normal whitespace-nowrap ${colorPago(i)}`}>
+                                                                                {formatMonto(p.monto, 'USD')}
+                                                                            </Badge>
+                                                                        ))
+                                                                    ) : op.detalle_compra?.info_general.tipo_compra === 'deuda_proveedor' ? (
+                                                                        <Badge
+                                                                            variant="outline"
+                                                                            className="border-amber-200 bg-amber-50 font-normal text-amber-700 whitespace-nowrap dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300"
+                                                                        >
+                                                                            Deuda pendiente
+                                                                        </Badge>
+                                                                    ) : (
+                                                                        '—'
+                                                                    )}
                                                                 </div>
                                                             ) : (
                                                                 montoEnvia(op)
@@ -1033,7 +1042,20 @@ export default function RastreoOperacionesPage({ operaciones, usuarios, filtros,
                                                                     ))}
                                                                 </div>
                                                             ) : op.tipo === 'Compra' ? (
-                                                                formatMonto(op.monto, op.moneda)
+                                                                <span
+                                                                    className={
+                                                                        op.detalle_compra?.info_general.tipo_compra === 'deuda_proveedor'
+                                                                            ? 'text-amber-600 dark:text-amber-400'
+                                                                            : ''
+                                                                    }
+                                                                    title={
+                                                                        op.detalle_compra?.info_general.tipo_compra === 'deuda_proveedor'
+                                                                            ? 'Quedó registrada como deuda con el proveedor, no se pagó desde ninguna cuenta'
+                                                                            : undefined
+                                                                    }
+                                                                >
+                                                                    {formatMonto(op.monto, op.moneda)}
+                                                                </span>
                                                             ) : (
                                                                 montoRecibeMovimiento(op)
                                                             )}
