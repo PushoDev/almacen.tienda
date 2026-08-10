@@ -75,6 +75,7 @@ Fuente: puede ser un `Proveedor` o un `Cliente físico` (reseller).
 Al registrar compra: crea/actualiza `Producto`, genera `ProductoCodigo`, incrementa `almacen_producto.cantidad`.
 Pagos múltiples soportados en `compra_pago`.
 - `user_id` (nullable, agregado 2026-08-06): quién registró la compra. Histórico queda en `null` — se captura desde `CompraController::store()` de ahora en adelante. Se agregó para poder acotar Compras por usuario en el reporte Rastreo de Operaciones (ver más abajo), no había forma de hacerlo antes.
+- **`compra_producto`** (pivot con `productos`): desde el 2026-08-10 tiene `id` autoincremental como clave primaria (antes era compuesta `(compra_id, producto_id)`). El mismo producto puede aparecer en **varias líneas** de una misma compra (p. ej. mandado a dos almacenes distintos, o distinto color) — `CompraController::store()` ya no las fusiona ni promedia el precio entre ellas, cada línea del carrito queda como su propia fila. `TransaccionController` (distribución de costos y de gastos de transportación) y los reportes que cuentan "veces comprado" ya están adaptados para no asumir una fila por producto por compra.
 
 ### Venta (`ventas`)
 

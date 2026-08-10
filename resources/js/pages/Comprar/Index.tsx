@@ -245,6 +245,19 @@ export default function ComprarPage() {
     const [productoCoincidente, setProductoCoincidente] = useState<ProductoExistente | null>(null);
     const justSelectedProductoRef = useRef(false);
 
+    // Fix del Combobox (@base-ui/react) roto dentro de un AlertDialog (Radix): el popup se porta a
+    // <body> por defecto, queda fuera del focus-trap del diálogo y el click con mouse no selecciona
+    // nada (ver docs/pendiente-combobox-reemplazo.md, mismo caso ya resuelto en ventas/PaymentForm.tsx).
+    // El diálogo "Editar Producto" vive dentro de un .map() por fila del carrito, así que no se puede
+    // usar useRef ahí adentro — se resuelve con un ref-callback a nivel de componente en su lugar.
+    const [editDialogContainer, setEditDialogContainer] = useState<HTMLElement | undefined>(undefined);
+    const resolveEditDialogContainer = (node: HTMLElement | null) => {
+        const container = node?.closest('[data-slot="alert-dialog-content"]');
+        if (container instanceof HTMLElement) {
+            setEditDialogContainer(container);
+        }
+    };
+
     // Estados para búsqueda de cuentas
     const [cuentaSearchTerm, setCuentaSearchTerm] = useState('');
     const [filteredCuentas, setFilteredCuentas] = useState<CuentaNegocioProps[]>([]);
@@ -624,7 +637,20 @@ export default function ComprarPage() {
                 });
             },
             onError: (errors) => {
-                if (errors.error) {
+                // Los errores de validación del backend vienen por índice real del carrito
+                // (productos.2.precio, productos.5.cantidad, etc.) — antes solo se leía el
+                // índice 0, así que si fallaba cualquier otra línea, el usuario no se enteraba
+                // ni de qué producto era ni de qué campo. Acá se busca cualquier error
+                // "productos.N.campo" y se señala el producto real por nombre.
+                const claveErrorProducto = Object.keys(errors).find((clave) => /^productos\.\d+\./.test(clave));
+
+                if (claveErrorProducto) {
+                    const indice = parseInt(claveErrorProducto.split('.')[1], 10);
+                    const nombreProducto = productos[indice]?.producto ?? `línea ${indice + 1}`;
+                    toast.error(`Error en "${nombreProducto}"`, {
+                        description: errors[claveErrorProducto],
+                    });
+                } else if (errors.error) {
                     toast.error('Error al procesar la compra', {
                         description: errors.error,
                     });
@@ -1042,6 +1068,17 @@ export default function ComprarPage() {
         );
     };
 
+    // Un cliente creado (o encontrado como ya existente) desde cualquiera de los dos flujos de
+    // "crear cliente" de esta página (el combobox superior Proveedor/Cliente, o "Financiamiento
+    // con Clientes" del paso de pago) queda visible en AMBOS selectores de inmediato, sin recargar
+    // la página. Antes cada flujo solo actualizaba su propia lista (`clientesList` o `clientes`).
+    const sincronizarClienteEnListas = (cliente: ClienteProps) => {
+        setClientes((prev) => (prev.some((c) => c.id === cliente.id) ? prev : [...prev, cliente]));
+        setClientesList((prev) =>
+            prev.some((c) => c.id === cliente.id) ? prev : [...prev, { id: cliente.id, nombre: cliente.nombre_cliente, tipo: 'cliente' }],
+        );
+    };
+
     // 🆕 COMPONENTE DE CREACIÓN DE PROVEEDOR (VERSIÓN SIMPLE)
     const CrearProveedorDialogContent = () => {
         const [nombreProveedor, setNombreProveedor] = useState('');
@@ -1084,11 +1121,11 @@ export default function ComprarPage() {
                 });
 
                 // Actualizar el estado global de proveedores/clientes segun el tipo
-                const nuevoItem = { id: nuevoData.id, nombre: nuevoData.nombre_proveedor || nuevoData.nombre_cliente, tipo };
                 if (tipo === 'proveedor') {
-                    setProveedoresList((prev) => [...prev, nuevoItem]);
+                    setProveedoresList((prev) => [...prev, { id: nuevoData.id, nombre: nuevoData.nombre_proveedor, tipo }]);
                 } else {
-                    setClientesList((prev) => [...prev, nuevoItem]);
+                    // nuevoData ya es un Cliente completo (nuevo o existente) — sincroniza las dos listas a la vez
+                    sincronizarClienteEnListas(nuevoData as ClienteProps);
                 }
                 // Seleccionar automáticamente el nuevo
                 setData('proveedor', nuevoData.nombre_proveedor || nuevoData.nombre_cliente);
@@ -1264,16 +1301,13 @@ export default function ComprarPage() {
                         description: 'El cliente ya existía en el sistema. Se ha agregado automáticamente.',
                     });
 
-                    // Verificar si el cliente ya está en la lista
-                    if (!clientes.some((c) => c.id === cliente.id)) {
-                        setClientes((prev) => [...prev, cliente]);
-                    }
+                    sincronizarClienteEnListas(cliente);
                 } else {
                     // Cliente nuevo creado
                     toast.success(message, {
                         description: 'Cliente creado exitosamente.',
                     });
-                    setClientes((prev) => [...prev, cliente]);
+                    sincronizarClienteEnListas(cliente);
                 }
 
                 // Agregar automáticamente a pagos_clientes con monto 0
@@ -1302,9 +1336,7 @@ export default function ComprarPage() {
                     });
 
                     // Agregar a la lista si no está
-                    if (!clientes.some((c) => c.id === clienteExistente.id)) {
-                        setClientes((prev) => [...prev, clienteExistente]);
-                    }
+                    sincronizarClienteEnListas(clienteExistente);
 
                     // Agregar a pagos_clientes
                     if (!data.pagos_clientes.some((p) => p.cliente_id === clienteExistente.id)) {
@@ -1806,7 +1838,6 @@ export default function ComprarPage() {
                                             onKeyDown={handleEnterAgregarProducto}
                                         />
                                     </InputGroup>
-                                    {errors['productos.0.precio'] && <InputError message={errors['productos.0.precio']} />}
                                 </Field>
 
                                 <Field>
@@ -1819,7 +1850,6 @@ export default function ComprarPage() {
                                         onChange={handleTempInputChange}
                                         onKeyDown={handleEnterAgregarProducto}
                                     />
-                                    {errors['productos.0.cantidad'] && <InputError message={errors['productos.0.cantidad']} />}
                                 </Field>
                             </FieldGroup>
 
@@ -2070,7 +2100,10 @@ export default function ComprarPage() {
                                                             </div>
 
                                                             {/* SIDEBAR */}
-                                                            <div className="flex flex-col border-l border-slate-200 bg-slate-50/50 p-6 dark:border-slate-700 dark:bg-slate-800/20">
+                                                            <div
+                                                                ref={resolveEditDialogContainer}
+                                                                className="flex flex-col border-l border-slate-200 bg-slate-50/50 p-6 dark:border-slate-700 dark:bg-slate-800/20"
+                                                            >
                                                                 <div className="space-y-6">
                                                                     <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
                                                                         Organización
@@ -2096,7 +2129,7 @@ export default function ComprarPage() {
                                                                                 showClear={!!tempFormData.almacen_id}
                                                                                 className="uppercase"
                                                                             />
-                                                                            <ComboboxContent>
+                                                                            <ComboboxContent container={editDialogContainer}>
                                                                                 <ComboboxEmpty>No se encontraron almacenes.</ComboboxEmpty>
                                                                                 <ComboboxList>
                                                                                     {(almacen) => (
@@ -2131,7 +2164,7 @@ export default function ComprarPage() {
                                                                                 showClear={!!tempFormData.categoria}
                                                                                 className="uppercase"
                                                                             />
-                                                                            <ComboboxContent>
+                                                                            <ComboboxContent container={editDialogContainer}>
                                                                                 <ComboboxEmpty>No se encontraron categorías.</ComboboxEmpty>
                                                                                 <ComboboxList>
                                                                                     {(categoria) => (
