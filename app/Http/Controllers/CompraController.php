@@ -120,6 +120,49 @@ class CompraController extends Controller
     }
 
     /**
+     * Busca productos existentes por nombre/marca/modelo/código para autocompletar el
+     * formulario de alta de compra, mostrando stock y costo actual antes de sobreescribirlo.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function buscarProductosExistentes(Request $request)
+    {
+        $request->validate([
+            'search' => 'required|string|min:2',
+        ]);
+
+        $productos = Producto::buscar($request->search)
+            ->with(['categoria', 'almacenes'])
+            ->limit(8)
+            ->get()
+            ->map(function ($producto) {
+                return [
+                    'id' => $producto->id,
+                    'nombre_producto' => $producto->nombre_producto,
+                    'marca_producto' => $producto->marca_producto,
+                    'modelo_producto' => $producto->modelo_producto,
+                    'capacidad_producto' => $producto->capacidad_producto,
+                    'categoria' => $producto->categoria?->nombre_categoria,
+                    'precio_compra_producto' => (float) $producto->precio_compra_producto,
+                    'cantidad_total' => $producto->cantidad_total,
+                    // Stock desglosado por almacén: el costo es un solo dato por producto,
+                    // pero el stock sí es específico de cada almacén.
+                    'stock_por_almacen' => $producto->almacenes
+                        ->map(fn($almacen) => [
+                            'almacen_id' => $almacen->id,
+                            'nombre_almacen' => $almacen->nombre_almacen,
+                            'cantidad' => (int) $almacen->pivot->cantidad,
+                        ])
+                        ->filter(fn($item) => $item['cantidad'] > 0)
+                        ->values(),
+                ];
+            });
+
+        return response()->json($productos);
+    }
+
+    /**
      * Busca clientes rápidamente por nombre o teléfono.
      * Usado para verificación en tiempo real en el frontend.
      *
@@ -324,7 +367,6 @@ class CompraController extends Controller
             }
 
             $productosConAlmacen = [];
-            $pivotResumen = [];
             foreach ($validated['productos'] as $item) {
                 $categoria = Categoria::firstOrCreate(['nombre_categoria' => $item['categoria']]);
 
@@ -389,43 +431,15 @@ class CompraController extends Controller
                 $almacenId = (int) $item['almacen_id'];
                 $lineaCantidad = (int) $item['cantidad'];
                 $lineaPrecio = (float) $item['precio'];
-                $lineaSubtotal = $lineaCantidad * $lineaPrecio;
 
-                // Asociar producto a la compra (evita duplicado en pivote compra_producto)
-                if (!isset($pivotResumen[$producto->id])) {
-                    $compra->productos()->attach($producto->id, [
-                        'cantidad' => $lineaCantidad,
-                        'precio' => $lineaPrecio,
-                        'almacen_id' => $almacenId,
-                    ]);
-
-                    $pivotResumen[$producto->id] = [
-                        'cantidad' => $lineaCantidad,
-                        'subtotal' => $lineaSubtotal,
-                        'almacen_id' => $almacenId,
-                    ];
-                } else {
-                    $resumen = $pivotResumen[$producto->id];
-                    $nuevaCantidad = $resumen['cantidad'] + $lineaCantidad;
-                    $nuevoSubtotal = $resumen['subtotal'] + $lineaSubtotal;
-                    $precioPromedio = $nuevaCantidad > 0 ? round($nuevoSubtotal / $nuevaCantidad, 2) : $lineaPrecio;
-
-                    // Si el producto entra a la misma compra desde distintos almacenes, dejamos null en pivote
-                    // para reflejar mezcla de origen en ese documento de compra.
-                    $almacenPivot = ($resumen['almacen_id'] === $almacenId) ? $almacenId : null;
-
-                    $compra->productos()->updateExistingPivot($producto->id, [
-                        'cantidad' => $nuevaCantidad,
-                        'precio' => $precioPromedio,
-                        'almacen_id' => $almacenPivot,
-                    ]);
-
-                    $pivotResumen[$producto->id] = [
-                        'cantidad' => $nuevaCantidad,
-                        'subtotal' => $nuevoSubtotal,
-                        'almacen_id' => $almacenPivot,
-                    ];
-                }
+                // Cada línea del carrito queda como su propia fila en compra_producto — si el mismo
+                // producto aparece dos veces en esta compra (distinto almacén y/o color), son dos
+                // líneas reales, no se fusionan ni se promedia el precio entre ellas.
+                $compra->productos()->attach($producto->id, [
+                    'cantidad' => $lineaCantidad,
+                    'precio' => $lineaPrecio,
+                    'almacen_id' => $almacenId,
+                ]);
 
                 // Actualizar inventario en el almacén específico
                 $almacenProducto = AlmacenProducto::firstOrNew([

@@ -29,6 +29,9 @@ Route::middleware(['auth', 'verified'])->group(
             // ✅ NUEVA: Ruta para crear categoría durante compra
             Route::post('/categorias', [CompraController::class, 'storeCategoria'])->name('categoria.store');
 
+            // NUEVA: Autocompletado de productos existentes al agregar un producto a la compra
+            Route::get('/productos/buscar', [CompraController::class, 'buscarProductosExistentes'])->name('productos.buscar');
+
             // Ruta MEJORADA para obtener clientes (ahora acepta parámetro search)
             Route::get('/clientes/fisicos', [CompraController::class, 'getClientesFisicos']);
 

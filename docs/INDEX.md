@@ -10,9 +10,9 @@
 | Campo | Valor |
 |---|---|---|
 | Rama activa | `feature/desarrollo-caliente` |
-| Última sesión | 2026-08-01 — **Cuentas: historial + acceso vendedor**, fix transferencias Cierres. `Cuentas/Show.tsx` ganó historial real de operaciones en 3 Cards (Compras/Ventas/Transacciones, estilo `Proveedores`/`Clientes`) con búsqueda + filtro por tipo + rango de fechas, cada una paginada y enlazando al registro real (venta/transacción/compra); `vendedor` ahora puede ver el detalle de sus propias cuentas (antes solo admin). Se encontró y corrigió un bug real de orden de bindings de Laravel al filtrar sobre una query `UNION ALL` embebida (B9, ver `ESTADO_DESARROLLO.md`). En `Cierres/*`: fix de deduplicación de transferencias entre monedas distintas, y el widget "Resumen Financiero del Turno" ahora se oculta a `vendedor`. 10 tests nuevos en `CuentaTest.php`. |
-| Estado general | 12/12 módulos estables, ✓ bugs B1/B2/B3/B6/B7/B8/B9 resueltos, ver lista de tareas priorizada en `ESTADO_DESARROLLO.md` |
-| Próximo paso | Ver "🎯 Lista de tareas priorizada" en `ESTADO_DESARROLLO.md` — alta prioridad: completar tests de Cuentas (`ajustarSaldo`, saldo negativo), Combobox en `Vendor/Index.tsx` (POS), validar doble reversión de stock en `anularVenta` |
+| Última sesión | 2026-08-06 — **Rastreo de Operaciones: Fases 7, 8, 9 cerradas** (reporte prioritario del cliente, dentro de la limpieza de los 15 reportes de `/reportes/*`). Fase 7: Compras reintegrada como 5º tipo de operación, admin/moderador-only, requirió `compras.user_id` (nullable, nuevo). Fase 8: tabla reorganizada a formato "partida doble" (`Referencia \| Cuenta Envía \| Monto \| Cuenta que Recibe \| Monto \| Tasa de la Operación \| Detalles`), badges por pago coloreados (`colorPago()`) en Venta y Compra. Fase 9: búsqueda exacta por número de referencia + 3 combobox multiselect con chips (Cliente/Proveedor/Cuenta). Todo commiteado (`ee8942c4`..`a5f2e052`). Hallazgo sin arreglar: "Exportar PDF" quedó con las columnas viejas. Ver `docs/arreglos-pendientes/rastreo-operaciones-rediseno-2026-08-01.md`. |
+| Estado general | 12/12 módulos base estables. Módulo Reportes en limpieza activa: Rastreo de Operaciones avanzado (Fases 0-3, 5, 7-9 cerradas; quedan Fase 4 y parte de Fase 6, baja prioridad), los otros 14 reportes sin tocar — ver `docs/arreglos-pendientes/reportes-arreglos-2026-08-01.md`. Suite de tests: 139 tests, 138 passed / 1 failed (fallo intermitente de Faker en factory de monedas, no es bug de la app — verificado 2026-08-08) |
+| Próximo paso | El usuario decide cuál de los 14 reportes pendientes sigue (no asumir orden), o cerrar Fase 4/6 de Rastreo de Operaciones, o arrancar la actualización de la suite de tests que pidió el cliente. Ver "🎯 Lista de tareas priorizada" en `ESTADO_DESARROLLO.md` para el resto del backlog (Cuentas `ajustarSaldo`, Combobox en `Vendor/Index.tsx`, doble reversión de stock en `anularVenta`) |
 
 ### ✅ Bugs resueltos recientemente
 
@@ -53,9 +53,9 @@
 | Backend | PHP 8.2+, Laravel 12 |
 | Frontend | React 19, Inertia v2, Vite 7, Tailwind v4 |
 | Modelos | 37 |
-| Controladores | 38 (27 raíz incl. `Controller.php` base + 11 en subdirectorios: 1 Api, 8 Auth, 2 Settings) |
-| Migraciones | 94 |
-| Páginas frontend | 117 únicas (16 reportes, 9 auth/settings, ~92 operacionales) |
+| Controladores | 39 (27 raíz incl. `Controller.php` base + 12 en subdirectorios: 1 Api, 8 Auth, 2 Settings, 1 Reportes — `Reportes\RastreoOperacionesController`, primero de una extracción incremental fuera de `ReporteController`) |
+| Migraciones | 98 |
+| Páginas frontend | 118 únicas (17 reportes, 9 auth/settings, ~92 operacionales) |
 | Middlewares | 7 (solo 3 aplicados a rutas reales: `HandleInertiaRequests`, `HandleAppearance`, `check.cuenta.permission`; `EnsureUserIsAdmin/Moderator/Vendor` registradas como alias pero sin uso, `CheckAlmacenPermission` ni registrada) |
 | Notificaciones | 7 (5 encoladas: Cambio, CierreCaja, MovimientoStock, VentaCreada, MovimientoFinanciero) |
 | Comandos artisan | 5 |
@@ -195,7 +195,7 @@ npm run format                   # formatear código con Prettier
 | **Precios vendedor** | `ProductoVendedorController.php` (421 L) | `ProductoVendedor`, `PrecioHistorial` | `Productos/Vendor/*` (4 páginas) |
 | **Movimientos stock** | `MovimientosController.php` (584 L) | `Movimiento`, `MovimientoDetalle`, `MovimientoSeguimiento` | `Movimientos/Index`, `Movimientos/Show` |
 | **Finanzas** | `TransaccionController.php`, `GastoController.php`, `IngresoController.php`, `TransferenciaController.php` | `MovimientoFinanciero`, `Cuenta`, `Moneda`, `TransaccionCuenta` | `Transacciones/*` (7+ páginas) |
-| **Reportes** | `ReporteController.php` (~845 L) | — | `Reportes/Report/*` (16 vistas) |
+| **Reportes** | `ReporteController.php` (728 L, 14 de 15 reportes) + `Reportes/RastreoOperacionesController.php` (623 L, 1er reporte extraído) | — | `Reportes/Report/*` (16 vistas) + `Reportes/Index.tsx` (menú) |
 | **Telegram Bot** | `TelegramWebhookController.php` (497 L) | — | `routes/api.php` (webhook) |
 | **Dashboard** | `AdminController.php` (545 L) | `TasaCambio`, `TasaCambioMLC`, `HistorialTasaCambio` | `dashboard.tsx` |
 | **Logística** | `LogisticaController.php` (25 L) | — (usa `DashboardStatsService`) | `Logistica/*` (Index, Create, Edit, Show, +layouts) |

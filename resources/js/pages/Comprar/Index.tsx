@@ -53,7 +53,7 @@ import {
     Warehouse,
     X,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
@@ -68,6 +68,73 @@ interface CompraReciente {
     tipo_compra: 'pago_cash' | 'deuda_proveedor';
     proveedor: string | null;
     cliente: string | null;
+}
+
+interface ProductoExistente {
+    id: number;
+    nombre_producto: string;
+    marca_producto: string | null;
+    modelo_producto: string | null;
+    capacidad_producto: string | null;
+    categoria: string | null;
+    precio_compra_producto: number;
+    cantidad_total: number;
+    stock_por_almacen: { almacen_id: number; nombre_almacen: string; cantidad: number }[];
+}
+
+// Dropdown de sugerencias de productos existentes, compartido por los 3 campos que
+// disparan autocompletado (Nombre, Marca, Modelo). Componente top-level (no anidado
+// dentro de ComprarPage) para no perder estado en cada re-render del formulario.
+function ProductoSugerenciasDropdown({
+    mostrar,
+    buscando,
+    sugerencias,
+    onSeleccionar,
+}: {
+    mostrar: boolean;
+    buscando: boolean;
+    sugerencias: ProductoExistente[];
+    onSeleccionar: (p: ProductoExistente) => void;
+}) {
+    if (!mostrar) return null;
+
+    return (
+        <div className="bg-popover absolute top-full left-0 z-50 mt-1 w-full max-w-sm rounded-md border shadow-lg">
+            {buscando ? (
+                <div className="text-muted-foreground flex items-center justify-center gap-2 p-3 text-sm">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Buscando...
+                </div>
+            ) : sugerencias.length > 0 ? (
+                <ul className="max-h-64 overflow-y-auto py-1">
+                    {sugerencias.map((p) => (
+                        <li
+                            key={p.id}
+                            onMouseDown={(e) => {
+                                e.preventDefault();
+                                onSeleccionar(p);
+                            }}
+                            className="hover:bg-accent cursor-pointer px-3 py-2 text-sm"
+                        >
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="font-medium">{p.nombre_producto}</span>
+                                <Badge variant={p.cantidad_total > 0 ? 'outline' : 'destructive'} className="shrink-0 text-xs">
+                                    {p.cantidad_total} en stock
+                                </Badge>
+                            </div>
+                            <p className="text-muted-foreground text-xs">
+                                {[p.marca_producto, p.modelo_producto, p.capacidad_producto].filter(Boolean).join(' · ') || 'Sin especificaciones'}
+                                {' — Costo actual: '}
+                                <span className="font-medium">${p.precio_compra_producto.toFixed(2)}</span>
+                            </p>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <p className="text-muted-foreground p-3 text-sm">No existe — se creará un producto nuevo.</p>
+            )}
+        </div>
+    );
 }
 
 // =================================================================
@@ -168,6 +235,15 @@ export default function ComprarPage() {
     const [isSearchingClientes, setIsSearchingClientes] = useState(false);
     const [clienteSelectOpen, setClienteSelectOpen] = useState(false);
 
+    // Estados para autocompletado de productos existentes (evita duplicados y avisa antes de pisar el costo).
+    // Un solo estado compartido por los 3 campos que pueden disparar la búsqueda (Nombre/Marca/Modelo) —
+    // `campoEnFoco` indica cuál de los tres está activo y por lo tanto cuál dropdown se muestra.
+    const [productoSugerencias, setProductoSugerencias] = useState<ProductoExistente[]>([]);
+    const [buscandoProducto, setBuscandoProducto] = useState(false);
+    const [campoEnFoco, setCampoEnFoco] = useState<'producto' | 'marca' | 'modelo' | null>(null);
+    const [productoCoincidente, setProductoCoincidente] = useState<ProductoExistente | null>(null);
+    const justSelectedProductoRef = useRef(false);
+
     // Estados para búsqueda de cuentas
     const [cuentaSearchTerm, setCuentaSearchTerm] = useState('');
     const [filteredCuentas, setFilteredCuentas] = useState<CuentaNegocioProps[]>([]);
@@ -239,6 +315,41 @@ export default function ComprarPage() {
         return () => clearTimeout(debounceTimer);
     }, [clienteSearchTerm, clientes]);
 
+    // 🔍 EFECTO PARA AUTOCOMPLETADO DE PRODUCTOS EXISTENTES — dispara desde Nombre, Marca o Modelo,
+    // el que tenga el foco en ese momento (el backend ya busca por los 3 campos, ver Producto::scopeBuscar).
+    useEffect(() => {
+        // Evita re-buscar/reabrir el dropdown cuando el cambio de texto vino de seleccionar una sugerencia
+        if (justSelectedProductoRef.current) {
+            justSelectedProductoRef.current = false;
+            return;
+        }
+
+        if (!campoEnFoco) return;
+
+        const termino = tempFormData[campoEnFoco].trim();
+        if (termino.length < 2) {
+            setProductoSugerencias([]);
+            return;
+        }
+
+        const buscarProductos = async () => {
+            setBuscandoProducto(true);
+            try {
+                const response = await axios.get(route('compras.productos.buscar'), {
+                    params: { search: termino },
+                });
+                setProductoSugerencias(response.data);
+            } catch (error) {
+                console.error('Error buscando productos existentes:', error);
+            } finally {
+                setBuscandoProducto(false);
+            }
+        };
+
+        const debounceTimer = setTimeout(buscarProductos, 300);
+        return () => clearTimeout(debounceTimer);
+    }, [tempFormData.producto, tempFormData.marca, tempFormData.modelo, campoEnFoco]);
+
     // 🔍 EFECTO PARA BÚSQUEDA EN TIEMPO REAL DE ALMACENES - ELIMINADO: El Combobox maneja el filtrado nativamente
 
     // 🔍 EFECTO PARA BÚSQUEDA EN TIEMPO REAL DE CUENTAS
@@ -309,6 +420,10 @@ export default function ComprarPage() {
             ...prev,
             [name]: name === 'precio' || name === 'cantidad' ? value : value.toUpperCase(),
         }));
+        // Si el usuario sigue editando a mano después de haber elegido una sugerencia, el aviso queda desactualizado
+        if (productoCoincidente && (name === 'producto' || name === 'marca' || name === 'modelo')) {
+            setProductoCoincidente(null);
+        }
     };
 
     const handleTempSelectChange = (name: string, value: string) => {
@@ -336,6 +451,27 @@ export default function ComprarPage() {
             cantidad: '',
             precio: '',
         });
+        setProductoCoincidente(null);
+        setCampoEnFoco(null);
+    };
+
+    // Autocompleta marca/modelo/capacidad/categoría desde un producto ya existente, sin importar si la
+    // sugerencia vino del campo Nombre, Marca o Modelo. El color y el precio NO se rellenan: el color es
+    // lo que suele distinguir la unidad real, y el precio se deja en blanco a propósito para que el
+    // usuario compare contra el costo actual (mostrado en el panel de abajo) en vez de arrastrarlo sin darse cuenta.
+    const seleccionarProductoExistente = (producto: ProductoExistente) => {
+        justSelectedProductoRef.current = true;
+        setTempFormData((prev) => ({
+            ...prev,
+            producto: producto.nombre_producto,
+            marca: producto.marca_producto || '',
+            modelo: producto.modelo_producto || '',
+            capacidad: producto.capacidad_producto || '',
+            categoria: producto.categoria || '',
+        }));
+        setProductoCoincidente(producto);
+        setCampoEnFoco(null);
+        setProductoSugerencias([]);
     };
 
     const agregarProducto = () => {
@@ -377,6 +513,22 @@ export default function ComprarPage() {
 
         resetTempForm();
     };
+
+    // Enter en cualquier campo de texto del formulario de alta agrega el producto, para no
+    // depender del mouse al cargar varias líneas seguidas. Los Combobox (Almacén/Categoría)
+    // quedan afuera a propósito: Enter ahí ya lo usa el propio combobox para seleccionar.
+    const handleEnterAgregarProducto = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            agregarProducto();
+        }
+    };
+
+    // Preview del código que se autogenera al agregar — mismo cálculo que agregarProducto(),
+    // solo que en vivo, para que no sea invisible hasta abrir "Editar" después de cargado.
+    const codigoPreview = tempFormData.producto
+        ? generarCodigoLocal(tempFormData.producto, tempFormData.marca || '', tempFormData.modelo || '', tempFormData.capacidad || '')
+        : '';
 
     const eliminarProducto = (id: number) => {
         setProductos((prev) => prev.filter((p) => p.id !== id));
@@ -1428,157 +1580,285 @@ export default function ComprarPage() {
                     <CardHeader>
                         <CardDescription className="text-center dark:text-emerald-400">Ingrese Datos del Producto a Comprar</CardDescription>
                     </CardHeader>
-                    <CardContent>
-                        <div className="grid grid-cols-4 gap-4">
-                            {/* Fila 1 - ALMACÉN CON BÚSQUEDA Y MODAL */}
-                            <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="almacen_id">Almacén Destino *</Label>
-                                <Combobox
-                                    items={almacens}
-                                    itemToStringLabel={(item) => item.nombre_almacen}
-                                    itemToStringValue={(item) => item.nombre_almacen}
-                                    value={selectedAlmacen}
-                                    onValueChange={(almacen) => {
-                                        if (almacen) {
-                                            handleTempSelectChange('almacen_id', almacen.id.toString());
-                                        } else {
-                                            handleTempSelectChange('almacen_id', '');
-                                        }
-                                    }}
-                                >
-                                    <ComboboxInput
-                                        placeholder={lastSelectedAlmacenId ? 'Último seleccionado' : 'Seleccione Almacén'}
-                                        showClear={!!tempFormData.almacen_id}
-                                        className="uppercase"
+                    <CardContent className="space-y-6">
+                        <FieldSet>
+                            <FieldLegend>Identificación del Producto</FieldLegend>
+                            <FieldGroup className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                                <Field className="relative">
+                                    <FieldLabel htmlFor="nombre_producto">Nombre del Producto *</FieldLabel>
+                                    <Input
+                                        type="text"
+                                        name="producto"
+                                        placeholder="Producto"
+                                        autoComplete="off"
+                                        value={tempFormData.producto}
+                                        onChange={handleTempInputChange}
+                                        onFocus={() => setCampoEnFoco('producto')}
+                                        onBlur={() => setTimeout(() => setCampoEnFoco((c) => (c === 'producto' ? null : c)), 150)}
+                                        onKeyDown={handleEnterAgregarProducto}
                                     />
-                                    <ComboboxContent>
-                                        <ComboboxEmpty>No se encontraron almacenes.</ComboboxEmpty>
-                                        <ComboboxList>
-                                            {(almacen) => (
-                                                <ComboboxItem key={almacen.id} value={almacen}>
-                                                    <div className="flex items-center gap-2 uppercase">
-                                                        <Warehouse className="h-4 w-4 text-gray-500" />
-                                                        <span>{almacen.nombre_almacen}</span>
-                                                        {almacen.tipo_almacen && (
-                                                            <Badge variant="outline" className="ml-auto text-xs">
-                                                                {almacen.tipo_almacen}
-                                                            </Badge>
+                                    <ProductoSugerenciasDropdown
+                                        mostrar={campoEnFoco === 'producto' && tempFormData.producto.trim().length >= 2}
+                                        buscando={buscandoProducto}
+                                        sugerencias={productoSugerencias}
+                                        onSeleccionar={seleccionarProductoExistente}
+                                    />
+                                </Field>
+
+                                <Field className="relative">
+                                    <FieldLabel htmlFor="marca_producto">Marca</FieldLabel>
+                                    <Input
+                                        type="text"
+                                        name="marca"
+                                        placeholder="Marca"
+                                        autoComplete="off"
+                                        value={tempFormData.marca}
+                                        onChange={handleTempInputChange}
+                                        onFocus={() => setCampoEnFoco('marca')}
+                                        onBlur={() => setTimeout(() => setCampoEnFoco((c) => (c === 'marca' ? null : c)), 150)}
+                                        onKeyDown={handleEnterAgregarProducto}
+                                    />
+                                    <ProductoSugerenciasDropdown
+                                        mostrar={campoEnFoco === 'marca' && tempFormData.marca.trim().length >= 2}
+                                        buscando={buscandoProducto}
+                                        sugerencias={productoSugerencias}
+                                        onSeleccionar={seleccionarProductoExistente}
+                                    />
+                                </Field>
+
+                                <Field className="relative">
+                                    <FieldLabel htmlFor="modelo_producto">Modelo</FieldLabel>
+                                    <Input
+                                        type="text"
+                                        name="modelo"
+                                        placeholder="Modelo"
+                                        autoComplete="off"
+                                        value={tempFormData.modelo}
+                                        onChange={handleTempInputChange}
+                                        onFocus={() => setCampoEnFoco('modelo')}
+                                        onBlur={() => setTimeout(() => setCampoEnFoco((c) => (c === 'modelo' ? null : c)), 150)}
+                                        onKeyDown={handleEnterAgregarProducto}
+                                    />
+                                    <ProductoSugerenciasDropdown
+                                        mostrar={campoEnFoco === 'modelo' && tempFormData.modelo.trim().length >= 2}
+                                        buscando={buscandoProducto}
+                                        sugerencias={productoSugerencias}
+                                        onSeleccionar={seleccionarProductoExistente}
+                                    />
+                                </Field>
+
+                                <Field>
+                                    <FieldLabel htmlFor="capacidad_producto">Capacidad/Tamaño</FieldLabel>
+                                    <Input
+                                        type="text"
+                                        name="capacidad"
+                                        placeholder="Ej: 1TB, 16GB"
+                                        value={tempFormData.capacidad}
+                                        onChange={handleTempInputChange}
+                                        onKeyDown={handleEnterAgregarProducto}
+                                    />
+                                </Field>
+
+                                <Field>
+                                    <FieldLabel htmlFor="color_producto">Color</FieldLabel>
+                                    <Input
+                                        type="text"
+                                        name="color"
+                                        placeholder="Ej: Negro, Rojo, Azul"
+                                        value={tempFormData.color}
+                                        onChange={handleTempInputChange}
+                                        onKeyDown={handleEnterAgregarProducto}
+                                    />
+                                </Field>
+
+                                <Field>
+                                    <FieldLabel htmlFor="codigo_preview">Código (autogenerado)</FieldLabel>
+                                    <Input
+                                        id="codigo_preview"
+                                        value={codigoPreview}
+                                        placeholder="Se genera al completar el nombre"
+                                        disabled
+                                        className="font-mono text-xs"
+                                    />
+                                </Field>
+                            </FieldGroup>
+                        </FieldSet>
+
+                        <FieldSeparator />
+
+                        <FieldSet>
+                            <FieldLegend>Destino y Categoría</FieldLegend>
+                            <FieldGroup className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                <Field>
+                                    <FieldLabel htmlFor="almacen_id">Almacén Destino *</FieldLabel>
+                                    <Combobox
+                                        items={almacens}
+                                        itemToStringLabel={(item) => item.nombre_almacen}
+                                        itemToStringValue={(item) => item.nombre_almacen}
+                                        value={selectedAlmacen}
+                                        onValueChange={(almacen) => {
+                                            if (almacen) {
+                                                handleTempSelectChange('almacen_id', almacen.id.toString());
+                                            } else {
+                                                handleTempSelectChange('almacen_id', '');
+                                            }
+                                        }}
+                                    >
+                                        <ComboboxInput
+                                            placeholder={lastSelectedAlmacenId ? 'Último seleccionado' : 'Seleccione Almacén'}
+                                            showClear={!!tempFormData.almacen_id}
+                                            className="uppercase"
+                                        />
+                                        <ComboboxContent>
+                                            <ComboboxEmpty>No se encontraron almacenes.</ComboboxEmpty>
+                                            <ComboboxList>
+                                                {(almacen) => (
+                                                    <ComboboxItem key={almacen.id} value={almacen}>
+                                                        <div className="flex items-center gap-2 uppercase">
+                                                            <Warehouse className="h-4 w-4 text-gray-500" />
+                                                            <span>{almacen.nombre_almacen}</span>
+                                                            {almacen.tipo_almacen && (
+                                                                <Badge variant="outline" className="ml-auto text-xs">
+                                                                    {almacen.tipo_almacen}
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+                                                    </ComboboxItem>
+                                                )}
+                                            </ComboboxList>
+                                            <Separator className="my-2" />
+                                            <div
+                                                className="flex cursor-pointer items-center rounded-md bg-blue-50 px-3 py-3 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-300"
+                                                onClick={() => {
+                                                    setIsCrearAlmacenDialogOpen(true);
+                                                }}
+                                            >
+                                                <PlusCircle className="mr-2 h-4 w-4" />
+                                                <span className="font-medium">Crear nuevo almacén</span>
+                                            </div>
+                                        </ComboboxContent>
+                                    </Combobox>
+                                    {!tempFormData.almacen_id && productos.some((p) => !p.almacen_id) && (
+                                        <p className="text-sm text-red-500">Debe seleccionar un almacén válido</p>
+                                    )}
+                                </Field>
+
+                                <Field>
+                                    <FieldLabel htmlFor="categorias">Categoría *</FieldLabel>
+                                    <Combobox
+                                        items={categorias}
+                                        itemToStringLabel={(item) => item.nombre_categoria}
+                                        itemToStringValue={(item) => item.nombre_categoria}
+                                        value={selectedCategoria}
+                                        onValueChange={(categoria) => {
+                                            if (categoria) {
+                                                handleTempSelectChange('categoria', categoria.nombre_categoria);
+                                            } else {
+                                                handleTempSelectChange('categoria', '');
+                                            }
+                                        }}
+                                    >
+                                        <ComboboxInput
+                                            placeholder="Seleccione Categoría"
+                                            showClear={!!tempFormData.categoria}
+                                            className="uppercase"
+                                        />
+                                        <ComboboxContent>
+                                            <ComboboxEmpty>No se encontraron categorías.</ComboboxEmpty>
+                                            <ComboboxList>
+                                                {(categoria) => (
+                                                    <ComboboxItem key={categoria.id} value={categoria}>
+                                                        <span className="uppercase">{categoria.nombre_categoria}</span>
+                                                    </ComboboxItem>
+                                                )}
+                                            </ComboboxList>
+                                            <Separator className="my-2" />
+                                            <div
+                                                className="hover:bg-accent flex cursor-pointer items-center gap-2 p-2 text-sm text-purple-600"
+                                                onClick={() => setIsCrearCategoriaDialogOpen(true)}
+                                            >
+                                                <PlusCircle className="h-4 w-4" />
+                                                Crear Nueva Categoría
+                                            </div>
+                                        </ComboboxContent>
+                                    </Combobox>
+                                    {errors.categorias && <InputError message={errors.categorias} />}
+                                </Field>
+                            </FieldGroup>
+                        </FieldSet>
+
+                        <FieldSeparator />
+
+                        <FieldSet>
+                            <FieldLegend>Datos Comerciales</FieldLegend>
+                            <FieldGroup className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                <Field>
+                                    <FieldLabel htmlFor="precio_producto">Precio *</FieldLabel>
+                                    <InputGroup>
+                                        <InputGroupAddon>$</InputGroupAddon>
+                                        <InputGroupInput
+                                            inputMode="decimal"
+                                            name="precio"
+                                            placeholder="0.00"
+                                            value={tempFormData.precio ?? ''}
+                                            onChange={handleTempInputChange}
+                                            onKeyDown={handleEnterAgregarProducto}
+                                        />
+                                    </InputGroup>
+                                    {errors['productos.0.precio'] && <InputError message={errors['productos.0.precio']} />}
+                                </Field>
+
+                                <Field>
+                                    <FieldLabel htmlFor="cantidad_producto">Cantidad *</FieldLabel>
+                                    <Input
+                                        inputMode="numeric"
+                                        name="cantidad"
+                                        placeholder="0"
+                                        value={tempFormData.cantidad ?? ''}
+                                        onChange={handleTempInputChange}
+                                        onKeyDown={handleEnterAgregarProducto}
+                                    />
+                                    {errors['productos.0.cantidad'] && <InputError message={errors['productos.0.cantidad']} />}
+                                </Field>
+                            </FieldGroup>
+
+                            {productoCoincidente &&
+                                (() => {
+                                    // El stock es por almacén; el costo (precio_compra_producto) es un solo dato por
+                                    // producto, sin importar el almacén. El aviso separa las dos cosas a propósito.
+                                    const stockEnEsteAlmacen = selectedAlmacen
+                                        ? (productoCoincidente.stock_por_almacen.find((s) => s.almacen_id === selectedAlmacen.id)?.cantidad ?? 0)
+                                        : null;
+
+                                    return (
+                                        <div className="mt-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/30">
+                                            <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                                            <p className="text-amber-800 dark:text-amber-300">
+                                                Este producto ya existe.{' '}
+                                                {stockEnEsteAlmacen !== null ? (
+                                                    <>
+                                                        Tiene <strong>{stockEnEsteAlmacen}</strong> unidades en{' '}
+                                                        <strong>{selectedAlmacen!.nombre_almacen}</strong>
+                                                        {productoCoincidente.cantidad_total > stockEnEsteAlmacen && (
+                                                            <> ({productoCoincidente.cantidad_total} en total entre todos los almacenes)</>
                                                         )}
-                                                    </div>
-                                                </ComboboxItem>
-                                            )}
-                                        </ComboboxList>
-                                        <Separator className="my-2" />
-                                        <div
-                                            className="flex cursor-pointer items-center rounded-md bg-blue-50 px-3 py-3 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-300"
-                                            onClick={() => {
-                                                setIsCrearAlmacenDialogOpen(true);
-                                            }}
-                                        >
-                                            <PlusCircle className="mr-2 h-4 w-4" />
-                                            <span className="font-medium">Crear nuevo almacén</span>
+                                                        .{' '}
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        Tiene <strong>{productoCoincidente.cantidad_total}</strong> unidades en stock, repartidas
+                                                        entre los almacenes que ya lo tienen — elegí el Almacén Destino para ver cuánto hay ahí
+                                                        específicamente.{' '}
+                                                    </>
+                                                )}
+                                                El costo (<strong>${productoCoincidente.precio_compra_producto.toFixed(2)}</strong>) es un dato
+                                                único por producto, no por almacén: si continuás, el precio que pongas acá lo va a reemplazar para
+                                                todos los almacenes.
+                                            </p>
                                         </div>
-                                    </ComboboxContent>
-                                </Combobox>
-                                {!tempFormData.almacen_id && productos.some((p) => !p.almacen_id) && (
-                                    <p className="text-sm text-red-500">Debe seleccionar un almacén válido</p>
-                                )}
-                            </div>
-
-                            <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="nombre_producto">Nombre del Producto *</Label>
-                                <Input
-                                    type="text"
-                                    name="producto"
-                                    placeholder="Producto"
-                                    value={tempFormData.producto}
-                                    onChange={handleTempInputChange}
-                                />
-                            </div>
-
-                            <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="marca_producto">Marca</Label>
-                                <Input type="text" name="marca" placeholder="Marca" value={tempFormData.marca} onChange={handleTempInputChange} />
-                            </div>
-
-                            <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="modelo_producto">Modelo</Label>
-                                <Input type="text" name="modelo" placeholder="Modelo" value={tempFormData.modelo} onChange={handleTempInputChange} />
-                            </div>
-
-                            {/* Fila 2 */}
-                            <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="capacidad_producto">Capacidad/Tamaño</Label>
-                                <Input
-                                    type="text"
-                                    name="capacidad"
-                                    placeholder="Ej: 1TB, 16GB"
-                                    value={tempFormData.capacidad}
-                                    onChange={handleTempInputChange}
-                                />
-                            </div>
-
-                            <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="color_producto">Color</Label>
-                                <Input
-                                    type="text"
-                                    name="color"
-                                    placeholder="Ej: Negro, Rojo, Azul"
-                                    value={tempFormData.color}
-                                    onChange={handleTempInputChange}
-                                />
-                            </div>
-                            {/* Categorias */}
-                            <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="categorias">Categoría *</Label>
-                                <Combobox
-                                    items={categorias}
-                                    itemToStringLabel={(item) => item.nombre_categoria}
-                                    itemToStringValue={(item) => item.nombre_categoria}
-                                    value={selectedCategoria}
-                                    onValueChange={(categoria) => {
-                                        if (categoria) {
-                                            handleTempSelectChange('categoria', categoria.nombre_categoria);
-                                        } else {
-                                            handleTempSelectChange('categoria', '');
-                                        }
-                                    }}
-                                >
-                                    <ComboboxInput placeholder="Seleccione Categoría" showClear={!!tempFormData.categoria} className="uppercase" />
-                                    <ComboboxContent>
-                                        <ComboboxEmpty>No se encontraron categorías.</ComboboxEmpty>
-                                        <ComboboxList>
-                                            {(categoria) => (
-                                                <ComboboxItem key={categoria.id} value={categoria}>
-                                                    <span className="uppercase">{categoria.nombre_categoria}</span>
-                                                </ComboboxItem>
-                                            )}
-                                        </ComboboxList>
-                                        <Separator className="my-2" />
-                                        <div
-                                            className="hover:bg-accent flex cursor-pointer items-center gap-2 p-2 text-sm text-purple-600"
-                                            onClick={() => setIsCrearCategoriaDialogOpen(true)}
-                                        >
-                                            <PlusCircle className="h-4 w-4" />
-                                            Crear Nueva Categoría
-                                        </div>
-                                    </ComboboxContent>
-                                </Combobox>
-                                {errors.categorias && <InputError message={errors.categorias} />}
-                            </div>
-
-                            <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="precio_producto">Precio *</Label>
-                                <Input inputMode="decimal" name="precio" placeholder="$ 0.00" value={tempFormData.precio ?? ''} onChange={handleTempInputChange} />
-                                {errors['productos.0.precio'] && <InputError message={errors['productos.0.precio']} />}
-                            </div>
-
-                            <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="cantidad_producto">Cantidad *</Label>
-                                <Input inputMode="numeric" name="cantidad" placeholder="0" value={tempFormData.cantidad ?? ''} onChange={handleTempInputChange} />
-                                {errors['productos.0.cantidad'] && <InputError message={errors['productos.0.cantidad']} />}
-                            </div>
-                        </div>
+                                    );
+                                })()}
+                        </FieldSet>
 
                         {/* Botón Agregar */}
                         <div className="mt-6 flex justify-end">

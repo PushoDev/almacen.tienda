@@ -215,3 +215,76 @@ test('rechaza precio de compra negativo', function () {
 
     $response->assertSessionHasErrors(['productos.0.precio']);
 });
+
+test('el mismo producto en dos almacenes distintos dentro de la misma compra queda en dos líneas separadas, sin fusionar precio ni cantidad', function () {
+    $user = User::factory()->admin()->create();
+    $this->actingAs($user);
+
+    $proveedor = Proveedor::factory()->create(['saldo_proveedor' => 500]);
+    $almacenA = Almacen::factory()->create();
+    $almacenB = Almacen::factory()->create();
+    $categoria = Categoria::factory()->create();
+
+    $response = $this->post(route('comprar.store'), [
+        'compra' => 'deuda_proveedor',
+        'proveedor' => $proveedor->nombre_proveedor,
+        'tipo_proveedor' => 'proveedor',
+        'fecha' => '2026-08-10',
+        'productos' => [
+            [
+                'almacen_id' => $almacenA->id,
+                'producto' => 'Producto Repetido',
+                'marca' => 'Marca X',
+                'modelo' => 'Modelo Y',
+                'categoria' => $categoria->nombre_categoria,
+                'codigo' => 'DUP-A',
+                'cantidad' => 5,
+                'precio' => 10,
+            ],
+            [
+                'almacen_id' => $almacenB->id,
+                'producto' => 'Producto Repetido',
+                'marca' => 'Marca X',
+                'modelo' => 'Modelo Y',
+                'categoria' => $categoria->nombre_categoria,
+                'codigo' => 'DUP-B',
+                'cantidad' => 3,
+                'precio' => 12,
+            ],
+        ],
+    ]);
+
+    $response->assertSessionHasNoErrors();
+
+    $producto = \App\Models\Producto::where('nombre_producto', 'Producto Repetido')->firstOrFail();
+
+    // Dos líneas reales en el pivot, no una fusionada — sin promediar precio ni sumar cantidad.
+    expect(\App\Models\CompraProducto::where('producto_id', $producto->id)->count())->toBe(2);
+
+    $this->assertDatabaseHas('compra_producto', [
+        'producto_id' => $producto->id,
+        'almacen_id' => $almacenA->id,
+        'cantidad' => 5,
+        'precio' => 10,
+    ]);
+
+    $this->assertDatabaseHas('compra_producto', [
+        'producto_id' => $producto->id,
+        'almacen_id' => $almacenB->id,
+        'cantidad' => 3,
+        'precio' => 12,
+    ]);
+
+    // El stock sí queda correcto por almacén, independiente del fix del pivot.
+    $this->assertDatabaseHas('almacen_producto', [
+        'almacen_id' => $almacenA->id,
+        'producto_id' => $producto->id,
+        'cantidad' => 5,
+    ]);
+
+    $this->assertDatabaseHas('almacen_producto', [
+        'almacen_id' => $almacenB->id,
+        'producto_id' => $producto->id,
+        'cantidad' => 3,
+    ]);
+});

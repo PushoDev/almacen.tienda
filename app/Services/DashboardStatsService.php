@@ -291,7 +291,9 @@ class DashboardStatsService
     {
         return DB::table('compra_producto')
             ->join('productos', 'compra_producto.producto_id', '=', 'productos.id')
-            ->selectRaw('productos.nombre_producto, SUM(compra_producto.cantidad) as total_cantidad, COUNT(compra_producto.compra_id) as veces_comprado')
+            // DISTINCT: un producto puede tener varias líneas en la misma compra (distintos
+            // almacenes/colores) — "veces comprado" cuenta compras, no líneas.
+            ->selectRaw('productos.nombre_producto, SUM(compra_producto.cantidad) as total_cantidad, COUNT(DISTINCT compra_producto.compra_id) as veces_comprado')
             ->groupBy('productos.id', 'productos.nombre_producto')
             ->orderByDesc('total_cantidad')
             ->take(10)

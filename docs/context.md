@@ -74,6 +74,7 @@ Tipos de pago:
 Fuente: puede ser un `Proveedor` o un `Cliente físico` (reseller).
 Al registrar compra: crea/actualiza `Producto`, genera `ProductoCodigo`, incrementa `almacen_producto.cantidad`.
 Pagos múltiples soportados en `compra_pago`.
+- `user_id` (nullable, agregado 2026-08-06): quién registró la compra. Histórico queda en `null` — se captura desde `CompraController::store()` de ahora en adelante. Se agregó para poder acotar Compras por usuario en el reporte Rastreo de Operaciones (ver más abajo), no había forma de hacerlo antes.
 
 ### Venta (`ventas`)
 
@@ -258,7 +259,8 @@ Prefijo: `/api/tienda` — sin autenticación, throttle: 60 req/min.
 | `MovimientosController` | Traslados de stock: crear, aprobar, enviar, recibir, rechazar, seguimiento, discrepancias |
 | `CuentaController` | CRUD de cuentas, control de saldo con contraseña, resumen con KPIs |
 | `CierreCajaController` | Pre-cierre (cálculos), store (persistencia), show (detalle histórico), aprobar cierre |
-| `ReporteController` | Todos los reportes: ventas, compras, inventario, ganancias, auditoría. También datos dashboard (chart, financial-states, usuarios, monedas) |
+| `ReporteController` | 14 de los 15 reportes: ventas, compras, inventario, ganancias, historial, finanzas. También datos dashboard (chart, financial-states, usuarios, monedas). Extracción incremental en curso hacia `App\Http\Controllers\Reportes\*` conforme se trabaja cada reporte |
+| `Reportes\RastreoOperacionesController` | Reporte "Rastreo de Operaciones" (el 15º), extraído de `ReporteController` — ver sección dedicada arriba |
 | `TransaccionController` | Movimientos financieros, distribución de costos de compra, gastos de transportación |
 | `GastoController` | Registro de gastos financieros |
 | `IngresoController` | Registro de ingresos financieros |
@@ -305,6 +307,20 @@ Prefijo: `/api/tienda` — sin autenticación, throttle: 60 req/min.
 - **Datos sensibles**: `precio_compra_producto` y `costo_unitario` solo se exponen a `admin` y `moderador` en respuestas JSON.
 - **Nombres en español**: modelos, columnas, rutas y vistas siguen nomenclatura en español.
 - **Rutas modularizadas**: `routes/web.php` incluye archivos de subdirectorio (`crud/`, `acciones/`, `shop/`, `empleados/`).
+
+---
+
+## Reportes — Rastreo de Operaciones (`Reportes/Report/RastreoOperaciones.tsx`)
+
+El reporte prioritario del cliente dentro del módulo Reportes (los otros 14 reportes viven en `ReporteController`; este tiene su propio controlador: `app/Http/Controllers/Reportes/RastreoOperacionesController.php`). Unifica 5 tipos de operación en una sola tabla tipo "partida doble":
+
+- **Venta, Gasto, Ingreso, Transferencia** (`movimientos_financieros` + `ventas`/`pago_ventas`) y **Compra** (`compras`/`compra_pago`, agregada 2026-08-06).
+- Columnas: `Referencia | Cuenta Envía | Monto | Cuenta que Recibe | Monto | Tasa de la Operación | Detalles` — `Tipo` fusionado como badge dentro de `Referencia`. En Venta y Compra, cuando hay varios pagos, cada columna de cuenta/monto/tasa muestra un `Badge` por pago, alineados por índice y coloreados con `colorPago()` para identificar visualmente qué monto/tasa corresponde a qué cuenta.
+- **Compra es admin/moderador-only** dentro de este reporte: dato de costo, y no hay forma de acotar "solo mis compras" para vendedor en filas históricas (`compras.user_id` es nullable, capturado solo desde 2026-08-06 en adelante).
+- Filtros: fecha, tipo, usuario, búsqueda de texto libre, búsqueda exacta por número de referencia (`34` encuentra `Venta #34`/`Gasto #34` sin saber el tipo), y tres combobox multiselect con chips (Cliente/Proveedor/Cuenta) — cada uno aplica solo a los tipos donde el dato tiene sentido (p. ej. Proveedor nunca aplica a Venta).
+- Costo/margen y widgets KPI gateados por rol; vendedor scoped a sus propias operaciones.
+- **Pendiente conocido:** el botón "Exportar PDF" (`exportToPDF` en el mismo `.tsx`) sigue generando el set de columnas viejo (`Fecha, Tipo, Referencia, Usuario, Monto, Detalles`), desincronizado de la tabla en pantalla desde que esta se rediseñó.
+- Ver `docs/arreglos-pendientes/rastreo-operaciones-rediseno-2026-08-01.md` para el plan de fases completo y `docs/arreglos-pendientes/reportes-arreglos-2026-08-01.md` para el resto del módulo Reportes (14 reportes aún sin trabajar, ordenados por el cliente uno a uno).
 
 ---
 
@@ -384,5 +400,8 @@ Cada card tiene: `border-l-4`, `shadow-sm hover:shadow-md`, icono en contenedor 
 
 ## Branch Actual
 
-`feature/desarrollo-caliente` — Trabajo activo en transacciones financieras, cuentas y logística.
-Últimos cambios: **Compras con 0.90**, mejoras UX/UI en Cierres. **Módulo Transacciones** (Gastos, Ingresos, Transferencias) al 75%. **Cuentas**: nuevo campo `tipo_titular` (externa/personal), eliminación de campo `deuda`, unificación `temporales→permanentes`. **Logística I+II**: 4 widgets Capital Financiero + resúmenes de Cuentas/Clientes/Proveedores/Productos + layouts de charts. **Bugs B1/B2/B3 resueltos** en VentaController.
+`feature/desarrollo-caliente` — Trabajo activo: limpieza de los 15 reportes del módulo Reportes (`docs/arreglos-pendientes/reportes-arreglos-2026-08-01.md`), uno por uno según orden del cliente.
+
+Últimos cambios (2026-08-06): **Rastreo de Operaciones** (el reporte prioritario del cliente) avanzó Fases 7, 8 y 9 — Compras reintegrada como 5º tipo de operación (admin/moderador-only, requirió `compras.user_id`), rediseño de columnas con badges por pago, filtros Cliente/Proveedor/Cuenta multiselect + búsqueda por referencia. Detalle completo en `docs/arreglos-pendientes/rastreo-operaciones-rediseno-2026-08-01.md`. Los otros 14 reportes del módulo siguen sin tocar. Control de acceso a nivel de ruta ya cerrado para todo el módulo (`routes/acciones/reportes.php`, alias `admin` → `EnsureUserIsAdmin`, permite admin+moderador).
+
+Trabajo previo (2026-07-26 a 2026-08-01, ya estable): **Compras con 0.90**, mejoras UX/UI en Cierres, **Transacciones** (Gastos/Ingresos/Transferencias) al 75%, **Cuentas** con `tipo_titular`, historial de operaciones en `Show.tsx` y acceso de vendedor a sus propias cuentas, **Logística I+II** (widgets Capital Financiero + resúmenes), **Bugs B1-B9 resueltos** (ver `ESTADO_DESARROLLO.md`).
