@@ -3,7 +3,9 @@
 use App\Http\Controllers\CompraController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth', 'verified'])->group(
+// 'admin.only' (EnsureUserIsAdminOnly) — a diferencia del alias 'admin' usado en Reportes,
+// este exige estrictamente role === 'admin'; moderador y vendedor no tienen acceso a Compras.
+Route::middleware(['auth', 'verified', 'admin.only'])->group(
     function () {
         /**
          * Iniciar Compra

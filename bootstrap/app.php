@@ -10,6 +10,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 
 use App\Http\Middleware\EnsureUserIsAdmin;
+use App\Http\Middleware\EnsureUserIsAdminOnly;
 use App\Http\Middleware\EnsureUserIsModerator;
 use App\Http\Middleware\EnsureUserIsVendor;
 
@@ -36,6 +37,7 @@ return Application::configure(basePath: dirname(__DIR__))
          */
         $middleware->alias([
             'admin' => EnsureUserIsAdmin::class,
+            'admin.only' => EnsureUserIsAdminOnly::class,
             'moderator' => EnsureUserIsModerator::class,
             'vendor' => EnsureUserIsVendor::class,
             'check.cuenta.permission' => CheckCuentaPermission::class,

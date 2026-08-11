@@ -9,6 +9,7 @@ use App\Models\Cliente;
 use App\Models\Compra;
 use App\Models\CompraPago; // ✅ AGREGAR IMPORT DE COMPRAPAGO
 use App\Models\Cuenta;
+use App\Models\HistorialPrecioCosto;
 use App\Models\Producto;
 use App\Models\Proveedor;
 use Illuminate\Http\Request;
@@ -102,13 +103,14 @@ class CompraController extends Controller
     }
 
     /**
-     * Devuelve una lista de cuentas permanentes y temporales SOLO EN USD.
+     * Devuelve una lista de cuentas permanentes SOLO EN USD.
+     * ('temporales' se unificó en 'permanentes' el 2026-07-28, ya no existe como tipo aparte)
      *
      * @return \Illuminate\Http\JsonResponse
      */
     public function getCuentas()
     {
-        $cuentas = Cuenta::whereIn('tipo_cuenta', ['permanentes', 'temporales'])
+        $cuentas = Cuenta::where('tipo_cuenta', 'permanentes')
             ->whereHas('moneda', function ($query) {
                 $query->where('codigo_moneda', 'USD')->where('estado', true);
             })
@@ -194,7 +196,7 @@ class CompraController extends Controller
      */
     public function index()
     {
-        $cuentasUSD = Cuenta::whereIn('tipo_cuenta', ['permanentes', 'temporales'])
+        $cuentasUSD = Cuenta::where('tipo_cuenta', 'permanentes')
             ->whereHas('moneda', function ($query) {
                 $query->where('codigo_moneda', 'USD')->where('estado', true);
             })
@@ -385,6 +387,12 @@ class CompraController extends Controller
                     $producto = new Producto();
                 }
 
+                // Capturado antes de sobreescribir: costo y stock previos a esta compra, para
+                // dejar rastro en historial_precio_costos si el costo cambia (ver más abajo).
+                // Solo aplica a productos existentes — un producto nuevo no tiene "costo anterior".
+                $precioCostoAnterior = $isNew ? null : (float) $producto->precio_compra_producto;
+                $stockAntesDeCompra = $isNew ? 0 : $producto->cantidad_total;
+
                 $producto->fill([
                     'nombre_producto' => $item['producto'],
                     'marca_producto' => $item['marca'] ?? null,
@@ -396,6 +404,31 @@ class CompraController extends Controller
                     'imagen_producto' => $producto->imagen_producto ?? 'productos/producto-default.png',
                 ]);
                 $producto->save();
+
+                // Auditoría de cambio de costo — mismo cálculo que ProductoController::update(),
+                // pero sin pedir confirmación de contraseña: aquí el cambio de costo es esperado
+                // (viene de una compra real), no una edición manual, así que solo se registra.
+                if (!$isNew) {
+                    $precioCostoNuevo = (float) $item['precio'];
+                    $precioCostoCambio = abs($precioCostoAnterior - $precioCostoNuevo) > 0.0001;
+
+                    if ($precioCostoCambio) {
+                        $diferencia = $precioCostoNuevo - $precioCostoAnterior;
+                        $impactoFinanciero = $diferencia * $stockAntesDeCompra;
+
+                        HistorialPrecioCosto::create([
+                            'producto_id' => $producto->id,
+                            'user_id' => $request->user()->id,
+                            'precio_anterior' => $precioCostoAnterior,
+                            'precio_nuevo' => $precioCostoNuevo,
+                            'diferencia' => $diferencia,
+                            'stock_momento' => $stockAntesDeCompra,
+                            'impacto_financiero' => $impactoFinanciero,
+                            'es_perdida' => $impactoFinanciero < 0,
+                            'motivo' => "Actualizado automáticamente por compra #{$compra->id}",
+                        ]);
+                    }
+                }
 
                 // Manejo de Códigos de Barras
                 $codigoBarrasInput = trim((string) ($item['codigo_barras'] ?? $item['codigo'] ?? ''));
