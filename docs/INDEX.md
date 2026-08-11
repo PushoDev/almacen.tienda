@@ -10,9 +10,9 @@
 | Campo | Valor |
 |---|---|---|
 | Rama activa | `feature/desarrollo-caliente` |
-| Última sesión | 2026-08-01 — **Cuentas: historial + acceso vendedor**, fix transferencias Cierres. `Cuentas/Show.tsx` ganó historial real de operaciones en 3 Cards (Compras/Ventas/Transacciones, estilo `Proveedores`/`Clientes`) con búsqueda + filtro por tipo + rango de fechas, cada una paginada y enlazando al registro real (venta/transacción/compra); `vendedor` ahora puede ver el detalle de sus propias cuentas (antes solo admin). Se encontró y corrigió un bug real de orden de bindings de Laravel al filtrar sobre una query `UNION ALL` embebida (B9, ver `ESTADO_DESARROLLO.md`). En `Cierres/*`: fix de deduplicación de transferencias entre monedas distintas, y el widget "Resumen Financiero del Turno" ahora se oculta a `vendedor`. 10 tests nuevos en `CuentaTest.php`. |
-| Estado general | 12/12 módulos estables, ✓ bugs B1/B2/B3/B6/B7/B8/B9 resueltos, ver lista de tareas priorizada en `ESTADO_DESARROLLO.md` |
-| Próximo paso | Ver "🎯 Lista de tareas priorizada" en `ESTADO_DESARROLLO.md` — alta prioridad: completar tests de Cuentas (`ajustarSaldo`, saldo negativo), Combobox en `Vendor/Index.tsx` (POS), validar doble reversión de stock en `anularVenta` |
+| Última sesión | 2026-08-10 — **Compras: formulario de alta perfeccionado + 3 bugs de UX + migración de `compra_producto`**. Autocompletado de productos existentes (stock/costo por almacén antes de sobreescribir), formulario reorganizado en 3 grupos visuales, tabla del carrito rediseñada, y `compra_producto` pasó a `id` autoincremental (ya no fusiona líneas del mismo producto en una compra). 3 bugs de UX arreglados: Combobox roto por mouse en "Editar Producto", clientes desincronizados entre selectores, errores de validación solo visibles en el índice 0 del carrito. Nuevo patrón documentado: `docs/patron-dialog-formulario-grande.md`. Suite completa: 140/140. Pendiente, pausado a propósito: reemplazar el paso de pago por `PaymentForm`/`PaymentList` (patrón ya usado en Ventas). Detalle completo en `ESTADO_DESARROLLO.md` (historial 2026-08-10). |
+| Estado general | 12/12 módulos base estables. Compras: formulario de alta y carrito pulidos, 3 bugs de UX cerrados, 1 pendiente grande (paso de pago) pausado por decisión explícita del cliente. Módulo Reportes sin cambios desde el 2026-08-06 (Rastreo de Operaciones Fases 0-3,5,7-9 cerradas; quedan Fase 4/6 baja prioridad; los otros 14 reportes sin tocar). Suite de tests: 140 tests, 140 passed (0 fallos — el intermitente de Faker de la sesión anterior no se repitió) |
+| Próximo paso | El usuario decide: retomar Compras (paso de pago `PaymentForm`/`PaymentList`, o los items de integridad de datos parqueados — sin control de rol en `CompraController`, costo sin auditoría, rutas muertas), seguir con alguno de los 14 reportes pendientes, o arrancar la actualización de la suite de tests. Ver "🎯 Lista de tareas priorizada" abajo para el resto del backlog histórico (Cuentas `ajustarSaldo`, Combobox en `Vendor/Index.tsx`, doble reversión de stock en `anularVenta`) |
 
 ### ✅ Bugs resueltos recientemente
 
@@ -53,9 +53,9 @@
 | Backend | PHP 8.2+, Laravel 12 |
 | Frontend | React 19, Inertia v2, Vite 7, Tailwind v4 |
 | Modelos | 37 |
-| Controladores | 38 (27 raíz incl. `Controller.php` base + 11 en subdirectorios: 1 Api, 8 Auth, 2 Settings) |
-| Migraciones | 94 |
-| Páginas frontend | 117 únicas (16 reportes, 9 auth/settings, ~92 operacionales) |
+| Controladores | 39 (27 raíz incl. `Controller.php` base + 12 en subdirectorios: 1 Api, 8 Auth, 2 Settings, 1 Reportes — `Reportes\RastreoOperacionesController`, primero de una extracción incremental fuera de `ReporteController`) |
+| Migraciones | 99 |
+| Páginas frontend | 118 únicas (17 reportes, 9 auth/settings, ~92 operacionales) |
 | Middlewares | 7 (solo 3 aplicados a rutas reales: `HandleInertiaRequests`, `HandleAppearance`, `check.cuenta.permission`; `EnsureUserIsAdmin/Moderator/Vendor` registradas como alias pero sin uso, `CheckAlmacenPermission` ni registrada) |
 | Notificaciones | 7 (5 encoladas: Cambio, CierreCaja, MovimientoStock, VentaCreada, MovimientoFinanciero) |
 | Comandos artisan | 5 |
@@ -195,7 +195,7 @@ npm run format                   # formatear código con Prettier
 | **Precios vendedor** | `ProductoVendedorController.php` (421 L) | `ProductoVendedor`, `PrecioHistorial` | `Productos/Vendor/*` (4 páginas) |
 | **Movimientos stock** | `MovimientosController.php` (584 L) | `Movimiento`, `MovimientoDetalle`, `MovimientoSeguimiento` | `Movimientos/Index`, `Movimientos/Show` |
 | **Finanzas** | `TransaccionController.php`, `GastoController.php`, `IngresoController.php`, `TransferenciaController.php` | `MovimientoFinanciero`, `Cuenta`, `Moneda`, `TransaccionCuenta` | `Transacciones/*` (7+ páginas) |
-| **Reportes** | `ReporteController.php` (~845 L) | — | `Reportes/Report/*` (16 vistas) |
+| **Reportes** | `ReporteController.php` (728 L, 14 de 15 reportes) + `Reportes/RastreoOperacionesController.php` (623 L, 1er reporte extraído) | — | `Reportes/Report/*` (16 vistas) + `Reportes/Index.tsx` (menú) |
 | **Telegram Bot** | `TelegramWebhookController.php` (497 L) | — | `routes/api.php` (webhook) |
 | **Dashboard** | `AdminController.php` (545 L) | `TasaCambio`, `TasaCambioMLC`, `HistorialTasaCambio` | `dashboard.tsx` |
 | **Logística** | `LogisticaController.php` (25 L) | — (usa `DashboardStatsService`) | `Logistica/*` (Index, Create, Edit, Show, +layouts) |

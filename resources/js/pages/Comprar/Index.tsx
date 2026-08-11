@@ -14,7 +14,17 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
+import {
+    Combobox,
+    ComboboxChip,
+    ComboboxChips,
+    ComboboxChipsInput,
+    ComboboxContent,
+    ComboboxEmpty,
+    ComboboxInput,
+    ComboboxItem,
+    ComboboxList,
+} from '@/components/ui/combobox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSeparator, FieldSet } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -24,7 +34,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from '@/components/ui/sonner';
-import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
 import { AlmacenProps, CategoriasProps, ClienteProps, CuentaNegocioProps, ProveedorClienteProps, type BreadcrumbItem } from '@/types';
@@ -34,13 +44,13 @@ import { format } from 'date-fns';
 import {
     CalendarIcon,
     CheckCircle,
-    ChevronsUpDown,
     CreditCard,
     DollarSign,
     Edit2,
     HardDriveUpload,
     Info,
     Loader2,
+    Package,
     Phone,
     PlusCircle,
     PlusIcon,
@@ -53,7 +63,7 @@ import {
     Warehouse,
     X,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
@@ -68,6 +78,73 @@ interface CompraReciente {
     tipo_compra: 'pago_cash' | 'deuda_proveedor';
     proveedor: string | null;
     cliente: string | null;
+}
+
+interface ProductoExistente {
+    id: number;
+    nombre_producto: string;
+    marca_producto: string | null;
+    modelo_producto: string | null;
+    capacidad_producto: string | null;
+    categoria: string | null;
+    precio_compra_producto: number;
+    cantidad_total: number;
+    stock_por_almacen: { almacen_id: number; nombre_almacen: string; cantidad: number }[];
+}
+
+// Dropdown de sugerencias de productos existentes, compartido por los 3 campos que
+// disparan autocompletado (Nombre, Marca, Modelo). Componente top-level (no anidado
+// dentro de ComprarPage) para no perder estado en cada re-render del formulario.
+function ProductoSugerenciasDropdown({
+    mostrar,
+    buscando,
+    sugerencias,
+    onSeleccionar,
+}: {
+    mostrar: boolean;
+    buscando: boolean;
+    sugerencias: ProductoExistente[];
+    onSeleccionar: (p: ProductoExistente) => void;
+}) {
+    if (!mostrar) return null;
+
+    return (
+        <div className="bg-popover absolute top-full left-0 z-50 mt-1 w-full max-w-sm rounded-md border shadow-lg">
+            {buscando ? (
+                <div className="text-muted-foreground flex items-center justify-center gap-2 p-3 text-sm">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Buscando...
+                </div>
+            ) : sugerencias.length > 0 ? (
+                <ul className="max-h-64 overflow-y-auto py-1">
+                    {sugerencias.map((p) => (
+                        <li
+                            key={p.id}
+                            onMouseDown={(e) => {
+                                e.preventDefault();
+                                onSeleccionar(p);
+                            }}
+                            className="hover:bg-accent cursor-pointer px-3 py-2 text-sm"
+                        >
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="font-medium">{p.nombre_producto}</span>
+                                <Badge variant={p.cantidad_total > 0 ? 'outline' : 'destructive'} className="shrink-0 text-xs">
+                                    {p.cantidad_total} en stock
+                                </Badge>
+                            </div>
+                            <p className="text-muted-foreground text-xs">
+                                {[p.marca_producto, p.modelo_producto, p.capacidad_producto].filter(Boolean).join(' · ') || 'Sin especificaciones'}
+                                {' — Costo actual: '}
+                                <span className="font-medium">${p.precio_compra_producto.toFixed(2)}</span>
+                            </p>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <p className="text-muted-foreground p-3 text-sm">No existe — se creará un producto nuevo.</p>
+            )}
+        </div>
+    );
 }
 
 // =================================================================
@@ -166,12 +243,39 @@ export default function ComprarPage() {
     const [clienteSearchTerm, setClienteSearchTerm] = useState('');
     const [filteredClientes, setFilteredClientes] = useState<ClienteProps[]>([]);
     const [isSearchingClientes, setIsSearchingClientes] = useState(false);
-    const [clienteSelectOpen, setClienteSelectOpen] = useState(false);
 
-    // Estados para búsqueda de cuentas
-    const [cuentaSearchTerm, setCuentaSearchTerm] = useState('');
-    const [filteredCuentas, setFilteredCuentas] = useState<CuentaNegocioProps[]>([]);
-    const [cuentaSelectOpen, setCuentaSelectOpen] = useState(false);
+    // Estados para autocompletado de productos existentes (evita duplicados y avisa antes de pisar el costo).
+    // Un solo estado compartido por los 3 campos que pueden disparar la búsqueda (Nombre/Marca/Modelo) —
+    // `campoEnFoco` indica cuál de los tres está activo y por lo tanto cuál dropdown se muestra.
+    const [productoSugerencias, setProductoSugerencias] = useState<ProductoExistente[]>([]);
+    const [buscandoProducto, setBuscandoProducto] = useState(false);
+    const [campoEnFoco, setCampoEnFoco] = useState<'producto' | 'marca' | 'modelo' | null>(null);
+    const [productoCoincidente, setProductoCoincidente] = useState<ProductoExistente | null>(null);
+    const justSelectedProductoRef = useRef(false);
+
+    // Fix del Combobox (@base-ui/react) roto dentro de un AlertDialog (Radix): el popup se porta a
+    // <body> por defecto, queda fuera del focus-trap del diálogo y el click con mouse no selecciona
+    // nada (ver docs/pendiente-combobox-reemplazo.md, mismo caso ya resuelto en ventas/PaymentForm.tsx).
+    // El diálogo "Editar Producto" vive dentro de un .map() por fila del carrito, así que no se puede
+    // usar useRef ahí adentro — se resuelve con un ref-callback a nivel de componente en su lugar.
+    const [editDialogContainer, setEditDialogContainer] = useState<HTMLElement | undefined>(undefined);
+    const resolveEditDialogContainer = (node: HTMLElement | null) => {
+        const container = node?.closest('[data-slot="alert-dialog-content"]');
+        if (container instanceof HTMLElement) {
+            setEditDialogContainer(container);
+        }
+    };
+
+    // Mismo fix que arriba, para el diálogo "Realizar Compra" (paso "Procesar Pago"). Este no vive
+    // dentro de un .map(), pero se resuelve igual con un ref-callback para no mezclar dos patrones
+    // distintos de un mismo problema en el mismo archivo.
+    const [pagoDialogContainer, setPagoDialogContainer] = useState<HTMLElement | undefined>(undefined);
+    const resolvePagoDialogContainer = (node: HTMLElement | null) => {
+        const container = node?.closest('[data-slot="alert-dialog-content"]');
+        if (container instanceof HTMLElement) {
+            setPagoDialogContainer(container);
+        }
+    };
 
     // Estados para búsqueda de almacenes
     const [lastSelectedAlmacenId, setLastSelectedAlmacenId] = useState<string>('');
@@ -185,7 +289,9 @@ export default function ComprarPage() {
     // 🆕 Estado para el modal de crear proveedor
     const [isCrearProveedorDialogOpen, setIsCrearProveedorDialogOpen] = useState(false);
 
-    const [tempFormData, setTempFormData] = useState<Omit<ProductoComprarProps, 'id' | 'almacen_id' | 'precio' | 'cantidad'> & { almacen_id: string; precio: string; cantidad: string }>({
+    const [tempFormData, setTempFormData] = useState<
+        Omit<ProductoComprarProps, 'id' | 'almacen_id' | 'precio' | 'cantidad'> & { almacen_id: string; precio: string; cantidad: string }
+    >({
         almacen_id: '',
         producto: '',
         marca: '',
@@ -239,17 +345,43 @@ export default function ComprarPage() {
         return () => clearTimeout(debounceTimer);
     }, [clienteSearchTerm, clientes]);
 
-    // 🔍 EFECTO PARA BÚSQUEDA EN TIEMPO REAL DE ALMACENES - ELIMINADO: El Combobox maneja el filtrado nativamente
-
-    // 🔍 EFECTO PARA BÚSQUEDA EN TIEMPO REAL DE CUENTAS
+    // 🔍 EFECTO PARA AUTOCOMPLETADO DE PRODUCTOS EXISTENTES — dispara desde Nombre, Marca o Modelo,
+    // el que tenga el foco en ese momento (el backend ya busca por los 3 campos, ver Producto::scopeBuscar).
     useEffect(() => {
-        if (cuentaSearchTerm) {
-            const filtered = cuentas.filter((cuenta) => cuenta.nombre_cuenta.toLowerCase().includes(cuentaSearchTerm.toLowerCase()));
-            setFilteredCuentas(filtered);
-        } else {
-            setFilteredCuentas(cuentas);
+        // Evita re-buscar/reabrir el dropdown cuando el cambio de texto vino de seleccionar una sugerencia
+        if (justSelectedProductoRef.current) {
+            justSelectedProductoRef.current = false;
+            return;
         }
-    }, [cuentaSearchTerm, cuentas]);
+
+        if (!campoEnFoco) return;
+
+        const termino = tempFormData[campoEnFoco].trim();
+        if (termino.length < 2) {
+            setProductoSugerencias([]);
+            return;
+        }
+
+        const buscarProductos = async () => {
+            setBuscandoProducto(true);
+            try {
+                const response = await axios.get(route('compras.productos.buscar'), {
+                    params: { search: termino },
+                });
+                setProductoSugerencias(response.data);
+            } catch (error) {
+                console.error('Error buscando productos existentes:', error);
+            } finally {
+                setBuscandoProducto(false);
+            }
+        };
+
+        const debounceTimer = setTimeout(buscarProductos, 300);
+        return () => clearTimeout(debounceTimer);
+    }, [tempFormData.producto, tempFormData.marca, tempFormData.modelo, campoEnFoco]);
+
+    // 🔍 EFECTO PARA BÚSQUEDA EN TIEMPO REAL DE ALMACENES - ELIMINADO: El Combobox maneja el filtrado nativamente
+    // 🔍 EFECTO PARA BÚSQUEDA EN TIEMPO REAL DE CUENTAS - ELIMINADO: mismo motivo, ver Combobox de "Pago desde Cuentas"
 
     // ⚡ EFECTO PARA MANTENER EL ÚLTIMO ALMACÉN SELECCIONADO
     useEffect(() => {
@@ -289,7 +421,6 @@ export default function ComprarPage() {
                 setClientesList(proveedoresRes.data.clientes || []);
                 setCategorias(categoriasRes.data);
                 setCuentas(cuentasRes.data);
-                setFilteredCuentas(cuentasRes.data);
                 setClientes(clientesRes.data);
                 setFilteredClientes(clientesRes.data);
             } catch (error) {
@@ -309,6 +440,10 @@ export default function ComprarPage() {
             ...prev,
             [name]: name === 'precio' || name === 'cantidad' ? value : value.toUpperCase(),
         }));
+        // Si el usuario sigue editando a mano después de haber elegido una sugerencia, el aviso queda desactualizado
+        if (productoCoincidente && (name === 'producto' || name === 'marca' || name === 'modelo')) {
+            setProductoCoincidente(null);
+        }
     };
 
     const handleTempSelectChange = (name: string, value: string) => {
@@ -336,6 +471,27 @@ export default function ComprarPage() {
             cantidad: '',
             precio: '',
         });
+        setProductoCoincidente(null);
+        setCampoEnFoco(null);
+    };
+
+    // Autocompleta marca/modelo/capacidad/categoría desde un producto ya existente, sin importar si la
+    // sugerencia vino del campo Nombre, Marca o Modelo. El color y el precio NO se rellenan: el color es
+    // lo que suele distinguir la unidad real, y el precio se deja en blanco a propósito para que el
+    // usuario compare contra el costo actual (mostrado en el panel de abajo) en vez de arrastrarlo sin darse cuenta.
+    const seleccionarProductoExistente = (producto: ProductoExistente) => {
+        justSelectedProductoRef.current = true;
+        setTempFormData((prev) => ({
+            ...prev,
+            producto: producto.nombre_producto,
+            marca: producto.marca_producto || '',
+            modelo: producto.modelo_producto || '',
+            capacidad: producto.capacidad_producto || '',
+            categoria: producto.categoria || '',
+        }));
+        setProductoCoincidente(producto);
+        setCampoEnFoco(null);
+        setProductoSugerencias([]);
     };
 
     const agregarProducto = () => {
@@ -378,6 +534,22 @@ export default function ComprarPage() {
         resetTempForm();
     };
 
+    // Enter en cualquier campo de texto del formulario de alta agrega el producto, para no
+    // depender del mouse al cargar varias líneas seguidas. Los Combobox (Almacén/Categoría)
+    // quedan afuera a propósito: Enter ahí ya lo usa el propio combobox para seleccionar.
+    const handleEnterAgregarProducto = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            agregarProducto();
+        }
+    };
+
+    // Preview del código que se autogenera al agregar — mismo cálculo que agregarProducto(),
+    // solo que en vivo, para que no sea invisible hasta abrir "Editar" después de cargado.
+    const codigoPreview = tempFormData.producto
+        ? generarCodigoLocal(tempFormData.producto, tempFormData.marca || '', tempFormData.modelo || '', tempFormData.capacidad || '')
+        : '';
+
     const eliminarProducto = (id: number) => {
         setProductos((prev) => prev.filter((p) => p.id !== id));
     };
@@ -406,13 +578,7 @@ export default function ComprarPage() {
         const cant = parseInt(tempFormData.cantidad) || 0;
         const prec = parseFloat(tempFormData.precio) || 0;
 
-        if (
-            !tempFormData.producto.trim() ||
-            !tempFormData.categoria.trim() ||
-            cant <= 0 ||
-            prec <= 0 ||
-            !tempFormData.almacen_id
-        ) {
+        if (!tempFormData.producto.trim() || !tempFormData.categoria.trim() || cant <= 0 || prec <= 0 || !tempFormData.almacen_id) {
             toast.warning('Por favor, completa los campos obligatorios válidos (Producto, Categoría, Cantidad, Precio y Almacén).');
             return;
         }
@@ -475,7 +641,20 @@ export default function ComprarPage() {
                 });
             },
             onError: (errors) => {
-                if (errors.error) {
+                // Los errores de validación del backend vienen por índice real del carrito
+                // (productos.2.precio, productos.5.cantidad, etc.) — antes solo se leía el
+                // índice 0, así que si fallaba cualquier otra línea, el usuario no se enteraba
+                // ni de qué producto era ni de qué campo. Acá se busca cualquier error
+                // "productos.N.campo" y se señala el producto real por nombre.
+                const claveErrorProducto = Object.keys(errors).find((clave) => /^productos\.\d+\./.test(clave));
+
+                if (claveErrorProducto) {
+                    const indice = parseInt(claveErrorProducto.split('.')[1], 10);
+                    const nombreProducto = productos[indice]?.producto ?? `línea ${indice + 1}`;
+                    toast.error(`Error en "${nombreProducto}"`, {
+                        description: errors[claveErrorProducto],
+                    });
+                } else if (errors.error) {
                     toast.error('Error al procesar la compra', {
                         description: errors.error,
                     });
@@ -893,6 +1072,17 @@ export default function ComprarPage() {
         );
     };
 
+    // Un cliente creado (o encontrado como ya existente) desde cualquiera de los dos flujos de
+    // "crear cliente" de esta página (el combobox superior Proveedor/Cliente, o "Financiamiento
+    // con Clientes" del paso de pago) queda visible en AMBOS selectores de inmediato, sin recargar
+    // la página. Antes cada flujo solo actualizaba su propia lista (`clientesList` o `clientes`).
+    const sincronizarClienteEnListas = (cliente: ClienteProps) => {
+        setClientes((prev) => (prev.some((c) => c.id === cliente.id) ? prev : [...prev, cliente]));
+        setClientesList((prev) =>
+            prev.some((c) => c.id === cliente.id) ? prev : [...prev, { id: cliente.id, nombre: cliente.nombre_cliente, tipo: 'cliente' }],
+        );
+    };
+
     // 🆕 COMPONENTE DE CREACIÓN DE PROVEEDOR (VERSIÓN SIMPLE)
     const CrearProveedorDialogContent = () => {
         const [nombreProveedor, setNombreProveedor] = useState('');
@@ -935,11 +1125,11 @@ export default function ComprarPage() {
                 });
 
                 // Actualizar el estado global de proveedores/clientes segun el tipo
-                const nuevoItem = { id: nuevoData.id, nombre: nuevoData.nombre_proveedor || nuevoData.nombre_cliente, tipo };
                 if (tipo === 'proveedor') {
-                    setProveedoresList((prev) => [...prev, nuevoItem]);
+                    setProveedoresList((prev) => [...prev, { id: nuevoData.id, nombre: nuevoData.nombre_proveedor, tipo }]);
                 } else {
-                    setClientesList((prev) => [...prev, nuevoItem]);
+                    // nuevoData ya es un Cliente completo (nuevo o existente) — sincroniza las dos listas a la vez
+                    sincronizarClienteEnListas(nuevoData as ClienteProps);
                 }
                 // Seleccionar automáticamente el nuevo
                 setData('proveedor', nuevoData.nombre_proveedor || nuevoData.nombre_cliente);
@@ -1115,16 +1305,13 @@ export default function ComprarPage() {
                         description: 'El cliente ya existía en el sistema. Se ha agregado automáticamente.',
                     });
 
-                    // Verificar si el cliente ya está en la lista
-                    if (!clientes.some((c) => c.id === cliente.id)) {
-                        setClientes((prev) => [...prev, cliente]);
-                    }
+                    sincronizarClienteEnListas(cliente);
                 } else {
                     // Cliente nuevo creado
                     toast.success(message, {
                         description: 'Cliente creado exitosamente.',
                     });
-                    setClientes((prev) => [...prev, cliente]);
+                    sincronizarClienteEnListas(cliente);
                 }
 
                 // Agregar automáticamente a pagos_clientes con monto 0
@@ -1153,9 +1340,7 @@ export default function ComprarPage() {
                     });
 
                     // Agregar a la lista si no está
-                    if (!clientes.some((c) => c.id === clienteExistente.id)) {
-                        setClientes((prev) => [...prev, clienteExistente]);
-                    }
+                    sincronizarClienteEnListas(clienteExistente);
 
                     // Agregar a pagos_clientes
                     if (!data.pagos_clientes.some((p) => p.cliente_id === clienteExistente.id)) {
@@ -1377,7 +1562,11 @@ export default function ComprarPage() {
                                             }
                                         }}
                                     >
-                                        <ComboboxInput placeholder="Buscar proveedor o cliente..." showClear={!!data.proveedor} className="uppercase" />
+                                        <ComboboxInput
+                                            placeholder="Buscar proveedor o cliente..."
+                                            showClear={!!data.proveedor}
+                                            className="uppercase"
+                                        />
                                         <ComboboxContent>
                                             <ComboboxEmpty>No se encontraron proveedores.</ComboboxEmpty>
                                             <ComboboxList>
@@ -1428,157 +1617,283 @@ export default function ComprarPage() {
                     <CardHeader>
                         <CardDescription className="text-center dark:text-emerald-400">Ingrese Datos del Producto a Comprar</CardDescription>
                     </CardHeader>
-                    <CardContent>
-                        <div className="grid grid-cols-4 gap-4">
-                            {/* Fila 1 - ALMACÉN CON BÚSQUEDA Y MODAL */}
-                            <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="almacen_id">Almacén Destino *</Label>
-                                <Combobox
-                                    items={almacens}
-                                    itemToStringLabel={(item) => item.nombre_almacen}
-                                    itemToStringValue={(item) => item.nombre_almacen}
-                                    value={selectedAlmacen}
-                                    onValueChange={(almacen) => {
-                                        if (almacen) {
-                                            handleTempSelectChange('almacen_id', almacen.id.toString());
-                                        } else {
-                                            handleTempSelectChange('almacen_id', '');
-                                        }
-                                    }}
-                                >
-                                    <ComboboxInput
-                                        placeholder={lastSelectedAlmacenId ? 'Último seleccionado' : 'Seleccione Almacén'}
-                                        showClear={!!tempFormData.almacen_id}
-                                        className="uppercase"
+                    <CardContent className="space-y-6">
+                        <FieldSet>
+                            <FieldLegend>Identificación del Producto</FieldLegend>
+                            <FieldGroup className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                                <Field className="relative">
+                                    <FieldLabel htmlFor="nombre_producto">Nombre del Producto *</FieldLabel>
+                                    <Input
+                                        type="text"
+                                        name="producto"
+                                        placeholder="Producto"
+                                        autoComplete="off"
+                                        value={tempFormData.producto}
+                                        onChange={handleTempInputChange}
+                                        onFocus={() => setCampoEnFoco('producto')}
+                                        onBlur={() => setTimeout(() => setCampoEnFoco((c) => (c === 'producto' ? null : c)), 150)}
+                                        onKeyDown={handleEnterAgregarProducto}
                                     />
-                                    <ComboboxContent>
-                                        <ComboboxEmpty>No se encontraron almacenes.</ComboboxEmpty>
-                                        <ComboboxList>
-                                            {(almacen) => (
-                                                <ComboboxItem key={almacen.id} value={almacen}>
-                                                    <div className="flex items-center gap-2 uppercase">
-                                                        <Warehouse className="h-4 w-4 text-gray-500" />
-                                                        <span>{almacen.nombre_almacen}</span>
-                                                        {almacen.tipo_almacen && (
-                                                            <Badge variant="outline" className="ml-auto text-xs">
-                                                                {almacen.tipo_almacen}
-                                                            </Badge>
+                                    <ProductoSugerenciasDropdown
+                                        mostrar={campoEnFoco === 'producto' && tempFormData.producto.trim().length >= 2}
+                                        buscando={buscandoProducto}
+                                        sugerencias={productoSugerencias}
+                                        onSeleccionar={seleccionarProductoExistente}
+                                    />
+                                </Field>
+
+                                <Field className="relative">
+                                    <FieldLabel htmlFor="marca_producto">Marca</FieldLabel>
+                                    <Input
+                                        type="text"
+                                        name="marca"
+                                        placeholder="Marca"
+                                        autoComplete="off"
+                                        value={tempFormData.marca}
+                                        onChange={handleTempInputChange}
+                                        onFocus={() => setCampoEnFoco('marca')}
+                                        onBlur={() => setTimeout(() => setCampoEnFoco((c) => (c === 'marca' ? null : c)), 150)}
+                                        onKeyDown={handleEnterAgregarProducto}
+                                    />
+                                    <ProductoSugerenciasDropdown
+                                        mostrar={campoEnFoco === 'marca' && tempFormData.marca.trim().length >= 2}
+                                        buscando={buscandoProducto}
+                                        sugerencias={productoSugerencias}
+                                        onSeleccionar={seleccionarProductoExistente}
+                                    />
+                                </Field>
+
+                                <Field className="relative">
+                                    <FieldLabel htmlFor="modelo_producto">Modelo</FieldLabel>
+                                    <Input
+                                        type="text"
+                                        name="modelo"
+                                        placeholder="Modelo"
+                                        autoComplete="off"
+                                        value={tempFormData.modelo}
+                                        onChange={handleTempInputChange}
+                                        onFocus={() => setCampoEnFoco('modelo')}
+                                        onBlur={() => setTimeout(() => setCampoEnFoco((c) => (c === 'modelo' ? null : c)), 150)}
+                                        onKeyDown={handleEnterAgregarProducto}
+                                    />
+                                    <ProductoSugerenciasDropdown
+                                        mostrar={campoEnFoco === 'modelo' && tempFormData.modelo.trim().length >= 2}
+                                        buscando={buscandoProducto}
+                                        sugerencias={productoSugerencias}
+                                        onSeleccionar={seleccionarProductoExistente}
+                                    />
+                                </Field>
+
+                                <Field>
+                                    <FieldLabel htmlFor="capacidad_producto">Capacidad/Tamaño</FieldLabel>
+                                    <Input
+                                        type="text"
+                                        name="capacidad"
+                                        placeholder="Ej: 1TB, 16GB"
+                                        value={tempFormData.capacidad}
+                                        onChange={handleTempInputChange}
+                                        onKeyDown={handleEnterAgregarProducto}
+                                    />
+                                </Field>
+
+                                <Field>
+                                    <FieldLabel htmlFor="color_producto">Color</FieldLabel>
+                                    <Input
+                                        type="text"
+                                        name="color"
+                                        placeholder="Ej: Negro, Rojo, Azul"
+                                        value={tempFormData.color}
+                                        onChange={handleTempInputChange}
+                                        onKeyDown={handleEnterAgregarProducto}
+                                    />
+                                </Field>
+
+                                <Field>
+                                    <FieldLabel htmlFor="codigo_preview">Código (autogenerado)</FieldLabel>
+                                    <Input
+                                        id="codigo_preview"
+                                        value={codigoPreview}
+                                        placeholder="Se genera al completar el nombre"
+                                        disabled
+                                        className="font-mono text-xs"
+                                    />
+                                </Field>
+                            </FieldGroup>
+                        </FieldSet>
+
+                        <FieldSeparator />
+
+                        <FieldSet>
+                            <FieldLegend>Destino y Categoría</FieldLegend>
+                            <FieldGroup className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                <Field>
+                                    <FieldLabel htmlFor="almacen_id">Almacén Destino *</FieldLabel>
+                                    <Combobox
+                                        items={almacens}
+                                        itemToStringLabel={(item) => item.nombre_almacen}
+                                        itemToStringValue={(item) => item.nombre_almacen}
+                                        value={selectedAlmacen}
+                                        onValueChange={(almacen) => {
+                                            if (almacen) {
+                                                handleTempSelectChange('almacen_id', almacen.id.toString());
+                                            } else {
+                                                handleTempSelectChange('almacen_id', '');
+                                            }
+                                        }}
+                                    >
+                                        <ComboboxInput
+                                            placeholder={lastSelectedAlmacenId ? 'Último seleccionado' : 'Seleccione Almacén'}
+                                            showClear={!!tempFormData.almacen_id}
+                                            className="uppercase"
+                                        />
+                                        <ComboboxContent>
+                                            <ComboboxEmpty>No se encontraron almacenes.</ComboboxEmpty>
+                                            <ComboboxList>
+                                                {(almacen) => (
+                                                    <ComboboxItem key={almacen.id} value={almacen}>
+                                                        <div className="flex items-center gap-2 uppercase">
+                                                            <Warehouse className="h-4 w-4 text-gray-500" />
+                                                            <span>{almacen.nombre_almacen}</span>
+                                                            {almacen.tipo_almacen && (
+                                                                <Badge variant="outline" className="ml-auto text-xs">
+                                                                    {almacen.tipo_almacen}
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+                                                    </ComboboxItem>
+                                                )}
+                                            </ComboboxList>
+                                            <Separator className="my-2" />
+                                            <div
+                                                className="flex cursor-pointer items-center rounded-md bg-blue-50 px-3 py-3 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-300"
+                                                onClick={() => {
+                                                    setIsCrearAlmacenDialogOpen(true);
+                                                }}
+                                            >
+                                                <PlusCircle className="mr-2 h-4 w-4" />
+                                                <span className="font-medium">Crear nuevo almacén</span>
+                                            </div>
+                                        </ComboboxContent>
+                                    </Combobox>
+                                    {!tempFormData.almacen_id && productos.some((p) => !p.almacen_id) && (
+                                        <p className="text-sm text-red-500">Debe seleccionar un almacén válido</p>
+                                    )}
+                                </Field>
+
+                                <Field>
+                                    <FieldLabel htmlFor="categorias">Categoría *</FieldLabel>
+                                    <Combobox
+                                        items={categorias}
+                                        itemToStringLabel={(item) => item.nombre_categoria}
+                                        itemToStringValue={(item) => item.nombre_categoria}
+                                        value={selectedCategoria}
+                                        onValueChange={(categoria) => {
+                                            if (categoria) {
+                                                handleTempSelectChange('categoria', categoria.nombre_categoria);
+                                            } else {
+                                                handleTempSelectChange('categoria', '');
+                                            }
+                                        }}
+                                    >
+                                        <ComboboxInput
+                                            placeholder="Seleccione Categoría"
+                                            showClear={!!tempFormData.categoria}
+                                            className="uppercase"
+                                        />
+                                        <ComboboxContent>
+                                            <ComboboxEmpty>No se encontraron categorías.</ComboboxEmpty>
+                                            <ComboboxList>
+                                                {(categoria) => (
+                                                    <ComboboxItem key={categoria.id} value={categoria}>
+                                                        <span className="uppercase">{categoria.nombre_categoria}</span>
+                                                    </ComboboxItem>
+                                                )}
+                                            </ComboboxList>
+                                            <Separator className="my-2" />
+                                            <div
+                                                className="hover:bg-accent flex cursor-pointer items-center gap-2 p-2 text-sm text-purple-600"
+                                                onClick={() => setIsCrearCategoriaDialogOpen(true)}
+                                            >
+                                                <PlusCircle className="h-4 w-4" />
+                                                Crear Nueva Categoría
+                                            </div>
+                                        </ComboboxContent>
+                                    </Combobox>
+                                    {errors.categorias && <InputError message={errors.categorias} />}
+                                </Field>
+                            </FieldGroup>
+                        </FieldSet>
+
+                        <FieldSeparator />
+
+                        <FieldSet>
+                            <FieldLegend>Datos Comerciales</FieldLegend>
+                            <FieldGroup className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                <Field>
+                                    <FieldLabel htmlFor="precio_producto">Precio *</FieldLabel>
+                                    <InputGroup>
+                                        <InputGroupAddon>$</InputGroupAddon>
+                                        <InputGroupInput
+                                            inputMode="decimal"
+                                            name="precio"
+                                            placeholder="0.00"
+                                            value={tempFormData.precio ?? ''}
+                                            onChange={handleTempInputChange}
+                                            onKeyDown={handleEnterAgregarProducto}
+                                        />
+                                    </InputGroup>
+                                </Field>
+
+                                <Field>
+                                    <FieldLabel htmlFor="cantidad_producto">Cantidad *</FieldLabel>
+                                    <Input
+                                        inputMode="numeric"
+                                        name="cantidad"
+                                        placeholder="0"
+                                        value={tempFormData.cantidad ?? ''}
+                                        onChange={handleTempInputChange}
+                                        onKeyDown={handleEnterAgregarProducto}
+                                    />
+                                </Field>
+                            </FieldGroup>
+
+                            {productoCoincidente &&
+                                (() => {
+                                    // El stock es por almacén; el costo (precio_compra_producto) es un solo dato por
+                                    // producto, sin importar el almacén. El aviso separa las dos cosas a propósito.
+                                    const stockEnEsteAlmacen = selectedAlmacen
+                                        ? (productoCoincidente.stock_por_almacen.find((s) => s.almacen_id === selectedAlmacen.id)?.cantidad ?? 0)
+                                        : null;
+
+                                    return (
+                                        <div className="mt-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/30">
+                                            <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                                            <p className="text-amber-800 dark:text-amber-300">
+                                                Este producto ya existe.{' '}
+                                                {stockEnEsteAlmacen !== null ? (
+                                                    <>
+                                                        Tiene <strong>{stockEnEsteAlmacen}</strong> unidades en{' '}
+                                                        <strong>{selectedAlmacen!.nombre_almacen}</strong>
+                                                        {productoCoincidente.cantidad_total > stockEnEsteAlmacen && (
+                                                            <> ({productoCoincidente.cantidad_total} en total entre todos los almacenes)</>
                                                         )}
-                                                    </div>
-                                                </ComboboxItem>
-                                            )}
-                                        </ComboboxList>
-                                        <Separator className="my-2" />
-                                        <div
-                                            className="flex cursor-pointer items-center rounded-md bg-blue-50 px-3 py-3 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-300"
-                                            onClick={() => {
-                                                setIsCrearAlmacenDialogOpen(true);
-                                            }}
-                                        >
-                                            <PlusCircle className="mr-2 h-4 w-4" />
-                                            <span className="font-medium">Crear nuevo almacén</span>
+                                                        .{' '}
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        Tiene <strong>{productoCoincidente.cantidad_total}</strong> unidades en stock, repartidas
+                                                        entre los almacenes que ya lo tienen — elegí el Almacén Destino para ver cuánto hay ahí
+                                                        específicamente.{' '}
+                                                    </>
+                                                )}
+                                                El costo (<strong>${productoCoincidente.precio_compra_producto.toFixed(2)}</strong>) es un dato único
+                                                por producto, no por almacén: si continuás, el precio que pongas acá lo va a reemplazar para todos los
+                                                almacenes.
+                                            </p>
                                         </div>
-                                    </ComboboxContent>
-                                </Combobox>
-                                {!tempFormData.almacen_id && productos.some((p) => !p.almacen_id) && (
-                                    <p className="text-sm text-red-500">Debe seleccionar un almacén válido</p>
-                                )}
-                            </div>
-
-                            <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="nombre_producto">Nombre del Producto *</Label>
-                                <Input
-                                    type="text"
-                                    name="producto"
-                                    placeholder="Producto"
-                                    value={tempFormData.producto}
-                                    onChange={handleTempInputChange}
-                                />
-                            </div>
-
-                            <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="marca_producto">Marca</Label>
-                                <Input type="text" name="marca" placeholder="Marca" value={tempFormData.marca} onChange={handleTempInputChange} />
-                            </div>
-
-                            <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="modelo_producto">Modelo</Label>
-                                <Input type="text" name="modelo" placeholder="Modelo" value={tempFormData.modelo} onChange={handleTempInputChange} />
-                            </div>
-
-                            {/* Fila 2 */}
-                            <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="capacidad_producto">Capacidad/Tamaño</Label>
-                                <Input
-                                    type="text"
-                                    name="capacidad"
-                                    placeholder="Ej: 1TB, 16GB"
-                                    value={tempFormData.capacidad}
-                                    onChange={handleTempInputChange}
-                                />
-                            </div>
-
-                            <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="color_producto">Color</Label>
-                                <Input
-                                    type="text"
-                                    name="color"
-                                    placeholder="Ej: Negro, Rojo, Azul"
-                                    value={tempFormData.color}
-                                    onChange={handleTempInputChange}
-                                />
-                            </div>
-                            {/* Categorias */}
-                            <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="categorias">Categoría *</Label>
-                                <Combobox
-                                    items={categorias}
-                                    itemToStringLabel={(item) => item.nombre_categoria}
-                                    itemToStringValue={(item) => item.nombre_categoria}
-                                    value={selectedCategoria}
-                                    onValueChange={(categoria) => {
-                                        if (categoria) {
-                                            handleTempSelectChange('categoria', categoria.nombre_categoria);
-                                        } else {
-                                            handleTempSelectChange('categoria', '');
-                                        }
-                                    }}
-                                >
-                                    <ComboboxInput placeholder="Seleccione Categoría" showClear={!!tempFormData.categoria} className="uppercase" />
-                                    <ComboboxContent>
-                                        <ComboboxEmpty>No se encontraron categorías.</ComboboxEmpty>
-                                        <ComboboxList>
-                                            {(categoria) => (
-                                                <ComboboxItem key={categoria.id} value={categoria}>
-                                                    <span className="uppercase">{categoria.nombre_categoria}</span>
-                                                </ComboboxItem>
-                                            )}
-                                        </ComboboxList>
-                                        <Separator className="my-2" />
-                                        <div
-                                            className="hover:bg-accent flex cursor-pointer items-center gap-2 p-2 text-sm text-purple-600"
-                                            onClick={() => setIsCrearCategoriaDialogOpen(true)}
-                                        >
-                                            <PlusCircle className="h-4 w-4" />
-                                            Crear Nueva Categoría
-                                        </div>
-                                    </ComboboxContent>
-                                </Combobox>
-                                {errors.categorias && <InputError message={errors.categorias} />}
-                            </div>
-
-                            <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="precio_producto">Precio *</Label>
-                                <Input inputMode="decimal" name="precio" placeholder="$ 0.00" value={tempFormData.precio ?? ''} onChange={handleTempInputChange} />
-                                {errors['productos.0.precio'] && <InputError message={errors['productos.0.precio']} />}
-                            </div>
-
-                            <div className="grid w-full max-w-sm items-center gap-1">
-                                <Label htmlFor="cantidad_producto">Cantidad *</Label>
-                                <Input inputMode="numeric" name="cantidad" placeholder="0" value={tempFormData.cantidad ?? ''} onChange={handleTempInputChange} />
-                                {errors['productos.0.cantidad'] && <InputError message={errors['productos.0.cantidad']} />}
-                            </div>
-                        </div>
+                                    );
+                                })()}
+                        </FieldSet>
 
                         {/* Botón Agregar */}
                         <div className="mt-6 flex justify-end">
@@ -1591,319 +1906,342 @@ export default function ComprarPage() {
                 </Card>
 
                 {/* Sección de la Tabla de Productos CON DIÁLOGO MEJORADO */}
-                <div className="border-sidebar-border/70 dark:border-sidebar-border relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border md:min-h-min">
-                    <Table>
-                        <TableCaption className="text-sidebar-accent">Lista de los Productos a Comprar</TableCaption>
-                        <TableHeader>
-                            <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
-                                <TableHead>Producto</TableHead>
-                                <TableHead>Marca</TableHead>
-                                <TableHead>Modelo</TableHead>
-                                <TableHead>Capacidad</TableHead>
-                                <TableHead>Color</TableHead>
-                                <TableHead>Almacén</TableHead>
-                                <TableHead>Categoria</TableHead>
-                                <TableHead>Código</TableHead>
-                                <TableHead>Cant.</TableHead>
-                                <TableHead>Precio</TableHead>
-                                <TableHead>Importe</TableHead>
-                                <TableHead className="text-right">Acciones</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {productos.map((p) => {
-                                const almacen = almacens.find((a) => a.id === p.almacen_id);
-                                return (
-                                    <TableRow key={p.id} className={!almacen ? 'bg-red-50 dark:bg-red-950/20' : ''}>
-                                        <TableCell className="font-medium">{p.producto}</TableCell>
-                                        <TableCell>{p.marca || 'N/A'}</TableCell>
-                                        <TableCell>{p.modelo || 'N/A'}</TableCell>
-                                        <TableCell>{p.capacidad || 'N/A'}</TableCell>
-                                        <TableCell>{p.color || 'N/A'}</TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center gap-2">
-                                                {almacen ? (
-                                                    <>
-                                                        <Warehouse className="h-4 w-4 text-gray-500" />
-                                                        <span>{almacen.nombre_almacen}</span>
-                                                        {almacen.tipo_almacen && (
-                                                            <Badge variant="outline" className="text-xs">
-                                                                {almacen.tipo_almacen}
-                                                            </Badge>
-                                                        )}
-                                                    </>
-                                                ) : (
-                                                    <span className="flex items-center gap-2 text-red-600">
-                                                        <X className="h-4 w-4" />
-                                                        <span>Almacén no válido</span>
-                                                    </span>
-                                                )}
-                                            </div>
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Package className="h-5 w-5" />
+                            Lista de los Productos a Comprar
+                            <Badge variant="outline" className="ml-auto">
+                                {productos.length} {productos.length === 1 ? 'producto' : 'productos'}
+                            </Badge>
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
+                                    <TableHead>Producto</TableHead>
+                                    <TableHead>Marca</TableHead>
+                                    <TableHead>Modelo</TableHead>
+                                    <TableHead>Capacidad</TableHead>
+                                    <TableHead>Color</TableHead>
+                                    <TableHead>Almacén</TableHead>
+                                    <TableHead>Categoria</TableHead>
+                                    <TableHead>Código</TableHead>
+                                    <TableHead>Cant.</TableHead>
+                                    <TableHead>Precio</TableHead>
+                                    <TableHead>Importe</TableHead>
+                                    <TableHead className="text-right">Acciones</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody className="[&>tr:nth-child(even)]:bg-muted/40">
+                                {productos.length === 0 && (
+                                    <TableRow className="hover:bg-transparent">
+                                        <TableCell colSpan={12} className="text-muted-foreground h-24 text-center">
+                                            Todavía no agregaste productos a esta compra.
                                         </TableCell>
-                                        <TableCell>{p.categoria}</TableCell>
-                                        <TableCell>{p.codigo || 'ERROR'}</TableCell>
-                                        <TableCell>{p.cantidad}</TableCell>
-                                        <TableCell>${p.precio.toFixed(2)}</TableCell>
-                                        <TableCell>${(p.cantidad * p.precio).toFixed(2)}</TableCell>
-                                        <TableCell className="text-right">
-                                            {/* DIÁLOGO MEJORADO - LISTO PARA USAR */}
-                                            <AlertDialog open={isDialogOpen && editingProductId === p.id} onOpenChange={setIsDialogOpen}>
-                                                <AlertDialogTrigger asChild>
-                                                    <Button
-                                                        variant="link"
-                                                        className="cursor-pointer text-blue-600 hover:text-blue-800"
-                                                        onClick={() => editarProducto(p.id)}
-                                                    >
-                                                        <Edit2 />
-                                                    </Button>
-                                                </AlertDialogTrigger>
+                                    </TableRow>
+                                )}
+                                {productos.map((p) => {
+                                    const almacen = almacens.find((a) => a.id === p.almacen_id);
+                                    return (
+                                        <TableRow key={p.id} className={!almacen ? 'bg-red-50 dark:bg-red-950/20' : ''}>
+                                            <TableCell className="font-medium">{p.producto}</TableCell>
+                                            <TableCell>{p.marca || 'N/A'}</TableCell>
+                                            <TableCell>{p.modelo || 'N/A'}</TableCell>
+                                            <TableCell>{p.capacidad || 'N/A'}</TableCell>
+                                            <TableCell>{p.color || 'N/A'}</TableCell>
+                                            <TableCell>
+                                                <div className="flex items-center gap-2">
+                                                    {almacen ? (
+                                                        <>
+                                                            <Warehouse className="h-4 w-4 text-gray-500" />
+                                                            <span>{almacen.nombre_almacen}</span>
+                                                            {almacen.tipo_almacen && (
+                                                                <Badge variant="outline" className="text-xs">
+                                                                    {almacen.tipo_almacen}
+                                                                </Badge>
+                                                            )}
+                                                        </>
+                                                    ) : (
+                                                        <span className="flex items-center gap-2 text-red-600">
+                                                            <X className="h-4 w-4" />
+                                                            <span>Almacén no válido</span>
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>{p.categoria}</TableCell>
+                                            <TableCell>{p.codigo || 'ERROR'}</TableCell>
+                                            <TableCell>{p.cantidad}</TableCell>
+                                            <TableCell>${p.precio.toFixed(2)}</TableCell>
+                                            <TableCell>${(p.cantidad * p.precio).toFixed(2)}</TableCell>
+                                            <TableCell className="text-right">
+                                                {/* DIÁLOGO MEJORADO - LISTO PARA USAR */}
+                                                <AlertDialog open={isDialogOpen && editingProductId === p.id} onOpenChange={setIsDialogOpen}>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button
+                                                            variant="link"
+                                                            className="cursor-pointer text-blue-600 hover:text-blue-800"
+                                                            onClick={() => editarProducto(p.id)}
+                                                        >
+                                                            <Edit2 />
+                                                        </Button>
+                                                    </AlertDialogTrigger>
 
-                                                <AlertDialogContent className="flex h-[90vh] w-[95vw] !max-w-none max-w-[1024px] flex-col p-0">
-                                                    <AlertDialogHeader className="shrink-0 border-b px-6 py-4">
-                                                        <AlertDialogTitle className="flex items-center gap-3 text-xl font-semibold text-gray-800 sm:text-2xl dark:text-white">
-                                                            <Edit2 className="h-6 w-6" />
-                                                            <span>Editar Producto</span>
-                                                        </AlertDialogTitle>
-                                                        <AlertDialogDescription className="text-base text-gray-600 dark:text-gray-300">
-                                                            Realiza ajustes detallados al producto. Los cambios se reflejarán en la lista de compra.
-                                                        </AlertDialogDescription>
-                                                    </AlertDialogHeader>
+                                                    <AlertDialogContent className="flex h-[90vh] w-[95vw] !max-w-none max-w-[1024px] flex-col p-0">
+                                                        <AlertDialogHeader className="shrink-0 border-b px-6 py-4">
+                                                            <AlertDialogTitle className="flex items-center gap-3 text-xl font-semibold text-gray-800 sm:text-2xl dark:text-white">
+                                                                <Edit2 className="h-6 w-6" />
+                                                                <span>Editar Producto</span>
+                                                            </AlertDialogTitle>
+                                                            <AlertDialogDescription className="text-base text-gray-600 dark:text-gray-300">
+                                                                Realiza ajustes detallados al producto. Los cambios se reflejarán en la lista de
+                                                                compra.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
 
-                                                    <div className="grid flex-1 overflow-hidden lg:grid-cols-[1fr_380px]">
-                                                        {/* CONTENIDO PRINCIPAL */}
-                                                        <div className="flex flex-col gap-y-8 overflow-y-auto px-6 py-8">
-                                                            <div className="space-y-6 rounded-lg border border-slate-200 p-6 dark:border-slate-700">
-                                                                <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
-                                                                    Detalles del Producto
-                                                                </h3>
+                                                        <div className="grid flex-1 overflow-hidden lg:grid-cols-[1fr_380px]">
+                                                            {/* CONTENIDO PRINCIPAL */}
+                                                            <div className="flex flex-col gap-y-8 overflow-y-auto px-6 py-8">
+                                                                <div className="space-y-6 rounded-lg border border-slate-200 p-6 dark:border-slate-700">
+                                                                    <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
+                                                                        Detalles del Producto
+                                                                    </h3>
 
-                                                                <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-                                                                    <div className="sm:col-span-2">
-                                                                        <Label htmlFor="edit-producto">Nombre del Producto *</Label>
-                                                                        <Input
-                                                                            id="edit-producto"
-                                                                            name="producto"
-                                                                            value={tempFormData.producto}
-                                                                            onChange={handleTempInputChange}
-                                                                        />
-                                                                    </div>
+                                                                    <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                                                                        <div className="sm:col-span-2">
+                                                                            <Label htmlFor="edit-producto">Nombre del Producto *</Label>
+                                                                            <Input
+                                                                                id="edit-producto"
+                                                                                name="producto"
+                                                                                value={tempFormData.producto}
+                                                                                onChange={handleTempInputChange}
+                                                                            />
+                                                                        </div>
 
-                                                                    <div>
-                                                                        <Label htmlFor="edit-marca">Marca</Label>
-                                                                        <Input
-                                                                            id="edit-marca"
-                                                                            name="marca"
-                                                                            value={tempFormData.marca}
-                                                                            onChange={handleTempInputChange}
-                                                                        />
-                                                                    </div>
+                                                                        <div>
+                                                                            <Label htmlFor="edit-marca">Marca</Label>
+                                                                            <Input
+                                                                                id="edit-marca"
+                                                                                name="marca"
+                                                                                value={tempFormData.marca}
+                                                                                onChange={handleTempInputChange}
+                                                                            />
+                                                                        </div>
 
-                                                                    <div>
-                                                                        <Label htmlFor="edit-modelo">Modelo</Label>
-                                                                        <Input
-                                                                            id="edit-modelo"
-                                                                            name="modelo"
-                                                                            value={tempFormData.modelo}
-                                                                            onChange={handleTempInputChange}
-                                                                        />
-                                                                    </div>
+                                                                        <div>
+                                                                            <Label htmlFor="edit-modelo">Modelo</Label>
+                                                                            <Input
+                                                                                id="edit-modelo"
+                                                                                name="modelo"
+                                                                                value={tempFormData.modelo}
+                                                                                onChange={handleTempInputChange}
+                                                                            />
+                                                                        </div>
 
-                                                                    <div className="sm:col-span-2">
-                                                                        <Label htmlFor="edit-capacidad">Capacidad / Tamaño</Label>
-                                                                        <Input
-                                                                            id="edit-capacidad"
-                                                                            name="capacidad"
-                                                                            value={tempFormData.capacidad}
-                                                                            onChange={handleTempInputChange}
-                                                                        />
-                                                                    </div>
+                                                                        <div className="sm:col-span-2">
+                                                                            <Label htmlFor="edit-capacidad">Capacidad / Tamaño</Label>
+                                                                            <Input
+                                                                                id="edit-capacidad"
+                                                                                name="capacidad"
+                                                                                value={tempFormData.capacidad}
+                                                                                onChange={handleTempInputChange}
+                                                                            />
+                                                                        </div>
 
-                                                                    <div className="sm:col-span-2">
-                                                                        <Label htmlFor="edit-color">Color</Label>
-                                                                        <Input
-                                                                            id="edit-color"
-                                                                            name="color"
-                                                                            placeholder="Ej: Negro, Rojo, Azul"
-                                                                            value={tempFormData.color}
-                                                                            onChange={handleTempInputChange}
-                                                                        />
+                                                                        <div className="sm:col-span-2">
+                                                                            <Label htmlFor="edit-color">Color</Label>
+                                                                            <Input
+                                                                                id="edit-color"
+                                                                                name="color"
+                                                                                placeholder="Ej: Negro, Rojo, Azul"
+                                                                                value={tempFormData.color}
+                                                                                onChange={handleTempInputChange}
+                                                                            />
+                                                                        </div>
                                                                     </div>
                                                                 </div>
-                                                            </div>
 
-                                                            <div className="space-y-6 rounded-lg border border-slate-200 p-6 dark:border-slate-700">
-                                                                <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
-                                                                    Inventario y Precio
-                                                                </h3>
+                                                                <div className="space-y-6 rounded-lg border border-slate-200 p-6 dark:border-slate-700">
+                                                                    <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
+                                                                        Inventario y Precio
+                                                                    </h3>
 
-                                                                <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-                                                                    <div>
-                                                                        <Label htmlFor="edit-cantidad">Cantidad *</Label>
-                                                                        <Input
-                                                                            id="edit-cantidad"
-                                                                            type="number"
-                                                                            name="cantidad"
-                                                                             value={tempFormData.cantidad ?? ''}
-                                                                             onChange={handleTempInputChange}
-                                                                             min="1"
-                                                                        />
-                                                                    </div>
-
-                                                                    <div>
-                                                                        <Label htmlFor="edit-precio">Precio Unitario *</Label>
-                                                                        <div className="relative">
-                                                                            <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">
-                                                                                $
-                                                                            </span>
+                                                                    <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                                                                        <div>
+                                                                            <Label htmlFor="edit-cantidad">Cantidad *</Label>
                                                                             <Input
-                                                                                id="edit-precio"
+                                                                                id="edit-cantidad"
                                                                                 type="number"
-                                                                                step="0.01"
-                                                                                name="precio"
-                                                                                value={tempFormData.precio ?? ''}
+                                                                                name="cantidad"
+                                                                                value={tempFormData.cantidad ?? ''}
                                                                                 onChange={handleTempInputChange}
-                                                                                className="pl-7"
-                                                                                min="0.01"
+                                                                                min="1"
+                                                                            />
+                                                                        </div>
+
+                                                                        <div>
+                                                                            <Label htmlFor="edit-precio">Precio Unitario *</Label>
+                                                                            <div className="relative">
+                                                                                <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">
+                                                                                    $
+                                                                                </span>
+                                                                                <Input
+                                                                                    id="edit-precio"
+                                                                                    type="number"
+                                                                                    step="0.01"
+                                                                                    name="precio"
+                                                                                    value={tempFormData.precio ?? ''}
+                                                                                    onChange={handleTempInputChange}
+                                                                                    className="pl-7"
+                                                                                    min="0.01"
                                                                                 />
+                                                                            </div>
                                                                         </div>
                                                                     </div>
                                                                 </div>
                                                             </div>
-                                                        </div>
 
-                                                        {/* SIDEBAR */}
-                                                        <div className="flex flex-col border-l border-slate-200 bg-slate-50/50 p-6 dark:border-slate-700 dark:bg-slate-800/20">
-                                                            <div className="space-y-6">
-                                                                <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
-                                                                    Organización
-                                                                </h3>
+                                                            {/* SIDEBAR */}
+                                                            <div
+                                                                ref={resolveEditDialogContainer}
+                                                                className="flex flex-col border-l border-slate-200 bg-slate-50/50 p-6 dark:border-slate-700 dark:bg-slate-800/20"
+                                                            >
+                                                                <div className="space-y-6">
+                                                                    <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
+                                                                        Organización
+                                                                    </h3>
 
-                                                                <div>
-                                                                    <Label>Almacén Destino *</Label>
-                                                                    <Combobox
-                                                                        items={almacens}
-                                                                        itemToStringLabel={(item) => item.nombre_almacen}
-                                                                        itemToStringValue={(item) => item.nombre_almacen}
-                                                                        value={selectedAlmacen}
-                                                                        onValueChange={(almacen) => {
-                                                                            if (almacen) {
-                                                                                handleTempSelectChange('almacen_id', almacen.id.toString());
-                                                                            } else {
-                                                                                handleTempSelectChange('almacen_id', '');
-                                                                            }
-                                                                        }}
-                                                                    >
-                                                                        <ComboboxInput
-                                                                            placeholder="Seleccione Almacén"
-                                                                            showClear={!!tempFormData.almacen_id}
-                                                                            className="uppercase"
-                                                                        />
-                                                                        <ComboboxContent>
-                                                                            <ComboboxEmpty>No se encontraron almacenes.</ComboboxEmpty>
-                                                                            <ComboboxList>
-                                                                                {(almacen) => (
-                                                                                    <ComboboxItem key={almacen.id} value={almacen}>
-                                                                                        <span className="uppercase">{almacen.nombre_almacen}</span>
-                                                                                    </ComboboxItem>
-                                                                                )}
-                                                                            </ComboboxList>
-                                                                        </ComboboxContent>
-                                                                    </Combobox>
+                                                                    <div>
+                                                                        <Label>Almacén Destino *</Label>
+                                                                        <Combobox
+                                                                            items={almacens}
+                                                                            itemToStringLabel={(item) => item.nombre_almacen}
+                                                                            itemToStringValue={(item) => item.nombre_almacen}
+                                                                            value={selectedAlmacen}
+                                                                            onValueChange={(almacen) => {
+                                                                                if (almacen) {
+                                                                                    handleTempSelectChange('almacen_id', almacen.id.toString());
+                                                                                } else {
+                                                                                    handleTempSelectChange('almacen_id', '');
+                                                                                }
+                                                                            }}
+                                                                        >
+                                                                            <ComboboxInput
+                                                                                placeholder="Seleccione Almacén"
+                                                                                showClear={!!tempFormData.almacen_id}
+                                                                                className="uppercase"
+                                                                            />
+                                                                            <ComboboxContent container={editDialogContainer}>
+                                                                                <ComboboxEmpty>No se encontraron almacenes.</ComboboxEmpty>
+                                                                                <ComboboxList>
+                                                                                    {(almacen) => (
+                                                                                        <ComboboxItem key={almacen.id} value={almacen}>
+                                                                                            <span className="uppercase">
+                                                                                                {almacen.nombre_almacen}
+                                                                                            </span>
+                                                                                        </ComboboxItem>
+                                                                                    )}
+                                                                                </ComboboxList>
+                                                                            </ComboboxContent>
+                                                                        </Combobox>
+                                                                    </div>
+
+                                                                    <div>
+                                                                        <Label>Categoría *</Label>
+                                                                        <Combobox
+                                                                            items={categorias}
+                                                                            itemToStringLabel={(item) => item.nombre_categoria}
+                                                                            itemToStringValue={(item) => item.nombre_categoria}
+                                                                            value={selectedCategoria}
+                                                                            onValueChange={(categoria) => {
+                                                                                if (categoria) {
+                                                                                    handleTempSelectChange('categoria', categoria.nombre_categoria);
+                                                                                } else {
+                                                                                    handleTempSelectChange('categoria', '');
+                                                                                }
+                                                                            }}
+                                                                        >
+                                                                            <ComboboxInput
+                                                                                placeholder="Seleccione o cree"
+                                                                                showClear={!!tempFormData.categoria}
+                                                                                className="uppercase"
+                                                                            />
+                                                                            <ComboboxContent container={editDialogContainer}>
+                                                                                <ComboboxEmpty>No se encontraron categorías.</ComboboxEmpty>
+                                                                                <ComboboxList>
+                                                                                    {(categoria) => (
+                                                                                        <ComboboxItem key={categoria.id} value={categoria}>
+                                                                                            {categoria.nombre_categoria}
+                                                                                        </ComboboxItem>
+                                                                                    )}
+                                                                                </ComboboxList>
+                                                                            </ComboboxContent>
+                                                                        </Combobox>
+                                                                    </div>
+
+                                                                    <div>
+                                                                        <Label>Código de Barras</Label>
+                                                                        <Input value={tempFormData.codigo || ''} disabled />
+                                                                    </div>
                                                                 </div>
 
-                                                                <div>
-                                                                    <Label>Categoría *</Label>
-                                                                    <Combobox
-                                                                        items={categorias}
-                                                                        itemToStringLabel={(item) => item.nombre_categoria}
-                                                                        itemToStringValue={(item) => item.nombre_categoria}
-                                                                        value={selectedCategoria}
-                                                                        onValueChange={(categoria) => {
-                                                                            if (categoria) {
-                                                                                handleTempSelectChange('categoria', categoria.nombre_categoria);
-                                                                            } else {
-                                                                                handleTempSelectChange('categoria', '');
-                                                                            }
-                                                                        }}
-                                                                    >
-                                                                        <ComboboxInput
-                                                                            placeholder="Seleccione o cree"
-                                                                            showClear={!!tempFormData.categoria}
-                                                                            className="uppercase"
-                                                                        />
-                                                                        <ComboboxContent>
-                                                                            <ComboboxEmpty>No se encontraron categorías.</ComboboxEmpty>
-                                                                            <ComboboxList>
-                                                                                {(categoria) => (
-                                                                                    <ComboboxItem key={categoria.id} value={categoria}>
-                                                                                        {categoria.nombre_categoria}
-                                                                                    </ComboboxItem>
-                                                                                )}
-                                                                            </ComboboxList>
-                                                                        </ComboboxContent>
-                                                                    </Combobox>
-                                                                </div>
-
-                                                                <div>
-                                                                    <Label>Código de Barras</Label>
-                                                                    <Input value={tempFormData.codigo || ''} disabled />
+                                                                <div className="mt-auto rounded-xl border-2 border-blue-500/40 bg-blue-50/50 p-4 dark:bg-blue-900/30">
+                                                                    <div className="flex justify-between">
+                                                                        <span>Subtotal</span>
+                                                                        <span className="font-bold">
+                                                                            ${((tempFormData.cantidad || 0) * (tempFormData.precio || 0)).toFixed(2)}
+                                                                        </span>
+                                                                    </div>
                                                                 </div>
                                                             </div>
-
-                                                            <div className="mt-auto rounded-xl border-2 border-blue-500/40 bg-blue-50/50 p-4 dark:bg-blue-900/30">
-                                                                <div className="flex justify-between">
-                                                                    <span>Subtotal</span>
-                                                                    <span className="font-bold">
-                                                                        ${((tempFormData.cantidad || 0) * (tempFormData.precio || 0)).toFixed(2)}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
                                                         </div>
-                                                    </div>
 
-                                                    <AlertDialogFooter className="shrink-0 flex-row justify-end space-x-4 border-t px-6 py-4">
-                                                        <AlertDialogCancel asChild>
-                                                            <Button variant="ghost" onClick={() => setIsDialogOpen(false)}>
-                                                                Cancelar
+                                                        <AlertDialogFooter className="shrink-0 flex-row justify-end space-x-4 border-t px-6 py-4">
+                                                            <AlertDialogCancel asChild>
+                                                                <Button variant="ghost" onClick={() => setIsDialogOpen(false)}>
+                                                                    Cancelar
+                                                                </Button>
+                                                            </AlertDialogCancel>
+
+                                                            <Button
+                                                                className="bg-blue-600 text-white hover:bg-blue-700"
+                                                                onClick={handleActualizarProducto}
+                                                            >
+                                                                <HardDriveUpload className="mr-2 h-4 w-4" />
+                                                                Guardar Cambios
                                                             </Button>
-                                                        </AlertDialogCancel>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
 
-                                                        <Button
-                                                            className="bg-blue-600 text-white hover:bg-blue-700"
-                                                            onClick={handleActualizarProducto}
-                                                        >
-                                                            <HardDriveUpload className="mr-2 h-4 w-4" />
-                                                            Guardar Cambios
-                                                        </Button>
-                                                    </AlertDialogFooter>
-                                                </AlertDialogContent>
-                                            </AlertDialog>
-
-                                            <Button
-                                                variant="link"
-                                                onClick={() => eliminarProducto(p.id)}
-                                                className="ms-2 cursor-pointer text-red-600 hover:text-red-800"
-                                            >
-                                                <Trash2Icon />
-                                            </Button>
-                                        </TableCell>
-                                    </TableRow>
-                                );
-                            })}
-                        </TableBody>
-                        <TableFooter>
-                            <TableRow>
-                                <TableCell colSpan={6} className="bg-gray-500 text-center text-white">
-                                    {productos.length} Tipo de Mercancía
-                                </TableCell>
-                                <TableCell className="bg-gray-600 text-amber-300">{productos.reduce((t, p) => t + p.cantidad, 0)} Unidades</TableCell>
-                                <TableCell colSpan={3} className="bg-gray-900 text-center font-bold text-emerald-300">
-                                    Importe General: ${calcularTotal()}
-                                </TableCell>
-                            </TableRow>
-                        </TableFooter>
-                    </Table>
-                </div>
+                                                <Button
+                                                    variant="link"
+                                                    onClick={() => eliminarProducto(p.id)}
+                                                    className="ms-2 cursor-pointer text-red-600 hover:text-red-800"
+                                                >
+                                                    <Trash2Icon />
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })}
+                            </TableBody>
+                            <TableFooter>
+                                <TableRow className="hover:bg-transparent">
+                                    <TableCell colSpan={6} className="font-medium">
+                                        {productos.length} {productos.length === 1 ? 'tipo de mercancía' : 'tipos de mercancía'}
+                                    </TableCell>
+                                    <TableCell className="font-medium">{productos.reduce((t, p) => t + p.cantidad, 0)} unidades</TableCell>
+                                    <TableCell colSpan={5} className="text-right text-base font-bold text-emerald-600 dark:text-emerald-400">
+                                        Importe General: ${calcularTotal()}
+                                    </TableCell>
+                                </TableRow>
+                            </TableFooter>
+                        </Table>
+                    </CardContent>
+                </Card>
 
                 {/* ==================== PROCESAR LAS COMPRAS DE LOS PRODUCTOS ==================== */}
                 <div className="flex justify-center gap-4 p-6">
@@ -1923,6 +2261,16 @@ export default function ComprarPage() {
                         <AlertDialogContent className="flex max-h-[90vh] flex-col overflow-hidden p-0 sm:max-w-5xl">
                             {(() => {
                                 const step = data.compra === 'deuda_proveedor' ? 'deuda' : data.compra === 'pago_cash' ? 'pago' : 'select';
+
+                                // Totales del paso "Procesar Pago" — calculados una sola vez y reutilizados en el
+                                // header (barra de progreso + chips) y en el footer (botón Confirmar Pago).
+                                const totalCuentas = data.pagos.reduce((a, p) => a + p.monto, 0);
+                                const totalClientes = data.pagos_clientes.reduce((a, p) => a + (p.monto || 0), 0);
+                                const totalCubierto = totalCuentas + totalClientes;
+                                const totalCompra = parseFloat(calcularTotal());
+                                const restante = Math.max(0, totalCompra - totalCubierto);
+                                const progresoPct = totalCompra > 0 ? Math.min(100, (totalCubierto / totalCompra) * 100) : 0;
+                                const pagoCompleto = Number(totalCubierto.toFixed(2)) === Number(totalCompra.toFixed(2));
 
                                 return (
                                     <>
@@ -2052,45 +2400,58 @@ export default function ComprarPage() {
                                             <>
                                                 <AlertDialogHeader className="border-b bg-gradient-to-r from-emerald-600 to-emerald-700 px-8 py-6 text-white">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
                                                             <DollarSign className="h-8 w-8" />
                                                         </div>
-                                                        <div>
+                                                        <div className="min-w-0 flex-1">
                                                             <AlertDialogTitle className="text-2xl font-bold">Procesar Pago</AlertDialogTitle>
                                                             <AlertDialogDescription className="text-emerald-100">
                                                                 Total a cubrir:{' '}
-                                                                <span className="text-3xl font-bold">${parseFloat(calcularTotal()).toFixed(2)}</span>
+                                                                <span className="text-3xl font-bold text-white">${totalCompra.toFixed(2)}</span>
                                                             </AlertDialogDescription>
-                                                            <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-emerald-100">
-                                                                <span>
-                                                                    Pagado:{' '}
-                                                                    <span className="font-semibold text-white">
-                                                                        $
-                                                                        {(
-                                                                            data.pagos.reduce((a, p) => a + p.monto, 0) +
-                                                                            data.pagos_clientes.reduce((a, p) => a + (p.monto || 0), 0)
-                                                                        ).toFixed(2)}
-                                                                    </span>
-                                                                </span>
-                                                                <span className="opacity-70">•</span>
-                                                                <span>
-                                                                    Restante:{' '}
-                                                                    <span className="font-semibold text-white">
-                                                                        $
-                                                                        {(
-                                                                            parseFloat(calcularTotal()) -
-                                                                            (data.pagos.reduce((a, p) => a + p.monto, 0) +
-                                                                                data.pagos_clientes.reduce((a, p) => a + (p.monto || 0), 0))
-                                                                        ).toFixed(2)}
-                                                                    </span>
-                                                                </span>
-                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="mt-5 space-y-2">
+                                                        <div className="h-2 w-full overflow-hidden rounded-full bg-white/20">
+                                                            <div
+                                                                className={cn(
+                                                                    'h-full rounded-full transition-all',
+                                                                    pagoCompleto ? 'bg-white' : 'bg-amber-300',
+                                                                )}
+                                                                style={{ width: `${progresoPct}%` }}
+                                                            />
+                                                        </div>
+                                                        <div className="flex flex-wrap items-center gap-2 text-sm">
+                                                            <span className="flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1">
+                                                                <Wallet className="h-3.5 w-3.5" />
+                                                                Cuentas: <span className="font-semibold text-white">${totalCuentas.toFixed(2)}</span>
+                                                            </span>
+                                                            <span className="flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1">
+                                                                <Users className="h-3.5 w-3.5" />
+                                                                Clientes:{' '}
+                                                                <span className="font-semibold text-white">${totalClientes.toFixed(2)}</span>
+                                                            </span>
+                                                            <span
+                                                                className={cn(
+                                                                    'ml-auto flex items-center gap-1.5 rounded-full px-3 py-1 font-semibold',
+                                                                    pagoCompleto ? 'bg-white text-emerald-700' : 'bg-white/15',
+                                                                )}
+                                                            >
+                                                                {pagoCompleto ? (
+                                                                    <>
+                                                                        <CheckCircle className="h-3.5 w-3.5" /> Cubierto: ${totalCubierto.toFixed(2)}
+                                                                    </>
+                                                                ) : (
+                                                                    <>Restante: ${restante.toFixed(2)}</>
+                                                                )}
+                                                            </span>
                                                         </div>
                                                     </div>
                                                 </AlertDialogHeader>
 
                                                 <ScrollArea className="flex-1 overflow-y-auto">
-                                                    <div className="space-y-8 px-8 py-6">
+                                                    <div className="px-8 py-6">
                                                         <div className="grid gap-8 lg:grid-cols-2">
                                                             {/* CLIENTES */}
                                                             <FieldSet>
@@ -2100,171 +2461,134 @@ export default function ComprarPage() {
                                                                 </FieldLegend>
                                                                 <FieldDescription>Usa créditos de clientes o genera préstamos</FieldDescription>
 
-                                                                <FieldGroup className="space-y-6 pt-4">
+                                                                <FieldGroup className="space-y-4 pt-4">
                                                                     <Field>
-                                                                        <Popover open={clienteSelectOpen} onOpenChange={setClienteSelectOpen}>
-                                                                            <PopoverTrigger asChild>
-                                                                                <Button
-                                                                                    variant="outline"
-                                                                                    className="h-12 w-full cursor-pointer justify-between"
-                                                                                >
-                                                                                    <span className="flex items-center gap-2">
-                                                                                        <Users className="h-4 w-4" />
-                                                                                        {data.pagos_clientes.length > 0
-                                                                                            ? `${data.pagos_clientes.length} cliente${data.pagos_clientes.length > 1 ? 's' : ''} seleccionado${data.pagos_clientes.length > 1 ? 's' : ''}`
-                                                                                            : 'Buscar cliente...'}
-                                                                                    </span>
-                                                                                    <ChevronsUpDown className="h-4 w-4 opacity-50" />
-                                                                                </Button>
-                                                                            </PopoverTrigger>
-                                                                            <PopoverContent className="w-full p-0" align="start">
-                                                                                <div className="space-y-3 p-3">
-                                                                                    <Input
-                                                                                        placeholder="Buscar cliente..."
-                                                                                        value={clienteSearchTerm}
-                                                                                        onChange={(e) => setClienteSearchTerm(e.target.value)}
-                                                                                        autoFocus
-                                                                                    />
-                                                                                    <ScrollArea className="h-64 rounded-md border">
-                                                                                        {isSearchingClientes ? (
-                                                                                            <div className="py-8 text-center">
-                                                                                                <Loader2 className="h-8 w-8 animate-spin" />
-                                                                                            </div>
-                                                                                        ) : filteredClientes.length > 0 ? (
-                                                                                            filteredClientes.map((cliente) => {
-                                                                                                const seleccionado = data.pagos_clientes.some(
-                                                                                                    (p) => p.cliente_id === cliente.id,
-                                                                                                );
-                                                                                                return (
-                                                                                                    <div
-                                                                                                        key={cliente.id}
-                                                                                                        className={cn(
-                                                                                                            'flex cursor-pointer items-center justify-between rounded-lg px-4 py-3 transition-colors',
-                                                                                                            seleccionado
-                                                                                                                ? 'bg-primary/10'
-                                                                                                                : 'hover:bg-accent',
-                                                                                                        )}
-                                                                                                        onClick={() => {
-                                                                                                            if (!seleccionado) {
-                                                                                                                setData('pagos_clientes', [
-                                                                                                                    ...data.pagos_clientes,
-                                                                                                                    {
-                                                                                                                        cliente_id: cliente.id,
-                                                                                                                        monto: 0,
-                                                                                                                    },
-                                                                                                                ]);
-                                                                                                            }
-                                                                                                            setClienteSelectOpen(false);
-                                                                                                            setClienteSearchTerm('');
-                                                                                                        }}
+                                                                        <div ref={resolvePagoDialogContainer}>
+                                                                            <Combobox
+                                                                                multiple
+                                                                                items={clientes}
+                                                                                filteredItems={filteredClientes}
+                                                                                itemToStringLabel={(c: ClienteProps) => c.nombre_cliente}
+                                                                                value={data.pagos_clientes
+                                                                                    .map((p) => clientes.find((c) => c.id === p.cliente_id))
+                                                                                    .filter((c): c is ClienteProps => !!c)}
+                                                                                onValueChange={(seleccionados) => {
+                                                                                    setData(
+                                                                                        'pagos_clientes',
+                                                                                        seleccionados.map(
+                                                                                            (c) =>
+                                                                                                data.pagos_clientes.find(
+                                                                                                    (p) => p.cliente_id === c.id,
+                                                                                                ) ?? { cliente_id: c.id, monto: 0 },
+                                                                                        ),
+                                                                                    );
+                                                                                }}
+                                                                                onInputValueChange={setClienteSearchTerm}
+                                                                            >
+                                                                                <ComboboxChips>
+                                                                                    {data.pagos_clientes.map((pago) => {
+                                                                                        const cliente = clientes.find(
+                                                                                            (c) => c.id === pago.cliente_id,
+                                                                                        );
+                                                                                        return cliente ? (
+                                                                                            <ComboboxChip key={pago.cliente_id}>
+                                                                                                {cliente.nombre_cliente}
+                                                                                            </ComboboxChip>
+                                                                                        ) : null;
+                                                                                    })}
+                                                                                    <ComboboxChipsInput placeholder="Buscar cliente..." />
+                                                                                </ComboboxChips>
+                                                                                <ComboboxContent container={pagoDialogContainer}>
+                                                                                    <ComboboxEmpty>
+                                                                                        {isSearchingClientes ? 'Buscando...' : 'Sin resultados'}
+                                                                                    </ComboboxEmpty>
+                                                                                    <ComboboxList>
+                                                                                        {(cliente: ClienteProps) => (
+                                                                                            <ComboboxItem key={cliente.id} value={cliente}>
+                                                                                                <div className="flex w-full items-center justify-between gap-2">
+                                                                                                    <span>{cliente.nombre_cliente}</span>
+                                                                                                    <Badge
+                                                                                                        variant={
+                                                                                                            (cliente.deuda_pago_cliente ?? 0) > 0
+                                                                                                                ? 'default'
+                                                                                                                : 'secondary'
+                                                                                                        }
+                                                                                                        className="text-xs"
                                                                                                     >
-                                                                                                        <div className="flex items-center gap-3">
-                                                                                                            <div className="bg-primary/10 text-primary flex h-10 w-10 items-center justify-center rounded-full font-bold">
-                                                                                                                {cliente.nombre_cliente[0]}
-                                                                                                            </div>
-                                                                                                            <div>
-                                                                                                                <p className="font-medium">
-                                                                                                                    {cliente.nombre_cliente}
-                                                                                                                </p>
-                                                                                                                <p className="text-muted-foreground text-sm">
-                                                                                                                    {cliente.telefono_cliente}
-                                                                                                                </p>
-                                                                                                            </div>
-                                                                                                        </div>
-                                                                                                        <Badge
-                                                                                                            variant={
-                                                                                                                cliente.deuda_pago_cliente > 0
-                                                                                                                    ? 'default'
-                                                                                                                    : 'secondary'
-                                                                                                            }
-                                                                                                        >
-                                                                                                            ${cliente.deuda_pago_cliente}
-                                                                                                        </Badge>
-                                                                                                    </div>
-                                                                                                );
-                                                                                            })
-                                                                                        ) : (
-                                                                                            <div className="text-muted-foreground py-8 text-center">
-                                                                                                No hay clientes
-                                                                                            </div>
+                                                                                                        ${cliente.deuda_pago_cliente ?? 0}
+                                                                                                    </Badge>
+                                                                                                </div>
+                                                                                            </ComboboxItem>
                                                                                         )}
-                                                                                    </ScrollArea>
-
-                                                                                    {/* BOTÓN QUE SÍ ABRE EL MODAL DE CREAR CLIENTE */}
-                                                                                    <Button
-                                                                                        variant="outline"
-                                                                                        className="mt-2 w-full cursor-pointer"
-                                                                                        onClick={() => {
-                                                                                            setIsCrearClienteDialogOpen(true);
-                                                                                            setClienteSelectOpen(false);
-                                                                                        }}
+                                                                                    </ComboboxList>
+                                                                                    <Separator className="my-2" />
+                                                                                    <div
+                                                                                        className="hover:bg-accent flex cursor-pointer items-center gap-2 p-2 text-sm text-blue-600"
+                                                                                        onClick={() => setIsCrearClienteDialogOpen(true)}
                                                                                     >
-                                                                                        <PlusCircle className="mr-2 h-4 w-4" />
+                                                                                        <PlusCircle className="h-4 w-4" />
                                                                                         Crear nuevo cliente
-                                                                                    </Button>
-                                                                                </div>
-                                                                            </PopoverContent>
-                                                                        </Popover>
+                                                                                    </div>
+                                                                                </ComboboxContent>
+                                                                            </Combobox>
+                                                                        </div>
                                                                     </Field>
 
                                                                     {data.pagos_clientes.length > 0 && (
-                                                                        <div className="space-y-4">
+                                                                        <div className="divide-y rounded-lg border">
                                                                             {data.pagos_clientes.map((pago) => {
                                                                                 const cliente = clientes.find((c) => c.id === pago.cliente_id);
                                                                                 return (
-                                                                                    <Card key={pago.cliente_id}>
-                                                                                        <CardContent className="p-4">
-                                                                                            <div className="mb-3 flex items-center justify-between">
-                                                                                                <div>
-                                                                                                    <p className="font-semibold">
-                                                                                                        {cliente?.nombre_cliente}
-                                                                                                    </p>
-                                                                                                    <p className="text-muted-foreground text-xs">
-                                                                                                        Crédito: ${cliente?.deuda_pago_cliente || 0}
-                                                                                                    </p>
-                                                                                                </div>
-                                                                                                <Button
-                                                                                                    variant="ghost"
-                                                                                                    size="icon"
-                                                                                                    className="cursor-pointer"
-                                                                                                    onClick={() =>
-                                                                                                        setData(
-                                                                                                            'pagos_clientes',
-                                                                                                            data.pagos_clientes.filter(
-                                                                                                                (p) =>
-                                                                                                                    p.cliente_id !== pago.cliente_id,
-                                                                                                            ),
-                                                                                                        )
-                                                                                                    }
-                                                                                                >
-                                                                                                    <X className="h-4 w-4" />
-                                                                                                </Button>
-                                                                                            </div>
-                                                                                            <Field>
-                                                                                                <FieldLabel className="text-xs">Monto</FieldLabel>
-                                                                                                <InputGroup>
-                                                                                                    <InputGroupInput
-                                                                                                        type="number"
-                                                                                                        min="0"
-                                                                                                        step="0.01"
-                                                                                                        value={pago.monto || ''}
-                                                                                                        onChange={(e) => {
-                                                                                                            const monto =
-                                                                                                                parseFloat(e.target.value) || 0;
-                                                                                                            setData(
-                                                                                                                'pagos_clientes',
-                                                                                                                data.pagos_clientes.map((p) =>
-                                                                                                                    p.cliente_id === pago.cliente_id
-                                                                                                                        ? { ...p, monto }
-                                                                                                                        : p,
-                                                                                                                ),
-                                                                                                            );
-                                                                                                        }}
-                                                                                                    />
-                                                                                                </InputGroup>
-                                                                                            </Field>
-                                                                                        </CardContent>
-                                                                                    </Card>
+                                                                                    <div
+                                                                                        key={pago.cliente_id}
+                                                                                        className="flex items-center gap-3 p-3"
+                                                                                    >
+                                                                                        <div className="bg-primary/10 text-primary flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold">
+                                                                                            {cliente?.nombre_cliente[0]}
+                                                                                        </div>
+                                                                                        <div className="min-w-0 flex-1">
+                                                                                            <p className="truncate text-sm font-medium">
+                                                                                                {cliente?.nombre_cliente}
+                                                                                            </p>
+                                                                                            <p className="text-muted-foreground text-xs">
+                                                                                                Crédito: ${cliente?.deuda_pago_cliente || 0}
+                                                                                            </p>
+                                                                                        </div>
+                                                                                        <InputGroup className="w-32 shrink-0">
+                                                                                            <InputGroupAddon>$</InputGroupAddon>
+                                                                                            <InputGroupInput
+                                                                                                inputMode="decimal"
+                                                                                                placeholder="0.00"
+                                                                                                value={pago.monto || ''}
+                                                                                                onChange={(e) => {
+                                                                                                    const monto = parseFloat(e.target.value) || 0;
+                                                                                                    setData(
+                                                                                                        'pagos_clientes',
+                                                                                                        data.pagos_clientes.map((p) =>
+                                                                                                            p.cliente_id === pago.cliente_id
+                                                                                                                ? { ...p, monto }
+                                                                                                                : p,
+                                                                                                        ),
+                                                                                                    );
+                                                                                                }}
+                                                                                            />
+                                                                                        </InputGroup>
+                                                                                        <Button
+                                                                                            variant="ghost"
+                                                                                            size="icon"
+                                                                                            className="shrink-0 cursor-pointer"
+                                                                                            onClick={() =>
+                                                                                                setData(
+                                                                                                    'pagos_clientes',
+                                                                                                    data.pagos_clientes.filter(
+                                                                                                        (p) => p.cliente_id !== pago.cliente_id,
+                                                                                                    ),
+                                                                                                )
+                                                                                            }
+                                                                                        >
+                                                                                            <X className="h-4 w-4" />
+                                                                                        </Button>
+                                                                                    </div>
                                                                                 );
                                                                             })}
                                                                         </div>
@@ -2280,192 +2604,115 @@ export default function ComprarPage() {
                                                                 </FieldLegend>
                                                                 <FieldDescription>Selecciona las cuentas a débitar</FieldDescription>
 
-                                                                <FieldGroup className="space-y-6 pt-4">
+                                                                <FieldGroup className="space-y-4 pt-4">
                                                                     <Field>
-                                                                        <Popover open={cuentaSelectOpen} onOpenChange={setCuentaSelectOpen}>
-                                                                            <PopoverTrigger asChild>
-                                                                                <Button
-                                                                                    variant="outline"
-                                                                                    className="h-12 w-full cursor-pointer justify-between"
-                                                                                >
-                                                                                    <span className="flex items-center gap-2">
-                                                                                        <Wallet className="h-4 w-4" />
-                                                                                        {data.pagos.length > 0
-                                                                                            ? `${data.pagos.length} cuenta${data.pagos.length > 1 ? 's' : ''} seleccionada${data.pagos.length > 1 ? 's' : ''}`
-                                                                                            : 'Buscar cuentas...'}
-                                                                                    </span>
-                                                                                    <ChevronsUpDown className="h-4 w-4 opacity-50" />
-                                                                                </Button>
-                                                                            </PopoverTrigger>
-                                                                            <PopoverContent className="w-full p-0" align="start">
-                                                                                <div className="space-y-3 p-3">
-                                                                                    <Input
-                                                                                        placeholder="Buscar cuenta..."
-                                                                                        value={cuentaSearchTerm}
-                                                                                        onChange={(e) => setCuentaSearchTerm(e.target.value)}
-                                                                                        autoFocus
-                                                                                    />
-                                                                                    <ScrollArea className="h-64 rounded-md border">
-                                                                                        {filteredCuentas.length > 0 ? (
-                                                                                            filteredCuentas.map((cuenta) => {
-                                                                                                const seleccionado = data.pagos.some(
-                                                                                                    (p) => p.cuenta_id === cuenta.id,
-                                                                                                );
-                                                                                                return (
-                                                                                                    <div
-                                                                                                        key={cuenta.id}
-                                                                                                        className={cn(
-                                                                                                            'flex cursor-pointer items-center justify-between rounded-lg px-4 py-3 transition-colors',
-                                                                                                            seleccionado
-                                                                                                                ? 'bg-primary/10'
-                                                                                                                : 'hover:bg-accent',
-                                                                                                        )}
-                                                                                                        onClick={() => {
-                                                                                                            if (!seleccionado) {
-                                                                                                                setData('pagos', [
-                                                                                                                    ...data.pagos,
-                                                                                                                    {
-                                                                                                                        cuenta_id: cuenta.id,
-                                                                                                                        monto: 0,
-                                                                                                                    },
-                                                                                                                ]);
-                                                                                                            }
-                                                                                                            setCuentaSelectOpen(false);
-                                                                                                            setCuentaSearchTerm('');
-                                                                                                        }}
-                                                                                                    >
-                                                                                                        <div className="flex items-center gap-3">
-                                                                                                            <div className="bg-primary/10 text-primary flex h-10 w-10 items-center justify-center rounded-full font-bold">
-                                                                                                                {cuenta.nombre_cuenta[0]}
-                                                                                                            </div>
-                                                                                                            <div>
-                                                                                                                <p className="font-medium">
-                                                                                                                    {cuenta.nombre_cuenta}
-                                                                                                                </p>
-                                                                                                                <p className="text-muted-foreground text-sm">
-                                                                                                                    Saldo: ${cuenta.saldo_cuenta}
-                                                                                                                </p>
-                                                                                                            </div>
-                                                                                                        </div>
-                                                                                                    </div>
-                                                                                                );
-                                                                                            })
-                                                                                        ) : (
-                                                                                            <div className="text-muted-foreground py-8 text-center">
-                                                                                                No hay cuentas
+                                                                        <Combobox
+                                                                            multiple
+                                                                            items={cuentas}
+                                                                            itemToStringLabel={(c: CuentaNegocioProps) => c.nombre_cuenta}
+                                                                            value={data.pagos
+                                                                                .map((p) => cuentas.find((c) => c.id === p.cuenta_id))
+                                                                                .filter((c): c is CuentaNegocioProps => !!c)}
+                                                                            onValueChange={(seleccionadas) => {
+                                                                                setData(
+                                                                                    'pagos',
+                                                                                    seleccionadas.map(
+                                                                                        (c) =>
+                                                                                            data.pagos.find((p) => p.cuenta_id === c.id) ?? {
+                                                                                                cuenta_id: c.id,
+                                                                                                monto: 0,
+                                                                                            },
+                                                                                    ),
+                                                                                );
+                                                                            }}
+                                                                        >
+                                                                            <ComboboxChips>
+                                                                                {data.pagos.map((pago) => {
+                                                                                    const cuenta = cuentas.find((c) => c.id === pago.cuenta_id);
+                                                                                    return cuenta ? (
+                                                                                        <ComboboxChip key={pago.cuenta_id}>
+                                                                                            {cuenta.nombre_cuenta}
+                                                                                        </ComboboxChip>
+                                                                                    ) : null;
+                                                                                })}
+                                                                                <ComboboxChipsInput placeholder="Buscar cuentas..." />
+                                                                            </ComboboxChips>
+                                                                            <ComboboxContent container={pagoDialogContainer}>
+                                                                                <ComboboxEmpty>Sin resultados</ComboboxEmpty>
+                                                                                <ComboboxList>
+                                                                                    {(cuenta: CuentaNegocioProps) => (
+                                                                                        <ComboboxItem key={cuenta.id} value={cuenta}>
+                                                                                            <div className="flex w-full items-center justify-between gap-2">
+                                                                                                <span>{cuenta.nombre_cuenta}</span>
+                                                                                                <span className="text-muted-foreground text-xs">
+                                                                                                    Saldo: ${cuenta.saldo_cuenta}
+                                                                                                </span>
                                                                                             </div>
-                                                                                        )}
-                                                                                    </ScrollArea>
-                                                                                </div>
-                                                                            </PopoverContent>
-                                                                        </Popover>
+                                                                                        </ComboboxItem>
+                                                                                    )}
+                                                                                </ComboboxList>
+                                                                            </ComboboxContent>
+                                                                        </Combobox>
                                                                     </Field>
 
                                                                     {data.pagos.length > 0 && (
-                                                                        <div className="space-y-4">
+                                                                        <div className="divide-y rounded-lg border">
                                                                             {data.pagos.map((pago) => {
                                                                                 const cuenta = cuentas.find((c) => c.id === pago.cuenta_id);
                                                                                 return (
-                                                                                    <Card key={pago.cuenta_id}>
-                                                                                        <CardContent className="p-4">
-                                                                                            <div className="mb-3 flex items-center justify-between">
-                                                                                                <div>
-                                                                                                    <p className="font-semibold">
-                                                                                                        {cuenta?.nombre_cuenta}
-                                                                                                    </p>
-                                                                                                    <p className="text-muted-foreground text-xs">
-                                                                                                        Saldo: ${cuenta?.saldo_cuenta}
-                                                                                                    </p>
-                                                                                                </div>
-                                                                                                <Button
-                                                                                                    variant="ghost"
-                                                                                                    size="icon"
-                                                                                                    className="cursor-pointer"
-                                                                                                    onClick={() =>
-                                                                                                        setData(
-                                                                                                            'pagos',
-                                                                                                            data.pagos.filter(
-                                                                                                                (p) => p.cuenta_id !== pago.cuenta_id,
-                                                                                                            ),
-                                                                                                        )
-                                                                                                    }
-                                                                                                >
-                                                                                                    <X className="h-4 w-4" />
-                                                                                                </Button>
-                                                                                            </div>
-                                                                                            <Field>
-                                                                                                <FieldLabel className="text-xs">Monto</FieldLabel>
-                                                                                                <InputGroup>
-                                                                                                    <InputGroupInput
-                                                                                                        type="number"
-                                                                                                        min="0.01"
-                                                                                                        step="0.01"
-                                                                                                        value={pago.monto || ''}
-                                                                                                        onChange={(e) => {
-                                                                                                            const monto =
-                                                                                                                parseFloat(e.target.value) || 0;
-                                                                                                            setData(
-                                                                                                                'pagos',
-                                                                                                                data.pagos.map((p) =>
-                                                                                                                    p.cuenta_id === pago.cuenta_id
-                                                                                                                        ? { ...p, monto }
-                                                                                                                        : p,
-                                                                                                                ),
-                                                                                                            );
-                                                                                                        }}
-                                                                                                    />
-                                                                                                </InputGroup>
-                                                                                            </Field>
-                                                                                        </CardContent>
-                                                                                    </Card>
+                                                                                    <div key={pago.cuenta_id} className="flex items-center gap-3 p-3">
+                                                                                        <div className="bg-primary/10 text-primary flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold">
+                                                                                            {cuenta?.nombre_cuenta[0]}
+                                                                                        </div>
+                                                                                        <div className="min-w-0 flex-1">
+                                                                                            <p className="truncate text-sm font-medium">
+                                                                                                {cuenta?.nombre_cuenta}
+                                                                                            </p>
+                                                                                            <p className="text-muted-foreground text-xs">
+                                                                                                Saldo: ${cuenta?.saldo_cuenta}
+                                                                                            </p>
+                                                                                        </div>
+                                                                                        <InputGroup className="w-32 shrink-0">
+                                                                                            <InputGroupAddon>$</InputGroupAddon>
+                                                                                            <InputGroupInput
+                                                                                                inputMode="decimal"
+                                                                                                placeholder="0.00"
+                                                                                                value={pago.monto || ''}
+                                                                                                onChange={(e) => {
+                                                                                                    const monto = parseFloat(e.target.value) || 0;
+                                                                                                    setData(
+                                                                                                        'pagos',
+                                                                                                        data.pagos.map((p) =>
+                                                                                                            p.cuenta_id === pago.cuenta_id
+                                                                                                                ? { ...p, monto }
+                                                                                                                : p,
+                                                                                                        ),
+                                                                                                    );
+                                                                                                }}
+                                                                                            />
+                                                                                        </InputGroup>
+                                                                                        <Button
+                                                                                            variant="ghost"
+                                                                                            size="icon"
+                                                                                            className="shrink-0 cursor-pointer"
+                                                                                            onClick={() =>
+                                                                                                setData(
+                                                                                                    'pagos',
+                                                                                                    data.pagos.filter(
+                                                                                                        (p) => p.cuenta_id !== pago.cuenta_id,
+                                                                                                    ),
+                                                                                                )
+                                                                                            }
+                                                                                        >
+                                                                                            <X className="h-4 w-4" />
+                                                                                        </Button>
+                                                                                    </div>
                                                                                 );
                                                                             })}
                                                                         </div>
                                                                     )}
                                                                 </FieldGroup>
                                                             </FieldSet>
-                                                        </div>
-
-                                                        {/* RESUMEN */}
-                                                        <div className="rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50/50 p-6 dark:border-emerald-700 dark:bg-emerald-950/30">
-                                                            <h3 className="mb-6 text-center font-bold">Resumen de Pago</h3>
-                                                            <div className="space-y-4">
-                                                                <div className="flex justify-between">
-                                                                    <span className="text-muted-foreground">Cuentas:</span>
-                                                                    <span className="font-semibold">
-                                                                        ${data.pagos.reduce((a, p) => a + p.monto, 0).toFixed(2)}
-                                                                    </span>
-                                                                </div>
-                                                                <div className="flex justify-between">
-                                                                    <span className="text-muted-foreground">Clientes:</span>
-                                                                    <span className="font-semibold">
-                                                                        ${data.pagos_clientes.reduce((a, p) => a + (p.monto || 0), 0).toFixed(2)}
-                                                                    </span>
-                                                                </div>
-                                                                <Separator />
-                                                                <div className="flex justify-between text-lg font-bold">
-                                                                    <span>Total cubierto:</span>
-                                                                    <span
-                                                                        className={
-                                                                            Number(
-                                                                                (
-                                                                                    data.pagos.reduce((a, p) => a + p.monto, 0) +
-                                                                                    data.pagos_clientes.reduce((a, p) => a + (p.monto || 0), 0)
-                                                                                ).toFixed(2),
-                                                                            ) === Number(calcularTotal())
-                                                                                ? 'text-emerald-600'
-                                                                                : 'text-orange-600'
-                                                                        }
-                                                                    >
-                                                                        $
-                                                                        {(
-                                                                            data.pagos.reduce((a, p) => a + p.monto, 0) +
-                                                                            data.pagos_clientes.reduce((a, p) => a + (p.monto || 0), 0)
-                                                                        ).toFixed(2)}{' '}
-                                                                        / ${calcularTotal()}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
                                                         </div>
                                                     </div>
                                                 </ScrollArea>
@@ -2480,15 +2727,7 @@ export default function ComprarPage() {
                                                     </Button>
                                                     <Button
                                                         onClick={realizarCompra}
-                                                        disabled={
-                                                            processing ||
-                                                            Number(
-                                                                (
-                                                                    data.pagos.reduce((a, p) => a + p.monto, 0) +
-                                                                    data.pagos_clientes.reduce((a, p) => a + (p.monto || 0), 0)
-                                                                ).toFixed(2),
-                                                            ) !== Number(calcularTotal())
-                                                        }
+                                                        disabled={processing || !pagoCompleto}
                                                         className="h-12 cursor-pointer bg-emerald-600 px-8 hover:bg-emerald-700"
                                                     >
                                                         {processing ? (
@@ -2556,9 +2795,7 @@ export default function ComprarPage() {
                                 <TableBody>
                                     {comprasRecientes.map((compra) => (
                                         <TableRow key={compra.id}>
-                                            <TableCell className="font-mono text-xs text-gray-500">
-                                                #{String(compra.id).padStart(6, '0')}
-                                            </TableCell>
+                                            <TableCell className="font-mono text-xs text-gray-500">#{String(compra.id).padStart(6, '0')}</TableCell>
                                             <TableCell className="text-sm">
                                                 {new Date(compra.fecha_compra).toLocaleDateString('es-MX', {
                                                     day: '2-digit',
@@ -2566,9 +2803,7 @@ export default function ComprarPage() {
                                                     year: 'numeric',
                                                 })}
                                             </TableCell>
-                                            <TableCell className="font-medium">
-                                                {compra.proveedor ?? compra.cliente ?? 'Sin registro'}
-                                            </TableCell>
+                                            <TableCell className="font-medium">{compra.proveedor ?? compra.cliente ?? 'Sin registro'}</TableCell>
                                             <TableCell>
                                                 <Badge variant={compra.tipo_compra === 'deuda_proveedor' ? 'destructive' : 'default'}>
                                                     {compra.tipo_compra === 'deuda_proveedor' ? 'Crédito' : 'Contado'}

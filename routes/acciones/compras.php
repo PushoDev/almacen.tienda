@@ -3,7 +3,9 @@
 use App\Http\Controllers\CompraController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth', 'verified'])->group(
+// 'admin.only' (EnsureUserIsAdminOnly) — a diferencia del alias 'admin' usado en Reportes,
+// este exige estrictamente role === 'admin'; moderador y vendedor no tienen acceso a Compras.
+Route::middleware(['auth', 'verified', 'admin.only'])->group(
     function () {
         /**
          * Iniciar Compra
@@ -28,6 +30,9 @@ Route::middleware(['auth', 'verified'])->group(
             Route::get('/categorias', [CompraController::class, 'getCategorias']);
             // ✅ NUEVA: Ruta para crear categoría durante compra
             Route::post('/categorias', [CompraController::class, 'storeCategoria'])->name('categoria.store');
+
+            // NUEVA: Autocompletado de productos existentes al agregar un producto a la compra
+            Route::get('/productos/buscar', [CompraController::class, 'buscarProductosExistentes'])->name('productos.buscar');
 
             // Ruta MEJORADA para obtener clientes (ahora acepta parámetro search)
             Route::get('/clientes/fisicos', [CompraController::class, 'getClientesFisicos']);

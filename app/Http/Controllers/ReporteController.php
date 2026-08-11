@@ -33,7 +33,9 @@ class ReporteController extends Controller
             ->select(
                 'productos.nombre_producto',
                 DB::raw('SUM(compra_producto.cantidad) as total_cantidad'),
-                DB::raw('COUNT(compra_producto.compra_id) as veces_comprado')
+                // DISTINCT: un producto puede tener varias líneas en la misma compra (distintos
+                // almacenes/colores) — "veces comprado" cuenta compras, no líneas.
+                DB::raw('COUNT(DISTINCT compra_producto.compra_id) as veces_comprado')
             )
             ->groupBy('productos.id', 'productos.nombre_producto')
             ->orderByDesc('total_cantidad')

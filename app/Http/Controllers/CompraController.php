@@ -9,6 +9,7 @@ use App\Models\Cliente;
 use App\Models\Compra;
 use App\Models\CompraPago; // ✅ AGREGAR IMPORT DE COMPRAPAGO
 use App\Models\Cuenta;
+use App\Models\HistorialPrecioCosto;
 use App\Models\Producto;
 use App\Models\Proveedor;
 use Illuminate\Http\Request;
@@ -102,13 +103,14 @@ class CompraController extends Controller
     }
 
     /**
-     * Devuelve una lista de cuentas permanentes y temporales SOLO EN USD.
+     * Devuelve una lista de cuentas permanentes SOLO EN USD.
+     * ('temporales' se unificó en 'permanentes' el 2026-07-28, ya no existe como tipo aparte)
      *
      * @return \Illuminate\Http\JsonResponse
      */
     public function getCuentas()
     {
-        $cuentas = Cuenta::whereIn('tipo_cuenta', ['permanentes', 'temporales'])
+        $cuentas = Cuenta::where('tipo_cuenta', 'permanentes')
             ->whereHas('moneda', function ($query) {
                 $query->where('codigo_moneda', 'USD')->where('estado', true);
             })
@@ -117,6 +119,49 @@ class CompraController extends Controller
             ->get();
 
         return response()->json($cuentas);
+    }
+
+    /**
+     * Busca productos existentes por nombre/marca/modelo/código para autocompletar el
+     * formulario de alta de compra, mostrando stock y costo actual antes de sobreescribirlo.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function buscarProductosExistentes(Request $request)
+    {
+        $request->validate([
+            'search' => 'required|string|min:2',
+        ]);
+
+        $productos = Producto::buscar($request->search)
+            ->with(['categoria', 'almacenes'])
+            ->limit(8)
+            ->get()
+            ->map(function ($producto) {
+                return [
+                    'id' => $producto->id,
+                    'nombre_producto' => $producto->nombre_producto,
+                    'marca_producto' => $producto->marca_producto,
+                    'modelo_producto' => $producto->modelo_producto,
+                    'capacidad_producto' => $producto->capacidad_producto,
+                    'categoria' => $producto->categoria?->nombre_categoria,
+                    'precio_compra_producto' => (float) $producto->precio_compra_producto,
+                    'cantidad_total' => $producto->cantidad_total,
+                    // Stock desglosado por almacén: el costo es un solo dato por producto,
+                    // pero el stock sí es específico de cada almacén.
+                    'stock_por_almacen' => $producto->almacenes
+                        ->map(fn($almacen) => [
+                            'almacen_id' => $almacen->id,
+                            'nombre_almacen' => $almacen->nombre_almacen,
+                            'cantidad' => (int) $almacen->pivot->cantidad,
+                        ])
+                        ->filter(fn($item) => $item['cantidad'] > 0)
+                        ->values(),
+                ];
+            });
+
+        return response()->json($productos);
     }
 
     /**
@@ -151,7 +196,7 @@ class CompraController extends Controller
      */
     public function index()
     {
-        $cuentasUSD = Cuenta::whereIn('tipo_cuenta', ['permanentes', 'temporales'])
+        $cuentasUSD = Cuenta::where('tipo_cuenta', 'permanentes')
             ->whereHas('moneda', function ($query) {
                 $query->where('codigo_moneda', 'USD')->where('estado', true);
             })
@@ -324,7 +369,6 @@ class CompraController extends Controller
             }
 
             $productosConAlmacen = [];
-            $pivotResumen = [];
             foreach ($validated['productos'] as $item) {
                 $categoria = Categoria::firstOrCreate(['nombre_categoria' => $item['categoria']]);
 
@@ -343,6 +387,12 @@ class CompraController extends Controller
                     $producto = new Producto();
                 }
 
+                // Capturado antes de sobreescribir: costo y stock previos a esta compra, para
+                // dejar rastro en historial_precio_costos si el costo cambia (ver más abajo).
+                // Solo aplica a productos existentes — un producto nuevo no tiene "costo anterior".
+                $precioCostoAnterior = $isNew ? null : (float) $producto->precio_compra_producto;
+                $stockAntesDeCompra = $isNew ? 0 : $producto->cantidad_total;
+
                 $producto->fill([
                     'nombre_producto' => $item['producto'],
                     'marca_producto' => $item['marca'] ?? null,
@@ -354,6 +404,31 @@ class CompraController extends Controller
                     'imagen_producto' => $producto->imagen_producto ?? 'productos/producto-default.png',
                 ]);
                 $producto->save();
+
+                // Auditoría de cambio de costo — mismo cálculo que ProductoController::update(),
+                // pero sin pedir confirmación de contraseña: aquí el cambio de costo es esperado
+                // (viene de una compra real), no una edición manual, así que solo se registra.
+                if (!$isNew) {
+                    $precioCostoNuevo = (float) $item['precio'];
+                    $precioCostoCambio = abs($precioCostoAnterior - $precioCostoNuevo) > 0.0001;
+
+                    if ($precioCostoCambio) {
+                        $diferencia = $precioCostoNuevo - $precioCostoAnterior;
+                        $impactoFinanciero = $diferencia * $stockAntesDeCompra;
+
+                        HistorialPrecioCosto::create([
+                            'producto_id' => $producto->id,
+                            'user_id' => $request->user()->id,
+                            'precio_anterior' => $precioCostoAnterior,
+                            'precio_nuevo' => $precioCostoNuevo,
+                            'diferencia' => $diferencia,
+                            'stock_momento' => $stockAntesDeCompra,
+                            'impacto_financiero' => $impactoFinanciero,
+                            'es_perdida' => $impactoFinanciero < 0,
+                            'motivo' => "Actualizado automáticamente por compra #{$compra->id}",
+                        ]);
+                    }
+                }
 
                 // Manejo de Códigos de Barras
                 $codigoBarrasInput = trim((string) ($item['codigo_barras'] ?? $item['codigo'] ?? ''));
@@ -389,43 +464,15 @@ class CompraController extends Controller
                 $almacenId = (int) $item['almacen_id'];
                 $lineaCantidad = (int) $item['cantidad'];
                 $lineaPrecio = (float) $item['precio'];
-                $lineaSubtotal = $lineaCantidad * $lineaPrecio;
 
-                // Asociar producto a la compra (evita duplicado en pivote compra_producto)
-                if (!isset($pivotResumen[$producto->id])) {
-                    $compra->productos()->attach($producto->id, [
-                        'cantidad' => $lineaCantidad,
-                        'precio' => $lineaPrecio,
-                        'almacen_id' => $almacenId,
-                    ]);
-
-                    $pivotResumen[$producto->id] = [
-                        'cantidad' => $lineaCantidad,
-                        'subtotal' => $lineaSubtotal,
-                        'almacen_id' => $almacenId,
-                    ];
-                } else {
-                    $resumen = $pivotResumen[$producto->id];
-                    $nuevaCantidad = $resumen['cantidad'] + $lineaCantidad;
-                    $nuevoSubtotal = $resumen['subtotal'] + $lineaSubtotal;
-                    $precioPromedio = $nuevaCantidad > 0 ? round($nuevoSubtotal / $nuevaCantidad, 2) : $lineaPrecio;
-
-                    // Si el producto entra a la misma compra desde distintos almacenes, dejamos null en pivote
-                    // para reflejar mezcla de origen en ese documento de compra.
-                    $almacenPivot = ($resumen['almacen_id'] === $almacenId) ? $almacenId : null;
-
-                    $compra->productos()->updateExistingPivot($producto->id, [
-                        'cantidad' => $nuevaCantidad,
-                        'precio' => $precioPromedio,
-                        'almacen_id' => $almacenPivot,
-                    ]);
-
-                    $pivotResumen[$producto->id] = [
-                        'cantidad' => $nuevaCantidad,
-                        'subtotal' => $nuevoSubtotal,
-                        'almacen_id' => $almacenPivot,
-                    ];
-                }
+                // Cada línea del carrito queda como su propia fila en compra_producto — si el mismo
+                // producto aparece dos veces en esta compra (distinto almacén y/o color), son dos
+                // líneas reales, no se fusionan ni se promedia el precio entre ellas.
+                $compra->productos()->attach($producto->id, [
+                    'cantidad' => $lineaCantidad,
+                    'precio' => $lineaPrecio,
+                    'almacen_id' => $almacenId,
+                ]);
 
                 // Actualizar inventario en el almacén específico
                 $almacenProducto = AlmacenProducto::firstOrNew([

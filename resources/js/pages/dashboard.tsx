@@ -312,10 +312,10 @@ export default function Dashboard({
 
                 {/* Opciones */}
                 <div
-                    className={`animate__animated animate__flipInX grid auto-rows-min gap-4 ${userRole === 'vendedor' ? 'md:grid-cols-3' : 'md:grid-cols-4'}`}
+                    className={`animate__animated animate__flipInX grid auto-rows-min gap-4 ${userRole === 'admin' ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}
                 >
-                    {/* Widget de Compra - Solo Admin y Moderador */}
-                    {(userRole === 'admin' || userRole === 'moderador') && (
+                    {/* Widget de Compra - Solo Admin (moderador y vendedor no tienen acceso a Compras) */}
+                    {userRole === 'admin' && (
                         <div>
                             <div className="border-sidebar-border/70 dark:border-sidebar-border relative aspect-video overflow-hidden rounded-xl border bg-gradient-to-br from-red-800 to-red-400">
                                 <CursorProvider>

@@ -35,7 +35,8 @@ class TransaccionController extends Controller
         $compras = Compra::with('productos')
             ->orderByDesc('fecha_compra')
             ->limit(50)
-            ->get();
+            ->get()
+            ->each(fn ($compra) => $compra->setRelation('productos', $this->agruparProductosPorLinea($compra->productos)));
 
         // Origen: vendedor solo ve sus cuentas asignadas personales; destino: cuentas asignadas a cualquier usuario
         if (auth()->user()->role === 'vendedor') {
@@ -76,6 +77,7 @@ class TransaccionController extends Controller
         $compra->load([
             'productos' => fn($query) => $query->withPivot('cantidad', 'precio')
         ]);
+        $compra->setRelation('productos', $this->agruparProductosPorLinea($compra->productos));
 
         // ✅ Filtrar cuentas según el rol del usuario y que tengan moneda CUP
         if (auth()->user()->role === 'vendedor') {
@@ -170,9 +172,9 @@ class TransaccionController extends Controller
             foreach ($validatedData['productos'] as $productoData) {
                 if ((float)$productoData['amount_usd'] > 0) {
                     $producto = Producto::findOrFail($productoData['product_id']);
-                    $pivotData = $compra->productos->find($producto->id)->pivot;
-
-                    $cantidad = $pivotData->cantidad;
+                    // Un producto puede tener varias líneas en la compra (distintos almacenes/colores);
+                    // se suma la cantidad de todas para este resumen, en vez de tomar solo la primera.
+                    $cantidad = $compra->productos->where('id', $producto->id)->sum(fn($p) => $p->pivot->cantidad);
                     $costoActual = $producto->precio_compra_producto;
                     $incrementoUnitario = (float)$productoData['amount_usd'];
                     $nuevoCosto = $costoActual + $incrementoUnitario;
@@ -486,9 +488,28 @@ class TransaccionController extends Controller
     /**
      * Distribuye el monto de transportación entre productos
      */
+    /**
+     * Agrupa las líneas de compra_producto por producto (un producto puede tener varias líneas
+     * en la misma compra desde distintos almacenes/colores) sumando la cantidad, para las
+     * pantallas que reparten un gasto por producto, no por línea.
+     */
+    private function agruparProductosPorLinea($productos)
+    {
+        return $productos
+            ->groupBy('id')
+            ->map(function ($lineas) {
+                $producto = $lineas->first();
+                $producto->pivot->cantidad = $lineas->sum(fn($p) => $p->pivot->cantidad);
+                return $producto;
+            })
+            ->values();
+    }
+
     private function distribuirTransportacion(Compra $compra, float $montoTotalUSD, string $tipo, array $distribucionManual = []): array
     {
-        $productos = $compra->productos;
+        // 'proporcional'/'igualitario' reparten por producto, no por línea — si el mismo producto
+        // tiene varias líneas en esta compra (distintos almacenes/colores), no debe pesar el doble.
+        $productos = $compra->productos->unique('id')->values();
         $distribuciones = [];
 
         switch ($tipo) {
