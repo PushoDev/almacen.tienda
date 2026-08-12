@@ -88,6 +88,49 @@ class DashboardStatsService
     }
 
     /**
+     * Resumen financiero compacto para el dashboard principal: Capital Financiero
+     * total + una tarjeta por cada moneda que realmente tenga cuentas permanentes
+     * (dinámico, no una lista fija de códigos — si se activa una moneda nueva
+     * aparece sola, sin tocar este método).
+     */
+    public function getResumenFinancieroCompacto(): array
+    {
+        $resumenCuentas = $this->getResumenCuentas();
+        $resumenClientes = $this->getResumenClientes();
+        $resumenProveedores = $this->getResumenProveedores();
+        $resumenProductos = $this->getResumenProductos();
+
+        // Clientes/proveedores/inventario no tienen desglose por moneda en el sistema
+        // (son montos únicos, sin columna moneda) — se asumen en la moneda principal,
+        // así que solo se suman a esa tarjeta, no a las demás.
+        $extrasMonedaPrincipal = $resumenClientes['balance_neto']
+            + $resumenProveedores['balance_neto']
+            + $resumenProductos['total_importe_global'];
+
+        $codigoPrincipal = $resumenCuentas['moneda_principal']['codigo'] ?? null;
+
+        $capitalPorMoneda = collect($resumenCuentas['por_moneda_perm'])
+            ->map(function ($info, $codigo) use ($extrasMonedaPrincipal, $codigoPrincipal) {
+                $esPrincipal = $codigo === $codigoPrincipal;
+
+                return [
+                    'codigo' => $codigo,
+                    'simbolo' => $info['simbolo'],
+                    'monto' => round(($esPrincipal ? $extrasMonedaPrincipal : 0) + $info['original'], 2),
+                    'incluye_clientes_proveedores_inventario' => $esPrincipal,
+                ];
+            })
+            ->values()
+            ->toArray();
+
+        return [
+            'capital_financiero' => round($resumenCuentas['total_saldo'] + $extrasMonedaPrincipal, 2),
+            'capital_por_moneda' => $capitalPorMoneda,
+            'moneda_principal' => $resumenCuentas['moneda_principal'],
+        ];
+    }
+
+    /**
      * KPIs por período usados por reportes y ventas.
      */
     public function getPeriodKpis(User $user, string $periodo): array

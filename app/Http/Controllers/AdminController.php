@@ -8,6 +8,7 @@ use App\Models\HistorialTasaCambio;
 use App\Models\HistorialComparacionMensual;
 use App\Models\HistorialPrecioCosto;
 use App\Models\Cuenta;
+use App\Services\DashboardStatsService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
@@ -18,7 +19,7 @@ class AdminController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(DashboardStatsService $dashboardStatsService)
     {
         // Obtener datos para las tablas
         $user = auth()->user();
@@ -76,9 +77,11 @@ class AdminController extends Controller
 
         $historialCostoPrecio = [];
         $statsCostoPrecio     = [];
+        $resumenFinanciero    = null;
         if ($user && in_array($user->role, ['admin', 'moderador'])) {
             $historialCostoPrecio = $this->getHistorialCostoPrecioReciente();
             $statsCostoPrecio     = $this->getStatsCostoPrecio();
+            $resumenFinanciero    = $dashboardStatsService->getResumenFinancieroCompacto();
         }
 
         return Inertia::render('dashboard', [
@@ -89,6 +92,7 @@ class AdminController extends Controller
             'historialCambios'    => $historialCambios,
             'historialCostoPrecio'=> $historialCostoPrecio,
             'statsCostoPrecio'    => $statsCostoPrecio,
+            'resumenFinanciero'   => $resumenFinanciero,
         ]);
     }
 

@@ -14,6 +14,7 @@ import {
     DiamondPercent,
     DollarSign,
     IdCard,
+    Landmark,
     LucideBaggageClaim,
     LucideBoomBox,
     Notebook,
@@ -150,6 +151,36 @@ interface StatsCostoPrecio {
     numero_cambios: number;
 }
 
+interface CapitalPorMoneda {
+    codigo: string;
+    simbolo: string;
+    monto: number;
+    incluye_clientes_proveedores_inventario: boolean;
+}
+
+interface ResumenFinanciero {
+    capital_financiero: number;
+    capital_por_moneda: CapitalPorMoneda[];
+    moneda_principal: { simbolo: string; codigo: string };
+}
+
+// Colores fijos para las monedas más comunes; cualquier otra (dinámica, agregada por el
+// admin en Gestión de Monedas) cae en la paleta de respaldo, ciclando por posición —
+// mismo criterio que `colorPago()` en RastreoOperaciones.tsx.
+const COLORES_MONEDA: Record<string, { bg: string; text: string; border: string }> = {
+    USD: { bg: 'bg-emerald-100 dark:bg-emerald-900/40', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-300 dark:border-emerald-700' },
+    CUP: { bg: 'bg-indigo-100 dark:bg-indigo-900/40', text: 'text-indigo-700 dark:text-indigo-300', border: 'border-indigo-300 dark:border-indigo-700' },
+    EUR: { bg: 'bg-blue-100 dark:bg-blue-900/40', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-300 dark:border-blue-700' },
+    MLC: { bg: 'bg-amber-100 dark:bg-amber-900/40', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-300 dark:border-amber-700' },
+};
+const PALETA_MONEDA_RESPALDO = [
+    { bg: 'bg-violet-100 dark:bg-violet-900/40', text: 'text-violet-700 dark:text-violet-300', border: 'border-violet-300 dark:border-violet-700' },
+    { bg: 'bg-pink-100 dark:bg-pink-900/40', text: 'text-pink-700 dark:text-pink-300', border: 'border-pink-300 dark:border-pink-700' },
+    { bg: 'bg-cyan-100 dark:bg-cyan-900/40', text: 'text-cyan-700 dark:text-cyan-300', border: 'border-cyan-300 dark:border-cyan-700' },
+    { bg: 'bg-lime-100 dark:bg-lime-900/40', text: 'text-lime-700 dark:text-lime-300', border: 'border-lime-300 dark:border-lime-700' },
+];
+const colorMoneda = (codigo: string, index: number) => COLORES_MONEDA[codigo] ?? PALETA_MONEDA_RESPALDO[index % PALETA_MONEDA_RESPALDO.length];
+
 export default function Dashboard({
     userRole,
     montosPorMoneda,
@@ -158,6 +189,7 @@ export default function Dashboard({
     historialCambios,
     historialCostoPrecio,
     statsCostoPrecio,
+    resumenFinanciero,
 }: {
     userRole: 'admin' | 'moderador' | 'vendedor';
     montosPorMoneda?: MontoPorMoneda[];
@@ -166,6 +198,7 @@ export default function Dashboard({
     historialCambios?: HistorialCambio[];
     historialCostoPrecio?: HistorialCostoPrecioItem[];
     statsCostoPrecio?: StatsCostoPrecio;
+    resumenFinanciero?: ResumenFinanciero | null;
 }) {
     const [timeRange, setTimeRange] = React.useState('90d');
     const [chartData, setChartData] = useState([]);
@@ -470,71 +503,137 @@ export default function Dashboard({
 
                 {/* Tablas de Montos y Comparaciones */}
                 <div className={`animate__animated animate__fadeIn grid grid-cols-1 gap-4 ${userRole !== 'vendedor' ? 'md:grid-cols-2' : ''}`}>
-                    {/* Tabla 1: Montos por Moneda */}
+                    {/* Tabla 1: Resumen Financiero (admin/moderador) o Mis Montos por Moneda (vendedor) */}
                     <div>
-                        <Card className="border-sidebar-border dark:border-sidebar-border">
-                            <CardHeader className="border-b-sidebar-border dark:border-b-sidebar-border">
-                                <CardTitle className="flex items-center gap-2">
-                                    <DollarSign className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                                    Tabla 1: Mis Montos por Moneda
-                                </CardTitle>
-                                <CardDescription>Montos asignados a tus cuentas por moneda</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow className="border-b-sidebar-border dark:border-b-sidebar-border hover:bg-transparent">
-                                            <TableHead className="text-gray-700 dark:text-gray-300">Moneda</TableHead>
-                                            <TableHead className="text-right text-gray-700 dark:text-gray-300">Monto</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {montosPorMoneda && montosPorMoneda.length > 0 ? (
-                                            montosPorMoneda.map((item, index) => (
-                                                <TableRow
-                                                    key={index}
-                                                    className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50 hover:bg-sidebar/10 dark:hover:bg-sidebar/20 transition-colors"
-                                                >
-                                                    <TableCell className="font-medium">
-                                                        <div className="flex items-center gap-3">
-                                                            <Badge variant="secondary" className="capitalize">
-                                                                {item.descripcion}
-                                                            </Badge>
-                                                            <span className="text-muted-foreground font-mono text-sm">{item.simbolo}</span>
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell className="text-right font-medium">
-                                                        {item.monto.toLocaleString('es-ES', {
-                                                            minimumFractionDigits: 2,
-                                                            maximumFractionDigits: 6,
-                                                        })}{' '}
-                                                        {item.simbolo}
+                        {resumenFinanciero ? (
+                            <Card className="border-emerald-500/30 border-l-4 shadow-sm transition-shadow hover:shadow-md">
+                                <CardHeader className="border-b-sidebar-border dark:border-b-sidebar-border">
+                                    <CardTitle className="flex items-center gap-2">
+                                        <Landmark className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                                        Tabla 1: Resumen Financiero
+                                    </CardTitle>
+                                    <CardDescription>Capital total del negocio, desglosado por moneda</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow className="border-b-sidebar-border dark:border-b-sidebar-border hover:bg-transparent">
+                                                <TableHead className="text-gray-700 dark:text-gray-300">Moneda</TableHead>
+                                                <TableHead className="text-right text-gray-700 dark:text-gray-300">Capital</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {resumenFinanciero.capital_por_moneda.length > 0 ? (
+                                                resumenFinanciero.capital_por_moneda.map((item, index) => {
+                                                    const c = colorMoneda(item.codigo, index);
+                                                    return (
+                                                        <TableRow
+                                                            key={item.codigo}
+                                                            className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50 hover:bg-sidebar/10 dark:hover:bg-sidebar/20 transition-colors"
+                                                        >
+                                                            <TableCell className="font-medium">
+                                                                <div className="flex items-center gap-3">
+                                                                    <Badge variant="outline" className={`${c.bg} ${c.text} ${c.border}`}>
+                                                                        {item.codigo}
+                                                                    </Badge>
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell className="text-right font-medium">
+                                                                {item.monto.toLocaleString('es-ES', {
+                                                                    minimumFractionDigits: 2,
+                                                                    maximumFractionDigits: 2,
+                                                                })}{' '}
+                                                                {item.simbolo}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    );
+                                                })
+                                            ) : (
+                                                <TableRow className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50">
+                                                    <TableCell colSpan={2} className="py-8 text-center text-gray-500 dark:text-gray-400">
+                                                        No hay cuentas registradas todavía
                                                     </TableCell>
                                                 </TableRow>
-                                            ))
-                                        ) : (
-                                            <TableRow className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50">
-                                                <TableCell colSpan={2} className="py-8 text-center text-gray-500 dark:text-gray-400">
-                                                    No tienes cuentas asignadas o no hay montos disponibles
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </TableBody>
-                                </Table>
-                                {totalCapital !== undefined && montosPorMoneda && montosPorMoneda.length > 0 && (
+                                            )}
+                                        </TableBody>
+                                    </Table>
                                     <div className="border-sidebar-border dark:border-sidebar-border mt-4 flex justify-between border-t pt-2 font-semibold">
-                                        <span>Total Capital (USD):</span>
+                                        <span>Capital Financiero Total:</span>
                                         <span>
-                                            {totalCapital.toLocaleString('es-ES', {
+                                            {resumenFinanciero.moneda_principal.simbolo}{' '}
+                                            {resumenFinanciero.capital_financiero.toLocaleString('es-ES', {
                                                 minimumFractionDigits: 2,
                                                 maximumFractionDigits: 2,
-                                            })}{' '}
-                                            USD
+                                            })}
                                         </span>
                                     </div>
-                                )}
-                            </CardContent>
-                        </Card>
+                                </CardContent>
+                            </Card>
+                        ) : (
+                            <Card className="border-sidebar-border dark:border-sidebar-border">
+                                <CardHeader className="border-b-sidebar-border dark:border-b-sidebar-border">
+                                    <CardTitle className="flex items-center gap-2">
+                                        <DollarSign className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                                        Tabla 1: Mis Montos por Moneda
+                                    </CardTitle>
+                                    <CardDescription>Montos asignados a tus cuentas por moneda</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow className="border-b-sidebar-border dark:border-b-sidebar-border hover:bg-transparent">
+                                                <TableHead className="text-gray-700 dark:text-gray-300">Moneda</TableHead>
+                                                <TableHead className="text-right text-gray-700 dark:text-gray-300">Monto</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {montosPorMoneda && montosPorMoneda.length > 0 ? (
+                                                montosPorMoneda.map((item, index) => (
+                                                    <TableRow
+                                                        key={index}
+                                                        className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50 hover:bg-sidebar/10 dark:hover:bg-sidebar/20 transition-colors"
+                                                    >
+                                                        <TableCell className="font-medium">
+                                                            <div className="flex items-center gap-3">
+                                                                <Badge variant="secondary" className="capitalize">
+                                                                    {item.descripcion}
+                                                                </Badge>
+                                                                <span className="text-muted-foreground font-mono text-sm">{item.simbolo}</span>
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-medium">
+                                                            {item.monto.toLocaleString('es-ES', {
+                                                                minimumFractionDigits: 2,
+                                                                maximumFractionDigits: 6,
+                                                            })}{' '}
+                                                            {item.simbolo}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))
+                                            ) : (
+                                                <TableRow className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50">
+                                                    <TableCell colSpan={2} className="py-8 text-center text-gray-500 dark:text-gray-400">
+                                                        No tienes cuentas asignadas o no hay montos disponibles
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                    {totalCapital !== undefined && montosPorMoneda && montosPorMoneda.length > 0 && (
+                                        <div className="border-sidebar-border dark:border-sidebar-border mt-4 flex justify-between border-t pt-2 font-semibold">
+                                            <span>Total Capital (USD):</span>
+                                            <span>
+                                                {totalCapital.toLocaleString('es-ES', {
+                                                    minimumFractionDigits: 2,
+                                                    maximumFractionDigits: 2,
+                                                })}{' '}
+                                                USD
+                                            </span>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        )}
                     </div>
 
                     {/* Tabla 2: Comparaciones Mensuales - Solo Admin y Moderador */}
