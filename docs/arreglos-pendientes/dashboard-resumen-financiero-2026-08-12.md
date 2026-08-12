@@ -71,7 +71,45 @@ Queda sin commitear, para revisión del cliente.
 
 Queda sin commitear, para revisión del cliente. **Pendiente operativo, no de código:** confirmar en el servidor de producción que el cron de Laravel (`schedule:run`) está configurado — si no lo está, el sistema sigue funcionando igual gracias a la red de seguridad, pero el cierre de mes solo ocurre en el primer acceso del mes nuevo, no exactamente a medianoche.
 
-## Fase 4 (futuro, no arrancar sin pedirlo explícitamente)
+## Fase 4 — Tabla 2 v2: movimiento neto mensual + ganancia real de la agencia — EN ANÁLISIS, no arrancar sin luz verde explícita
 
-- [ ] "Otras cosas" mencionadas al abrir este plan — sin especificar todavía.
-- [ ] Duplicado de moneda CUP — parqueado, ver nota en Contexto.
+Surgió el mismo día (2026-08-12), en la sesión siguiente a que el cliente hiciera commit de las Fases 1-3, al preguntar "¿de dónde sacás los datos de Tabla 2?". La respuesta abrió una conversación larga que redefine cómo debe funcionar Tabla 2 — **nada de esto está implementado todavía**, es la fase de análisis/diseño antes de tocar código.
+
+### 1. Redefinición de "Saldo Acumulado" (confirmada vía AskUserQuestion)
+
+La Fase 3 implementó "Saldo Acumulado" como el saldo **real y total** de las cuentas en cualquier momento (igual a Tabla 1). El cliente aclaró que en realidad lo quiere como **el movimiento neto SOLO de este mes** — arranca en 0 el día 1, va sumando/restando con cada operación (compra, gasto, ingreso, transferencia, venta) que afecte una cuenta, sin importar el tipo.
+
+Modelo confirmado:
+- **Mes Anterior** = el "Saldo Acumulado" final con el que cerró el mes pasado (congelado, se lee tal cual).
+- **Saldo Acumulado** = cuánto se ha movido (entradas − salidas) desde que empezó este mes. Arranca en 0 cada día 1.
+- **Diferencia** = Saldo Acumulado − Mes Anterior (compara el movimiento de este mes contra el del mes pasado — ya no es un número redundante con otra columna, ahora sí aporta algo distinto).
+
+Al llegar el día 1 del mes siguiente: el "Saldo Acumulado" final del mes que cierra pasa a ser el "Mes Anterior" del mes nuevo, y el "Saldo Acumulado" nuevo vuelve a 0. Mismo mecanismo híbrido de disparo ya construido en Fase 3 (comando programado + red de seguridad en el dashboard) — no cambia, solo cambia qué significan los números.
+
+**Flujo de ejemplo, verificado con el cliente (no implementado, solo narrado):** partiendo de Mes Anterior USD 120 / CUP 13.000 / EUR 12, con Saldo Acumulado en 0 el día 1, se recorrió una Compra (pago_cash USD, -50), un Gasto (CUP, -500), un Ingreso (USD, +30), una Transferencia (USD→EUR con conversión, -20/+18) y una Venta (cobro en CUP, +2.000) — resultado: Saldo Acumulado USD -40, CUP 1.500, EUR 18; Diferencia USD -160, CUP -11.500, EUR +6. Sirve como caso de prueba de aceptación una vez que se implemente.
+
+**Cambio técnico que esto implica (analizado, no hecho):** calcular "movimiento neto de este mes" sin volver a tocar `movimientos_financieros` (ahí vivía el bug de agrupación de WHERE que se arregló en Fase 3 — no reabrir ese camino). Se resuelve guardando un ancla: el saldo real de las cuentas capturado una sola vez, justo en el instante del rollover de cada mes. `Saldo Acumulado` en cualquier momento = saldo real ahora − esa ancla. Requiere una columna nueva en `historial_comparacion_mensuals` (ej. `saldo_inicio_mes`) — a diferencia de la migración de Fase 3, esta sí puede ser un `ADD COLUMN` simple (con default), no hace falta recrear la tabla porque no toca ningún NOT NULL existente.
+
+### 2. Ganancia real de la agencia — análisis por tipo de operación (código ya revisado, nada implementado)
+
+El cliente quiere reflejar ganancias del negocio, no solo de Ventas — pero al analizar cada controller se confirmó que **la mayoría de las operaciones no tienen margen posible**, y el cliente terminó de acuerdo con esa lectura:
+
+- **Compras** (`CompraController::store()`): siempre se pagan desde cuentas USD, sin conversión de moneda posible (`if ($cuenta->moneda->codigo_moneda !== 'USD') throw ...`). No hay margen que calcular — es costo puro.
+- **Gasto/Ingreso** (`GastoController`, `IngresoController`): exigen que la moneda de la cuenta coincida exacto con la moneda del movimiento. Sin conversión, sin margen posible.
+- **Transferencias** (`TransferenciaController`): **sí puede generar ganancia o pérdida real**, hoy no calculada ni guardada en ningún lado. Ya tiene toda la lógica de conversión (`calcularMontoConvertido()`, con tasa oficial o una tasa personalizada que el usuario puede meter a mano) — falta comparar "lo que realmente se movió" contra "lo que hubiera sido a la tasa oficial", mismo patrón que `Venta::monto_diferencia_cambiaria` ya usa.
+- **Ventas**: ya existe un concepto de ganancia, pero repartido en 3 campos que nunca se juntan:
+  1. `total_ganancia` — margen bruto por producto (precio venta − costo), sin descontar comisión.
+  2. `ganancia_agencia` — se calcula al vuelo solo en `VentaController::show()` (nunca se guarda): `total_ganancia − comisión del vendedor`.
+  3. `ganancia_real_total` — se guarda al aprobar la venta (`aprobarVenta()`): `total_ganancia + ganancia_perdida_cambiaria`, pero **sin restar la comisión**.
+  
+  Ninguno junta las tres cosas a la vez (margen − comisión + cambiaria). El cliente confirmó que quiere un número nuevo que sí las junte.
+
+**Conclusión acordada con el cliente:** Compras/Gasto/Ingreso/Transferencias no necesitan su propio cálculo de "ganancia" — el "Saldo Acumulado" redefinido en el punto 1 ya captura su efecto sobre las cuentas automáticamente. Solo hace falta un número nuevo de "ganancia neta" para Ventas, porque ese margen no es visible con solo mirar el saldo de las cuentas.
+
+### 3. Abierto, sin confirmar todavía — no arrancar a codear sin esto
+
+- [ ] **¿Qué forma toman las columnas nuevas en Tabla 2?** Pregunta hecha, sin responder aún: ¿una columna "Ganancia de Ventas" al lado de Mes Anterior/Saldo Acumulado/Diferencia (mismo `Card`, más columnas), o algo separado (otra card / Tabla 3)?
+- [ ] **¿Se implementa el cálculo de ganancia/pérdida cambiaria de Transferencias ahora, junto con lo de Ventas, o se deja para después?** El cliente dijo "depende de la operación, hay ocasiones que generan pérdidas" — confirma que el fenómeno es real, pero no si entra en el alcance de esta fase.
+- [ ] Fórmula exacta del nuevo "Ganancia Neta de Venta" a implementar: `total_ganancia − total_comision + ganancia_perdida_cambiaria` — confirmada conceptualmente, falta decidir si se guarda como columna nueva en `ventas` o se calcula on-the-fly para el agregado del dashboard.
+- [ ] "Otras cosas" mencionadas al abrir este plan (antes de esta Fase 4) — sin especificar todavía, puede que ya estén cubiertas por lo de arriba.
+- [ ] Duplicado de moneda CUP (dos monedas, mismo código, distinta tasa) — sigue parqueado, sin relación con esta fase.

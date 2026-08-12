@@ -4,7 +4,7 @@
 
 ## Cuándo usar este patrón
 
-Cuando una tarjeta de resumen/KPI necesita destacarse visualmente en una pantalla con varias cards — no es el estilo por defecto de toda tarjeta del sistema (la mayoría sigue usando `border-sidebar-border` plano, sin degradado, ver por ejemplo "Información de Monedas" en la misma página). Se usa cuando el cliente pide explícitamente que una card "resalte" o tenga "más color".
+Cuando una tarjeta de resumen/KPI necesita destacarse visualmente en una pantalla con varias cards — no es el estilo por defecto de toda tarjeta del sistema (la mayoría de las pantallas del proyecto sigue usando `border-sidebar-border` plano, sin degradado — `dashboard.tsx` es la excepción, ahí ya se aplicó a las 7 cards de la página). Se usa cuando el cliente pide explícitamente que una card "resalte" o tenga "más color".
 
 ## La receta
 
@@ -48,10 +48,23 @@ No uses un color sólido (`bg-blue-600`) — se mezcla con el degradado y desapa
 className="bg-white/20 text-white backdrop-blur-sm hover:bg-white/30"
 ```
 
+### 4. Si el header tiene un `Select`/`Input` (como el rango de fechas de "Area Interactiva" o el buscador de "Estados Financieros")
+
+Mismo criterio semitransparente que el botón, adaptado a cada componente:
+
+```tsx
+// SelectTrigger
+className="border-white/30 bg-white/20 text-white backdrop-blur-sm [&>svg]:text-white"
+
+// Input (con ícono de lupa al lado)
+className="border-white/30 bg-white/20 text-white placeholder:text-white/70 backdrop-blur-sm"
+// el ícono de lupa: text-white/70 en vez del gris por defecto
+```
+
 ## Dónde ya se aplicó
 
-- `resources/js/pages/dashboard.tsx` — Tabla 1 (verde/emerald) y Tabla 2 (azul/blue), 2026-08-12.
+- `resources/js/pages/dashboard.tsx`, todas 2026-08-12: Tabla 1 "Resumen Financiero" (verde/emerald), Tabla 2 "Comparación Mensual" (azul/blue), "Información de Monedas" (violeta/violet), "Area Interactiva" (cyan), "Historial de Cambios de Tasa" (naranja/orange), "Cambios de Precio de Costo" (ámbar/amber), "Estados Financieros" (rosa/rose).
 
 ## Dónde falta aplicarlo (pendiente, no arrancar sin que el cliente lo pida)
 
-Sin especificar todavía — el cliente mencionó que "existen otros lugares donde debemos arreglar eso también" pero no dijo cuáles. Preguntar antes de tocar cualquier otra pantalla.
+`dashboard.tsx` ya quedó completo (las 7 cards de la página, 2026-08-12). El cliente mencionó en su momento que "existen otros lugares donde debemos arreglar eso también" pero no dijo cuáles fuera de esta página — no asumir qué pantalla sigue, preguntar primero. **`Logistica/Index.tsx` queda explícitamente fuera** — el cliente pidió no tocarla en esta ronda (ver [[project_dashboard_resumen_financiero]]).
