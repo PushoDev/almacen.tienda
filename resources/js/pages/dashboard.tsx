@@ -32,7 +32,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ChartConfig, ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 const chartConfig = {
     compras: {
@@ -86,6 +86,7 @@ interface ComparacionMensual {
     diferencia: number;
     porcentaje_cambio: number;
     es_positivo: boolean;
+    tasa_cambio: number;
 }
 
 interface EstadoFinanciero {
@@ -506,13 +507,19 @@ export default function Dashboard({
                     {/* Tabla 1: Resumen Financiero (admin/moderador) o Mis Montos por Moneda (vendedor) */}
                     <div>
                         {resumenFinanciero ? (
-                            <Card className="border-emerald-500/30 border-l-4 shadow-sm transition-shadow hover:shadow-md">
-                                <CardHeader className="border-b-sidebar-border dark:border-b-sidebar-border">
-                                    <CardTitle className="flex items-center gap-2">
-                                        <Landmark className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                                        Tabla 1: Resumen Financiero
-                                    </CardTitle>
-                                    <CardDescription>Capital total del negocio, desglosado por moneda</CardDescription>
+                            <Card className="h-full overflow-hidden border-emerald-500/30 border-l-4 pt-0 shadow-sm transition-shadow hover:shadow-md">
+                                <CardHeader className="border-b bg-gradient-to-r from-emerald-600 to-emerald-700 px-6 py-5 text-white">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                            <Landmark className="h-5 w-5" />
+                                        </div>
+                                        <div>
+                                            <CardTitle className="text-white">Tabla 1: Resumen Financiero</CardTitle>
+                                            <CardDescription className="text-emerald-100">
+                                                Capital total del negocio, desglosado por moneda
+                                            </CardDescription>
+                                        </div>
+                                    </div>
                                 </CardHeader>
                                 <CardContent>
                                     <Table>
@@ -638,20 +645,24 @@ export default function Dashboard({
 
                     {/* Tabla 2: Comparaciones Mensuales - Solo Admin y Moderador */}
                     {userRole !== 'vendedor' && <div>
-                        <Card className="border-sidebar-border dark:border-sidebar-border">
-                            <CardHeader className="border-b-sidebar-border dark:border-b-sidebar-border">
+                        <Card className="h-full overflow-hidden border-blue-500/30 border-l-4 pt-0 shadow-sm transition-shadow hover:shadow-md">
+                            <CardHeader className="border-b bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 text-white">
                                 <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <TrendingUp className="h-5 w-5 text-green-600 dark:text-green-400" />
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                            <TrendingUp className="h-5 w-5" />
+                                        </div>
                                         <div>
-                                            <CardTitle>Tabla 2: Comparación Mensual</CardTitle>
-                                            <CardDescription>Comparación entre el mes actual y el mes anterior</CardDescription>
+                                            <CardTitle className="text-white">Tabla 2: Comparación Mensual</CardTitle>
+                                            <CardDescription className="text-blue-100">
+                                                Comparación entre el mes actual y el mes anterior
+                                            </CardDescription>
                                         </div>
                                     </div>
                                     {(userRole === 'admin' || userRole === 'moderador') && (
                                         <button
                                             onClick={() => window.open(route('dashboard.historial.comparaciones.view'), '_blank')}
-                                            className="flex cursor-pointer items-center gap-2 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+                                            className="flex cursor-pointer items-center gap-2 rounded-md bg-white/20 px-3 py-1.5 text-sm font-medium text-white backdrop-blur-sm transition-colors hover:bg-white/30"
                                         >
                                             <TrendingUp className="h-4 w-4" />
                                             Ver Historial
@@ -664,150 +675,124 @@ export default function Dashboard({
                                     <TableHeader>
                                         <TableRow className="border-b-sidebar-border dark:border-b-sidebar-border hover:bg-transparent">
                                             <TableHead className="text-gray-700 dark:text-gray-300">Moneda</TableHead>
-                                            <TableHead className="text-gray-700 dark:text-gray-300">Símbolo</TableHead>
                                             <TableHead className="text-right text-gray-700 dark:text-gray-300">Mes Anterior</TableHead>
-                                            <TableHead className="text-right text-gray-700 dark:text-gray-300">Mes Actual</TableHead>
                                             <TableHead className="text-right text-gray-700 dark:text-gray-300">Diferencia</TableHead>
-                                            <TableHead className="text-right text-gray-700 dark:text-gray-300">% Cambio</TableHead>
+                                            <TableHead className="text-right text-gray-700 dark:text-gray-300">Saldo Acumulado</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {comparaciones && comparaciones.length > 0 ? (
-                                            comparaciones.map((comparacion, index) => (
-                                                <TableRow
-                                                    key={index}
-                                                    className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50 hover:bg-sidebar/10 dark:hover:bg-sidebar/20 transition-colors"
-                                                >
-                                                    <TableCell className="font-medium">{comparacion.moneda}</TableCell>
-                                                    <TableCell>
-                                                        <Badge variant="secondary">{comparacion.simbolo_moneda}</Badge>
-                                                    </TableCell>
-                                                    <TableCell className="text-right">
-                                                        {comparacion.monto_anterior.toLocaleString('es-ES', {
-                                                            minimumFractionDigits: 2,
-                                                            maximumFractionDigits: 6,
-                                                        })}
-                                                    </TableCell>
-                                                    <TableCell className="text-right">
-                                                        {comparacion.monto_actual.toLocaleString('es-ES', {
-                                                            minimumFractionDigits: 2,
-                                                            maximumFractionDigits: 6,
-                                                        })}
-                                                    </TableCell>
-                                                    <TableCell className="text-right">
-                                                        <span
-                                                            className={
-                                                                comparacion.es_positivo
-                                                                    ? 'font-medium text-green-600 dark:text-green-400'
-                                                                    : 'font-medium text-red-600 dark:text-red-400'
-                                                            }
-                                                        >
-                                                            {comparacion.diferencia >= 0 ? '+' : ''}
-                                                            {comparacion.diferencia.toLocaleString('es-ES', {
+                                            comparaciones.map((comparacion, index) => {
+                                                const c = colorMoneda(comparacion.moneda, index);
+                                                return (
+                                                    <TableRow
+                                                        key={index}
+                                                        className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50 hover:bg-sidebar/10 dark:hover:bg-sidebar/20 transition-colors"
+                                                    >
+                                                        <TableCell className="font-medium">
+                                                            <Badge variant="outline" className={`${c.bg} ${c.text} ${c.border}`}>
+                                                                {comparacion.moneda}
+                                                            </Badge>
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            {comparacion.monto_anterior.toLocaleString('es-ES', {
                                                                 minimumFractionDigits: 2,
                                                                 maximumFractionDigits: 6,
                                                             })}
-                                                        </span>
-                                                    </TableCell>
-                                                    <TableCell className="text-right">
-                                                        <span
-                                                            className={
-                                                                comparacion.es_positivo
-                                                                    ? 'font-medium text-green-600 dark:text-green-400'
-                                                                    : 'font-medium text-red-600 dark:text-red-400'
-                                                            }
-                                                        >
-                                                            {comparacion.porcentaje_cambio >= 0 ? '+' : ''}
-                                                            {comparacion.porcentaje_cambio.toFixed(2)}%
-                                                        </span>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            <span
+                                                                className={
+                                                                    comparacion.es_positivo
+                                                                        ? 'font-medium text-green-600 dark:text-green-400'
+                                                                        : 'font-medium text-red-600 dark:text-red-400'
+                                                                }
+                                                            >
+                                                                {comparacion.diferencia >= 0 ? '+' : ''}
+                                                                {comparacion.diferencia.toLocaleString('es-ES', {
+                                                                    minimumFractionDigits: 2,
+                                                                    maximumFractionDigits: 6,
+                                                                })}
+                                                            </span>
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            {comparacion.monto_actual.toLocaleString('es-ES', {
+                                                                minimumFractionDigits: 2,
+                                                                maximumFractionDigits: 6,
+                                                            })}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })
                                         ) : (
                                             <TableRow className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50">
-                                                <TableCell colSpan={6} className="py-8 text-center text-gray-500 dark:text-gray-400">
+                                                <TableCell colSpan={4} className="py-8 text-center text-gray-500 dark:text-gray-400">
                                                     No hay datos históricos disponibles para comparar
                                                 </TableCell>
                                             </TableRow>
                                         )}
                                     </TableBody>
+                                    {comparaciones && comparaciones.length > 0 && (
+                                        <TableFooter>
+                                            <TableRow className="hover:bg-transparent">
+                                                <TableCell>Totales</TableCell>
+                                                <TableCell className="text-right">
+                                                    {comparaciones
+                                                        .reduce((sum, comp) => {
+                                                            const tasaCambio = comp.tasa_cambio || 1;
+                                                            return sum + comp.monto_anterior / tasaCambio;
+                                                        }, 0)
+                                                        .toLocaleString('es-ES', {
+                                                            minimumFractionDigits: 2,
+                                                            maximumFractionDigits: 2,
+                                                        })}{' '}
+                                                    USD
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <span
+                                                        className={
+                                                            comparaciones.reduce((sum, comp) => {
+                                                                const tasaCambio = comp.tasa_cambio || 1;
+                                                                return sum + comp.diferencia / tasaCambio;
+                                                            }, 0) >= 0
+                                                                ? 'text-green-600 dark:text-green-400'
+                                                                : 'text-red-600 dark:text-red-400'
+                                                        }
+                                                    >
+                                                        {comparaciones.reduce((sum, comp) => {
+                                                            const tasaCambio = comp.tasa_cambio || 1;
+                                                            return sum + comp.diferencia / tasaCambio;
+                                                        }, 0) >= 0
+                                                            ? '+'
+                                                            : ''}
+                                                        {comparaciones
+                                                            .reduce((sum, comp) => {
+                                                                const tasaCambio = comp.tasa_cambio || 1;
+                                                                return sum + comp.diferencia / tasaCambio;
+                                                            }, 0)
+                                                            .toLocaleString('es-ES', {
+                                                                minimumFractionDigits: 2,
+                                                                maximumFractionDigits: 2,
+                                                            })}{' '}
+                                                        USD
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    {comparaciones
+                                                        .reduce((sum, comp) => {
+                                                            const tasaCambio = comp.tasa_cambio || 1;
+                                                            return sum + comp.monto_actual / tasaCambio;
+                                                        }, 0)
+                                                        .toLocaleString('es-ES', {
+                                                            minimumFractionDigits: 2,
+                                                            maximumFractionDigits: 2,
+                                                        })}{' '}
+                                                    USD
+                                                </TableCell>
+                                            </TableRow>
+                                        </TableFooter>
+                                    )}
                                 </Table>
-                                {comparaciones && comparaciones.length > 0 && (
-                                    <div className="border-sidebar-border dark:border-sidebar-border mt-4 grid grid-cols-6 gap-2 border-t pt-2 text-sm font-semibold">
-                                        <span className="text-right">Totales:</span>
-                                        <span></span>
-                                        <span className="text-right">
-                                            {comparaciones
-                                                .reduce((sum, comp) => {
-                                                    const tasaCambio = comp.tasa_cambio || 1;
-                                                    return sum + comp.monto_anterior / tasaCambio;
-                                                }, 0)
-                                                .toLocaleString('es-ES', {
-                                                    minimumFractionDigits: 2,
-                                                    maximumFractionDigits: 2,
-                                                })}{' '}
-                                            USD
-                                        </span>
-                                        <span className="text-right">
-                                            {comparaciones
-                                                .reduce((sum, comp) => {
-                                                    const tasaCambio = comp.tasa_cambio || 1;
-                                                    return sum + comp.monto_actual / tasaCambio;
-                                                }, 0)
-                                                .toLocaleString('es-ES', {
-                                                    minimumFractionDigits: 2,
-                                                    maximumFractionDigits: 2,
-                                                })}{' '}
-                                            USD
-                                        </span>
-                                        <span className="text-right">
-                                            <span
-                                                className={
-                                                    comparaciones.reduce((sum, comp) => {
-                                                        const tasaCambio = comp.tasa_cambio || 1;
-                                                        return sum + comp.diferencia / tasaCambio;
-                                                    }, 0) >= 0
-                                                        ? 'text-green-600 dark:text-green-400'
-                                                        : 'text-red-600 dark:text-red-400'
-                                                }
-                                            >
-                                                {comparaciones.reduce((sum, comp) => {
-                                                    const tasaCambio = comp.tasa_cambio || 1;
-                                                    return sum + comp.diferencia / tasaCambio;
-                                                }, 0) >= 0
-                                                    ? '+'
-                                                    : ''}
-                                                {comparaciones
-                                                    .reduce((sum, comp) => {
-                                                        const tasaCambio = comp.tasa_cambio || 1;
-                                                        return sum + comp.diferencia / tasaCambio;
-                                                    }, 0)
-                                                    .toLocaleString('es-ES', {
-                                                        minimumFractionDigits: 2,
-                                                        maximumFractionDigits: 2,
-                                                    })}{' '}
-                                                USD
-                                            </span>
-                                        </span>
-                                        <span className="text-right">
-                                            <span
-                                                className={
-                                                    comparaciones.reduce((sum, comp) => sum + comp.porcentaje_cambio, 0) / comparaciones.length >= 0
-                                                        ? 'text-green-600 dark:text-green-400'
-                                                        : 'text-red-600 dark:text-red-400'
-                                                }
-                                            >
-                                                {comparaciones.reduce((sum, comp) => sum + comp.porcentaje_cambio, 0) / comparaciones.length >= 0
-                                                    ? '+'
-                                                    : ''}
-                                                {(
-                                                    comparaciones.reduce((sum, comp) => sum + comp.porcentaje_cambio, 0) / comparaciones.length
-                                                ).toFixed(2)}
-                                                %
-                                            </span>
-                                        </span>
-                                    </div>
-                                )}
                             </CardContent>
                         </Card>
                     </div>}

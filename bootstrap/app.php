@@ -4,6 +4,7 @@ use App\Http\Middleware\CheckAlmacenPermission;
 use App\Http\Middleware\CheckCuentaPermission;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -42,6 +43,14 @@ return Application::configure(basePath: dirname(__DIR__))
             'vendor' => EnsureUserIsVendor::class,
             'check.cuenta.permission' => CheckCuentaPermission::class,
         ]);
+    })
+    ->withSchedule(function (Schedule $schedule) {
+        // Cierra el snapshot de comparación mensual del dashboard (Tabla 2) al inicio de cada mes.
+        // Nota: este proyecto no tenía ningún scheduler registrado hasta ahora — para que esto
+        // corra en producción hace falta confirmar que el cron `* * * * * php artisan schedule:run`
+        // esté configurado en el servidor. AdminController::index() tiene una red de seguridad que
+        // hace el mismo cierre en el primer acceso del mes nuevo si este comando no llegó a correr.
+        $schedule->command('comparacion:cerrar-mes')->monthlyOn(1, '00:00');
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //
