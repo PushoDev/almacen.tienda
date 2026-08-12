@@ -196,6 +196,13 @@ class ReporteController extends Controller
      */
     public function getComprasVentasData(Request $request)
     {
+        // Compras es admin-only en el resto del sistema (routes/acciones/compras.php,
+        // middleware admin.only) — este endpoint agrega totales de Compras de todo el
+        // negocio, así que necesita el mismo gate, aunque viva fuera de ese grupo de rutas.
+        if (!in_array(auth()->user()->role, ['admin', 'moderador'])) {
+            abort(403);
+        }
+
         // Define el rango de tiempo. Por defecto, 90 días.
         $timeRange = $request->query('timeRange', '90d');
 

@@ -215,6 +215,10 @@ export default function Dashboard({
     const [isLoadingMonedas, setIsLoadingMonedas] = useState(true);
 
     useEffect(() => {
+        if (userRole === 'vendedor') {
+            return;
+        }
+
         const fetchChartData = async () => {
             setIsLoading(true);
             try {
@@ -229,7 +233,7 @@ export default function Dashboard({
         };
 
         fetchChartData();
-    }, [timeRange]);
+    }, [timeRange, userRole]);
 
     // Cargar usuarios al montar el componente
     useEffect(() => {
@@ -514,7 +518,7 @@ export default function Dashboard({
                                             <Landmark className="h-5 w-5" />
                                         </div>
                                         <div>
-                                            <CardTitle className="text-white">Tabla 1: Resumen Financiero</CardTitle>
+                                            <CardTitle className="text-white">Resumen Financiero</CardTitle>
                                             <CardDescription className="text-emerald-100">
                                                 Capital total del negocio, desglosado por moneda
                                             </CardDescription>
@@ -653,7 +657,7 @@ export default function Dashboard({
                                             <TrendingUp className="h-5 w-5" />
                                         </div>
                                         <div>
-                                            <CardTitle className="text-white">Tabla 2: Comparación Mensual</CardTitle>
+                                            <CardTitle className="text-white">Comparación Mensual</CardTitle>
                                             <CardDescription className="text-blue-100">
                                                 Comparación entre el mes actual y el mes anterior
                                             </CardDescription>
@@ -800,75 +804,86 @@ export default function Dashboard({
 
                 {/* Sección de Monedas - Información de Tasas de Cambio */}
                 <div className="animate__animated animate__fadeIn">
-                    <Card>
-                        <CardHeader className="flex items-center gap-2 space-y-0 border-b py-5 sm:flex-row">
+                    <Card className="overflow-hidden border-violet-500/30 border-l-4 pt-0 shadow-sm transition-shadow hover:shadow-md">
+                        <CardHeader className="flex items-center gap-2 space-y-0 border-b bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white sm:flex-row">
                             <div className="grid flex-1 gap-1 text-center sm:text-left">
-                                <div className="flex items-center gap-2">
-                                    <DollarSign className="h-5 w-5 text-green-600" />
-                                    <CardTitle>Información de Monedas</CardTitle>
+                                <div className="flex items-center justify-center gap-3 sm:justify-start">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <DollarSign className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-white">Información de Monedas</CardTitle>
+                                        <CardDescription className="text-violet-100">
+                                            Tasas de cambio y comisiones disponibles en el sistema
+                                        </CardDescription>
+                                    </div>
                                 </div>
-                                <CardDescription>Tasas de cambio y comisiones disponibles en el sistema</CardDescription>
                             </div>
                         </CardHeader>
                         <CardContent className="pt-6">
                             {isLoadingMonedas ? (
                                 <div className="flex h-[300px] items-center justify-center text-center">Cargando datos de monedas...</div>
                             ) : monedas.length > 0 ? (
-                                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                    {monedas.map((moneda) => (
-                                        <div
-                                            key={moneda.id}
-                                            className={`rounded-lg border p-4 transition-all hover:shadow-md ${
-                                                moneda.principal
-                                                    ? 'border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-950'
-                                                    : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
-                                            }`}
-                                        >
-                                            {/* Header con símbolo y código */}
-                                            <div className="mb-3 flex items-start justify-between">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900">
-                                                        <span className="text-xl font-bold text-blue-600 dark:text-blue-300">
-                                                            {moneda.simbolo_moneda}
-                                                        </span>
+                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+                                    {monedas.map((moneda, index) => {
+                                        const c = colorMoneda(moneda.codigo_moneda, index);
+                                        return (
+                                            <div
+                                                key={moneda.id}
+                                                className={`rounded-lg border p-3 transition-all hover:shadow-md ${
+                                                    moneda.principal
+                                                        ? 'border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-950'
+                                                        : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
+                                                }`}
+                                            >
+                                                {/* Header con símbolo y código */}
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <div className="flex min-w-0 items-center gap-2">
+                                                        <div
+                                                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${c.bg}`}
+                                                        >
+                                                            <span className={`text-sm font-bold ${c.text}`}>{moneda.simbolo_moneda}</span>
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <h3 className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                                                                {moneda.nombre_moneda}
+                                                            </h3>
+                                                            <p className="text-xs text-gray-500 dark:text-gray-400">{moneda.codigo_moneda}</p>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <h3 className="font-semibold text-gray-900 dark:text-white">{moneda.nombre_moneda}</h3>
-                                                        <p className="text-sm text-gray-500 dark:text-gray-400">{moneda.codigo_moneda}</p>
-                                                    </div>
+                                                    {moneda.principal && (
+                                                        <TrendingUp
+                                                            className="h-4 w-4 shrink-0 text-yellow-600 dark:text-yellow-400"
+                                                            aria-label="Moneda Principal"
+                                                        />
+                                                    )}
                                                 </div>
-                                                {moneda.principal && (
-                                                    <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-1 text-xs font-semibold text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
-                                                        <TrendingUp className="h-3 w-3" />
-                                                        Principal
-                                                    </span>
-                                                )}
-                                            </div>
 
-                                            {/* Información de tasas */}
-                                            <div className="space-y-2 border-t pt-3 dark:border-gray-700">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-sm text-gray-600 dark:text-gray-400">Tasa de Cambio:</span>
-                                                    <span className="font-semibold text-gray-900 dark:text-white">
-                                                        {moneda.tasa_cambio.toLocaleString('es-ES', {
-                                                            minimumFractionDigits: 2,
-                                                            maximumFractionDigits: 6,
-                                                        })}
+                                                {/* Información de tasas */}
+                                                <div className="mt-2 flex items-center justify-between border-t pt-2 text-xs dark:border-gray-700">
+                                                    <span className="text-gray-500 dark:text-gray-400">
+                                                        Tasa:{' '}
+                                                        <span className="font-semibold text-gray-900 dark:text-white">
+                                                            {moneda.tasa_cambio.toLocaleString('es-ES', {
+                                                                minimumFractionDigits: 2,
+                                                                maximumFractionDigits: 6,
+                                                            })}
+                                                        </span>
                                                     </span>
-                                                </div>
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-sm text-gray-600 dark:text-gray-400">Comisión:</span>
-                                                    <span className="font-semibold text-orange-600 dark:text-orange-400">
-                                                        {moneda.commission.toLocaleString('es-ES', {
-                                                            minimumFractionDigits: 2,
-                                                            maximumFractionDigits: 4,
-                                                        })}
-                                                        %
+                                                    <span className="text-gray-500 dark:text-gray-400">
+                                                        Com:{' '}
+                                                        <span className="font-semibold text-orange-600 dark:text-orange-400">
+                                                            {moneda.commission.toLocaleString('es-ES', {
+                                                                minimumFractionDigits: 2,
+                                                                maximumFractionDigits: 4,
+                                                            })}
+                                                            %
+                                                        </span>
                                                     </span>
                                                 </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             ) : (
                                 <div className="flex h-[300px] items-center justify-center text-center">
@@ -879,17 +894,29 @@ export default function Dashboard({
                     </Card>
                 </div>
 
+                {(userRole === 'admin' || userRole === 'moderador') && (
+                <>
                 <Separator />
                 {/* Charts */}
                 <div>
-                    <Card>
-                        <CardHeader className="flex items-center gap-2 space-y-0 border-b py-5 sm:flex-row">
+                    <Card className="overflow-hidden border-cyan-500/30 border-l-4 pt-0 shadow-sm transition-shadow hover:shadow-md">
+                        <CardHeader className="flex items-center gap-2 space-y-0 border-b bg-gradient-to-r from-cyan-600 to-cyan-700 px-6 py-5 text-white sm:flex-row">
                             <div className="grid flex-1 gap-1 text-center sm:text-left">
-                                <CardTitle>Area Interactiva</CardTitle>
-                                <CardDescription>Total de Compras y ventas en los ultimos meses</CardDescription>
+                                <div className="flex items-center justify-center gap-3 sm:justify-start">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <TrendingUp className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-white">Area Interactiva</CardTitle>
+                                        <CardDescription className="text-cyan-100">Total de Compras y ventas en los ultimos meses</CardDescription>
+                                    </div>
+                                </div>
                             </div>
                             <Select value={timeRange} onValueChange={setTimeRange}>
-                                <SelectTrigger className="w-[160px] rounded-lg sm:ml-auto" aria-label="Select a value">
+                                <SelectTrigger
+                                    className="w-[160px] rounded-lg border-white/30 bg-white/20 text-white backdrop-blur-sm sm:ml-auto [&>svg]:text-white"
+                                    aria-label="Select a value"
+                                >
                                     <SelectValue placeholder="Ultimos 3 meses" />
                                 </SelectTrigger>
                                 <SelectContent className="rounded-xl">
@@ -972,20 +999,28 @@ export default function Dashboard({
                         </CardContent>
                     </Card>
                 </div>
+                </>
+                )}
 
                 <Separator />
 
                 {/* Sección de Historial de Cambios de Tasa - Solo Admin y Moderador */}
                 {(userRole === 'admin' || userRole === 'moderador') && (
                     <div className="animate__animated animate__fadeIn">
-                        <Card>
-                            <CardHeader className="flex items-center gap-2 space-y-0 border-b py-5 sm:flex-row">
+                        <Card className="overflow-hidden border-orange-500/30 border-l-4 pt-0 shadow-sm transition-shadow hover:shadow-md">
+                            <CardHeader className="flex items-center gap-2 space-y-0 border-b bg-gradient-to-r from-orange-600 to-orange-700 px-6 py-5 text-white sm:flex-row">
                                 <div className="grid flex-1 gap-1 text-center sm:text-left">
-                                    <div className="flex items-center gap-2">
-                                        <TrendingUp className="h-5 w-5 text-orange-600" />
-                                        <CardTitle>Historial de Cambios de Tasa</CardTitle>
+                                    <div className="flex items-center justify-center gap-3 sm:justify-start">
+                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                            <TrendingUp className="h-5 w-5" />
+                                        </div>
+                                        <div>
+                                            <CardTitle className="text-white">Historial de Cambios de Tasa</CardTitle>
+                                            <CardDescription className="text-orange-100">
+                                                Impacto financiero generado por cambios en tasas de cambio
+                                            </CardDescription>
+                                        </div>
                                     </div>
-                                    <CardDescription>Impacto financiero generado por cambios en tasas de cambio</CardDescription>
                                 </div>
                             </CardHeader>
                             <CardContent className="pt-6">
@@ -1162,18 +1197,24 @@ export default function Dashboard({
                 {/* Sección de Cambios de Precio de Costo - Solo Admin y Moderador */}
                 {(userRole === 'admin' || userRole === 'moderador') && (
                     <div className="animate__animated animate__fadeIn">
-                        <Card>
-                            <CardHeader className="flex items-center gap-2 space-y-0 border-b py-5 sm:flex-row">
+                        <Card className="overflow-hidden border-amber-500/30 border-l-4 pt-0 shadow-sm transition-shadow hover:shadow-md">
+                            <CardHeader className="flex items-center gap-2 space-y-0 border-b bg-gradient-to-r from-amber-600 to-amber-700 px-6 py-5 text-white sm:flex-row">
                                 <div className="grid flex-1 gap-1 text-center sm:text-left">
-                                    <div className="flex items-center gap-2">
-                                        <DollarSign className="h-5 w-5 text-amber-600" />
-                                        <CardTitle>Cambios de Precio de Costo</CardTitle>
+                                    <div className="flex items-center justify-center gap-3 sm:justify-start">
+                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                            <DollarSign className="h-5 w-5" />
+                                        </div>
+                                        <div>
+                                            <CardTitle className="text-white">Cambios de Precio de Costo</CardTitle>
+                                            <CardDescription className="text-amber-100">
+                                                Impacto financiero estimado por cambios al precio de costo de productos
+                                            </CardDescription>
+                                        </div>
                                     </div>
-                                    <CardDescription>Impacto financiero estimado por cambios al precio de costo de productos</CardDescription>
                                 </div>
                                 <button
                                     onClick={() => window.open(route('reportes.historial_costo_precio'), '_blank')}
-                                    className="flex cursor-pointer items-center gap-2 rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-amber-700"
+                                    className="flex cursor-pointer items-center gap-2 rounded-md bg-white/20 px-3 py-1.5 text-sm font-medium text-white backdrop-blur-sm transition-colors hover:bg-white/30"
                                 >
                                     <TrendingUp className="h-4 w-4" />
                                     Ver Historial Completo
@@ -1301,27 +1342,31 @@ export default function Dashboard({
 
                 {/* Tabla de Estados Financieros */}
                 <div>
-                    <Card className="border-sidebar-border dark:border-sidebar-border">
-                        <CardHeader className="flex items-center gap-2 space-y-0 border-b py-5 sm:flex-row">
+                    <Card className="overflow-hidden border-rose-500/30 border-l-4 pt-0 shadow-sm transition-shadow hover:shadow-md">
+                        <CardHeader className="flex items-center gap-2 space-y-0 border-b bg-gradient-to-r from-rose-600 to-rose-700 px-6 py-5 text-white sm:flex-row">
                             <div className="grid flex-1 gap-1 text-center sm:text-left">
-                                <div className="flex items-center gap-2">
-                                    <DollarSign className="h-5 w-5 text-green-600" />
-                                    <CardTitle>Estados Financieros</CardTitle>
+                                <div className="flex items-center justify-center gap-3 sm:justify-start">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                        <DollarSign className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-white">Estados Financieros</CardTitle>
+                                        <CardDescription className="text-rose-100">Resumen de cuentas y saldos asignados</CardDescription>
+                                    </div>
                                 </div>
-                                <CardDescription>Resumen de cuentas y saldos asignados</CardDescription>
                             </div>
                             {/* Búsqueda */}
                             <div className="relative w-[250px]">
-                                <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                                <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-white/70" />
                                 <Input
                                     type="text"
                                     placeholder="Buscar cuenta, tipo, moneda..."
+                                    className="border-white/30 bg-white/20 pl-9 text-white placeholder:text-white/70 backdrop-blur-sm"
                                     value={busquedaEstado}
                                     onChange={(e) => {
                                         setBusquedaEstado(e.target.value);
                                         setPaginaEstado(1);
                                     }}
-                                    className="pl-9"
                                 />
                             </div>
                             {/* Selector de usuario */}
