@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Compra;
+use App\Models\HistorialComparacionMensual;
 use App\Models\User;
 use App\Models\Venta;
 use Illuminate\Database\Eloquent\Builder;
@@ -85,6 +86,125 @@ class DashboardStatsService
             'resumenProveedores' => $resumenProveedores,
             'resumenProductos' => $resumenProductos,
         ];
+    }
+
+    /**
+     * Resumen financiero compacto para el dashboard principal: Capital Financiero
+     * total + una tarjeta por cada moneda que realmente tenga cuentas permanentes
+     * (dinámico, no una lista fija de códigos — si se activa una moneda nueva
+     * aparece sola, sin tocar este método).
+     */
+    public function getResumenFinancieroCompacto(): array
+    {
+        $resumenCuentas = $this->getResumenCuentas();
+        $resumenClientes = $this->getResumenClientes();
+        $resumenProveedores = $this->getResumenProveedores();
+        $resumenProductos = $this->getResumenProductos();
+
+        // Clientes/proveedores/inventario no tienen desglose por moneda en el sistema
+        // (son montos únicos, sin columna moneda) — se asumen en la moneda principal,
+        // así que solo se suman a esa tarjeta, no a las demás.
+        $extrasMonedaPrincipal = $resumenClientes['balance_neto']
+            + $resumenProveedores['balance_neto']
+            + $resumenProductos['total_importe_global'];
+
+        $codigoPrincipal = $resumenCuentas['moneda_principal']['codigo'] ?? null;
+
+        $capitalPorMoneda = collect($resumenCuentas['por_moneda_perm'])
+            ->map(function ($info, $codigo) use ($extrasMonedaPrincipal, $codigoPrincipal) {
+                $esPrincipal = $codigo === $codigoPrincipal;
+
+                return [
+                    'codigo' => $codigo,
+                    'simbolo' => $info['simbolo'],
+                    'monto' => round(($esPrincipal ? $extrasMonedaPrincipal : 0) + $info['original'], 2),
+                    'incluye_clientes_proveedores_inventario' => $esPrincipal,
+                ];
+            })
+            ->values()
+            ->toArray();
+
+        return [
+            'capital_financiero' => round($resumenCuentas['total_saldo'] + $extrasMonedaPrincipal, 2),
+            'capital_por_moneda' => $capitalPorMoneda,
+            'moneda_principal' => $resumenCuentas['moneda_principal'],
+        ];
+    }
+
+    /**
+     * Actualiza (o crea, en el primer acceso al mes) el snapshot de comparación
+     * mensual por moneda. "Mes Anterior" queda fijo desde que se crea la fila del
+     * mes en curso — nunca se vuelve a tocar. "Mes Actual" (la UI lo llama "Saldo
+     * Acumulado") se refresca en cada llamada con el saldo real y en vivo de las
+     * cuentas (mismo origen que Tabla 1: `getResumenCuentas()['por_moneda_perm']`)
+     * — ya no se recalcula sumando `movimientos_financieros`, que es donde vivía
+     * el bug de agrupación de WHERE (whereIn()->orWhereIn()->where()->where()
+     * sin agrupar, dejaba el lado "origen" sin filtro de moneda/fecha).
+     *
+     * Se llama tanto desde el comando programado (00:00 del día 1) como, de red
+     * de seguridad, desde AdminController::index() en cada carga del dashboard —
+     * si el comando no corrió todavía, el primer acceso del mes nuevo hace el
+     * "cierre" ahí mismo.
+     */
+    public function actualizarComparacionMensual(?int $userId = null): array
+    {
+        $mesActual = now()->startOfMonth()->toDateString();
+        $porMoneda = $this->getResumenCuentas()['por_moneda_perm'];
+        $monedasInfo = DB::table('monedas')->get()->groupBy('codigo_moneda');
+
+        $resultado = [];
+
+        foreach ($porMoneda as $codigo => $info) {
+            $monedaInfo = $monedasInfo->get($codigo)?->first();
+
+            $filaExistente = HistorialComparacionMensual::where('user_id', $userId)
+                ->where('mes_comparado', $mesActual)
+                ->where('moneda_codigo', $codigo)
+                ->first();
+
+            if ($filaExistente) {
+                $montoAnterior = (float) $filaExistente->monto_anterior;
+            } else {
+                $ultimaFila = HistorialComparacionMensual::where('user_id', $userId)
+                    ->where('moneda_codigo', $codigo)
+                    ->where('mes_comparado', '<', $mesActual)
+                    ->orderByDesc('mes_comparado')
+                    ->first();
+
+                $montoAnterior = $ultimaFila ? (float) $ultimaFila->monto_actual : 0.0;
+            }
+
+            $montoActual = (float) $info['original'];
+            $diferencia = $montoActual - $montoAnterior;
+            $porcentajeCambio = $montoAnterior != 0.0 ? round(($diferencia / $montoAnterior) * 100, 2) : 0.0;
+
+            HistorialComparacionMensual::updateOrCreate(
+                ['user_id' => $userId, 'mes_comparado' => $mesActual, 'moneda_codigo' => $codigo],
+                [
+                    'moneda_nombre' => $monedaInfo->nombre_moneda ?? $codigo,
+                    'moneda_simbolo' => $info['simbolo'],
+                    'monto_anterior' => $montoAnterior,
+                    'monto_actual' => $montoActual,
+                    'diferencia' => $diferencia,
+                    'porcentaje_cambio' => $porcentajeCambio,
+                    'tasa_cambio_usada' => $monedaInfo->tasa_cambio ?? 1,
+                ]
+            );
+
+            $resultado[] = [
+                'moneda' => $codigo,
+                'nombre_moneda' => $monedaInfo->nombre_moneda ?? $codigo,
+                'simbolo_moneda' => $info['simbolo'],
+                'monto_actual' => round($montoActual, 2),
+                'monto_anterior' => round($montoAnterior, 2),
+                'diferencia' => round($diferencia, 2),
+                'porcentaje_cambio' => $porcentajeCambio,
+                'es_positivo' => $diferencia >= 0,
+                'tasa_cambio' => (float) ($monedaInfo->tasa_cambio ?? 1),
+            ];
+        }
+
+        return $resultado;
     }
 
     /**

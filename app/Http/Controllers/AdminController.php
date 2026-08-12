@@ -7,18 +7,17 @@ use App\Models\TasaCambioMLC;
 use App\Models\HistorialTasaCambio;
 use App\Models\HistorialComparacionMensual;
 use App\Models\HistorialPrecioCosto;
-use App\Models\Cuenta;
+use App\Services\DashboardStatsService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 
 class AdminController extends Controller
 {
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(DashboardStatsService $dashboardStatsService)
     {
         // Obtener datos para las tablas
         $user = auth()->user();
@@ -60,14 +59,6 @@ class AdminController extends Controller
                 $totalCapital += $monto / $tasaCambio;
             }
 
-            // Obtener comparaciones mensuales (solo para las cuentas del usuario si es vendedor)
-            if ($user->role === 'vendedor') {
-                $comparaciones = $this->getComparacionesMensuales($user->id);
-            } else {
-                // Para admin y moderador, mostrar comparaciones de todas las cuentas
-                $comparaciones = $this->getComparacionesMensuales(null); // null significa todas las cuentas
-            }
-
             // Obtener historial de cambios de tasa (solo para admin y moderador)
             if (in_array($user->role, ['admin', 'moderador'])) {
                 $historialCambios = $this->getHistorialCambiosRecientes();
@@ -76,9 +67,16 @@ class AdminController extends Controller
 
         $historialCostoPrecio = [];
         $statsCostoPrecio     = [];
+        $resumenFinanciero    = null;
         if ($user && in_array($user->role, ['admin', 'moderador'])) {
             $historialCostoPrecio = $this->getHistorialCostoPrecioReciente();
             $statsCostoPrecio     = $this->getStatsCostoPrecio();
+            $resumenFinanciero    = $dashboardStatsService->getResumenFinancieroCompacto();
+            // Red de seguridad: si el comando programado `comparacion:cerrar-mes` no corrió
+            // todavía este mes (p.ej. no hay cron configurado en el servidor), el primer
+            // acceso al dashboard en el mes nuevo hace el cierre acá mismo. Llamadas
+            // siguientes solo refrescan el saldo en vivo, sin tocar "Mes Anterior".
+            $comparaciones = $dashboardStatsService->actualizarComparacionMensual(null);
         }
 
         return Inertia::render('dashboard', [
@@ -89,116 +87,8 @@ class AdminController extends Controller
             'historialCambios'    => $historialCambios,
             'historialCostoPrecio'=> $historialCostoPrecio,
             'statsCostoPrecio'    => $statsCostoPrecio,
+            'resumenFinanciero'   => $resumenFinanciero,
         ]);
-    }
-
-    /**
-     * Obtener comparaciones mensuales (mes actual vs mes anterior)
-     * Versión corregida que calcula saldos reales del mes anterior
-     */
-    private function getComparacionesMensuales($userId)
-    {
-        // Obtener cuentas del usuario o todas las cuentas si userId es null
-        if ($userId) {
-            $cuentas = Cuenta::whereHas('users', function($query) use ($userId) {
-                $query->where('user_id', $userId);
-            })->with('moneda')->get();
-        } else {
-            // Si userId es null, obtener todas las cuentas
-            $cuentas = Cuenta::with('moneda')->get();
-        }
-
-        if ($cuentas->isEmpty()) {
-            return [];
-        }
-        
-
-        // Agrupar cuentas por moneda
-        $cuentasPorMoneda = $cuentas->groupBy('moneda.codigo_moneda');
-        
-        // Fechas para el cálculo
-        $inicioMesActual = now()->startOfMonth();
-        $finMesAnterior = now()->subMonth()->endOfMonth();
-        $inicioMesAnterior = now()->subMonth()->startOfMonth();
-
-        $comparaciones = [];
-        $mesComparado = now()->startOfMonth();
-
-        foreach ($cuentasPorMoneda as $codigoMoneda => $cuentasMoneda) {
-            $moneda = $cuentasMoneda->first()->moneda;
-            if (!$moneda) continue;
-
-            // Calcular saldo actual (suma de todas las cuentas de esta moneda)
-            $saldoActual = $cuentasMoneda->sum('saldo_cuenta');
-
-            // Calcular saldo al final del mes anterior usando snapshot de saldos
-            // Buscamos el saldo más antiguo registrado en el mes actual y restamos movimientos
-            $movimientosMesActual = DB::table('movimientos_financieros')
-                ->whereIn('cuenta_origen_id', $cuentasMoneda->pluck('id'))
-                ->orWhereIn('cuenta_destino_id', $cuentasMoneda->pluck('id'))
-                ->where('moneda', $codigoMoneda)
-                ->where('fecha_operacion', '>=', $inicioMesActual)
-                ->get();
-
-            // Calcular cambio neto del mes actual
-            $cambioNetoMesActual = 0;
-            foreach ($movimientosMesActual as $movimiento) {
-                if ($cuentasMoneda->pluck('id')->contains($movimiento->cuenta_origen_id)) {
-                    $cambioNetoMesActual -= $movimiento->monto;
-                }
-                if ($cuentasMoneda->pluck('id')->contains($movimiento->cuenta_destino_id)) {
-                    $cambioNetoMesActual += $movimiento->monto;
-                }
-            }
-
-            // El saldo al final del mes anterior es el saldo actual menos los movimientos del mes actual
-            $saldoAnterior = $saldoActual - $cambioNetoMesActual;
-
-            // Si no hay movimientos en el mes actual, buscamos el saldo real del mes anterior
-            if ($cambioNetoMesActual == 0) {
-                // Buscamos el primer movimiento del mes anterior para estimar
-                $primerMovimientoMesAnterior = DB::table('movimientos_financieros')
-                    ->whereIn('cuenta_origen_id', $cuentasMoneda->pluck('id'))
-                    ->orWhereIn('cuenta_destino_id', $cuentasMoneda->pluck('id'))
-                    ->where('moneda', $codigoMoneda)
-                    ->whereBetween('fecha_operacion', [$inicioMesAnterior, $finMesAnterior])
-                    ->orderBy('fecha_operacion', 'asc')
-                    ->first();
-
-                if ($primerMovimientoMesAnterior) {
-                    // Si hay movimientos el mes anterior, estimamos un saldo razonable
-                    $saldoAnterior = max(0, $saldoActual * 0.8); // Estimación conservadora
-                } else {
-                    // Si no hay movimientos, asumimos que el saldo era similar
-                    $saldoAnterior = $saldoActual;
-                }
-            }
-
-            // Calcular diferencias
-            $diferencia = $saldoActual - $saldoAnterior;
-            $porcentajeCambio = $saldoAnterior != 0 
-                ? ($diferencia / $saldoAnterior) * 100 
-                : 0;
-
-            $comparacion = [
-                'moneda' => $codigoMoneda,
-                'nombre_moneda' => $moneda->nombre_moneda,
-                'simbolo_moneda' => $moneda->simbolo_moneda,
-                'monto_actual' => $saldoActual,
-                'monto_anterior' => $saldoAnterior,
-                'diferencia' => $diferencia,
-                'porcentaje_cambio' => round($porcentajeCambio, 2),
-                'es_positivo' => $diferencia >= 0,
-                'tasa_cambio' => $moneda->tasa_cambio
-            ];
-
-            $comparaciones[] = $comparacion;
-
-            // Guardar en el historial
-            $this->guardarHistorialComparacion($userId, $mesComparado, $comparacion);
-        }
-
-        return $comparaciones;
     }
 
     /**
@@ -255,28 +145,6 @@ class AdminController extends Controller
         return response()->json($historial);
     }
 
-    /**
-     * Guardar comparación mensual en el historial
-     */
-    private function guardarHistorialComparacion($userId, $mesComparado, $comparacion)
-    {
-        // Evitar duplicados para el mismo mes, usuario y moneda
-        HistorialComparacionMensual::updateOrCreate([
-            'user_id' => $userId ?? auth()->id(),
-            'mes_comparado' => $mesComparado,
-            'moneda_codigo' => $comparacion['moneda'],
-        ], [
-            'moneda_nombre' => $comparacion['nombre_moneda'],
-            'moneda_simbolo' => $comparacion['simbolo_moneda'],
-            'monto_anterior' => $comparacion['monto_anterior'],
-            'monto_actual' => $comparacion['monto_actual'],
-            'diferencia' => $comparacion['diferencia'],
-            'porcentaje_cambio' => $comparacion['porcentaje_cambio'],
-            'tasa_cambio_usada' => $comparacion['tasa_cambio'] ?? 1,
-        ]);
-    }
-
-    
 
     /**
      * Actualizar la tasa de cambio USD -> CUP
