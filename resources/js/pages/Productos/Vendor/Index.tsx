@@ -10,6 +10,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollProgress } from '@/components/ui/scroll';
@@ -30,7 +32,7 @@ import {
     PaginationNext,
     PaginationPrevious,
 } from '@/components/ui/pagination';
-import { BadgeDollarSign, CheckCircle2, FileText, History, Sheet, Upload, Warehouse, XCircle } from 'lucide-react';
+import { BadgeDollarSign, CheckCircle2, FileText, History, Package, Sheet, Upload, Warehouse, XCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 interface Producto {
@@ -351,68 +353,137 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                 </div>
                 <Separator />
 
-                {/* Barra de búsqueda y exportación */}
-                <div className="flex items-center justify-between gap-4">
-                    <Input
-                        type="text"
-                        placeholder="Buscar producto o almacén..."
-                        value={searchTerm}
-                        onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                        className="max-w-md"
-                    />
-                    <div className="flex gap-2">
-                        <Button variant="outline" className="gap-2" onClick={handleExport} disabled={!selectedAlmacenId}>
-                            <Sheet size={16} />
-                            Exportar Excel
-                        </Button>
-                        <Button
-                            variant="secondary"
-                            className="gap-2"
-                            onClick={() => { setImportFile(null); setImportResult(null); setIsImportDialogOpen(true); }}
-                            disabled={!selectedAlmacenId}
-                        >
-                            <FileText size={16} />
-                            Importar Excel
-                        </Button>
-                    </div>
-                </div>
-
                 {/* Estadísticas */}
-                <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
-                    <p>
-                        Total de Productos Asignados:{' '}
-                        <span className="font-medium">
-                            <Badge variant="secondary">{filteredProducts.length}</Badge>
-                        </span>
-                    </p>
-                    <p>
-                        Rol actual:{' '}
-                        <span className="text-primary font-sans font-medium">
-                            {meta.role_usuario === 'admin' ? 'Administrador' : meta.role_usuario === 'moderador' ? 'Moderador' : 'Vendedor'}
-                        </span>
-                    </p>
+                <div className="border-sidebar-border/70 dark:border-sidebar-border space-y-3 rounded-xl border p-4">
+                    <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
+                        <p>
+                            Total de Productos Asignados:{' '}
+                            <span className="font-medium">
+                                <Badge variant="secondary">{filteredProducts.length}</Badge>
+                            </span>
+                        </p>
+                        <p>
+                            Rol actual:{' '}
+                            <span className="text-primary font-sans font-medium">
+                                {meta.role_usuario === 'admin' ? 'Administrador' : meta.role_usuario === 'moderador' ? 'Moderador' : 'Vendedor'}
+                            </span>
+                        </p>
+                    </div>
+
+                    {selectedAlmacen &&
+                        (() => {
+                            const almacenStats = availableAlmacenes.find((a) => a.id === selectedAlmacen.almacen_id);
+                            return almacenStats ? (
+                                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                                    <Card className="border-l-4 border-blue-500/30 shadow-sm transition-shadow hover:shadow-md">
+                                        <CardHeader className="pb-2">
+                                            <div className="flex items-center justify-between">
+                                                <CardDescription className="text-xs font-medium tracking-wider text-blue-600 uppercase dark:text-blue-400">
+                                                    Total Productos
+                                                </CardDescription>
+                                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/50">
+                                                    <Package className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                                </div>
+                                            </div>
+                                            <CardTitle className="text-2xl font-bold tabular-nums text-blue-600 dark:text-blue-400">
+                                                {almacenStats.totalProductos}
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <p className="text-muted-foreground text-xs">Asignados a este almacén</p>
+                                        </CardContent>
+                                    </Card>
+
+                                    <Card className="border-l-4 border-emerald-500/30 shadow-sm transition-shadow hover:shadow-md">
+                                        <CardHeader className="pb-2">
+                                            <div className="flex items-center justify-between">
+                                                <CardDescription className="text-xs font-medium tracking-wider text-emerald-600 uppercase dark:text-emerald-400">
+                                                    Con Precio
+                                                </CardDescription>
+                                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900/50">
+                                                    <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                                </div>
+                                            </div>
+                                            <CardTitle className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                                                {almacenStats.productosConPrecio}
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <p className="text-muted-foreground text-xs">Listos para vender</p>
+                                        </CardContent>
+                                    </Card>
+
+                                    <Card className="border-l-4 border-amber-500/30 shadow-sm transition-shadow hover:shadow-md">
+                                        <CardHeader className="pb-2">
+                                            <div className="flex items-center justify-between">
+                                                <CardDescription className="text-xs font-medium tracking-wider text-amber-600 uppercase dark:text-amber-400">
+                                                    Sin Precio
+                                                </CardDescription>
+                                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/50">
+                                                    <XCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                                </div>
+                                            </div>
+                                            <CardTitle className="text-2xl font-bold tabular-nums text-amber-600 dark:text-amber-400">
+                                                {almacenStats.productosSinPrecio}
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <p className="text-muted-foreground text-xs">Pendientes de asignar</p>
+                                        </CardContent>
+                                    </Card>
+
+                                    <Card className="border-l-4 border-purple-500/30 shadow-sm transition-shadow hover:shadow-md">
+                                        <CardHeader className="pb-2">
+                                            <div className="flex items-center justify-between">
+                                                <CardDescription className="text-xs font-medium tracking-wider text-purple-600 uppercase dark:text-purple-400">
+                                                    Stock Total
+                                                </CardDescription>
+                                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-100 dark:bg-purple-900/50">
+                                                    <Warehouse className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                                                </div>
+                                            </div>
+                                            <CardTitle className="text-2xl font-bold tabular-nums text-purple-600 dark:text-purple-400">
+                                                {almacenStats.totalStock}
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <p className="text-muted-foreground text-xs">Unidades en almacén</p>
+                                        </CardContent>
+                                    </Card>
+                                </div>
+                            ) : null;
+                        })()}
                 </div>
 
-                {/* Selector de Almacén */}
-                <div className="space-y-4">
-                    <div className="flex items-center gap-4">
-                        <div className="max-w-sm flex-1">
-                            <Label htmlFor="almacen-selector" className="mb-2 block text-sm font-medium">
-                                Seleccionar Almacén
-                            </Label>
-                            <Select
-                                value={selectedAlmacenId?.toString()}
-                                onValueChange={(value) => { setSelectedAlmacenId(parseInt(value)); setCurrentPage(1); setSearchTerm(''); }}
-                            >
-                                <SelectTrigger id="almacen-selector" className="bg-background hover:bg-accent/50 h-11 transition-colors">
-                                    <div className="flex items-center gap-2">
-                                        <Warehouse className="text-muted-foreground h-4 w-4" />
-                                        <SelectValue placeholder="Seleccione un almacén" />
-                                    </div>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {availableAlmacenes.map((almacen) => (
-                                        <SelectItem key={almacen.id} value={almacen.id.toString()}>
+                {/* Controles del almacén: selector, búsqueda y exportar/importar (todos específicos del almacén seleccionado) */}
+                <div className="border-sidebar-border/70 dark:border-sidebar-border flex flex-wrap items-end gap-4 rounded-xl border p-4">
+                    <div className="min-w-[220px] flex-1 max-w-sm">
+                        <Label htmlFor="almacen-selector" className="mb-2 block text-sm font-medium">
+                            Seleccionar Almacén
+                        </Label>
+                        <Combobox
+                            items={availableAlmacenes}
+                            itemToStringLabel={(almacen: (typeof availableAlmacenes)[number]) => almacen.nombre}
+                            itemToStringValue={(almacen: (typeof availableAlmacenes)[number]) => almacen.nombre}
+                            value={availableAlmacenes.find((a) => a.id === selectedAlmacenId) ?? null}
+                            onValueChange={(almacen: (typeof availableAlmacenes)[number] | null) => {
+                                if (almacen) {
+                                    setSelectedAlmacenId(almacen.id);
+                                    setCurrentPage(1);
+                                    setSearchTerm('');
+                                }
+                            }}
+                        >
+                            <ComboboxInput
+                                id="almacen-selector"
+                                className="bg-background hover:bg-accent/50 h-11 w-full transition-colors"
+                                placeholder="Buscar almacén..."
+                            />
+                            <ComboboxContent>
+                                <ComboboxEmpty>Sin resultados</ComboboxEmpty>
+                                <ComboboxList>
+                                    {(almacen: (typeof availableAlmacenes)[number]) => (
+                                        <ComboboxItem key={almacen.id} value={almacen}>
                                             <div className="flex flex-col items-start">
                                                 <span className="font-medium">{almacen.nombre}</span>
                                                 <span className="text-muted-foreground text-xs">
@@ -420,36 +491,41 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                                     {canViewSensitiveData && ` • ${formatCurrency(almacen.valorTotal)}`}
                                                 </span>
                                             </div>
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
+                                        </ComboboxItem>
+                                    )}
+                                </ComboboxList>
+                            </ComboboxContent>
+                        </Combobox>
+                    </div>
 
-                        {selectedAlmacen &&
-                            (() => {
-                                const almacenStats = availableAlmacenes.find((a) => a.id === selectedAlmacen.almacen_id);
-                                return almacenStats ? (
-                                    <div className="grid flex-1 grid-cols-2 gap-3 md:grid-cols-4">
-                                        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
-                                            <p className="text-xs font-medium text-blue-600">Total Productos</p>
-                                            <p className="text-lg font-bold text-blue-900">{almacenStats.totalProductos}</p>
-                                        </div>
-                                        <div className="rounded-lg border border-green-200 bg-green-50 p-3">
-                                            <p className="text-xs font-medium text-green-600">Con Precio</p>
-                                            <p className="text-lg font-bold text-green-900">{almacenStats.productosConPrecio}</p>
-                                        </div>
-                                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-                                            <p className="text-xs font-medium text-amber-600">Sin Precio</p>
-                                            <p className="text-lg font-bold text-amber-900">{almacenStats.productosSinPrecio}</p>
-                                        </div>
-                                        <div className="rounded-lg border border-purple-200 bg-purple-50 p-3">
-                                            <p className="text-xs font-medium text-purple-600">Stock Total</p>
-                                            <p className="text-lg font-bold text-purple-900">{almacenStats.totalStock}</p>
-                                        </div>
-                                    </div>
-                                ) : null;
-                            })()}
+                    <div className="min-w-[220px] flex-1">
+                        <Label htmlFor="buscar-producto" className="mb-2 block text-sm font-medium">
+                            Buscar
+                        </Label>
+                        <Input
+                            id="buscar-producto"
+                            type="text"
+                            placeholder="Buscar producto o almacén..."
+                            value={searchTerm}
+                            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                            className="h-11 uppercase placeholder:normal-case"
+                        />
+                    </div>
+
+                    <div className="flex gap-2">
+                        <Button variant="outline" className="h-11 gap-2" onClick={handleExport} disabled={!selectedAlmacenId}>
+                            <Sheet size={16} />
+                            Exportar Excel
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            className="h-11 gap-2"
+                            onClick={() => { setImportFile(null); setImportResult(null); setIsImportDialogOpen(true); }}
+                            disabled={!selectedAlmacenId}
+                        >
+                            <FileText size={16} />
+                            Importar Excel
+                        </Button>
                     </div>
                 </div>
 
