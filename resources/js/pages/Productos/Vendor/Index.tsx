@@ -612,6 +612,12 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                                         </TooltipContent>
                                                     </Tooltip>
                                                 </TooltipProvider>
+                                                {(() => {
+                                                    const detalles = [producto.marca_producto, producto.modelo_producto, producto.capacidad_producto].filter(Boolean);
+                                                    return detalles.length > 0 ? (
+                                                        <p className="text-muted-foreground mt-0.5 text-xs font-normal">{detalles.join(' • ')}</p>
+                                                    ) : null;
+                                                })()}
                                             </TableCell>
                                             <TableCell>{producto.categoria || 'Sin categoría'}</TableCell>
                                             {canViewSensitiveData && <TableCell>{formatCurrency(producto.precio_compra)}</TableCell>}
