@@ -13,6 +13,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
@@ -177,6 +178,101 @@ class ProductoVendedorController extends Controller
             'new_comision'     => $updateData['comision'] ?? null,
             'history_recorded' => $precioCambio,
             'puesto_por_nombre' => $user->name,
+        ]);
+    }
+
+    /**
+     * Aplica el mismo precio de venta (y comisión opcional) a varios almacenes
+     * a la vez, para un mismo producto. Exclusivo admin (gate en la ruta, ver
+     * routes/crud/productos.php, middleware 'admin.only').
+     */
+    public function updateBulk(Request $request)
+    {
+        $user = Auth::user();
+
+        $validated = $request->validate([
+            'producto_id'          => ['required', 'integer', 'exists:productos,id'],
+            'almacen_ids'          => ['required', 'array', 'min:1'],
+            'almacen_ids.*'        => ['integer', 'exists:almacens,id', 'distinct'],
+            'precio_venta'         => ['required', 'numeric', 'min:0.01'],
+            'comision'             => ['nullable', 'numeric', 'min:0'],
+            'password_confirmacion' => ['required', 'string'],
+        ]);
+
+        if (!Hash::check($validated['password_confirmacion'], $user->password)) {
+            return response()->json([
+                'success' => false,
+                'error'   => 'Contraseña incorrecta. Los precios no fueron actualizados.',
+            ], 422);
+        }
+
+        $producto    = Producto::findOrFail($validated['producto_id']);
+        $precioVenta = round($validated['precio_venta'], 2);
+        $ganancia    = round($precioVenta - $producto->precio_compra_producto, 2);
+        $comision    = isset($validated['comision']) ? round($validated['comision'], 2) : null;
+
+        $resultados = DB::transaction(function () use ($validated, $producto, $precioVenta, $ganancia, $comision, $user) {
+            $resultados = [];
+
+            foreach ($validated['almacen_ids'] as $almacenId) {
+                $registroActual = DB::table('producto_vendedors')
+                    ->where('producto_id', $producto->id)
+                    ->where('almacen_id', $almacenId)
+                    ->first();
+
+                $precioAnterior = $registroActual?->precio_venta;
+                $precioCambio   = $precioAnterior === null || round((float) $precioAnterior, 2) != $precioVenta;
+
+                $updateData = [
+                    'precio_venta'       => $precioVenta,
+                    'venta_ganancia'     => $ganancia,
+                    'puesto_por_user_id' => $user->id,
+                    'updated_at'         => now(),
+                ];
+
+                if ($comision !== null) {
+                    $updateData['comision'] = $comision;
+                }
+
+                DB::table('producto_vendedors')->updateOrInsert(
+                    ['producto_id' => $producto->id, 'almacen_id' => $almacenId],
+                    $updateData
+                );
+
+                if ($precioCambio) {
+                    $comisionRegistrada = $comision ?? (float) ($registroActual?->comision ?? 0);
+
+                    PrecioHistorial::create([
+                        'producto_id'    => $producto->id,
+                        'user_id'        => $user->id,
+                        'almacen_id'     => $almacenId,
+                        'precio_anterior' => $precioAnterior,
+                        'precio_nuevo'   => $precioVenta,
+                        'comision'       => $comisionRegistrada,
+                        'accion'         => $precioAnterior === null
+                            ? 'Primera asignación (masiva) - Almacén ID ' . $almacenId
+                            : 'Actualización masiva - Almacén ID ' . $almacenId,
+                    ]);
+                }
+
+                $resultados[] = [
+                    'almacen_id'       => $almacenId,
+                    'precio_anterior'  => $precioAnterior !== null ? round((float) $precioAnterior, 2) : null,
+                    'precio_nuevo'     => $precioVenta,
+                    'history_recorded' => $precioCambio,
+                ];
+            }
+
+            return $resultados;
+        });
+
+        return response()->json([
+            'success'      => true,
+            'message'      => 'Precio actualizado en ' . count($resultados) . ' almacén(es).',
+            'new_profit'   => $ganancia,
+            'new_price'    => $precioVenta,
+            'new_comision' => $comision,
+            'resultados'   => $resultados,
         ]);
     }
 

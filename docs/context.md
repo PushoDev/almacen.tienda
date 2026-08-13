@@ -65,6 +65,7 @@ Una fila única por par `(producto_id, almacen_id)`:
 - `comision`: margen del vendedor incluido en el precio.
 - **Precio mínimo vendible** = `precio_venta - comision`.
 - No se puede crear una venta sin que todos los productos del almacén tengan precio asignado.
+- Se edita desde `/disponibles` (`Productos/Vendor/Index.tsx`) de dos formas: una fila a la vez (todos los roles, scopeado a los almacenes del usuario) o **masivo, admin-only** — ver sección dedicada abajo.
 
 ### Compra (`compras`)
 Tipos de pago:
@@ -267,7 +268,7 @@ Prefijo: `/api/tienda` — sin autenticación, throttle: 60 req/min.
 | `IngresoController` | Registro de ingresos financieros |
 | `TransferenciaController` | Transferencias entre cuentas (incluye conversión de moneda) |
 | `TelegramWebhookController` | Bot: comandos texto + callbacks inline de aprobación |
-| `ProductoVendedorController` | Asignación/edición de precios y comisiones por almacén, export/import Excel, precios base |
+| `ProductoVendedorController` | Asignación/edición de precios y comisiones por almacén (individual y masiva admin-only), export/import Excel, precios base |
 | `UserController` | Gestión de usuarios (CRUD) |
 | `UserAlmacenController` | Asignación de usuarios a almacenes |
 | `LogisticaController` | Dashboard de logística con KPIs y resúmenes (resource completo) |
@@ -291,11 +292,13 @@ Prefijo: `/api/tienda` — sin autenticación, throttle: 60 req/min.
 |---|---|
 | `auth` + `verified` | Protege todas las rutas del panel (dashboard, CRUDs, acciones) |
 | `check.cuenta.permission` | Verifica que el usuario tiene acceso a la cuenta (en show/edit/update/destroy de cuentas) |
+| `admin` (`EnsureUserIsAdmin`) | Permite admin **y** moderador. Aplicado a todo el módulo Reportes (`routes/acciones/reportes.php`) |
+| `admin.only` (`EnsureUserIsAdminOnly`) | Exige estrictamente `admin`, ni moderador ni vendedor pasan. Aplicado a todas las rutas de Compras (`routes/acciones/compras.php` + duplicado en `routes/shop/puntoventa.php`) y a `PUT /disponibles/bulk-actualizar` (update masivo de precios) |
 | `HandleInertiaRequests` | Comparte datos globales con Inertia (usuario, permisos, tasas) |
 | `HandleAppearance` | Maneja preferencia de tema (claro/oscuro) |
 | `throttle:60,1` | Rate limiting para API pública (60 req/min) |
 
-> **Nota:** `EnsureUserIsAdmin`, `EnsureUserIsModerator`, `EnsureUserIsVendor` y `CheckAlmacenPermission` existen como clases pero **no están aplicadas a rutas**. La verificación de roles se hace inline en los controladores (`$user->isAdmin()`).
+> **Nota (corregida 2026-08-13, estaba desactualizada):** `EnsureUserIsModerator`, `EnsureUserIsVendor` y `CheckAlmacenPermission` existen como clases pero no están aplicadas a rutas — la verificación para esos casos sigue siendo inline en los controladores. `EnsureUserIsAdmin`/`EnsureUserIsAdminOnly` sí están aplicados a rutas reales desde Compras/Reportes/Precios de Venta (ver fila arriba); esta nota decía lo contrario para las cuatro clases, ya no es cierto desde que se cerró el control de acceso de Compras (2026-08-11).
 
 ---
 
@@ -322,6 +325,19 @@ El reporte prioritario del cliente dentro del módulo Reportes (los otros 14 rep
 - Costo/margen y widgets KPI gateados por rol; vendedor scoped a sus propias operaciones.
 - **Pendiente conocido:** el botón "Exportar PDF" (`exportToPDF` en el mismo `.tsx`) sigue generando el set de columnas viejo (`Fecha, Tipo, Referencia, Usuario, Monto, Detalles`), desincronizado de la tabla en pantalla desde que esta se rediseñó.
 - Ver `docs/arreglos-pendientes/rastreo-operaciones-rediseno-2026-08-01.md` para el plan de fases completo y `docs/arreglos-pendientes/reportes-arreglos-2026-08-01.md` para el resto del módulo Reportes (14 reportes aún sin trabajar, ordenados por el cliente uno a uno).
+
+---
+
+## Precios de Venta — Modal Masivo por Almacén (`Productos/Vendor/Index.tsx`)
+
+Vista `/disponibles`, donde se asigna `precio_venta`/`comision` por producto+almacén. Dos flujos coexisten:
+
+- **Individual (todos los roles):** elegir almacén → tabla de ese almacén → click en la fila → dialog "Actualizar Precio" para ese producto+almacén. Vendedor scopeado a `$user->almacenes`.
+- **Masivo, admin-only, agregado 2026-08-13:** botón "Buscar Producto" abre un modal de dos paneles — buscar producto (autocompletado client-side sobre los datos ya cargados, sin endpoint nuevo), ver en qué almacenes está disponible y a qué precio, marcar varios con checkbox, aplicar el mismo precio/comisión a todos a la vez. `PUT /disponibles/bulk-actualizar` (`ProductoVendedorController::updateBulk()`), transacción única, un `PrecioHistorial` por almacén donde el precio realmente cambió. **Exige reconfirmar la contraseña** (`Hash::check`, mismo patrón que `ProductoController::update()` para cambios de costo, pero acá siempre, no solo si cambia el precio) antes de aplicar.
+- Tabla del almacén seleccionado: los widgets "Con Precio"/"Sin Precio" son ahora filtro-toggle (click para filtrar, click de nuevo para quitar), combinable con la búsqueda de texto.
+- **Bug real encontrado y corregido:** las imágenes de producto en este proyecto viven en `public/productos/` (servidas vía `Producto::getImagenUrlAttribute()` → `asset()`), no en `storage/app/public/productos/` — el tooltip de la tabla y el modal nuevo usaban `/storage/{imagen_producto}` (URL equivocada, 403). Corregido a `/{imagen_producto}` en los 3 lugares.
+- **Hallazgo sin resolver, bloquea tests:** `producto_vendedors` tiene desfase de esquema MySQL/SQLite — la migración `2026_05_30_000001_refactor_producto_vendedors_unico_por_almacen.php` hace `if (driver !== 'mysql') return;`, nunca corrió en SQLite (el motor de los tests). Bloquea probar todo `ProductoVendedorController`, no solo lo nuevo. `tests/Feature/ProductoVendedorTest.php` ya tiene 9 tests escritos para `updateBulk()`, sin poder correr hasta que se agregue una migración nueva compatible con SQLite (mismo patrón create/copy/drop/rename ya usado en `2026_08_10_191405_change_compra_producto_primary_key.php`).
+- Ver `docs/arreglos-pendientes/precios-venta-modal-busqueda-producto-2026-08-13.md` para el detalle completo.
 
 ---
 
@@ -401,8 +417,8 @@ Cada card tiene: `border-l-4`, `shadow-sm hover:shadow-md`, icono en contenedor 
 
 ## Branch Actual
 
-`feature/desarrollo-caliente` — Trabajo activo: limpieza de los 15 reportes del módulo Reportes (`docs/arreglos-pendientes/reportes-arreglos-2026-08-01.md`), uno por uno según orden del cliente.
+`feature/desarrollo-caliente` — Trabajo activo (2026-08-13): **Precios de Venta — modal masivo por almacén** en `/disponibles`, ver sección dedicada arriba. Backend y frontend de la primera versión ya cerrados (búsqueda producto-primero, aplicar a varios almacenes, confirmación con contraseña, filtro Con Precio/Sin Precio en la tabla); pendiente resolver el desfase de esquema SQLite que bloquea los 9 tests ya escritos. Detalle completo en `docs/arreglos-pendientes/precios-venta-modal-busqueda-producto-2026-08-13.md`.
 
-Últimos cambios (2026-08-06): **Rastreo de Operaciones** (el reporte prioritario del cliente) avanzó Fases 7, 8 y 9 — Compras reintegrada como 5º tipo de operación (admin/moderador-only, requirió `compras.user_id`), rediseño de columnas con badges por pago, filtros Cliente/Proveedor/Cuenta multiselect + búsqueda por referencia. Detalle completo en `docs/arreglos-pendientes/rastreo-operaciones-rediseno-2026-08-01.md`. Los otros 14 reportes del módulo siguen sin tocar. Control de acceso a nivel de ruta ya cerrado para todo el módulo (`routes/acciones/reportes.php`, alias `admin` → `EnsureUserIsAdmin`, permite admin+moderador).
+Otros tracks recientes, todos cerrados y commiteados por el cliente: **Dashboard** (2026-08-12, rework de Tabla 1 "Resumen Financiero" + Tabla 2 "Comparación Mensual", 3 bugs reales corregidos — ver `docs/arreglos-pendientes/dashboard-resumen-financiero-2026-08-12.md`); **Compras UX** (2026-08-10/11, formulario de alta, rediseño del carrito, diálogo de pago, control de acceso admin-only + auditoría de costos — ver `docs/arreglos-pendientes/`); **Reportes — Rastreo de Operaciones** (2026-08-06, Fases 7-9: Compras reintegrada como 5º tipo de operación, filtros multiselect + búsqueda por referencia — ver `docs/arreglos-pendientes/rastreo-operaciones-rediseno-2026-08-01.md`). Los otros 14 reportes del módulo Reportes siguen sin tocar (`docs/arreglos-pendientes/reportes-arreglos-2026-08-01.md`).
 
 Trabajo previo (2026-07-26 a 2026-08-01, ya estable): **Compras con 0.90**, mejoras UX/UI en Cierres, **Transacciones** (Gastos/Ingresos/Transferencias) al 75%, **Cuentas** con `tipo_titular`, historial de operaciones en `Show.tsx` y acceso de vendedor a sus propias cuentas, **Logística I+II** (widgets Capital Financiero + resúmenes), **Bugs B1-B9 resueltos** (ver `ESTADO_DESARROLLO.md`).

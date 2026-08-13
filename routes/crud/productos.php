@@ -41,6 +41,12 @@ Route::middleware(['auth', 'verified'])->group(
         // Plantilla de importación
         Route::get('/listado-productos/descargar/plantilla', [ProductoController::class, 'downloadTemplate'])->name('productos.template');
 
+        // Actualizar precio/comisión en varios almacenes a la vez (exclusivo admin).
+        // Debe ir ANTES del resource para que no la intercepte PUT /disponibles/{disponible}.
+        Route::put('/disponibles/bulk-actualizar', [ProductoVendedorController::class, 'updateBulk'])
+            ->middleware('admin.only')
+            ->name('disponibles.bulk-actualizar');
+
         // Ruta para agregar el precio de venta a los Productos
         Route::resource('disponibles', ProductoVendedorController::class);
 
