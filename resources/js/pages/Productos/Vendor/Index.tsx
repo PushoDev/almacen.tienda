@@ -5,13 +5,16 @@ import {
     AlertDialogCancel,
     AlertDialogContent,
     AlertDialogDescription,
+    AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollProgress } from '@/components/ui/scroll';
@@ -32,7 +35,7 @@ import {
     PaginationNext,
     PaginationPrevious,
 } from '@/components/ui/pagination';
-import { BadgeDollarSign, CheckCircle2, FileText, History, Package, Sheet, Upload, Warehouse, XCircle } from 'lucide-react';
+import { BadgeDollarSign, CheckCircle2, Eye, EyeOff, FileText, History, Package, Search, Sheet, ShieldAlert, Upload, Warehouse, XCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 interface Producto {
@@ -93,6 +96,26 @@ interface HistorialData {
     total_cambios: number;
 }
 
+interface AparicionAlmacen {
+    almacen_id: number;
+    nombre_almacen: string;
+    precio_venta: number | null;
+    stock_almacen: number;
+}
+
+interface ProductoUnico {
+    id: number;
+    nombre_producto: string;
+    marca_producto: string;
+    modelo_producto?: string;
+    capacidad_producto?: string;
+    color_producto?: string;
+    categoria: string;
+    imagen_producto?: string;
+    precio_compra: number;
+    apariciones: AparicionAlmacen[];
+}
+
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Resumen General', href: '/dashboard' },
     { title: 'Productos', href: '/listado-productos' },
@@ -111,6 +134,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
     const [isEditMode, setIsEditMode] = useState(true);
     const [currentPage, setCurrentPage] = useState(1);
     const [searchTerm, setSearchTerm] = useState('');
+    const [filtroPrecio, setFiltroPrecio] = useState<'todos' | 'con_precio' | 'sin_precio'>('todos');
     const itemsPerPage = 10;
 
     // Estados para el modal de historial
@@ -124,8 +148,54 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
     const [isImporting, setIsImporting] = useState(false);
     const [importResult, setImportResult] = useState<{ actualizados: number; omitidos: number; errores: string[] } | null>(null);
 
+    // Estados para el modal "Buscar Producto" (asignar precio en varios almacenes a la vez, solo admin)
+    const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+    const [bulkSelectedProductId, setBulkSelectedProductId] = useState<number | null>(null);
+    const [bulkPrice, setBulkPrice] = useState('');
+    const [bulkComision, setBulkComision] = useState('');
+    const [bulkSelectedAlmacenIds, setBulkSelectedAlmacenIds] = useState<number[]>([]);
+    const [isBulkLoading, setIsBulkLoading] = useState(false);
+    const [bulkError, setBulkError] = useState<string | null>(null);
+    const [isBulkPasswordDialogOpen, setIsBulkPasswordDialogOpen] = useState(false);
+    const [bulkPasswordInput, setBulkPasswordInput] = useState('');
+    const [bulkShowPassword, setBulkShowPassword] = useState(false);
+
     const selectedAlmacen = almacenes.find((a) => a.almacen_id === selectedAlmacenId);
     const productsInAlmacen = selectedAlmacen?.productos || [];
+
+    const productosUnicos = useMemo<ProductoUnico[]>(() => {
+        const mapa = new Map<number, ProductoUnico>();
+
+        almacenes.forEach((almacen) => {
+            almacen.productos.forEach((producto) => {
+                if (!mapa.has(producto.id)) {
+                    mapa.set(producto.id, {
+                        id: producto.id,
+                        nombre_producto: producto.nombre_producto,
+                        marca_producto: producto.marca_producto,
+                        modelo_producto: producto.modelo_producto,
+                        capacidad_producto: producto.capacidad_producto,
+                        color_producto: producto.color_producto,
+                        categoria: producto.categoria,
+                        imagen_producto: producto.imagen_producto,
+                        precio_compra: producto.precio_compra,
+                        apariciones: [],
+                    });
+                }
+
+                mapa.get(producto.id)!.apariciones.push({
+                    almacen_id: almacen.almacen_id,
+                    nombre_almacen: almacen.nombre_almacen,
+                    precio_venta: producto.precio_venta,
+                    stock_almacen: producto.stock_almacen,
+                });
+            });
+        });
+
+        return Array.from(mapa.values()).sort((a, b) => a.nombre_producto.localeCompare(b.nombre_producto));
+    }, [almacenes]);
+
+    const bulkSelectedProduct = productosUnicos.find((p) => p.id === bulkSelectedProductId) ?? null;
 
     const availableAlmacenes = initialAlmacenes.map((a) => {
         const totalProductos     = a.productos.length;
@@ -233,6 +303,117 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
         }
     };
 
+    const openBulkModal = () => {
+        setBulkSelectedProductId(null);
+        setBulkPrice('');
+        setBulkComision('');
+        setBulkSelectedAlmacenIds([]);
+        setBulkError(null);
+        setBulkPasswordInput('');
+        setIsBulkModalOpen(true);
+    };
+
+    const requestBulkConfirmation = () => {
+        if (!bulkSelectedProduct || !bulkPrice || bulkSelectedAlmacenIds.length === 0) return;
+        const parsedPrice = parseFloat(bulkPrice);
+
+        if (isNaN(parsedPrice) || parsedPrice < 0.01) {
+            setBulkError('El precio debe ser un número positivo mayor a 0.00');
+            return;
+        }
+
+        setBulkError(null);
+        setBulkPasswordInput('');
+        setIsBulkPasswordDialogOpen(true);
+    };
+
+    const handleBulkProductChange = (producto: ProductoUnico | null) => {
+        setBulkSelectedProductId(producto?.id ?? null);
+        setBulkSelectedAlmacenIds([]);
+        setBulkPrice('');
+        setBulkComision('');
+        setBulkError(null);
+    };
+
+    const toggleBulkAlmacen = (almacenId: number) => {
+        setBulkSelectedAlmacenIds((prev) =>
+            prev.includes(almacenId) ? prev.filter((id) => id !== almacenId) : [...prev, almacenId],
+        );
+    };
+
+    const handleBulkSubmit = async () => {
+        if (!bulkSelectedProduct || !bulkPrice || bulkSelectedAlmacenIds.length === 0) return;
+        const parsedPrice = parseFloat(bulkPrice);
+
+        if (isNaN(parsedPrice) || parsedPrice < 0.01) {
+            setBulkError('El precio debe ser un número positivo mayor a 0.00');
+            return;
+        }
+
+        setIsBulkLoading(true);
+        setBulkError(null);
+
+        try {
+            const response = await fetch('/disponibles/bulk-actualizar', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: JSON.stringify({
+                    producto_id: bulkSelectedProduct.id,
+                    almacen_ids: bulkSelectedAlmacenIds,
+                    precio_venta: parsedPrice,
+                    comision: bulkComision !== '' ? parseFloat(bulkComision) : null,
+                    password_confirmacion: bulkPasswordInput,
+                }),
+            });
+
+            const responseData = await response.json();
+
+            if (!response.ok) {
+                throw new Error(responseData.message || responseData.error || 'Error al actualizar los precios');
+            }
+
+            const almacenIdsActualizados = bulkSelectedAlmacenIds;
+            const productoId = bulkSelectedProduct.id;
+
+            setAlmacenes((prevAlmacenes) =>
+                prevAlmacenes.map((almacen) => {
+                    if (!almacenIdsActualizados.includes(almacen.almacen_id)) return almacen;
+                    return {
+                        ...almacen,
+                        productos: almacen.productos.map((p) =>
+                            p.id === productoId
+                                ? {
+                                      ...p,
+                                      precio_venta: parsedPrice,
+                                      ganancia: parsedPrice - p.precio_compra,
+                                      comision:
+                                          responseData.new_comision !== undefined && responseData.new_comision !== null
+                                              ? responseData.new_comision
+                                              : p.comision,
+                                  }
+                                : p,
+                        ),
+                    };
+                }),
+            );
+
+            setIsBulkPasswordDialogOpen(false);
+            setBulkPasswordInput('');
+            setIsBulkModalOpen(false);
+        } catch (err) {
+            console.error('Error en la solicitud:', err);
+            const message = err instanceof Error ? err.message : 'Error inesperado al procesar la solicitud';
+            setBulkPasswordInput('');
+            setBulkError(message);
+        } finally {
+            setIsBulkLoading(false);
+        }
+    };
+
     const verHistorial = async (producto: Producto) => {
         if (meta.role_usuario !== 'admin' && meta.role_usuario !== 'moderador') return;
 
@@ -267,14 +448,25 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
         }
     };
 
-    const filteredProducts = productsInAlmacen.filter(
-        (producto) =>
-            (producto.nombre_producto || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (producto.marca_producto || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (producto.categoria || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (producto.modelo_producto || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (producto.capacidad_producto || '').toLowerCase().includes(searchTerm.toLowerCase()),
-    );
+    const filteredProducts = productsInAlmacen
+        .filter(
+            (producto) =>
+                (producto.nombre_producto || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (producto.marca_producto || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (producto.categoria || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (producto.modelo_producto || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (producto.capacidad_producto || '').toLowerCase().includes(searchTerm.toLowerCase()),
+        )
+        .filter((producto) => {
+            if (filtroPrecio === 'con_precio') return producto.precio_venta !== null;
+            if (filtroPrecio === 'sin_precio') return producto.precio_venta === null;
+            return true;
+        });
+
+    const toggleFiltroPrecio = (valor: 'con_precio' | 'sin_precio') => {
+        setFiltroPrecio((prev) => (prev === valor ? 'todos' : valor));
+        setCurrentPage(1);
+    };
 
     const totalPages      = Math.ceil(filteredProducts.length / itemsPerPage);
     const currentProducts = filteredProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -394,7 +586,13 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                         </CardContent>
                                     </Card>
 
-                                    <Card className="border-l-4 border-emerald-500/30 shadow-sm transition-shadow hover:shadow-md">
+                                    <Card
+                                        onClick={() => toggleFiltroPrecio('con_precio')}
+                                        className={cn(
+                                            'cursor-pointer border-l-4 border-emerald-500/30 shadow-sm transition-shadow hover:shadow-md',
+                                            filtroPrecio === 'con_precio' && 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-background',
+                                        )}
+                                    >
                                         <CardHeader className="pb-2">
                                             <div className="flex items-center justify-between">
                                                 <CardDescription className="text-xs font-medium tracking-wider text-emerald-600 uppercase dark:text-emerald-400">
@@ -409,11 +607,19 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent>
-                                            <p className="text-muted-foreground text-xs">Listos para vender</p>
+                                            <p className="text-muted-foreground text-xs">
+                                                {filtroPrecio === 'con_precio' ? 'Filtrando · click para quitar' : 'Listos para vender'}
+                                            </p>
                                         </CardContent>
                                     </Card>
 
-                                    <Card className="border-l-4 border-amber-500/30 shadow-sm transition-shadow hover:shadow-md">
+                                    <Card
+                                        onClick={() => toggleFiltroPrecio('sin_precio')}
+                                        className={cn(
+                                            'cursor-pointer border-l-4 border-amber-500/30 shadow-sm transition-shadow hover:shadow-md',
+                                            filtroPrecio === 'sin_precio' && 'ring-2 ring-amber-500 ring-offset-2 ring-offset-background',
+                                        )}
+                                    >
                                         <CardHeader className="pb-2">
                                             <div className="flex items-center justify-between">
                                                 <CardDescription className="text-xs font-medium tracking-wider text-amber-600 uppercase dark:text-amber-400">
@@ -428,7 +634,9 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent>
-                                            <p className="text-muted-foreground text-xs">Pendientes de asignar</p>
+                                            <p className="text-muted-foreground text-xs">
+                                                {filtroPrecio === 'sin_precio' ? 'Filtrando · click para quitar' : 'Pendientes de asignar'}
+                                            </p>
                                         </CardContent>
                                     </Card>
 
@@ -471,6 +679,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                     setSelectedAlmacenId(almacen.id);
                                     setCurrentPage(1);
                                     setSearchTerm('');
+                                    setFiltroPrecio('todos');
                                 }
                             }}
                         >
@@ -513,6 +722,12 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                     </div>
 
                     <div className="flex gap-2">
+                        {meta.role_usuario === 'admin' && (
+                            <Button variant="default" className="h-11 gap-2" onClick={openBulkModal}>
+                                <Search size={16} />
+                                Buscar Producto
+                            </Button>
+                        )}
                         <Button variant="outline" className="h-11 gap-2" onClick={handleExport} disabled={!selectedAlmacenId}>
                             <Sheet size={16} />
                             Exportar Excel
@@ -569,7 +784,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                                                 {producto.imagen_producto && (
                                                                     <div className="mb-2 flex justify-center">
                                                                         <img
-                                                                            src={`/storage/${producto.imagen_producto}`}
+                                                                            src={`/${producto.imagen_producto}`}
                                                                             alt={producto.nombre_producto}
                                                                             className="h-20 w-20 rounded-lg object-cover"
                                                                             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
@@ -895,6 +1110,277 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                         </AlertDialogContent>
                     </AlertDialog>
                 )}
+
+                {/* Modal "Buscar Producto" — asignar precio en varios almacenes a la vez (solo admin) */}
+                <AlertDialog open={isBulkModalOpen} onOpenChange={setIsBulkModalOpen}>
+                    <AlertDialogContent className="flex h-[85vh] w-[95vw] !max-w-none max-w-[900px] flex-col p-0">
+                        <AlertDialogHeader className="shrink-0 border-b px-6 py-4">
+                            <AlertDialogTitle className="flex items-center gap-3 text-xl font-semibold">
+                                <Search className="h-6 w-6" />
+                                <span>Buscar Producto y Asignar Precio</span>
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Buscá un producto y aplicá el mismo precio de venta (y comisión opcional) en varios almacenes a la vez.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+
+                        <div className="grid flex-1 overflow-hidden lg:grid-cols-[1fr_380px]">
+                            {/* Columna principal: buscar producto + precio/comisión */}
+                            <div className="flex flex-col gap-y-6 overflow-y-auto px-6 py-6">
+                                <div className="space-y-2">
+                                    <Label htmlFor="bulk-producto">Producto</Label>
+                                    <Combobox
+                                        items={productosUnicos}
+                                        itemToStringLabel={(p: ProductoUnico) => p.nombre_producto}
+                                        itemToStringValue={(p: ProductoUnico) => p.nombre_producto}
+                                        value={bulkSelectedProduct}
+                                        onValueChange={handleBulkProductChange}
+                                    >
+                                        <ComboboxInput
+                                            id="bulk-producto"
+                                            className="w-full"
+                                            placeholder="Buscar por nombre, marca o modelo..."
+                                            showClear={!!bulkSelectedProduct}
+                                        />
+                                        <ComboboxContent>
+                                            <ComboboxEmpty>Sin resultados</ComboboxEmpty>
+                                            <ComboboxList>
+                                                {(p: ProductoUnico) => (
+                                                    <ComboboxItem key={p.id} value={p}>
+                                                        <div className="flex w-full items-center gap-3 py-1">
+                                                            {p.imagen_producto && (
+                                                                <img
+                                                                    src={`/${p.imagen_producto}`}
+                                                                    alt={p.nombre_producto}
+                                                                    className="h-10 w-10 shrink-0 rounded-md object-cover"
+                                                                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                                                />
+                                                            )}
+                                                            <div className="flex flex-col items-start">
+                                                                <span className="font-medium">{p.nombre_producto}</span>
+                                                                <span className="text-muted-foreground text-xs">
+                                                                    {[p.marca_producto, p.modelo_producto, p.capacidad_producto, p.color_producto]
+                                                                        .filter(Boolean)
+                                                                        .join(' • ') || 'Sin atributos adicionales'}
+                                                                </span>
+                                                                <span className="text-muted-foreground text-xs">
+                                                                    {p.categoria} · Disponible en {p.apariciones.length} almacén(es)
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </ComboboxItem>
+                                                )}
+                                            </ComboboxList>
+                                        </ComboboxContent>
+                                    </Combobox>
+                                </div>
+
+                                {bulkSelectedProduct && (
+                                    <>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <Label htmlFor="bulk-precio">Precio de Venta (USD)</Label>
+                                                <Input
+                                                    id="bulk-precio"
+                                                    type="number"
+                                                    min="0.01"
+                                                    step="0.01"
+                                                    value={bulkPrice}
+                                                    onChange={(e) => setBulkPrice(e.target.value)}
+                                                    placeholder="0.00"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label htmlFor="bulk-comision">Comisión (USD, opcional)</Label>
+                                                <Input
+                                                    id="bulk-comision"
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    value={bulkComision}
+                                                    onChange={(e) => setBulkComision(e.target.value)}
+                                                    placeholder="0.00"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {bulkError && <p className="text-sm text-red-500">{bulkError}</p>}
+
+                                        <Card className="border-primary/30 border-l-4">
+                                            <CardHeader className="flex-row items-start gap-4 space-y-0 pb-2">
+                                                {bulkSelectedProduct.imagen_producto && (
+                                                    <img
+                                                        src={`/${bulkSelectedProduct.imagen_producto}`}
+                                                        alt={bulkSelectedProduct.nombre_producto}
+                                                        className="h-16 w-16 shrink-0 rounded-lg object-cover"
+                                                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                                    />
+                                                )}
+                                                <div>
+                                                    <CardTitle className="text-base">{bulkSelectedProduct.nombre_producto}</CardTitle>
+                                                    <CardDescription>{bulkSelectedProduct.categoria}</CardDescription>
+                                                </div>
+                                            </CardHeader>
+                                            <CardContent>
+                                                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                                                    <span className="text-muted-foreground">Marca:</span>
+                                                    <span className="font-medium">{bulkSelectedProduct.marca_producto || '—'}</span>
+                                                    {bulkSelectedProduct.modelo_producto && (
+                                                        <>
+                                                            <span className="text-muted-foreground">Modelo:</span>
+                                                            <span className="font-medium">{bulkSelectedProduct.modelo_producto}</span>
+                                                        </>
+                                                    )}
+                                                    {bulkSelectedProduct.capacidad_producto && (
+                                                        <>
+                                                            <span className="text-muted-foreground">Capacidad:</span>
+                                                            <span className="font-medium">{bulkSelectedProduct.capacidad_producto}</span>
+                                                        </>
+                                                    )}
+                                                    {bulkSelectedProduct.color_producto && (
+                                                        <>
+                                                            <span className="text-muted-foreground">Color:</span>
+                                                            <span className="font-medium">{bulkSelectedProduct.color_producto}</span>
+                                                        </>
+                                                    )}
+                                                    <span className="text-muted-foreground">Precio Compra:</span>
+                                                    <span className="font-medium">{formatCurrency(bulkSelectedProduct.precio_compra)}</span>
+                                                    <span className="text-muted-foreground">Stock Total:</span>
+                                                    <span className="font-medium">
+                                                        {bulkSelectedProduct.apariciones.reduce((sum, a) => sum + a.stock_almacen, 0)} unidades
+                                                    </span>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Panel lateral: almacenes donde está disponible */}
+                            <div className="flex flex-col overflow-y-auto border-l bg-slate-50/50 p-6 dark:bg-slate-800/20">
+                                {!bulkSelectedProduct ? (
+                                    <p className="text-muted-foreground text-sm">
+                                        Seleccioná un producto para ver en qué almacenes está disponible.
+                                    </p>
+                                ) : (
+                                    <>
+                                        <p className="mb-3 text-sm font-medium">
+                                            Disponible en {bulkSelectedProduct.apariciones.length} almacén(es)
+                                        </p>
+                                        <div className="space-y-2">
+                                            {bulkSelectedProduct.apariciones.map((a) => (
+                                                <div
+                                                    key={a.almacen_id}
+                                                    onClick={() => toggleBulkAlmacen(a.almacen_id)}
+                                                    className="bg-background flex cursor-pointer items-center justify-between gap-2 rounded-lg border p-3"
+                                                >
+                                                    <div className="flex items-center gap-2">
+                                                        <Checkbox checked={bulkSelectedAlmacenIds.includes(a.almacen_id)} />
+                                                        <span className="text-sm font-medium">{a.nombre_almacen}</span>
+                                                    </div>
+                                                    <span
+                                                        className={cn(
+                                                            'text-xs',
+                                                            a.precio_venta === null ? 'text-amber-500 italic' : 'text-muted-foreground',
+                                                        )}
+                                                    >
+                                                        {formatCurrency(a.precio_venta)}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <div className="mt-auto rounded-xl border-2 p-4">
+                                            <p className="text-sm">
+                                                <span className="font-semibold">{bulkSelectedAlmacenIds.length}</span> almacén(es) seleccionado(s)
+                                            </p>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+
+                        <AlertDialogFooter className="shrink-0 flex-row justify-end space-x-4 border-t px-6 py-4">
+                            <AlertDialogCancel onClick={() => setIsBulkModalOpen(false)} disabled={isBulkLoading}>
+                                Cancelar
+                            </AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={(e) => { e.preventDefault(); requestBulkConfirmation(); }}
+                                disabled={!bulkSelectedProduct || !bulkPrice || bulkSelectedAlmacenIds.length === 0 || isBulkLoading}
+                            >
+                                {`Aplicar a ${bulkSelectedAlmacenIds.length} almacén(es)`}
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+
+                {/* Confirmación con contraseña antes de aplicar el precio masivo (mismo patrón que Productos/Edit.tsx) */}
+                <Dialog
+                    open={isBulkPasswordDialogOpen}
+                    onOpenChange={(open) => {
+                        setIsBulkPasswordDialogOpen(open);
+                        if (!open) { setBulkPasswordInput(''); setBulkShowPassword(false); setBulkError(null); }
+                    }}
+                >
+                    <DialogContent className="sm:max-w-[420px]">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                                <ShieldAlert className="text-amber-500" size={20} />
+                                Confirmar cambio de precio masivo
+                            </DialogTitle>
+                            <DialogDescription>
+                                Vas a aplicar <strong>{formatCurrency(bulkSelectedProduct ? parseFloat(bulkPrice) || 0 : 0)}</strong> a{' '}
+                                <strong>{bulkSelectedProduct?.nombre_producto}</strong> en{' '}
+                                <strong>{bulkSelectedAlmacenIds.length} almacén(es)</strong>. Esta acción queda registrada en el historial.
+                                Ingresa tu contraseña para confirmar.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                            <div className="grid gap-2">
+                                <Label htmlFor="bulk-confirm-password">Contraseña</Label>
+                                <div className="relative">
+                                    <Input
+                                        id="bulk-confirm-password"
+                                        type={bulkShowPassword ? 'text' : 'password'}
+                                        value={bulkPasswordInput}
+                                        onChange={(e) => setBulkPasswordInput(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' && bulkPasswordInput) handleBulkSubmit(); }}
+                                        placeholder="Ingresa tu contraseña"
+                                        className="pr-10"
+                                        autoFocus
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setBulkShowPassword((v) => !v)}
+                                        className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                        tabIndex={-1}
+                                    >
+                                        {bulkShowPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
+                                </div>
+                                {bulkError && <p className="text-sm text-red-500">{bulkError}</p>}
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => { setIsBulkPasswordDialogOpen(false); setBulkPasswordInput(''); setBulkShowPassword(false); setBulkError(null); }}
+                                disabled={isBulkLoading}
+                            >
+                                Cancelar
+                            </Button>
+                            <Button
+                                type="button"
+                                disabled={!bulkPasswordInput || isBulkLoading}
+                                onClick={handleBulkSubmit}
+                                className="bg-amber-600 text-white hover:bg-amber-700"
+                            >
+                                {isBulkLoading ? 'Aplicando...' : 'Confirmar cambio'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
 
                 {/* Modal de Historial de Precios */}
                 <AlertDialog open={isHistorialDialogOpen} onOpenChange={setIsHistorialDialogOpen}>
