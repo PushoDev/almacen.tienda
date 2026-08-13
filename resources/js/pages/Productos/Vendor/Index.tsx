@@ -725,7 +725,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                         {meta.role_usuario === 'admin' && (
                             <Button variant="default" className="h-11 gap-2" onClick={openBulkModal}>
                                 <Search size={16} />
-                                Buscar Producto
+                                Precio Global
                             </Button>
                         )}
                         <Button variant="outline" className="h-11 gap-2" onClick={handleExport} disabled={!selectedAlmacenId}>
