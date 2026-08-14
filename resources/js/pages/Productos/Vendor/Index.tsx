@@ -21,6 +21,7 @@ import { ScrollProgress } from '@/components/ui/scroll';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Toaster } from '@/components/ui/sileo-toaster';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
@@ -36,6 +37,7 @@ import {
     PaginationPrevious,
 } from '@/components/ui/pagination';
 import { BadgeDollarSign, CheckCircle2, Eye, EyeOff, FileText, History, Package, Search, Sheet, ShieldAlert, Upload, Warehouse, XCircle } from 'lucide-react';
+import { sileo } from '@/lib/sileo';
 import { useMemo, useState } from 'react';
 
 interface Producto {
@@ -253,6 +255,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
 
         if (isNaN(parsedPrice) || parsedPrice < 0.01) {
             setError('El precio debe ser un número positivo mayor a 0.00');
+            sileo.warning({ title: 'Precio inválido', description: 'El precio debe ser un número positivo mayor a 0.00' });
             return;
         }
 
@@ -265,25 +268,40 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
         setError(null);
 
         try {
-            const response = await fetch(`/disponibles/${selectedProduct.id}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-                body: JSON.stringify({
-                    precio_venta: parsedPrice,
-                    almacen_id: selectedProduct.almacen_id,
-                    comision: newComision !== '' ? parseFloat(newComision) : null,
+            const responseData = await sileo.promise(
+                fetch(`/disponibles/${selectedProduct.id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: JSON.stringify({
+                        precio_venta: parsedPrice,
+                        almacen_id: selectedProduct.almacen_id,
+                        comision: newComision !== '' ? parseFloat(newComision) : null,
+                    }),
+                }).then(async (response) => {
+                    const data = await response.json();
+                    if (!response.ok) {
+                        throw new Error(data.message || data.error || 'Error al actualizar el precio');
+                    }
+                    return data;
                 }),
-            });
-
-            const responseData = await response.json();
-
-            if (!response.ok) {
-                throw new Error(responseData.message || responseData.error || 'Error al actualizar el precio');
-            }
+                {
+                    loading: { title: 'Actualizando precio...', description: selectedProduct.nombre_producto },
+                    success: (data) => ({
+                        title: data.message || 'Precio actualizado correctamente',
+                        description: `${selectedProduct.nombre_producto} — ${formatCurrency(parsedPrice)}${
+                            newComision !== '' ? ` · Comisión ${formatCurrency(parseFloat(newComision))}` : ''
+                        }`,
+                    }),
+                    error: (err) => ({
+                        title: 'No se pudo actualizar el precio',
+                        description: err instanceof Error ? err.message : 'Error inesperado al procesar la solicitud',
+                    }),
+                },
+            );
 
             setAlmacenes((prevAlmacenes) =>
                 prevAlmacenes.map((almacen) => {
@@ -333,6 +351,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
 
         if (isNaN(parsedPrice) || parsedPrice < 0.01) {
             setBulkError('El precio debe ser un número positivo mayor a 0.00');
+            sileo.warning({ title: 'Precio inválido', description: 'El precio debe ser un número positivo mayor a 0.00' });
             return;
         }
 
@@ -361,6 +380,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
 
         if (isNaN(parsedPrice) || parsedPrice < 0.01) {
             setBulkError('El precio debe ser un número positivo mayor a 0.00');
+            sileo.warning({ title: 'Precio inválido', description: 'El precio debe ser un número positivo mayor a 0.00' });
             return;
         }
 
@@ -368,27 +388,42 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
         setBulkError(null);
 
         try {
-            const response = await fetch('/disponibles/bulk-actualizar', {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-                body: JSON.stringify({
-                    producto_id: bulkSelectedProduct.id,
-                    almacen_ids: bulkSelectedAlmacenIds,
-                    precio_venta: parsedPrice,
-                    comision: bulkComision !== '' ? parseFloat(bulkComision) : null,
-                    password_confirmacion: bulkPasswordInput,
+            const responseData = await sileo.promise(
+                fetch('/disponibles/bulk-actualizar', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: JSON.stringify({
+                        producto_id: bulkSelectedProduct.id,
+                        almacen_ids: bulkSelectedAlmacenIds,
+                        precio_venta: parsedPrice,
+                        comision: bulkComision !== '' ? parseFloat(bulkComision) : null,
+                        password_confirmacion: bulkPasswordInput,
+                    }),
+                }).then(async (response) => {
+                    const data = await response.json();
+                    if (!response.ok) {
+                        throw new Error(data.message || data.error || 'Error al actualizar los precios');
+                    }
+                    return data;
                 }),
-            });
-
-            const responseData = await response.json();
-
-            if (!response.ok) {
-                throw new Error(responseData.message || responseData.error || 'Error al actualizar los precios');
-            }
+                {
+                    loading: { title: 'Actualizando precios...', description: bulkSelectedProduct.nombre_producto },
+                    success: () => ({
+                        title: 'Precio actualizado',
+                        description: `${bulkSelectedProduct.nombre_producto} — ${formatCurrency(parsedPrice)} · ${bulkSelectedAlmacenIds.length} almacén(es)${
+                            bulkComision !== '' ? ` · Comisión ${formatCurrency(parseFloat(bulkComision))}` : ''
+                        }`,
+                    }),
+                    error: (err) => ({
+                        title: 'No se pudo actualizar el precio',
+                        description: err instanceof Error ? err.message : 'Error inesperado al procesar la solicitud',
+                    }),
+                },
+            );
 
             const almacenIdsActualizados = bulkSelectedAlmacenIds;
             const productoId = bulkSelectedProduct.id;
@@ -448,14 +483,12 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
             if (response.ok && data.success) {
                 setHistorialData(data);
             } else {
-                setError(data.error || 'Error al cargar el historial');
-                setTimeout(() => setError(null), 3000);
+                sileo.error({ title: 'No se pudo cargar el historial', description: data.error || 'Error al cargar el historial' });
                 setIsHistorialDialogOpen(false);
             }
         } catch (err) {
             console.error('Error al obtener historial:', err);
-            setError('Error al cargar el historial de precios');
-            setTimeout(() => setError(null), 3000);
+            sileo.error({ title: 'No se pudo cargar el historial', description: 'Error al cargar el historial de precios' });
             setIsHistorialDialogOpen(false);
         } finally {
             setLoadingHistorial(false);
@@ -548,6 +581,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Precios por Almacén" />
+            <Toaster position="top-center" />
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* Header */}
                 <div className="border-sidebar-accent bg-sidebar relative rounded-2xl border border-dashed p-4">

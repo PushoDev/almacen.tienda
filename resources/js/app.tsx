@@ -1,4 +1,5 @@
 import 'animate.css';
+import 'sileo/styles.css';
 import '../css/app.css';
 
 import { createInertiaApp } from '@inertiajs/react';
