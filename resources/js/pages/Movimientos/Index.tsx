@@ -21,7 +21,7 @@ import { sileo } from '@/lib/sileo';
 import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, BreadcrumbItem, Movimiento, ProductoPorAlmacenDetalleRef } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { AlertCircle, Caravan, CheckCircle2, ChevronLeft, ChevronRight, Clock, Eye, ListCheck, Package, PackageSearch, Search, Send, TrendingUp, XCircle } from 'lucide-react';
+import { ArrowLeftRight, Caravan, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, Eye, History, ListCheck, Package, PackageCheck, PackageSearch, Search, Send, TrendingUp, XCircle } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -119,6 +119,27 @@ interface ErrorResponse {
     [key: string]: string | undefined;
 }
 
+// Mismos tokens que Show.tsx (basados en opacidad, funcionan en claro/oscuro) —
+// un solo lugar para no repetir esta lógica en la tabla y en el timeline de seguimiento.
+const ESTADO_BADGE: Record<string, { badgeClass: string; icon: React.ReactNode }> = {
+    pendiente_confirmacion: { badgeClass: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20', icon: <Clock className="h-3.5 w-3.5" /> },
+    en_transito: { badgeClass: 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20', icon: <Send className="h-3.5 w-3.5" /> },
+    recibido_parcial: { badgeClass: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20', icon: <Package className="h-3.5 w-3.5" /> },
+    recibido_completo: { badgeClass: 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20', icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
+    rechazado: { badgeClass: 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20', icon: <XCircle className="h-3.5 w-3.5" /> },
+    cancelado: { badgeClass: 'bg-muted text-muted-foreground border-border', icon: <XCircle className="h-3.5 w-3.5" /> },
+};
+
+function EstadoBadge({ estado, label }: { estado: string; label: string }) {
+    const config = ESTADO_BADGE[estado] ?? ESTADO_BADGE.cancelado;
+    return (
+        <span className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold ${config.badgeClass}`}>
+            {config.icon}
+            {label}
+        </span>
+    );
+}
+
 export default function MovimientosPage({
     movimientos,
     almacenes,
@@ -192,6 +213,9 @@ export default function MovimientosPage({
     const almacenesOrigen = isVendedor && userAlmacenesIds.length > 0 ? almacenes.filter((a) => userAlmacenesIds.includes(a.id)) : almacenes;
 
     const almacenesDestino = almacenOrigenId ? almacenes.filter((a) => a.id !== parseInt(almacenOrigenId)) : almacenes;
+
+    const totalDespachadoRecibir = selectedMovimiento?.detalles.reduce((sum, d) => sum + d.cantidad_despachada, 0) ?? 0;
+    const totalRecibidoRecibir = selectedMovimiento?.detalles.reduce((sum, d) => sum + (productosRecibidos[d.producto_id] || 0), 0) ?? 0;
 
     const handleAlmacenOrigenChange = (value: string | null) => {
         if (!value) {
@@ -444,10 +468,17 @@ export default function MovimientosPage({
                 </div>
 
                 {/* Crear nuevo movimiento */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Nuevo Movimiento</CardTitle>
-                        <CardDescription>Crea un movimiento entre almacenes. El stock se reservará al enviar.</CardDescription>
+                <Card className="overflow-hidden border-l-4 border-cyan-500/30 pt-0 shadow-sm transition-shadow hover:shadow-md">
+                    <CardHeader className="border-b bg-gradient-to-r from-cyan-600 to-cyan-700 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <ArrowLeftRight className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-white">Nuevo Movimiento</CardTitle>
+                                <CardDescription className="text-cyan-100">Crea un movimiento entre almacenes. El stock se reservará al enviar.</CardDescription>
+                            </div>
+                        </div>
                     </CardHeader>
                     <CardContent>
                         <form>
@@ -526,7 +557,7 @@ export default function MovimientosPage({
                                             setBusquedaProducto(e.target.value);
                                             setPaginaProductos(1);
                                         }}
-                                        className="pl-9"
+                                        className="pl-9 uppercase placeholder:normal-case"
                                     />
                                 </div>
                                 <div className="overflow-x-auto rounded-lg border">
@@ -687,10 +718,17 @@ export default function MovimientosPage({
                 </Card>
 
                 {/* Lista de Movimientos */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Historial de Movimientos</CardTitle>
-                        <CardDescription>Gestiona y monitorea el flujo de tus movimientos logísticos</CardDescription>
+                <Card className="overflow-hidden border-l-4 border-violet-500/30 pt-0 shadow-sm transition-shadow hover:shadow-md">
+                    <CardHeader className="border-b bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <History className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-white">Historial de Movimientos</CardTitle>
+                                <CardDescription className="text-violet-100">Gestiona y monitorea el flujo de tus movimientos logísticos</CardDescription>
+                            </div>
+                        </div>
                     </CardHeader>
                     <CardContent>
                         <div className="overflow-x-auto rounded-lg border">
@@ -727,26 +765,7 @@ export default function MovimientosPage({
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <span
-                                                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${
-                                                        movimiento.estado === 'pendiente_confirmacion'
-                                                            ? 'bg-yellow-100 text-yellow-800'
-                                                            : movimiento.estado === 'en_transito'
-                                                              ? 'bg-orange-100 text-orange-800'
-                                                              : movimiento.estado === 'recibido_completo'
-                                                                ? 'bg-green-100 text-green-800'
-                                                                : movimiento.estado === 'recibido_parcial'
-                                                                  ? 'bg-cyan-100 text-cyan-800'
-                                                                  : 'bg-red-100 text-red-800'
-                                                    }`}
-                                                >
-                                                    {movimiento.estado === 'pendiente_confirmacion' && <Clock className="h-3.5 w-3.5" />}
-                                                    {movimiento.estado === 'en_transito' && <Send className="h-3.5 w-3.5" />}
-                                                    {movimiento.estado === 'recibido_completo' && <CheckCircle2 className="h-3.5 w-3.5" />}
-                                                    {movimiento.estado === 'recibido_parcial' && <AlertCircle className="h-3.5 w-3.5" />}
-                                                    {movimiento.estado === 'rechazado' && <XCircle className="h-3.5 w-3.5" />}
-                                                    {estados[movimiento.estado]}
-                                                </span>
+                                                <EstadoBadge estado={movimiento.estado} label={estados[movimiento.estado]} />
                                             </td>
                                             <td className="px-6 py-4">{movimiento.usuario?.name}</td>
                                             <td className="px-6 py-4">
@@ -861,21 +880,7 @@ export default function MovimientosPage({
                                 selectedMovimiento.seguimientos.map((seguimiento) => (
                                     <div key={seguimiento.id} className="relative border-l-4 border-blue-300 pb-3 pl-4">
                                         <div className="mb-2 flex items-start justify-between">
-                                            <span
-                                                className={`rounded-full px-2 py-1 text-sm font-semibold ${
-                                                    seguimiento.estado === 'pendiente_confirmacion'
-                                                        ? 'bg-yellow-100 text-yellow-800'
-                                                        : seguimiento.estado === 'en_transito'
-                                                          ? 'bg-orange-100 text-orange-800'
-                                                          : seguimiento.estado === 'recibido_completo'
-                                                            ? 'bg-green-100 text-green-800'
-                                                            : seguimiento.estado === 'recibido_parcial'
-                                                              ? 'bg-cyan-100 text-cyan-800'
-                                                              : 'bg-red-100 text-red-800'
-                                                }`}
-                                            >
-                                                {estados[seguimiento.estado]}
-                                            </span>
+                                            <EstadoBadge estado={seguimiento.estado} label={estados[seguimiento.estado]} />
                                             <span className="text-xs text-gray-500">{new Date(seguimiento.created_at).toLocaleString('es-ES')}</span>
                                         </div>
                                         <p className="text-sm font-medium text-gray-700">{seguimiento.observaciones}</p>
@@ -895,16 +900,23 @@ export default function MovimientosPage({
 
                 {/* AlertDialog - Ver Productos (vista rápida, cualquier estado, sin salir del listado) */}
                 <AlertDialog open={showDialogs.verProductos} onOpenChange={(open) => setShowDialogs({ ...showDialogs, verProductos: open })}>
-                    <AlertDialogContent className="max-h-[80vh] max-w-3xl overflow-y-auto">
-                        <AlertDialogHeader>
-                            <AlertDialogTitle className="text-xl">Productos del Movimiento #{selectedMovimiento?.id}</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                {selectedMovimiento?.almacen_origen?.nombre_almacen} → {selectedMovimiento?.almacen_destino?.nombre_almacen} ·{' '}
-                                {selectedMovimiento && estados[selectedMovimiento.estado]}
-                            </AlertDialogDescription>
+                    <AlertDialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-3xl">
+                        <AlertDialogHeader className="shrink-0 border-b bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 text-white">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <PackageSearch className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <AlertDialogTitle className="text-white">Productos del Movimiento #{selectedMovimiento?.id}</AlertDialogTitle>
+                                    <AlertDialogDescription className="text-blue-100">
+                                        {selectedMovimiento?.almacen_origen?.nombre_almacen} → {selectedMovimiento?.almacen_destino?.nombre_almacen} ·{' '}
+                                        {selectedMovimiento && estados[selectedMovimiento.estado]}
+                                    </AlertDialogDescription>
+                                </div>
+                            </div>
                         </AlertDialogHeader>
 
-                        <div className="max-h-[50vh] overflow-y-auto py-2">
+                        <div className="flex-1 overflow-y-auto px-6 py-4">
                             <table className="w-full text-sm">
                                 <thead className="bg-muted/50 sticky top-0">
                                     <tr>
@@ -920,7 +932,14 @@ export default function MovimientosPage({
                                             <td className="px-2 py-2">
                                                 <div className="font-medium">{detalle.producto?.nombre_producto}</div>
                                                 <div className="text-muted-foreground text-xs">
-                                                    {[detalle.producto?.marca_producto, detalle.producto?.modelo_producto].filter(Boolean).join(' · ')}
+                                                    {[
+                                                        detalle.producto?.marca_producto,
+                                                        detalle.producto?.modelo_producto,
+                                                        detalle.producto?.capacidad_producto,
+                                                        detalle.producto?.categoria?.nombre_categoria,
+                                                    ]
+                                                        .filter(Boolean)
+                                                        .join(' · ')}
                                                 </div>
                                             </td>
                                             <td className="px-2 py-2 text-center">{detalle.cantidad_solicitada}</td>
@@ -934,14 +953,15 @@ export default function MovimientosPage({
                             </table>
                         </div>
 
-                        {selectedMovimiento?.observaciones && (
-                            <p className="text-muted-foreground border-t pt-2 text-sm">
-                                <span className="font-medium">Observaciones:</span> {selectedMovimiento.observaciones}
-                            </p>
-                        )}
-
-                        <div className="flex justify-end gap-2">
-                            <AlertDialogCancel>Cerrar</AlertDialogCancel>
+                        <div className="shrink-0 border-t px-6 py-4">
+                            {selectedMovimiento?.observaciones && (
+                                <p className="text-muted-foreground mb-3 text-sm">
+                                    <span className="font-medium">Observaciones:</span> {selectedMovimiento.observaciones}
+                                </p>
+                            )}
+                            <div className="flex justify-end gap-2">
+                                <AlertDialogCancel>Cerrar</AlertDialogCancel>
+                            </div>
                         </div>
                     </AlertDialogContent>
                 </AlertDialog>
@@ -988,68 +1008,112 @@ export default function MovimientosPage({
 
                 {/* AlertDialog - Recibir Movimiento */}
                 <AlertDialog open={showDialogs.recibir} onOpenChange={(open) => setShowDialogs({ ...showDialogs, recibir: open })}>
-                    <AlertDialogContent className="max-h-[80vh] max-w-4xl overflow-y-auto">
-                        <AlertDialogHeader>
-                            <AlertDialogTitle>Registrar Recepción - Movimiento #{selectedMovimiento?.id}</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                Confirma las cantidades recibidas por cada producto. Las diferencias se registrarán.
-                            </AlertDialogDescription>
+                    <AlertDialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-3xl">
+                        <AlertDialogHeader className="shrink-0 border-b bg-gradient-to-r from-green-600 to-green-700 px-6 py-5 text-white">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <PackageCheck className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <AlertDialogTitle className="text-white">
+                                        Registrar Recepción — Movimiento #{selectedMovimiento?.id}
+                                    </AlertDialogTitle>
+                                    <AlertDialogDescription className="text-green-100">
+                                        Confirma las cantidades recibidas por cada producto.
+                                    </AlertDialogDescription>
+                                </div>
+                            </div>
                         </AlertDialogHeader>
 
-                        <div className="overflow-x-auto py-4">
+                        <div className="flex-1 overflow-y-auto px-6 py-4">
                             <table className="w-full border-collapse text-sm">
-                                <thead className="bg-sidebar-accent">
+                                <thead className="bg-muted/50">
                                     <tr>
                                         <th className="px-2 py-2 text-left font-semibold">Producto</th>
-                                        <th className="px-2 py-2 text-left font-semibold">Marca</th>
-                                        <th className="px-2 py-2 text-left font-semibold">Modelo</th>
-                                        <th className="px-2 py-2 text-left font-semibold">Cap.</th>
-                                        <th className="px-2 py-2 text-left font-semibold">Color</th>
-                                        <th className="px-2 py-2 text-left font-semibold">Categoría</th>
                                         <th className="px-2 py-2 text-center font-semibold">Despachado</th>
                                         <th className="px-2 py-2 text-center font-semibold">Recibido</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
-                                    {selectedMovimiento?.detalles.map((detalle) => (
-                                        <tr key={detalle.id} className="hover:bg-sidebar-accent">
-                                            <td className="px-2 py-2">
-                                                <div className="flex items-center gap-2">
-                                                    <img
-                                                        src={detalle.producto?.imagen_url || 'https://via.placeholder.com/32'}
-                                                        alt={detalle.producto?.nombre_producto}
-                                                        className="h-8 w-8 rounded object-cover"
-                                                    />
-                                                    <span className="font-medium">{detalle.producto?.nombre_producto}</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-2 py-2 text-muted-foreground">{detalle.producto?.marca_producto || '—'}</td>
-                                            <td className="px-2 py-2 text-muted-foreground">{detalle.producto?.modelo_producto || '—'}</td>
-                                            <td className="px-2 py-2 text-muted-foreground">{detalle.producto?.capacidad_producto || '—'}</td>
-                                            <td className="px-2 py-2 text-muted-foreground">{detalle.producto?.color_producto || '—'}</td>
-                                            <td className="px-2 py-2 text-muted-foreground">{detalle.producto?.categoria?.nombre_categoria || '—'}</td>
-                                            <td className="px-2 py-2 text-center font-semibold">{detalle.cantidad_despachada}</td>
-                                            <td className="px-2 py-2">
-                                                <Input
-                                                    type="number"
-                                                    min="0"
-                                                    max={detalle.cantidad_despachada}
-                                                    value={productosRecibidos[detalle.producto_id] || 0}
-                                                    onChange={(e) => handleCantidadRecibidaChange(detalle.producto_id, parseInt(e.target.value) || 0)}
-                                                    className="max-w-20 h-8 text-center"
-                                                />
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {selectedMovimiento?.detalles.map((detalle) => {
+                                        const recibido = productosRecibidos[detalle.producto_id] || 0;
+                                        const diferencia = detalle.cantidad_despachada - recibido;
+                                        return (
+                                            <tr key={detalle.id} className="hover:bg-muted/50">
+                                                <td className="px-2 py-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <img
+                                                            src={detalle.producto?.imagen_url || 'https://via.placeholder.com/32'}
+                                                            alt={detalle.producto?.nombre_producto}
+                                                            className="h-8 w-8 rounded object-cover"
+                                                        />
+                                                        <div>
+                                                            <div className="font-medium">{detalle.producto?.nombre_producto}</div>
+                                                            <div className="text-muted-foreground text-xs">
+                                                                {[
+                                                                    detalle.producto?.marca_producto,
+                                                                    detalle.producto?.modelo_producto,
+                                                                    detalle.producto?.capacidad_producto,
+                                                                    detalle.producto?.categoria?.nombre_categoria,
+                                                                ]
+                                                                    .filter(Boolean)
+                                                                    .join(' · ')}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-2 py-2 text-center font-semibold">{detalle.cantidad_despachada}</td>
+                                                <td className="px-2 py-2">
+                                                    <div className="flex flex-col items-center gap-1">
+                                                        <Input
+                                                            type="number"
+                                                            min="0"
+                                                            max={detalle.cantidad_despachada}
+                                                            value={recibido}
+                                                            onChange={(e) => handleCantidadRecibidaChange(detalle.producto_id, parseInt(e.target.value) || 0)}
+                                                            className="h-8 max-w-20 text-center"
+                                                        />
+                                                        {diferencia === 0 ? (
+                                                            <span className="inline-flex items-center gap-1 rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-600 dark:text-green-400">
+                                                                <Check className="h-3 w-3" /> Completo
+                                                            </span>
+                                                        ) : diferencia > 0 ? (
+                                                            <span className="inline-flex items-center rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+                                                                Faltan {diferencia}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center rounded-full border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-600 dark:text-blue-400">
+                                                                +{Math.abs(diferencia)} de más
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
 
-                        <div className="flex justify-end gap-2">
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleRecibirConfirm} className="bg-green-600 hover:bg-green-700">
-                                Confirmar Recepción
-                            </AlertDialogAction>
+                        <div className="shrink-0 border-t px-6 py-4">
+                            <div className="mb-3 flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-3 text-sm">
+                                <span className="text-muted-foreground">Total a confirmar</span>
+                                <span className="font-semibold">
+                                    {totalRecibidoRecibir} / {totalDespachadoRecibir} unidades
+                                    {totalRecibidoRecibir !== totalDespachadoRecibir && (
+                                        <span className="ml-2 font-normal text-amber-600 dark:text-amber-400">
+                                            ({totalDespachadoRecibir - totalRecibidoRecibir > 0 ? 'faltan' : 'de más'}{' '}
+                                            {Math.abs(totalDespachadoRecibir - totalRecibidoRecibir)})
+                                        </span>
+                                    )}
+                                </span>
+                            </div>
+                            <div className="flex justify-end gap-2">
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleRecibirConfirm} className="bg-green-600 hover:bg-green-700">
+                                    Confirmar Recepción
+                                </AlertDialogAction>
+                            </div>
                         </div>
                     </AlertDialogContent>
                 </AlertDialog>
