@@ -783,7 +783,10 @@ class VentaController extends Controller
             'nota_venta_especial'  => 'nullable|string|max:500|required_if:es_venta_especial,true',
             // MENSAJERO
             'mensajero_monto'          => 'nullable|numeric|min:0.01',
-            'mensajero_tipo'           => 'nullable|in:propio,externo',
+            // 'propio' (vehículo propio) no está implementado — ver el bloque comentado
+            // en aprobarVenta()/anularVenta() más abajo. Rechazar acá evita que se cree
+            // una venta con un tipo que después no mueve dinero al aprobar/anular.
+            'mensajero_tipo'           => 'nullable|in:externo',
             'mensajero_cuenta_id'      => 'nullable|exists:cuentas,id',
             'mensajero_tasa'           => 'nullable|numeric|min:0.0001',
             'mensajero_moneda_id'      => 'nullable|exists:monedas,id',
@@ -1740,7 +1743,8 @@ class VentaController extends Controller
 
         $validated = $request->validate([
             'mensajero_monto'             => 'nullable|numeric|min:0.01',
-            'mensajero_tipo'              => 'nullable|in:propio,externo',
+            // 'propio' no implementado — mismo motivo que en procesarVenta().
+            'mensajero_tipo'              => 'nullable|in:externo',
             'mensajero_cuenta_id'         => 'nullable|exists:cuentas,id',
             'mensajero_cuenta_origen_id'  => 'nullable|exists:cuentas,id',
             'mensajero_tasa'              => 'nullable|numeric|min:0.0001',

@@ -28,6 +28,7 @@ import { Label } from '@/components/ui/label';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Toaster } from '@/components/ui/sileo-toaster';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
@@ -61,7 +62,7 @@ import {
     XCircle,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
+import { sileo } from '@/lib/sileo';
 
 // ─────────────────────────────────────────────
 // Breadcrumbs
@@ -338,11 +339,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     // ── Distribución (mensajero + comisión) ──
     const [showCambiarAComisionPV, setShowCambiarAComisionPV] = useState(false);
     const [showMensajeroForm, setShowMensajeroForm] = useState(false);
-    const [mensajeroFormTipo, setMensajeroFormTipo] = useState<'propio' | 'externo' | ''>('');
     const [mensajeroFormMontoCUP, setMensajeroFormMontoCUP] = useState('');
     const [mensajeroFormTasa, setMensajeroFormTasa] = useState('');
     const [mensajeroFormCuentaId, setMensajeroFormCuentaId] = useState('');
-    const [mensajeroFormCuentaOrigenId, setMensajeroFormCuentaOrigenId] = useState('');
     const [cuentasMensajero, setCuentasMensajero] = useState<Cuenta[]>([]);
     const [showComisionForm, setShowComisionForm] = useState(false);
     const [comisionFormCuentaId, setComisionFormCuentaId] = useState('');
@@ -378,7 +377,6 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     // Pre-llenar form mensajero al abrirlo
     useEffect(() => {
         if (!showMensajeroForm || !currentVenta.mensajero) return;
-        setMensajeroFormTipo('externo');
         // Tasa: usar la ya guardada en la venta si existe, si no la del sistema (editable desde aquí)
         const tasaCUPSistema = monedasSistema.find(m => m.codigo === 'CUP')?.tasa ?? 0;
         const tasaInicial = currentVenta.mensajero.tasa ?? tasaCUPSistema;
@@ -496,13 +494,13 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                     comision_pago: data.comision_pago,
                     ...(data.gestor === null ? { gestor: null } : {}),
                 }));
-                toast.success(data.message);
+                sileo.success({ title: data.message });
                 setShowMensajeroForm(false);
                 setShowComisionForm(false);
             }
         } catch (e: unknown) {
             const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Error al guardar.';
-            toast.error(msg);
+            sileo.error({ title: 'No se pudo guardar la distribución', description: msg });
         } finally {
             setGuardandoDistribucion(false);
         }
@@ -510,16 +508,19 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
     const guardarMensajero = () => {
         const montoCUP = parseFloat(mensajeroFormMontoCUP);
-        if (!montoCUP || montoCUP <= 0) { toast.error('Ingresa el monto CUP al mensajero.'); return; }
+        if (!montoCUP || montoCUP <= 0) { sileo.warning({ title: 'Ingresa el monto CUP al mensajero.' }); return; }
 
         const tasa = parseFloat(mensajeroFormTasa);
-        if (!tasa || tasa <= 0) { toast.error('Ingresa la tasa de cambio para el pago.'); return; }
+        if (!tasa || tasa <= 0) { sileo.warning({ title: 'Ingresa la tasa de cambio para el pago.' }); return; }
 
         // EXTERNO: solo necesita la cuenta de donde sale el pago
-        if (!mensajeroFormCuentaId) { toast.error('Selecciona la cuenta CUP de donde sale el pago al mensajero.'); return; }
+        if (!mensajeroFormCuentaId) { sileo.warning({ title: 'Selecciona la cuenta CUP de donde sale el pago al mensajero.' }); return; }
         const cuentaSel = cuentasMensajero.find(c => String(c.id) === mensajeroFormCuentaId);
         if (cuentaSel && (cuentaSel.saldo_actual ?? 0) < montoCUP) {
-            toast.error(`Saldo insuficiente. Necesitas ${montoCUP.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP, la cuenta tiene ${(cuentaSel.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP.`);
+            sileo.warning({
+                title: 'Saldo insuficiente',
+                description: `Necesitas ${montoCUP.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP, la cuenta tiene ${(cuentaSel.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP.`,
+            });
             return;
         }
 
@@ -532,8 +533,8 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     };
 
     const guardarComisionVendedor = () => {
-        if (!comisionFormCuentaId) { toast.error('Selecciona una cuenta CUP.'); return; }
-        if (!comisionFormTasa || parseFloat(comisionFormTasa) <= 0) { toast.error('Ingresa la tasa CUP/USD.'); return; }
+        if (!comisionFormCuentaId) { sileo.warning({ title: 'Selecciona una cuenta CUP.' }); return; }
+        if (!comisionFormTasa || parseFloat(comisionFormTasa) <= 0) { sileo.warning({ title: 'Ingresa la tasa CUP/USD.' }); return; }
         guardarDistribucion({
             comision_cuenta_id: Number(comisionFormCuentaId),
             comision_tasa: parseFloat(comisionFormTasa),
@@ -670,30 +671,30 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     /** Guardar destinatario (y gestor opcional) */
     const handleGuardarDestinatario = async () => {
         if (!formDestinatario.nombre?.trim() || !formDestinatario.apellidos?.trim()) {
-            toast.error('Complete el nombre y apellidos del destinatario');
+            sileo.warning({ title: 'Complete el nombre y apellidos del destinatario' });
             setActiveTab('receptor');
             return;
         }
         if (!formDestinatario.carnet_identidad?.trim()) {
-            toast.error('El carnet de identidad es obligatorio');
+            sileo.warning({ title: 'El carnet de identidad es obligatorio' });
             setActiveTab('receptor');
             return;
         }
 
         if (esVentaGestor) {
             if (!gestorCuentaId) {
-                toast.error('Seleccione una cuenta para el gestor');
+                sileo.warning({ title: 'Seleccione una cuenta para el gestor' });
                 setActiveTab('gestor');
                 return;
             }
             if (!gestorMonto || parseFloat(gestorMonto) <= 0) {
-                toast.error('Ingrese el monto de la comisión');
+                sileo.warning({ title: 'Ingrese el monto de la comisión' });
                 setActiveTab('gestor');
                 return;
             }
             // El backend requiere tasa_aplicada_gestor para calcular monto_usd en el cierre de caja
             if (!tasaAplicadaGestor || parseFloat(tasaAplicadaGestor) <= 0) {
-                toast.error('Ingrese la tasa de cambio del gestor');
+                sileo.warning({ title: 'Ingrese la tasa de cambio del gestor' });
                 setActiveTab('gestor');
                 return;
             }
@@ -724,7 +725,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                               : 'Receptor guardado correctamente'
                           : 'Gestor guardado correctamente');
 
-                toast.success(message);
+                sileo.success({ title: message });
 
                 // Actualizar estado local inmediatamente — sin setTimeout ni router.reload()
                 setCurrentVenta((prev) => ({
@@ -736,15 +737,17 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
                 cerrarModal();
             } else {
-                toast.error(data.message || 'Error al guardar la información');
+                sileo.error({ title: 'No se pudo guardar la información', description: data.message });
             }
         } catch (error: unknown) {
             if (axios.isAxiosError(error)) {
-                toast.error(
-                    error.response?.data?.message || error.response?.data?.error || `Error ${error.response?.status}: ${error.response?.statusText}`,
-                );
+                sileo.error({
+                    title: 'No se pudo guardar la información',
+                    description:
+                        error.response?.data?.message || error.response?.data?.error || `Error ${error.response?.status}: ${error.response?.statusText}`,
+                });
             } else {
-                toast.error('Error de conexión: No se pudo contactar al servidor');
+                sileo.error({ title: 'Error de conexión', description: 'No se pudo contactar al servidor' });
             }
         } finally {
             setIsSavingDestinatario(false);
@@ -757,18 +760,20 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
         try {
             const { data } = await axios.post(route('ventas.aprobar', currentVenta.id));
             if (data.success) {
-                toast.success(data.message || 'Venta aprobada correctamente');
+                sileo.success({ title: data.message || 'Venta aprobada correctamente' });
                 setCurrentVenta((prev) => ({ ...prev, estado: 'completada' }));
             } else {
-                toast.error(data.message || 'Error al aprobar la venta');
+                sileo.error({ title: 'No se pudo aprobar la venta', description: data.message });
             }
         } catch (error: unknown) {
             if (axios.isAxiosError(error)) {
-                toast.error(
-                    error.response?.data?.message || error.response?.data?.error || `Error ${error.response?.status}: ${error.response?.statusText}`,
-                );
+                sileo.error({
+                    title: 'No se pudo aprobar la venta',
+                    description:
+                        error.response?.data?.message || error.response?.data?.error || `Error ${error.response?.status}: ${error.response?.statusText}`,
+                });
             } else {
-                toast.error('Error de conexión: No se pudo contactar al servidor');
+                sileo.error({ title: 'Error de conexión', description: 'No se pudo contactar al servidor' });
             }
         } finally {
             setIsApproving(false);
@@ -781,14 +786,14 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
         try {
             const { data } = await axios.post(route('ventas.especial.aprobar', currentVenta.id));
             if (data.success) {
-                toast.success(data.message);
+                sileo.success({ title: data.message });
                 setCurrentVenta((prev) => ({ ...prev, estado: 'pendiente' }));
             } else {
-                toast.error(data.message || 'Error al aprobar la solicitud');
+                sileo.error({ title: 'No se pudo aprobar la solicitud', description: data.message });
             }
         } catch (error: unknown) {
             if (axios.isAxiosError(error)) {
-                toast.error(error.response?.data?.message || 'Error al aprobar la solicitud');
+                sileo.error({ title: 'No se pudo aprobar la solicitud', description: error.response?.data?.message });
             }
         } finally {
             setIsApproving(false);
@@ -801,14 +806,14 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
         try {
             const { data } = await axios.post(route('ventas.especial.rechazar', currentVenta.id));
             if (data.success) {
-                toast.success(data.message);
+                sileo.success({ title: data.message });
                 setCurrentVenta((prev) => ({ ...prev, estado: 'rechazada' }));
             } else {
-                toast.error(data.message || 'Error al rechazar la solicitud');
+                sileo.error({ title: 'No se pudo rechazar la solicitud', description: data.message });
             }
         } catch (error: unknown) {
             if (axios.isAxiosError(error)) {
-                toast.error(error.response?.data?.message || 'Error al rechazar la solicitud');
+                sileo.error({ title: 'No se pudo rechazar la solicitud', description: error.response?.data?.message });
             }
         } finally {
             setIsRejecting(false);
@@ -866,7 +871,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     /** Guardar cambios de la venta pendiente */
     const handleGuardarEdicion = async () => {
         if (editPayments.length === 0) {
-            toast.error('Debe agregar al menos un pago.');
+            sileo.warning({ title: 'Debe agregar al menos un pago.' });
             return;
         }
 
@@ -879,7 +884,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
         const totalPagado = editPayments.reduce((sum, p) => sum + p.amountInUsd, 0);
         if (totalPagado < totalEditado - 0.01) {
-            toast.error(`Los pagos no cubren el total. Restante: $${(totalEditado - totalPagado).toFixed(2)} USD`);
+            sileo.warning({ title: 'Los pagos no cubren el total', description: `Restante: $${(totalEditado - totalPagado).toFixed(2)} USD` });
             return;
         }
 
@@ -906,7 +911,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
             const { data } = await axios.post(route('ventas.editar.pendiente', currentVenta.id), payload);
 
             if (data.success) {
-                toast.success(data.message || 'Venta actualizada correctamente.');
+                sileo.success({ title: data.message || 'Venta actualizada correctamente.' });
                 // Actualizar estado local con los nuevos datos
                 setCurrentVenta((prev) => ({
                     ...prev,
@@ -920,13 +925,13 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                 }));
                 setIsEditModalOpen(false);
             } else {
-                toast.error(data.message || 'Error al actualizar la venta.');
+                sileo.error({ title: 'No se pudo actualizar la venta', description: data.message });
             }
         } catch (error: unknown) {
             if (axios.isAxiosError(error)) {
-                toast.error(error.response?.data?.message || 'Error al guardar los cambios.');
+                sileo.error({ title: 'No se pudieron guardar los cambios', description: error.response?.data?.message });
             } else {
-                toast.error('Error de conexión.');
+                sileo.error({ title: 'Error de conexión' });
             }
         } finally {
             setIsSavingEdit(false);
@@ -936,11 +941,11 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     /** Anular venta */
     const handleAnularVenta = async () => {
         if (!motivoAnulacion) {
-            toast.error('Debe seleccionar un motivo de anulación');
+            sileo.warning({ title: 'Debe seleccionar un motivo de anulación' });
             return;
         }
         if (motivoAnulacion === 'otros' && !detalleAnulacion.trim()) {
-            toast.error('Debe describir el motivo en el campo "Otros"');
+            sileo.warning({ title: 'Debe describir el motivo en el campo "Otros"' });
             return;
         }
         setIsCancelling(true);
@@ -950,7 +955,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                 detalle_anulacion: motivoAnulacion === 'otros' ? detalleAnulacion.trim() : null,
             });
             if (data.success) {
-                toast.success(data.message || 'Venta anulada correctamente');
+                sileo.success({ title: data.message || 'Venta anulada correctamente' });
                 setCurrentVenta((prev) => ({
                     ...prev,
                     estado: 'cancelada',
@@ -961,13 +966,16 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                 setMotivoAnulacion('');
                 setDetalleAnulacion('');
             } else {
-                toast.error(data.message || 'Error al anular la venta');
+                sileo.error({ title: 'No se pudo anular la venta', description: data.message });
             }
         } catch (error: unknown) {
             if (axios.isAxiosError(error)) {
-                toast.error(error.response?.data?.message || error.response?.data?.error || 'Ocurrió un error al intentar anular la venta.');
+                sileo.error({
+                    title: 'No se pudo anular la venta',
+                    description: error.response?.data?.message || error.response?.data?.error || 'Ocurrió un error al intentar anular la venta.',
+                });
             } else {
-                toast.error('Error de conexión: No se pudo contactar al servidor');
+                sileo.error({ title: 'Error de conexión', description: 'No se pudo contactar al servidor' });
             }
         } finally {
             setIsCancelling(false);
@@ -980,6 +988,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={`Detalle de Venta #${currentVenta.id}`} />
+            <Toaster position="top-center" />
 
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* ── Header ── */}
@@ -1805,7 +1814,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                             window.print();
                                             document.body.innerHTML = originalContents;
                                         } else {
-                                            toast.error('No se pudo generar el reporte para imprimir');
+                                            sileo.error({ title: 'No se pudo generar el reporte para imprimir' });
                                         }
                                     }}
                                     className="cursor-pointer"
@@ -2176,22 +2185,6 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
                             {currentVenta.mensajero && !showMensajeroForm && (
                                 <div className="space-y-1 rounded-md bg-sky-50 px-3 py-2 text-sm dark:bg-sky-950">
-                                    {/* Bloque propio comentado — habilitar cuando se implemente vehículo propio */}
-                                    {/* {currentVenta.mensajero.tipo === 'propio' && (
-                                        <>
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-muted-foreground text-xs">← Origen: {currentVenta.mensajero.cuenta_origen?.nombre ?? <span className="text-red-500">Sin cuenta origen</span>}</span>
-                                            </div>
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-muted-foreground text-xs">→ Destino: {currentVenta.mensajero.cuenta?.nombre ?? 'Sin cuenta destino'}</span>
-                                                <span className="font-semibold text-sky-700">
-                                                    {currentVenta.mensajero.monto_final_cup
-                                                        ? `${Number(currentVenta.mensajero.monto_final_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
-                                                        : formatCurrency(currentVenta.mensajero.monto, 'USD')}
-                                                </span>
-                                            </div>
-                                        </>
-                                    )} */}
                                     <div className="flex items-center justify-between">
                                         <span className="text-muted-foreground">
                                             🛵 Sale de: {currentVenta.mensajero.cuenta?.nombre ?? 'Sin cuenta asignada'}
@@ -2207,18 +2200,6 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
                             {showMensajeroForm && (
                                 <div className="mt-2 space-y-3 rounded-lg border p-3">
-                                    {/* Selector de tipo — comentado hasta habilitar vehículo propio */}
-                                    {/* <div className="space-y-1">
-                                        <Label className="text-xs">Tipo de mensajero</Label>
-                                        <Select value={mensajeroFormTipo} onValueChange={v => setMensajeroFormTipo(v as 'propio' | 'externo')}>
-                                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Tipo..." /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="propio">🚗 Vehículo propio</SelectItem>
-                                                <SelectItem value="externo">🛵 Mensajero externo</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div> */}
-
                                     {/* Referencia del POS — solo lectura */}
                                     {(() => {
                                         const m = currentVenta.mensajero!;
@@ -2306,38 +2287,6 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                             );
                                         })()}
                                     </div>
-
-                                    {/* Bloque propio comentado — habilitar cuando se implemente vehículo propio */}
-                                    {/* {mensajeroFormTipo === 'propio' && (
-                                        <>
-                                            <div className="rounded-md border border-dashed border-orange-300 p-2 space-y-1.5">
-                                                <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">← Cuenta origen (de donde sale)</p>
-                                                <Select value={mensajeroFormCuentaOrigenId} onValueChange={setMensajeroFormCuentaOrigenId}>
-                                                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Cuenta CUP cobrada al cliente..." /></SelectTrigger>
-                                                    <SelectContent>
-                                                        {cuentasMensajero.map(c => (
-                                                            <SelectItem key={c.id} value={String(c.id)}>
-                                                                {c.nombre_cuenta} — {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div className="rounded-md border border-dashed border-emerald-300 p-2 space-y-1.5">
-                                                <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wide">→ Cuenta destino (mensajero del almacén)</p>
-                                                <Select value={mensajeroFormCuentaId} onValueChange={setMensajeroFormCuentaId}>
-                                                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Cuenta del mensajero..." /></SelectTrigger>
-                                                    <SelectContent>
-                                                        {cuentasMensajero.map(c => (
-                                                            <SelectItem key={c.id} value={String(c.id)}>
-                                                                {c.nombre_cuenta} — {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                        </>
-                                    )} */}
 
                                     <div className="flex gap-2 justify-end">
                                         {currentVenta.mensajero && (

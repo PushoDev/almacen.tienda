@@ -553,6 +553,25 @@ test('el mensajero no se incluye en el cálculo de ganancia cambiaria (pass-thro
     ]);
 });
 
+test('mensajero_tipo "propio" es rechazado — no está implementado, nunca mueve dinero al aprobar/anular', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 20, cantidad: 1, monedaPrincipal: $monedaUsd);
+    $payload['mensajero_monto'] = 5;
+    $payload['mensajero_tipo'] = 'propio';
+
+    $response = $this->postJson(route('ventas.procesar'), $payload);
+
+    $response->assertStatus(422);
+    $response->assertJsonValidationErrors('mensajero_tipo');
+    $this->assertDatabaseCount('ventas', 0);
+});
+
 // ==========================================================================
 // ANULAR VENTA — revierte stock y saldos según el estado
 // ==========================================================================

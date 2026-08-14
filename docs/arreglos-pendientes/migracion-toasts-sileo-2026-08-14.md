@@ -32,9 +32,9 @@ Un archivo a la vez. **El usuario indica el orden** — no asumir que sigue el q
 - **Llamadas portadas:** 31 (el conteo real fue 31, no 33). Swap directo `toast.*` → `sileo.*` sin restructurar el flujo async de `handleCompleteSale` (la ruta crítica de cobro) — se evaluó `sileo.promise()` pero se descartó por riesgo dado que no se pudo verificar en navegador esta sesión (el cliente pidió no abrir navegador salvo que lo pida). Lint limpio salvo 6 errores de variables sin usar ya preexistentes antes de este cambio (confirmado con `git stash`), sin relación con la migración.
 
 ### 2. Vendor/Show.tsx
-- [ ] Pendiente
+- [x] Cerrado 2026-08-14
 - **Archivo:** `resources/js/pages/Vendor/Show.tsx`
-- **Llamadas a portar:** 40 (el archivo más grande de todos — considerar dividir en dos sesiones)
+- **Llamadas portadas:** 39 (no 40). **Hallazgo real de paso:** esta página nunca tuvo ningún `<Toaster/>` montado — ni sonner ni nada — porque `AppLayout` acá resuelve a `app-sidebar-layout.tsx`, que no monta ninguno (el `<Toaster/>` de sonner en `app-header-layout.tsx` es código muerto, esa plantilla no se usa). Los 39 toasts de este archivo nunca se mostraron a nadie. Se agregó `<Toaster position="top-center" />` (sileo) — primera vez que estos avisos son visibles. Lint limpio salvo 8 problemas preexistentes (confirmado con `git stash`), sin relación.
 
 ### 3. PaymentForm.tsx
 - [x] Cerrado 2026-08-14 (junto con el ítem 1, mismo diálogo)
