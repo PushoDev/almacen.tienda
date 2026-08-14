@@ -16,12 +16,13 @@ import { Label } from '@/components/ui/label';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
 import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink } from '@/components/ui/pagination';
+import { Toaster } from '@/components/ui/sileo-toaster';
+import { sileo } from '@/lib/sileo';
 import AppLayout from '@/layouts/app-layout';
 import { AlmacenProps, BreadcrumbItem, Movimiento, ProductoPorAlmacenDetalleRef } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { AlertCircle, Caravan, CheckCircle2, ChevronLeft, ChevronRight, Clock, Eye, ListCheck, Package, Search, Send, TrendingUp, XCircle } from 'lucide-react';
+import { AlertCircle, Caravan, CheckCircle2, ChevronLeft, ChevronRight, Clock, Eye, ListCheck, Package, PackageSearch, Search, Send, TrendingUp, XCircle } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
-import { toast, Toaster } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -173,6 +174,7 @@ export default function MovimientosPage({
         enviar: false,
         rechazar: false,
         producto: false,
+        verProductos: false,
     });
 
     const [selectedProductDetails, setSelectedProductDetails] = useState<ProductoConStock | null>(null);
@@ -212,7 +214,7 @@ export default function MovimientosPage({
             })
             .catch((err) => {
                 console.error('[Movimientos] Error al cargar productos:', err);
-                toast.error('Error al cargar productos del almacén');
+                sileo.error({ title: 'No se pudieron cargar los productos del almacén' });
             });
     };
 
@@ -221,7 +223,7 @@ export default function MovimientosPage({
 
         if (!almacenOrigenId || !almacenDestinoId) {
             console.warn('[Movimientos] Faltan almacenes origen o destino');
-            toast.warning('Debes seleccionar un almacén origen y un almacén destino.');
+            sileo.warning({ title: 'Faltan datos', description: 'Debes seleccionar un almacén origen y un almacén destino.' });
             return;
         }
 
@@ -244,7 +246,7 @@ export default function MovimientosPage({
 
         if (productosTrasladados.length === 0) {
             console.warn('[Movimientos] No hay productos para trasladar');
-            toast.warning('Debes especificar al menos una cantidad a trasladar.');
+            sileo.warning({ title: 'Faltan datos', description: 'Debes especificar al menos una cantidad a trasladar.' });
             return;
         }
 
@@ -260,7 +262,7 @@ export default function MovimientosPage({
             {
                 onSuccess: () => {
                     console.log('[Movimientos] Movimiento creado exitosamente');
-                    toast.success('Movimiento creado exitosamente. Listo para enviar.');
+                    sileo.success({ title: 'Movimiento creado', description: 'Listo para enviar.' });
                     setProductosEmisor([]);
                     setAlmacenOrigenId('');
                     setAlmacenDestinoId('');
@@ -271,7 +273,7 @@ export default function MovimientosPage({
                 onError: (errors: ErrorResponse) => {
                     console.error('[Movimientos] Error al crear movimiento:', errors);
                     const errorMsg = errors?.general || 'Error al crear el movimiento';
-                    toast.error(errorMsg);
+                    sileo.error({ title: 'No se pudo crear el movimiento', description: errorMsg });
                 },
                 onFinish: () => {
                     setLoading(false);
@@ -301,13 +303,13 @@ export default function MovimientosPage({
             {
                 onSuccess: () => {
                     console.log('[Movimientos] Movimiento enviado exitosamente');
-                    toast.success('Movimiento despachado y en tránsito.');
+                    sileo.success({ title: 'Movimiento despachado', description: 'En tránsito hacia el destino.' });
                     setShowDialogs({ ...showDialogs, enviar: false });
                     router.reload({ only: ['movimientos'] });
                 },
                 onError: (errors: ErrorResponse) => {
                     console.error('[Movimientos] Error al enviar:', errors);
-                    toast.error('Error al enviar el movimiento.');
+                    sileo.error({ title: 'No se pudo despachar el movimiento', description: errors?.general });
                 },
             },
         );
@@ -345,13 +347,13 @@ export default function MovimientosPage({
             {
                 onSuccess: () => {
                     console.log('[Movimientos] Recepción confirmada exitosamente');
-                    toast.success('Movimiento recibido exitosamente.');
+                    sileo.success({ title: 'Recepción confirmada', description: 'Movimiento recibido exitosamente.' });
                     setShowDialogs({ ...showDialogs, recibir: false });
                     router.reload({ only: ['movimientos'] });
                 },
                 onError: (errors: ErrorResponse) => {
                     console.error('[Movimientos] Error al recibir:', errors);
-                    toast.error('Error al recibir el movimiento.');
+                    sileo.error({ title: 'No se pudo confirmar la recepción', description: errors?.general });
                 },
             },
         );
@@ -377,13 +379,13 @@ export default function MovimientosPage({
             {
                 onSuccess: () => {
                     console.log('[Movimientos] Movimiento rechazado exitosamente');
-                    toast.success('Movimiento rechazado. Stock liberado.');
+                    sileo.success({ title: 'Movimiento rechazado', description: 'Stock liberado en el origen.' });
                     setShowDialogs({ ...showDialogs, rechazar: false });
                     router.reload({ only: ['movimientos'] });
                 },
                 onError: (errors: ErrorResponse) => {
                     console.error('[Movimientos] Error al rechazar:', errors);
-                    toast.error('Error al rechazar el movimiento.');
+                    sileo.error({ title: 'No se pudo rechazar el movimiento', description: errors?.general });
                 },
             },
         );
@@ -405,8 +407,13 @@ export default function MovimientosPage({
             })
             .catch((err) => {
                 console.error('[Movimientos] Error al cargar seguimiento:', err);
-                toast.error('Error al cargar el seguimiento');
+                sileo.error({ title: 'No se pudo cargar el seguimiento' });
             });
+    };
+
+    const handleVerProductosClick = (movimiento: MovimientoWithDetails) => {
+        setSelectedMovimiento(movimiento);
+        setShowDialogs({ ...showDialogs, verProductos: true });
     };
 
     const handleCantidadRecibidaChange = (productoId: number, cantidad: number) => {
@@ -754,13 +761,21 @@ export default function MovimientosPage({
                                                         <Eye className="h-4 w-4" />
                                                     </Button>
 
-                                                    {['recibido_completo', 'recibido_parcial', 'rechazado'].includes(movimiento.estado) && (
-                                                        <Link href={`/movimientos/${movimiento.id}`}>
-                                                            <Button variant="outline" size="sm" title="Ver movimientos" className="cursor-pointer">
-                                                                <ListCheck className="h-4 w-4" />
-                                                            </Button>
-                                                        </Link>
-                                                    )}
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        title="Ver productos del movimiento"
+                                                        className="cursor-pointer"
+                                                        onClick={() => handleVerProductosClick(movimiento)}
+                                                    >
+                                                        <PackageSearch className="h-4 w-4" />
+                                                    </Button>
+
+                                                    <Link href={`/movimientos/${movimiento.id}`}>
+                                                        <Button variant="outline" size="sm" title="Ver detalle completo" className="cursor-pointer">
+                                                            <ListCheck className="h-4 w-4" />
+                                                        </Button>
+                                                    </Link>
 
                                                     {movimiento.estado === 'pendiente_confirmacion' && (
                                                         <>
@@ -783,16 +798,17 @@ export default function MovimientosPage({
                                                         </>
                                                     )}
 
-                                                    {movimiento.estado === 'en_transito' && (
-                                                        <Button
-                                                            size="sm"
-                                                            className="gap-1"
-                                                            onClick={() => handleRecibirClick(movimiento)}
-                                                            title="Registrar recepción"
-                                                        >
-                                                            <Package className="h-3.5 w-3.5" /> Recibir
-                                                        </Button>
-                                                    )}
+                                                    {movimiento.estado === 'en_transito' &&
+                                                        (!isVendedor || userAlmacenesIds.includes(movimiento.almacen_destino_id)) && (
+                                                            <Button
+                                                                size="sm"
+                                                                className="gap-1"
+                                                                onClick={() => handleRecibirClick(movimiento)}
+                                                                title="Registrar recepción"
+                                                            >
+                                                                <Package className="h-3.5 w-3.5" /> Recibir
+                                                            </Button>
+                                                        )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -870,6 +886,59 @@ export default function MovimientosPage({
                                 <p className="text-center text-gray-500">No hay registros de seguimiento</p>
                             )}
                         </div>
+
+                        <div className="flex justify-end gap-2">
+                            <AlertDialogCancel>Cerrar</AlertDialogCancel>
+                        </div>
+                    </AlertDialogContent>
+                </AlertDialog>
+
+                {/* AlertDialog - Ver Productos (vista rápida, cualquier estado, sin salir del listado) */}
+                <AlertDialog open={showDialogs.verProductos} onOpenChange={(open) => setShowDialogs({ ...showDialogs, verProductos: open })}>
+                    <AlertDialogContent className="max-h-[80vh] max-w-3xl overflow-y-auto">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="text-xl">Productos del Movimiento #{selectedMovimiento?.id}</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                {selectedMovimiento?.almacen_origen?.nombre_almacen} → {selectedMovimiento?.almacen_destino?.nombre_almacen} ·{' '}
+                                {selectedMovimiento && estados[selectedMovimiento.estado]}
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+
+                        <div className="max-h-[50vh] overflow-y-auto py-2">
+                            <table className="w-full text-sm">
+                                <thead className="bg-muted/50 sticky top-0">
+                                    <tr>
+                                        <th className="px-2 py-2 text-left font-semibold">Producto</th>
+                                        <th className="px-2 py-2 text-center font-semibold">Solicitada</th>
+                                        <th className="px-2 py-2 text-center font-semibold">Despachada</th>
+                                        <th className="px-2 py-2 text-center font-semibold">Recibida</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {selectedMovimiento?.detalles.map((detalle) => (
+                                        <tr key={detalle.id} className="border-b">
+                                            <td className="px-2 py-2">
+                                                <div className="font-medium">{detalle.producto?.nombre_producto}</div>
+                                                <div className="text-muted-foreground text-xs">
+                                                    {[detalle.producto?.marca_producto, detalle.producto?.modelo_producto].filter(Boolean).join(' · ')}
+                                                </div>
+                                            </td>
+                                            <td className="px-2 py-2 text-center">{detalle.cantidad_solicitada}</td>
+                                            <td className="px-2 py-2 text-center">{detalle.cantidad_despachada}</td>
+                                            <td className="px-2 py-2 text-center">
+                                                {selectedMovimiento.estado === 'pendiente_confirmacion' ? '—' : detalle.cantidad_recibida}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {selectedMovimiento?.observaciones && (
+                            <p className="text-muted-foreground border-t pt-2 text-sm">
+                                <span className="font-medium">Observaciones:</span> {selectedMovimiento.observaciones}
+                            </p>
+                        )}
 
                         <div className="flex justify-end gap-2">
                             <AlertDialogCancel>Cerrar</AlertDialogCancel>

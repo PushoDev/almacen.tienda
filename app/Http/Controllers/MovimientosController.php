@@ -43,7 +43,7 @@ class MovimientosController extends Controller
     {
         $user = Auth::user();
 
-        return $user->role === 'admin'
+        return in_array($user->role, ['admin', 'moderador'])
             ? Almacen::select('id', 'nombre_almacen', 'tipo_almacen')->get()
             : $user->almacenes()->select('id', 'nombre_almacen', 'tipo_almacen')->get();
     }
@@ -58,7 +58,7 @@ class MovimientosController extends Controller
             ->paginate(10);
 
         $user = Auth::user();
-        $userAlmacenesIds = $user->role === 'admin' ? [] : $user->almacenes()->pluck('id')->toArray();
+        $userAlmacenesIds = in_array($user->role, ['admin', 'moderador']) ? [] : $user->almacenes()->pluck('id')->toArray();
 
         return Inertia::render('Movimientos/Index', [
             'almacenes' => Almacen::select('id', 'nombre_almacen', 'tipo_almacen')->get(),
@@ -84,7 +84,7 @@ class MovimientosController extends Controller
         $almacen = Almacen::findOrFail($id);
 
         // Verificar permisos para vendedores
-        if ($user->role !== 'admin') {
+        if (!in_array($user->role, ['admin', 'moderador'])) {
             $userAlmacenesIds = $user->almacenes->pluck('id');
             if (!$userAlmacenesIds->contains($almacen->id)) {
                 abort(403, 'Acceso denegado a este almacén');
@@ -154,7 +154,7 @@ class MovimientosController extends Controller
             'observaciones' => ['nullable', 'string', 'max:500'],
         ]);
 
-        if ($user->role !== 'admin') {
+        if (!in_array($user->role, ['admin', 'moderador'])) {
             if (!$almacenesPermitidosIds->contains($request->almacen_origen_id)) {
                 throw ValidationException::withMessages([
                     'almacen_origen_id' => 'No tienes permisos sobre este almacén de origen'
@@ -235,7 +235,7 @@ class MovimientosController extends Controller
             'transportista' => 'nullable|string|max:255',
         ]);
 
-        if ($user->role !== 'admin') {
+        if (!in_array($user->role, ['admin', 'moderador'])) {
             $almacenesPermitidosIds = $user->almacenes->pluck('id');
             if (!$almacenesPermitidosIds->contains($movimiento->almacen_origen_id)) {
                 abort(403, 'No tienes permisos para enviar movimientos de este almacén');
@@ -315,14 +315,12 @@ class MovimientosController extends Controller
             'productos.*.cantidad_recibida' => 'required|integer|min:0',
         ]);
 
-        // Permitir recepción a todos los usuarios sin restricción de almacén
-        // La lógica de negocio se encarga del control de stock
-        // if ($user->role !== 'admin') {
-        //     $almacenesPermitidosIds = $user->almacenes->pluck('id');
-        //     if (!$almacenesPermitidosIds->contains($movimiento->almacen_destino_id)) {
-        //         abort(403, 'No tienes permisos para recibir movimientos en este almacén');
-        //     }
-        // }
+        if (!in_array($user->role, ['admin', 'moderador'])) {
+            $almacenesPermitidosIds = $user->almacenes->pluck('id');
+            if (!$almacenesPermitidosIds->contains($movimiento->almacen_destino_id)) {
+                abort(403, 'No tienes permisos para recibir movimientos en este almacén');
+            }
+        }
 
         DB::beginTransaction();
 
@@ -441,7 +439,7 @@ class MovimientosController extends Controller
             'observaciones' => 'required|string|max:500',
         ]);
 
-        if ($user->role !== 'admin') {
+        if (!in_array($user->role, ['admin', 'moderador'])) {
             $almacenesPermitidosIds = $user->almacenes->pluck('id');
             if (!$almacenesPermitidosIds->contains($movimiento->almacen_origen_id)) {
                 abort(403, 'No tienes permisos para rechazar movimientos de este almacén');
@@ -551,14 +549,6 @@ class MovimientosController extends Controller
      */
     public function show(Movimiento $movimiento)
     {
-        $estadosPermitidos = ['recibido_completo', 'recibido_parcial', 'rechazado'];
-        
-        if (!in_array($movimiento->estado, $estadosPermitidos)) {
-            return back()->withErrors([
-                'general' => 'El movimiento aún está en proceso. Solo puedes ver detalles de movimientos recibidos o rechazados.'
-            ]);
-        }
-
         $movimiento->load([
             'almacenOrigen',
             'almacenDestino',

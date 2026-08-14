@@ -152,6 +152,16 @@ export default function MovimientoShow() {
                                                 <XCircle className="h-4 w-4 text-red-500" />
                                                 <span className="text-red-500">Movimiento rechazado</span>
                                             </>
+                                        ) : movimiento.estado === 'pendiente_confirmacion' ? (
+                                            <>
+                                                <Clock className="h-4 w-4 text-yellow-500" />
+                                                <span className="text-yellow-500">Pendiente de envío</span>
+                                            </>
+                                        ) : movimiento.estado === 'en_transito' ? (
+                                            <>
+                                                <Send className="h-4 w-4 text-orange-500" />
+                                                <span className="text-orange-500">En tránsito</span>
+                                            </>
                                         ) : (
                                             <>
                                                 <CheckCircle2 className="h-4 w-4 text-green-500" />
