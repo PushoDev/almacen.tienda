@@ -14,6 +14,7 @@ use App\Models\ProductoCodigo;
 use App\Models\Cliente;
 use App\Models\Moneda;
 use App\Models\User;
+use App\Models\DestinatarioVenta;
 use App\Services\DashboardStatsService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -92,6 +93,39 @@ class VentaController extends Controller
             ->get();
 
         return response()->json($clientes);
+    }
+
+    /**
+     * Busca destinatarios ya usados en ventas anteriores, para autocompletar el
+     * formulario cuando la misma persona recibe varias ventas. `destinatarios_venta`
+     * guarda una fila por venta (no hay tabla de personas), así que un mismo carnet
+     * puede repetirse muchas veces — nos quedamos con el registro más reciente de cada
+     * carnet (por si cambió de dirección/teléfono) y descartamos el resto.
+     */
+    public function buscarDestinatarios(Request $request)
+    {
+        $q = trim((string) $request->query('q', ''));
+        if (mb_strlen($q) < 2) {
+            return response()->json([]);
+        }
+
+        $destinatarios = DestinatarioVenta::query()
+            ->where(function ($query) use ($q) {
+                $query->where('nombre', 'like', "%{$q}%")
+                    ->orWhere('apellidos', 'like', "%{$q}%")
+                    ->orWhere('carnet_identidad', 'like', "%{$q}%");
+            })
+            ->orderByDesc('updated_at')
+            ->orderByDesc('id')
+            ->limit(50)
+            ->get(['id', 'nombre', 'apellidos', 'carnet_identidad', 'direccion_residencia', 'telefono_contacto', 'parentesco_cliente'])
+            // El nombre no es identificador único (puede haber dos personas distintas con
+            // el mismo nombre) — el carnet sí. Los que no tienen carnet (columna nullable,
+            // dato histórico) se muestran todos por separado, sin agrupar.
+            ->unique(fn ($d) => $d->carnet_identidad ?: 'sin-carnet-' . $d->id)
+            ->values();
+
+        return response()->json($destinatarios);
     }
 
     /**
@@ -1124,7 +1158,7 @@ class VentaController extends Controller
             'apellidos' => 'required|string|max:100',
             'carnet_identidad' => 'nullable|string|size:11|regex:/^\d+$/',
             'direccion_residencia' => 'nullable|string|max:500',
-            'telefono_contacto' => 'nullable|string|max:20',
+            'telefono_contacto' => 'required|string|max:20',
             'parentesco_cliente' => 'nullable|string|max:100',
             'observaciones' => 'nullable|string|max:500',
             // Campos opcionales del gestor

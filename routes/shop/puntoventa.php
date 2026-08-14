@@ -37,6 +37,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/ventas/clientes', [VentaController::class, 'getClientes'])->name('ventas.getClientes');
     // ✅ NUEVA RUTA PARA CLIENTES FÍSICOS EN PAGOS
     Route::get('/ventas/clientes-fisicos-pago', [VentaController::class, 'getClientesFisicosParaPago'])->name('ventas.getClientesFisicosParaPago');
+    Route::get('/ventas/destinatarios/buscar', [VentaController::class, 'buscarDestinatarios'])->name('ventas.destinatarios.buscar');
 
     // ========================================================================
     // PROCESAMIENTO DE VENTAS

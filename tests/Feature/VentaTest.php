@@ -788,3 +788,59 @@ test('un vendedor no puede crear una venta en un almacén que no tiene asignado'
     expect($response->json('message'))->toContain('acceso a este almacén');
     $this->assertDatabaseCount('ventas', 0);
 });
+
+// ==========================================================================
+// BUSCAR DESTINATARIOS — autocompletado, deduplicado por carnet
+// ==========================================================================
+
+test('buscarDestinatarios devuelve solo el registro más reciente cuando el mismo carnet se repite en varias ventas', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $ventaVieja = Venta::factory()->create(['user_id' => $admin->id]);
+    $ventaVieja->destinatario()->create([
+        'nombre' => 'Juan', 'apellidos' => 'Pérez', 'carnet_identidad' => '90010112345',
+        'direccion_residencia' => 'Dirección vieja', 'telefono_contacto' => '55511111',
+    ]);
+
+    // Se crea después → mayor id → es la "más reciente", sin depender de la precisión
+    // de updated_at (en SQLite dos inserts en el mismo segundo pueden empatar).
+    $ventaNueva = Venta::factory()->create(['user_id' => $admin->id]);
+    $ventaNueva->destinatario()->create([
+        'nombre' => 'Juan', 'apellidos' => 'Pérez', 'carnet_identidad' => '90010112345',
+        'direccion_residencia' => 'Dirección nueva', 'telefono_contacto' => '55522222',
+    ]);
+
+    $response = $this->getJson(route('ventas.destinatarios.buscar', ['q' => 'Juan']));
+
+    $response->assertOk();
+    $data = $response->json();
+    expect($data)->toHaveCount(1);
+    expect($data[0]['direccion_residencia'])->toBe('Dirección nueva');
+});
+
+test('buscarDestinatarios no mezcla personas distintas que comparten el mismo nombre', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $venta1 = Venta::factory()->create(['user_id' => $admin->id]);
+    $venta1->destinatario()->create(['nombre' => 'Ana', 'apellidos' => 'Gómez', 'carnet_identidad' => '85010112345']);
+
+    $venta2 = Venta::factory()->create(['user_id' => $admin->id]);
+    $venta2->destinatario()->create(['nombre' => 'Ana', 'apellidos' => 'Gómez', 'carnet_identidad' => '92010154321']);
+
+    $response = $this->getJson(route('ventas.destinatarios.buscar', ['q' => 'Ana']));
+
+    $response->assertOk();
+    expect($response->json())->toHaveCount(2);
+});
+
+test('buscarDestinatarios no busca con menos de 2 caracteres', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $response = $this->getJson(route('ventas.destinatarios.buscar', ['q' => 'A']));
+
+    $response->assertOk();
+    expect($response->json())->toBe([]);
+});
