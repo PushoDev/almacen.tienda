@@ -172,3 +172,15 @@
 .sidebar-group-label:hover {
     background-color: var(--color-sidebar-hover);
 }
+
+/* sileo (toasts): su hoja de estilos trae [data-sileo-viewport] en z-index:50 —
+   el mismo nivel que usan Dialog/AlertDialog/Sheet/Combobox/etc. en este proyecto
+   (ver components/ui/*.tsx). Al empatar el z-index, el portal que se montó último
+   en <body> gana el stacking (los diálogos, que se montan al abrirse, después del
+   Toaster) y el toast queda tapado detrás del modal. Se sube por encima de todo
+   lo demás del proyecto (techo actual: z-50) para que un toast siempre se vea,
+   incluso con un diálogo abierto encima. !important porque la hoja de sileo se
+   inyecta vía JS y puede cargar después de este archivo. */
+[data-sileo-viewport] {
+    z-index: 100 !important;
+}
