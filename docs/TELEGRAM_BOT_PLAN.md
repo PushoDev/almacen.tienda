@@ -645,3 +645,11 @@ ngrok http 8000
 - La lógica de reversión de stock en el rechazo desde Telegram debe ser la **misma** que usa `VentaController::rechazar()` — extráela a un método de servicio para reutilizarla.
 - Vendedores no usan Telegram en esta fase.
 - Hostinger: el paquete es PHP puro, no necesita configuración especial del servidor.
+
+---
+
+## Pendiente — próxima fase (no implementado, solo anotado 2026-08-14)
+
+**Movimientos de inventario (traslados entre almacenes) por Telegram.** Idea del cliente: cuando se dispara una notificación de movimiento (`MovimientoStockNotification`, canal `database` ya existente y funcionando — ver `NotificationService::getUsuariosParaNotificar()`, ya nofica a vendedores con almacén origen o destino, más admin/moderador siempre), agregar también el canal Telegram, mismo patrón que `CierreCajaNotification`/`VentaEspecialSolicitudNotification` (Paso 8). Posiblemente con botones inline para "Enviar"/"Recibir"/"Rechazar" directo desde Telegram, igual que el flujo de aprobar/rechazar venta especial (Paso 9, `TelegramWebhookController`).
+
+No arrancar sin luz verde explícita — es una idea capturada, no una tarea confirmada para esta ronda.

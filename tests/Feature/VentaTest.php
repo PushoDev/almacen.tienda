@@ -14,9 +14,6 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Crea un producto con stock en un almacén y precio/comisión en producto_vendedors.
- * NOTA: en sqlite (entorno de test) la migración 2026_05_30_...refactor_producto_vendedors
- * está condicionada a `DB::connection()->getDriverName() === 'mysql'` y no corre, por lo que
- * el esquema real en test sigue siendo el original: PK (producto_id, user_id, almacen_id).
  */
 function crearProductoConPrecio(Almacen $almacen, float $costo, float $precioVenta, float $comision = 0): array
 {
@@ -34,7 +31,6 @@ function crearProductoConPrecio(Almacen $almacen, float $costo, float $precioVen
 
     DB::table('producto_vendedors')->insert([
         'producto_id' => $producto->id,
-        'user_id' => 1,
         'almacen_id' => $almacen->id,
         'precio_venta' => $precioVenta,
         'venta_ganancia' => $precioVenta - $costo,
@@ -557,6 +553,25 @@ test('el mensajero no se incluye en el cálculo de ganancia cambiaria (pass-thro
     ]);
 });
 
+test('mensajero_tipo "propio" es rechazado — no está implementado, nunca mueve dinero al aprobar/anular', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaUsd = Moneda::factory()->create(['codigo_moneda' => 'USD', 'estado' => true]);
+    [$producto, $codigo] = crearProductoConPrecio($almacen, costo: 10, precioVenta: 20, comision: 2);
+
+    $payload = payloadBaseVenta($almacen, $producto, $codigo, precioVenta: 20, cantidad: 1, monedaPrincipal: $monedaUsd);
+    $payload['mensajero_monto'] = 5;
+    $payload['mensajero_tipo'] = 'propio';
+
+    $response = $this->postJson(route('ventas.procesar'), $payload);
+
+    $response->assertStatus(422);
+    $response->assertJsonValidationErrors('mensajero_tipo');
+    $this->assertDatabaseCount('ventas', 0);
+});
+
 // ==========================================================================
 // ANULAR VENTA — revierte stock y saldos según el estado
 // ==========================================================================
@@ -772,4 +787,60 @@ test('un vendedor no puede crear una venta en un almacén que no tiene asignado'
     $response->assertJson(['success' => false]);
     expect($response->json('message'))->toContain('acceso a este almacén');
     $this->assertDatabaseCount('ventas', 0);
+});
+
+// ==========================================================================
+// BUSCAR DESTINATARIOS — autocompletado, deduplicado por carnet
+// ==========================================================================
+
+test('buscarDestinatarios devuelve solo el registro más reciente cuando el mismo carnet se repite en varias ventas', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $ventaVieja = Venta::factory()->create(['user_id' => $admin->id]);
+    $ventaVieja->destinatario()->create([
+        'nombre' => 'Juan', 'apellidos' => 'Pérez', 'carnet_identidad' => '90010112345',
+        'direccion_residencia' => 'Dirección vieja', 'telefono_contacto' => '55511111',
+    ]);
+
+    // Se crea después → mayor id → es la "más reciente", sin depender de la precisión
+    // de updated_at (en SQLite dos inserts en el mismo segundo pueden empatar).
+    $ventaNueva = Venta::factory()->create(['user_id' => $admin->id]);
+    $ventaNueva->destinatario()->create([
+        'nombre' => 'Juan', 'apellidos' => 'Pérez', 'carnet_identidad' => '90010112345',
+        'direccion_residencia' => 'Dirección nueva', 'telefono_contacto' => '55522222',
+    ]);
+
+    $response = $this->getJson(route('ventas.destinatarios.buscar', ['q' => 'Juan']));
+
+    $response->assertOk();
+    $data = $response->json();
+    expect($data)->toHaveCount(1);
+    expect($data[0]['direccion_residencia'])->toBe('Dirección nueva');
+});
+
+test('buscarDestinatarios no mezcla personas distintas que comparten el mismo nombre', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $venta1 = Venta::factory()->create(['user_id' => $admin->id]);
+    $venta1->destinatario()->create(['nombre' => 'Ana', 'apellidos' => 'Gómez', 'carnet_identidad' => '85010112345']);
+
+    $venta2 = Venta::factory()->create(['user_id' => $admin->id]);
+    $venta2->destinatario()->create(['nombre' => 'Ana', 'apellidos' => 'Gómez', 'carnet_identidad' => '92010154321']);
+
+    $response = $this->getJson(route('ventas.destinatarios.buscar', ['q' => 'Ana']));
+
+    $response->assertOk();
+    expect($response->json())->toHaveCount(2);
+});
+
+test('buscarDestinatarios no busca con menos de 2 caracteres', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $response = $this->getJson(route('ventas.destinatarios.buscar', ['q' => 'A']));
+
+    $response->assertOk();
+    expect($response->json())->toBe([]);
 });

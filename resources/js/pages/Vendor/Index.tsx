@@ -19,7 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Toaster } from '@/components/ui/sonner';
+import { Toaster } from '@/components/ui/sileo-toaster';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import PaymentForm from '@/components/ventas/PaymentForm';
 import PaymentList from '@/components/ventas/PaymentList';
@@ -32,6 +32,7 @@ import {
     BarChartIcon,
     BoxesIcon,
     Building2,
+    CreditCard,
     Eye,
     Info,
     Minus,
@@ -47,7 +48,7 @@ import {
     X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { toast } from 'sonner';
+import { sileo } from '@/lib/sileo';
 
 interface Almacen {
     id: number | string;
@@ -213,7 +214,7 @@ export default function PuntoVentaOficial({
             setAlmacenes(response.data);
         } catch (error) {
             console.error('Error al cargar almacenes:', error);
-            toast.error('Error al cargar almacenes');
+            sileo.error({ title: 'No se pudieron cargar los almacenes' });
         }
     };
 
@@ -223,7 +224,7 @@ export default function PuntoVentaOficial({
             setClientes(response.data);
         } catch (error) {
             console.error('Error al cargar clientes:', error);
-            toast.error('Error al cargar clientes');
+            sileo.error({ title: 'No se pudieron cargar los clientes' });
         }
     };
 
@@ -234,7 +235,7 @@ export default function PuntoVentaOficial({
             setClientesFisicos(response.data);
         } catch (error) {
             console.error('Error al cargar clientes físicos:', error);
-            toast.error('Error al cargar clientes físicos');
+            sileo.error({ title: 'No se pudieron cargar los clientes físicos' });
             setClientesFisicos([]);
         } finally {
             setCargandoClientesFisicos(false);
@@ -262,13 +263,13 @@ export default function PuntoVentaOficial({
                 })),
             }));
             if (productosProcesados.length === 0) {
-                toast.info('No hay productos con precio disponible en este almacén');
+                sileo.info({ title: 'Sin productos', description: 'No hay productos con precio disponible en este almacén' });
             }
             setProductos(productosProcesados);
         } catch (error: unknown) {
             console.error('Error al cargar productos:', error);
             if (axios.isAxiosError(error) && error.response?.status === 403) {
-                toast.error('No tienes acceso a este almacén');
+                sileo.error({ title: 'No tienes acceso a este almacén' });
             }
             setProductos([]);
         }
@@ -361,17 +362,17 @@ export default function PuntoVentaOficial({
 
     const agregarAlCarrito = (producto: Producto, codigoForzadoId?: number) => {
         if (!esVentaEspecial && (!producto.tiene_precio || !producto.precio_venta || producto.precio_venta <= 0)) {
-            toast.error('Este producto no tiene un precio de venta configurado');
+            sileo.error({ title: 'Este producto no tiene un precio de venta configurado' });
             return;
         }
         if (producto.stock_disponible <= 0) {
-            toast.error('Stock insuficiente para este producto');
+            sileo.error({ title: 'Stock insuficiente para este producto' });
             return;
         }
 
         const codigoVenta = resolverCodigoParaVenta(producto, codigoForzadoId);
         if (!codigoVenta) {
-            toast.error('No hay stock disponible en los códigos de barras de este producto');
+            sileo.error({ title: 'No hay stock disponible en los códigos de barras de este producto' });
             return;
         }
 
@@ -382,7 +383,7 @@ export default function PuntoVentaOficial({
         if (itemExistente) {
             const nuevaCantidad = Math.min(itemExistente.cantidad + 1, stockMaximoPorCodigo);
             if (nuevaCantidad === itemExistente.cantidad) {
-                toast.warning(`No hay más stock disponible para el código ${codigoVenta.codigo_barras}`);
+                sileo.warning({ title: 'Sin más stock', description: `No hay más stock disponible para el código ${codigoVenta.codigo_barras}` });
                 return;
             }
             setCarrito(
@@ -411,7 +412,17 @@ export default function PuntoVentaOficial({
                 subtotal: precioVenta,
             };
             setCarrito([...carrito, nuevoItem]);
-            toast.success(`Producto agregado (${codigoVenta.codigo_barras})`);
+            sileo.success({
+                title: producto.nombre_producto,
+                description: `$${precioVenta.toFixed(2)} · Código ${codigoVenta.codigo_barras}`,
+                icon: (
+                    <img
+                        src={producto.imagen_url || '/placeholder-product.png'}
+                        alt={producto.nombre_producto}
+                        className="h-full w-full rounded-full object-cover"
+                    />
+                ),
+            });
         }
     };
 
@@ -425,7 +436,7 @@ export default function PuntoVentaOficial({
 
         if (nuevaCantidad > stockMaximo) {
             nuevaCantidad = stockMaximo;
-            toast.warning(`No hay más stock disponible para el código ${item.codigo_barras_usado}`);
+            sileo.warning({ title: 'Sin más stock', description: `No hay más stock disponible para el código ${item.codigo_barras_usado}` });
         }
         setCarrito(
             carrito.map((itemCarrito) =>
@@ -456,7 +467,7 @@ export default function PuntoVentaOficial({
             } else {
                 // Por debajo del límite: activar venta especial automáticamente
                 setEsVentaEspecial(true);
-                toast.warning('Precio por debajo del límite permitido. Se activó Venta Especial automáticamente.');
+                sileo.warning({ title: 'Venta Especial activada', description: 'Precio por debajo del límite permitido.' });
             }
         }
 
@@ -484,7 +495,7 @@ export default function PuntoVentaOficial({
 
     const quitarDelCarrito = (id: string) => {
         setCarrito(carrito.filter((item) => item.id !== id));
-        toast.info('Producto removido del carrito');
+        sileo.info({ title: 'Producto removido del carrito' });
     };
 
     const calcularComisionEfectiva = (item: ItemCarrito): number => {
@@ -527,7 +538,10 @@ export default function PuntoVentaOficial({
         if (item && item.cantidad < stockMaximo) {
             actualizarCantidad(id, item.cantidad + 1);
         } else {
-            toast.warning(item ? `No hay más stock para el código ${item.codigo_barras_usado}` : 'No hay más stock disponible');
+            sileo.warning({
+                title: 'Sin más stock',
+                description: item ? `No hay más stock para el código ${item.codigo_barras_usado}` : 'No hay más stock disponible',
+            });
         }
     };
 
@@ -543,7 +557,7 @@ export default function PuntoVentaOficial({
 
     const handleRemovePayment = (id: string) => {
         setPayments(payments.filter((payment) => payment.id !== id));
-        toast.info('Pago removido');
+        sileo.info({ title: 'Pago removido' });
     };
 
     const handleSeleccionCodigoProducto = (productoId: string | number, codigoId: string) => {
@@ -582,44 +596,44 @@ export default function PuntoVentaOficial({
     const handleCompleteSale = async () => {
         console.log('Iniciando proceso de venta...');
         if (!almacenSeleccionado) {
-            toast.error('Selecciona un almacén antes de completar la venta.');
+            sileo.error({ title: 'Selecciona un almacén antes de completar la venta.' });
             return;
         }
         if (carrito.length === 0) {
-            toast.error('El carrito está vacío.');
+            sileo.error({ title: 'El carrito está vacío.' });
             return;
         }
         for (const item of carrito) {
             const producto = productos.find((p) => p.id === item.producto.id);
             if (!producto || producto.stock_disponible < item.cantidad) {
-                toast.error(`Stock insuficiente para: ${item.producto.nombre_producto}`);
+                sileo.error({ title: 'Stock insuficiente', description: item.producto.nombre_producto });
                 return;
             }
 
             const codigo = producto.codigos?.find((c) => c.id === item.producto_codigo_id);
             if (!codigo || codigo.cantidad < item.cantidad) {
-                toast.error(`Stock insuficiente para el código ${item.codigo_barras_usado}`);
+                sileo.error({ title: 'Stock insuficiente', description: `Código ${item.codigo_barras_usado}` });
                 return;
             }
         }
         for (const item of carrito) {
             // En ventas especiales el precio puede ser 0 (regalo)
             if (!esVentaEspecial && (!item.precio_venta || item.precio_venta < 0)) {
-                toast.error(`Precio inválido para: ${item.producto.nombre_producto}`);
+                sileo.error({ title: 'Precio inválido', description: item.producto.nombre_producto });
                 return;
             }
         }
         if (esVentaEspecial && !motivoEspecial.trim()) {
-            toast.error('Debe ingresar el motivo de la venta especial');
+            sileo.error({ title: 'Debe ingresar el motivo de la venta especial' });
             return;
         }
         const esRegalo = esVentaEspecial && calcularTotal === 0;
         if (!esRegalo && remainingInUsd > 0.01) {
-            toast.error(`El total a pagar no ha sido cubierto. Restante: $${remainingInUsd.toFixed(2)} USD`);
+            sileo.error({ title: 'El total a pagar no ha sido cubierto', description: `Restante: $${remainingInUsd.toFixed(2)} USD` });
             return;
         }
         if (!esRegalo && payments.length === 0) {
-            toast.error('Debe agregar al menos un método de pago para completar la venta.');
+            sileo.error({ title: 'Debe agregar al menos un método de pago para completar la venta.' });
             return;
         }
 
@@ -661,10 +675,10 @@ export default function PuntoVentaOficial({
             console.log('Respuesta del servidor:', response.data);
 
             if (response.data.success) {
-                const msgExito = esVentaEspecial
-                    ? '✅ Solicitud especial enviada. El admin revisará tu solicitud.'
-                    : '✅ Venta creada correctamente. Stock reservado pendiente de aprobación.';
-                toast.success(msgExito);
+                sileo.success({
+                    title: esVentaEspecial ? 'Solicitud especial enviada' : 'Venta creada correctamente',
+                    description: esVentaEspecial ? 'El admin revisará tu solicitud.' : 'Stock reservado, pendiente de aprobación.',
+                });
                 setCarrito([]);
                 setPayments([]);
                 setAlmacenSeleccionado('');
@@ -681,16 +695,16 @@ export default function PuntoVentaOficial({
                     }, 2000);
                 }
             } else {
-                toast.error('Error al procesar la venta: ' + (response.data.message || response.data.error));
+                sileo.error({ title: 'Error al procesar la venta', description: response.data.message || response.data.error });
             }
         } catch (error: unknown) {
             console.error('Error al procesar venta:', error);
             if (axios.isAxiosError(error) && error.response) {
                 console.error('Detalles del error:', error.response.data);
                 const errorMessage = error.response.data.message || 'Ocurrió un error en el servidor.';
-                toast.error(errorMessage);
+                sileo.error({ title: 'No se pudo procesar la venta', description: errorMessage });
             } else {
-                toast.error('Error de red al procesar la venta');
+                sileo.error({ title: 'Error de red al procesar la venta' });
             }
         } finally {
             setProcesandoVenta(false);
@@ -727,7 +741,7 @@ export default function PuntoVentaOficial({
 
         const crearClienteLocal = async () => {
             if (!localCliente.nombre_cliente.trim() || !localCliente.telefono_cliente.trim()) {
-                toast.error('Nombre y teléfono son requeridos');
+                sileo.error({ title: 'Nombre y teléfono son requeridos' });
                 return;
             }
 
@@ -740,13 +754,9 @@ export default function PuntoVentaOficial({
                 const { cliente, existe, message } = response.data;
 
                 if (existe) {
-                    toast.info(message, {
-                        description: 'El cliente ya existía en el sistema. Se ha seleccionado automáticamente.',
-                    });
+                    sileo.info({ title: message, description: 'El cliente ya existía en el sistema. Se ha seleccionado automáticamente.' });
                 } else {
-                    toast.success(message, {
-                        description: 'Cliente creado exitosamente.',
-                    });
+                    sileo.success({ title: message, description: 'Cliente creado exitosamente.' });
                     setClientes((prev) => [...prev, cliente]);
                 }
 
@@ -765,13 +775,9 @@ export default function PuntoVentaOficial({
                 console.error('Error al crear cliente:', error);
                 if (axios.isAxiosError(error) && error.response?.data?.errors) {
                     // setLocalErrors(error.response.data.errors); // Assuming setLocalErrors is local to this component or accessible
-                    toast.error('Error de validación', {
-                        description: 'Por favor corrige los errores en el formulario.',
-                    });
+                    sileo.error({ title: 'Error de validación', description: 'Por favor corrige los errores en el formulario.' });
                 } else {
-                    toast.error('Error al crear cliente', {
-                        description: 'Intenta nuevamente o contacta al administrador.',
-                    });
+                    sileo.error({ title: 'Error al crear cliente', description: 'Intenta nuevamente o contacta al administrador.' });
                 }
             }
         };
@@ -787,15 +793,21 @@ export default function PuntoVentaOficial({
             setIsCrearClienteDialogOpen(false);
         };
         return (
-            <DialogContent className="sm:max-w-lg">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2 text-xl">
-                        <Users className="h-5 w-5 text-blue-600" />
-                        Crear Nuevo Cliente
-                    </DialogTitle>
-                    <DialogDescription>Añade un nuevo cliente al sistema para asociarlo a esta venta.</DialogDescription>
+            <DialogContent className="overflow-hidden p-0 sm:max-w-lg">
+                <DialogHeader className="border-b bg-gradient-to-r from-cyan-600 to-cyan-700 px-6 py-5 text-white">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                            <Users className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <DialogTitle className="text-xl text-white">Crear Nuevo Cliente</DialogTitle>
+                            <DialogDescription className="text-cyan-100">
+                                Añade un nuevo cliente al sistema para asociarlo a esta venta.
+                            </DialogDescription>
+                        </div>
+                    </div>
                 </DialogHeader>
-                <div className="grid gap-4 py-4">
+                <div className="grid gap-4 px-6 py-4">
                     <div className="space-y-2">
                         <Label htmlFor="dialog-nombre-cliente">
                             Nombre Completo <span className="text-red-500">*</span>
@@ -850,14 +862,14 @@ export default function PuntoVentaOficial({
                     </div>
                 </div>
 
-                <DialogFooter className="gap-2">
+                <DialogFooter className="gap-2 border-t px-6 py-4">
                     <Button type="button" variant="outline" onClick={resetDialog}>
                         Cancelar
                     </Button>
                     <Button
                         type="button"
                         onClick={crearClienteLocal}
-                        className="bg-blue-600 hover:bg-blue-700"
+                        className="bg-cyan-600 hover:bg-cyan-700"
                         disabled={!localCliente.nombre_cliente.trim() || !localCliente.telefono_cliente.trim()}
                     >
                         <PlusCircle className="mr-2 h-4 w-4" />
@@ -917,13 +929,19 @@ export default function PuntoVentaOficial({
                         {/* Left column - Products */}
                         <div className="space-y-4 lg:col-span-2 lg:space-y-6">
                             {/* Configuración */}
-                            <Card className="overflow-hidden border-0 shadow-lg">
-                                <CardHeader className="from-secondary to-secondary/50 bg-linear-to-r pb-4">
-                                    <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                                        <Building2 className="text-primary h-5 w-5" />
-                                        Configuración de Venta
-                                    </CardTitle>
-                                    <CardDescription className="text-xs">Seleccione almacén y cliente para comenzar</CardDescription>
+                            <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                                <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 text-white">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                            <Building2 className="h-5 w-5" />
+                                        </div>
+                                        <div>
+                                            <CardTitle className="text-base font-semibold text-white">Configuración de Venta</CardTitle>
+                                            <CardDescription className="text-xs text-blue-100">
+                                                Seleccione almacén y cliente para comenzar
+                                            </CardDescription>
+                                        </div>
+                                    </div>
                                 </CardHeader>
                                 <CardContent className="pt-5">
                                     <div className="grid gap-4 sm:grid-cols-2">
@@ -1031,15 +1049,17 @@ export default function PuntoVentaOficial({
 
                             {/* Productos */}
                             {almacenSeleccionado && (
-                                <Card className="animate-fade-in min-h-[500px] overflow-hidden border-0 shadow-lg">
-                                    <CardHeader className="from-secondary to-secondary/50 bg-linear-to-r pb-4">
+                                <Card className="animate-fade-in min-h-[500px] overflow-hidden border-0 pt-0 shadow-lg">
+                                    <CardHeader className="bg-gradient-to-r from-emerald-600 to-emerald-700 px-6 py-5 text-white">
                                         <div className="flex items-center justify-between">
-                                            <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                                                <BoxesIcon className="text-success h-5 w-5" />
-                                                Productos Disponibles
-                                            </CardTitle>
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                                    <BoxesIcon className="h-5 w-5" />
+                                                </div>
+                                                <CardTitle className="text-base font-semibold text-white">Productos Disponibles</CardTitle>
+                                            </div>
                                             {productosFiltrados.length > 0 && (
-                                                <Badge variant="secondary" className="text-xs font-medium">
+                                                <Badge className="border-0 bg-white/20 text-xs font-medium text-white backdrop-blur-sm">
                                                     {productosFiltrados.length} productos
                                                 </Badge>
                                             )}
@@ -1235,20 +1255,31 @@ export default function PuntoVentaOficial({
 
                         {/* Right column - Carrito Sticky */}
                         <div className="space-y-6 lg:sticky lg:top-4 lg:self-start">
-                            <Card className={`overflow-hidden border-0 shadow-lg ${esVentaEspecial ? 'ring-2 ring-amber-400' : ''}`}>
+                            <Card className={`overflow-hidden border-0 pt-0 shadow-lg ${esVentaEspecial ? 'ring-2 ring-amber-400' : ''}`}>
                                 <CardHeader
-                                    className={`pb-4 ${esVentaEspecial ? 'bg-amber-50 dark:bg-amber-950' : 'from-primary/10 to-primary/5 bg-linear-to-r'}`}
+                                    className={`px-6 py-5 ${
+                                        esVentaEspecial ? 'bg-amber-50 dark:bg-amber-950' : 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white'
+                                    }`}
                                 >
                                     <div className="flex items-center justify-between">
-                                        <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                                            <ShoppingCart className={`h-5 w-5 ${esVentaEspecial ? 'text-amber-600' : 'text-primary'}`} />
-                                            {esVentaEspecial ? 'Venta Especial' : 'Carrito de Compras'}
-                                        </CardTitle>
+                                        <div className="flex items-center gap-3">
+                                            {!esVentaEspecial && (
+                                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                                    <ShoppingCart className="h-5 w-5" />
+                                                </div>
+                                            )}
+                                            <CardTitle
+                                                className={`flex items-center gap-2 text-base font-semibold ${esVentaEspecial ? '' : 'text-white'}`}
+                                            >
+                                                {esVentaEspecial && <ShoppingCart className="h-5 w-5 text-amber-600" />}
+                                                {esVentaEspecial ? 'Venta Especial' : 'Carrito de Compras'}
+                                            </CardTitle>
+                                        </div>
                                         <div className="flex items-center gap-2">
                                             {carrito.length > 0 && (
                                                 <Badge
-                                                    variant={esVentaEspecial ? 'outline' : 'secondary'}
-                                                    className={esVentaEspecial ? 'border-amber-400 text-amber-700' : ''}
+                                                    variant={esVentaEspecial ? 'outline' : undefined}
+                                                    className={esVentaEspecial ? 'border-amber-400 text-amber-700' : 'border-0 bg-white/20 text-white backdrop-blur-sm'}
                                                 >
                                                     {carrito.length}
                                                 </Badge>
@@ -1262,7 +1293,7 @@ export default function PuntoVentaOficial({
                                                 className={`flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition-colors ${
                                                     esVentaEspecial
                                                         ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900 dark:text-amber-300'
-                                                        : 'bg-muted text-muted-foreground hover:bg-amber-50 hover:text-amber-600'
+                                                        : 'bg-white/20 text-white backdrop-blur-sm hover:bg-white/30'
                                                 }`}
                                                 title="Activar modo Venta Especial"
                                             >
@@ -1468,14 +1499,35 @@ export default function PuntoVentaOficial({
                                                             )}
                                                         </Button>
                                                     </AlertDialogTrigger>
-                                                    <AlertDialogContent className="max-h-[700px] overflow-y-auto p-0 sm:max-w-[1024px]">
-                                                        <AlertDialogHeader className="from-secondary to-secondary/50 border-b bg-linear-to-r px-6 pt-6 pb-4">
+                                                    <AlertDialogContent className="flex h-[90vh] w-[95vw] !max-w-none max-w-[1024px] flex-col p-0">
+                                                        <AlertDialogHeader
+                                                            className={`shrink-0 border-b px-6 py-5 ${
+                                                                esVentaEspecial
+                                                                    ? 'bg-amber-50 dark:bg-amber-950'
+                                                                    : 'bg-gradient-to-r from-teal-600 to-teal-700 text-white'
+                                                            }`}
+                                                        >
                                                             <div className="flex items-start justify-between">
-                                                                <div>
-                                                                    <AlertDialogTitle className="text-xl font-bold">Procesar Venta</AlertDialogTitle>
-                                                                    <AlertDialogDescription className="mt-1 text-sm">
-                                                                        Complete la información de pago para finalizar la venta
-                                                                    </AlertDialogDescription>
+                                                                <div className="flex items-center gap-3">
+                                                                    {esVentaEspecial ? (
+                                                                        <CreditCard className="h-5 w-5 text-amber-600" />
+                                                                    ) : (
+                                                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                                                            <CreditCard className="h-5 w-5" />
+                                                                        </div>
+                                                                    )}
+                                                                    <div>
+                                                                        <AlertDialogTitle
+                                                                            className={`text-xl font-bold ${esVentaEspecial ? '' : 'text-white'}`}
+                                                                        >
+                                                                            Procesar Venta
+                                                                        </AlertDialogTitle>
+                                                                        <AlertDialogDescription
+                                                                            className={`mt-1 text-sm ${esVentaEspecial ? '' : 'text-teal-100'}`}
+                                                                        >
+                                                                            Complete la información de pago para finalizar la venta
+                                                                        </AlertDialogDescription>
+                                                                    </div>
                                                                 </div>
                                                                 <div className="bg-card min-w-[200px] rounded-lg border p-3 shadow-sm">
                                                                     <div className="grid grid-cols-3 gap-2 text-center text-xs">
@@ -1515,7 +1567,7 @@ export default function PuntoVentaOficial({
                                                                 </div>
                                                             </div>
                                                         </AlertDialogHeader>
-                                                        <div className="grid max-h-[calc(90vh-200px)] overflow-hidden md:grid-cols-2">
+                                                        <div className="grid flex-1 overflow-hidden md:grid-cols-2">
                                                             <div className="overflow-y-auto border-r p-6">
                                                                 {/* Motivo venta especial */}
                                                                 {esVentaEspecial && (
@@ -1562,7 +1614,7 @@ export default function PuntoVentaOficial({
                                                                 />
                                                             </div>
                                                         </div>
-                                                        <AlertDialogFooter className="border-t p-6">
+                                                        <AlertDialogFooter className="shrink-0 border-t p-6">
                                                             <Button
                                                                 onClick={handleCompleteSale}
                                                                 disabled={
@@ -1607,10 +1659,19 @@ export default function PuntoVentaOficial({
             <Toaster position="top-center" />
             {/* Modal de Vista Rápida */}
             <Dialog open={isVistaRapidaOpen} onOpenChange={setIsVistaRapidaOpen}>
-                <DialogContent className="sm:max-w-2xl">
-                    <DialogHeader>
-                        <DialogTitle>Detalles del Producto</DialogTitle>
-                        <DialogDescription>Información detallada del producto seleccionado.</DialogDescription>
+                <DialogContent className="max-h-[90vh] overflow-y-auto p-0 sm:max-w-2xl">
+                    <DialogHeader className="border-b bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <Eye className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <DialogTitle className="text-white">Detalles del Producto</DialogTitle>
+                                <DialogDescription className="text-violet-100">
+                                    Información detallada del producto seleccionado.
+                                </DialogDescription>
+                            </div>
+                        </div>
                     </DialogHeader>
 
                     {productoVistaRapida &&
@@ -1618,7 +1679,7 @@ export default function PuntoVentaOficial({
                             const codigosDisponiblesModal = (productoVistaRapida.codigos || []).filter((c) => c.cantidad > 0);
                             const codigoSeleccionadoModal = codigoSeleccionadoPorProducto[String(productoVistaRapida.id)]?.toString() || '';
                             return (
-                                <div className="grid grid-cols-1 gap-6 py-4 md:grid-cols-2">
+                                <div className="grid grid-cols-1 gap-6 px-6 py-4 md:grid-cols-2">
                                     {/* Columna de Imagen */}
                                     <div className="space-y-4">
                                         <div className="bg-muted relative flex aspect-square items-center justify-center overflow-hidden rounded-lg border">
@@ -1749,23 +1810,25 @@ export default function PuntoVentaOficial({
                     if (!open) setProductoSinComisionPendiente(null);
                 }}
             >
-                <AlertDialogContent className="sm:max-w-md">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-amber-700">
-                            <AlertTriangle className="h-5 w-5" />
-                            Producto sin comisión configurada
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="space-y-2 text-sm">
+                <AlertDialogContent className="overflow-hidden p-0 sm:max-w-md">
+                    <AlertDialogHeader className="border-b bg-gradient-to-r from-amber-600 to-amber-700 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <AlertTriangle className="h-5 w-5" />
+                            </div>
+                            <AlertDialogTitle className="text-white">Producto sin comisión configurada</AlertDialogTitle>
+                        </div>
+                        <AlertDialogDescription className="space-y-2 pt-2 text-sm text-amber-50">
                             <span className="block">
                                 Este producto no tiene comisión asignada. No puedes aplicar un descuento sin autorización del administrador.
                             </span>
-                            <span className="block font-medium text-amber-700">
+                            <span className="block font-medium text-white">
                                 Si deseas continuar, la venta se convertirá en una Venta Especial que requiere aprobación del admin antes de
                                 completarse.
                             </span>
                         </AlertDialogDescription>
                     </AlertDialogHeader>
-                    <AlertDialogFooter>
+                    <AlertDialogFooter className="border-t px-6 py-4">
                         <AlertDialogCancel onClick={() => setProductoSinComisionPendiente(null)}>Cancelar</AlertDialogCancel>
                         <AlertDialogAction
                             className="bg-amber-600 hover:bg-amber-700"
@@ -1776,7 +1839,7 @@ export default function PuntoVentaOficial({
                                     setCarrito((prev) =>
                                         prev.map((i) => (i.id === id ? { ...i, precio_venta: nuevoPrecio, subtotal: i.cantidad * nuevoPrecio } : i)),
                                     );
-                                    toast.warning('Venta Especial activada. Recuerda agregar el motivo.');
+                                    sileo.warning({ title: 'Venta Especial activada', description: 'Recuerda agregar el motivo.' });
                                 }
                                 setProductoSinComisionPendiente(null);
                             }}

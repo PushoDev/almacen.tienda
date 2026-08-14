@@ -23,11 +23,14 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollProgress } from '@/components/ui/scroll';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Toaster } from '@/components/ui/sileo-toaster';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
@@ -61,7 +64,7 @@ import {
     XCircle,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
+import { sileo } from '@/lib/sileo';
 
 // ─────────────────────────────────────────────
 // Breadcrumbs
@@ -187,6 +190,16 @@ interface Destinatario {
     observaciones: string | null;
 }
 
+interface DestinatarioSugerido {
+    id: number;
+    nombre: string;
+    apellidos: string;
+    carnet_identidad: string | null;
+    direccion_residencia: string | null;
+    telefono_contacto: string | null;
+    parentesco_cliente: string | null;
+}
+
 interface Venta {
     id: number;
     almacen: Almacen;
@@ -266,12 +279,12 @@ interface Props {
 // Motivos de anulación predefinidos
 // ─────────────────────────────────────────────
 const MOTIVOS_ANULACION = [
-    { value: 'error_precio',        label: 'Error en el precio' },
-    { value: 'solicitud_cliente',   label: 'Solicitud del cliente' },
+    { value: 'error_precio', label: 'Error en el precio' },
+    { value: 'solicitud_cliente', label: 'Solicitud del cliente' },
     { value: 'producto_defectuoso', label: 'Producto defectuoso' },
-    { value: 'duplicado_venta',     label: 'Duplicado de venta' },
-    { value: 'error_pedido',        label: 'Error en el pedido' },
-    { value: 'otros',               label: 'Otros' },
+    { value: 'duplicado_venta', label: 'Duplicado de venta' },
+    { value: 'error_pedido', label: 'Error en el pedido' },
+    { value: 'otros', label: 'Otros' },
 ];
 
 const motivoLabel = (value: string | null | undefined) =>
@@ -306,10 +319,10 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     const [detalleAnulacion, setDetalleAnulacion] = useState('');
 
     // ── Modal editar pendiente ────────────────
-    const [isEditModalOpen, setIsEditModalOpen]     = useState(false);
-    const [editPayments, setEditPayments]           = useState<PaymentEdit[]>([]);
-    const [editPrecios, setEditPrecios]             = useState<Record<number, string>>({});
-    const [isSavingEdit, setIsSavingEdit]           = useState(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [editPayments, setEditPayments] = useState<PaymentEdit[]>([]);
+    const [editPrecios, setEditPrecios] = useState<Record<number, string>>({});
+    const [isSavingEdit, setIsSavingEdit] = useState(false);
     const [clientesFisicosEdit, setClientesFisicosEdit] = useState<{ id: number | string; nombre_cliente: string }[]>([]);
     const [isApproving, setIsApproving] = useState(false);
     const [isRejecting, setIsRejecting] = useState(false);
@@ -326,6 +339,60 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     // ── Formulario destinatario ───────────────
     const [formDestinatario, setFormDestinatario] = useState(FORM_VACIO);
 
+    // ── Autocompletado de destinatario (busca en ventas anteriores) ──
+    const [destinatarioSearch, setDestinatarioSearch] = useState('');
+    const [destinatarioSeleccionado, setDestinatarioSeleccionado] = useState<DestinatarioSugerido | null>(null);
+    const [destinatarioSugerencias, setDestinatarioSugerencias] = useState<DestinatarioSugerido[]>([]);
+    const [buscandoDestinatario, setBuscandoDestinatario] = useState(false);
+    // El Combobox (base-ui) porta su popup a <body> por defecto, quedando fuera del
+    // focus-trap del AlertDialog (Radix) — rompe la selección con mouse. Mismo fix ya
+    // usado en Comprar/Index.tsx y PaymentForm.tsx.
+    const [destinatarioDialogContainer, setDestinatarioDialogContainer] = useState<HTMLElement | undefined>(undefined);
+    const resolveDestinatarioDialogContainer = (node: HTMLElement | null) => {
+        const container = node?.closest('[data-slot="alert-dialog-content"]');
+        if (container instanceof HTMLElement) {
+            setDestinatarioDialogContainer(container);
+        }
+    };
+
+    useEffect(() => {
+        if (destinatarioSearch.trim().length < 2) {
+            setDestinatarioSugerencias([]);
+            return;
+        }
+        setBuscandoDestinatario(true);
+        const timeout = setTimeout(async () => {
+            try {
+                const { data } = await axios.get<DestinatarioSugerido[]>(route('ventas.destinatarios.buscar'), {
+                    params: { q: destinatarioSearch.trim() },
+                });
+                setDestinatarioSugerencias(data);
+            } catch {
+                setDestinatarioSugerencias([]);
+            } finally {
+                setBuscandoDestinatario(false);
+            }
+        }, 300);
+        return () => clearTimeout(timeout);
+    }, [destinatarioSearch]);
+
+    // El Combobox (base-ui) es de selección única: al perder foco sin una selección
+    // explícita, revierte el texto visible a `itemToStringLabel(value)`. Si `value`
+    // fuera `destinatarioSeleccionado` (que queda en null mientras se escribe texto
+    // libre), esa reversión limpia el campo — es el bug de "se borra al presionar Tab".
+    // Por eso el `value` que se le pasa a los Combobox de Nombre/Carnet es este objeto
+    // sintético, siempre sincronizado con lo que el usuario ya escribió: la reversión
+    // se vuelve un no-op porque el texto "revertido" es igual al texto actual.
+    const destinatarioValorMostrado: DestinatarioSugerido = {
+        id: destinatarioSeleccionado?.id ?? 0,
+        nombre: formDestinatario.nombre,
+        apellidos: formDestinatario.apellidos,
+        carnet_identidad: formDestinatario.carnet_identidad,
+        direccion_residencia: formDestinatario.direccion_residencia,
+        telefono_contacto: formDestinatario.telefono_contacto,
+        parentesco_cliente: formDestinatario.parentesco_cliente,
+    };
+
     // ── Gestor ────────────────────────────────
     const [esVentaGestor, setEsVentaGestor] = useState(false);
     const [gestorMonto, setGestorMonto] = useState('');
@@ -338,11 +405,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     // ── Distribución (mensajero + comisión) ──
     const [showCambiarAComisionPV, setShowCambiarAComisionPV] = useState(false);
     const [showMensajeroForm, setShowMensajeroForm] = useState(false);
-    const [mensajeroFormTipo, setMensajeroFormTipo] = useState<'propio' | 'externo' | ''>('');
     const [mensajeroFormMontoCUP, setMensajeroFormMontoCUP] = useState('');
     const [mensajeroFormTasa, setMensajeroFormTasa] = useState('');
     const [mensajeroFormCuentaId, setMensajeroFormCuentaId] = useState('');
-    const [mensajeroFormCuentaOrigenId, setMensajeroFormCuentaOrigenId] = useState('');
     const [cuentasMensajero, setCuentasMensajero] = useState<Cuenta[]>([]);
     const [showComisionForm, setShowComisionForm] = useState(false);
     const [comisionFormCuentaId, setComisionFormCuentaId] = useState('');
@@ -363,7 +428,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
         axios
             .get(route('ventas.getCuentasParaGestor'))
             .then((r) => setCuentasGestor(r.data))
-            .catch(() => {});
+            .catch(() => { });
         // Cargar cuentas CUP para comisión y mensajero
         axios
             .get(route('ventas.getCuentasParaGestor'))
@@ -372,13 +437,12 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                 setCuentasComision(cup);
                 setCuentasMensajero(cup);
             })
-            .catch(() => {});
+            .catch(() => { });
     }, []);
 
     // Pre-llenar form mensajero al abrirlo
     useEffect(() => {
         if (!showMensajeroForm || !currentVenta.mensajero) return;
-        setMensajeroFormTipo('externo');
         // Tasa: usar la ya guardada en la venta si existe, si no la del sistema (editable desde aquí)
         const tasaCUPSistema = monedasSistema.find(m => m.codigo === 'CUP')?.tasa ?? 0;
         const tasaInicial = currentVenta.mensajero.tasa ?? tasaCUPSistema;
@@ -461,6 +525,9 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
             }
         } else if (!isEditingDestinatario) {
             setFormDestinatario(FORM_VACIO);
+            setDestinatarioSearch('');
+            setDestinatarioSeleccionado(null);
+            setDestinatarioSugerencias([]);
             setEsVentaGestor(false);
             setGestorMonto('');
             setGestorCuentaId('');
@@ -496,13 +563,13 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                     comision_pago: data.comision_pago,
                     ...(data.gestor === null ? { gestor: null } : {}),
                 }));
-                toast.success(data.message);
+                sileo.success({ title: data.message });
                 setShowMensajeroForm(false);
                 setShowComisionForm(false);
             }
         } catch (e: unknown) {
             const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Error al guardar.';
-            toast.error(msg);
+            sileo.error({ title: 'No se pudo guardar la distribución', description: msg });
         } finally {
             setGuardandoDistribucion(false);
         }
@@ -510,16 +577,19 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
     const guardarMensajero = () => {
         const montoCUP = parseFloat(mensajeroFormMontoCUP);
-        if (!montoCUP || montoCUP <= 0) { toast.error('Ingresa el monto CUP al mensajero.'); return; }
+        if (!montoCUP || montoCUP <= 0) { sileo.warning({ title: 'Ingresa el monto CUP al mensajero.' }); return; }
 
         const tasa = parseFloat(mensajeroFormTasa);
-        if (!tasa || tasa <= 0) { toast.error('Ingresa la tasa de cambio para el pago.'); return; }
+        if (!tasa || tasa <= 0) { sileo.warning({ title: 'Ingresa la tasa de cambio para el pago.' }); return; }
 
         // EXTERNO: solo necesita la cuenta de donde sale el pago
-        if (!mensajeroFormCuentaId) { toast.error('Selecciona la cuenta CUP de donde sale el pago al mensajero.'); return; }
+        if (!mensajeroFormCuentaId) { sileo.warning({ title: 'Selecciona la cuenta CUP de donde sale el pago al mensajero.' }); return; }
         const cuentaSel = cuentasMensajero.find(c => String(c.id) === mensajeroFormCuentaId);
         if (cuentaSel && (cuentaSel.saldo_actual ?? 0) < montoCUP) {
-            toast.error(`Saldo insuficiente. Necesitas ${montoCUP.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP, la cuenta tiene ${(cuentaSel.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP.`);
+            sileo.warning({
+                title: 'Saldo insuficiente',
+                description: `Necesitas ${montoCUP.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP, la cuenta tiene ${(cuentaSel.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP.`,
+            });
             return;
         }
 
@@ -532,8 +602,8 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     };
 
     const guardarComisionVendedor = () => {
-        if (!comisionFormCuentaId) { toast.error('Selecciona una cuenta CUP.'); return; }
-        if (!comisionFormTasa || parseFloat(comisionFormTasa) <= 0) { toast.error('Ingresa la tasa CUP/USD.'); return; }
+        if (!comisionFormCuentaId) { sileo.warning({ title: 'Selecciona una cuenta CUP.' }); return; }
+        if (!comisionFormTasa || parseFloat(comisionFormTasa) <= 0) { sileo.warning({ title: 'Ingresa la tasa CUP/USD.' }); return; }
         guardarDistribucion({
             comision_cuenta_id: Number(comisionFormCuentaId),
             comision_tasa: parseFloat(comisionFormTasa),
@@ -602,7 +672,24 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
         setIsEditingDestinatario(false);
         setActiveTab('receptor');
         setFormDestinatario(FORM_VACIO);
+        setDestinatarioSearch('');
+        setDestinatarioSeleccionado(null);
+        setDestinatarioSugerencias([]);
         limpiarEstadosGestor();
+    };
+
+    /** Autocompleta el formulario del destinatario con un registro elegido de una venta anterior */
+    const autocompletarDestinatario = (d: DestinatarioSugerido) => {
+        setDestinatarioSeleccionado(d);
+        setFormDestinatario((p) => ({
+            ...p,
+            nombre: d.nombre,
+            apellidos: d.apellidos,
+            carnet_identidad: d.carnet_identidad ?? '',
+            direccion_residencia: d.direccion_residencia ?? '',
+            telefono_contacto: d.telefono_contacto ?? '',
+            parentesco_cliente: d.parentesco_cliente ?? '',
+        }));
     };
 
     // ─────────────────────────────────────────
@@ -614,11 +701,11 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     const codigoReporte = monedaReporte?.codigo || 'USD';
     const convertirMontoReporte = (monto: number) => monto * tasaReporte;
 
-    const isVentaPendiente          = currentVenta.estado === 'pendiente';
-    const isVentaCompletada         = currentVenta.estado === 'completada';
-    const isVentaCancelada          = currentVenta.estado === 'cancelada';
-    const isVentaSolicitudEspecial  = currentVenta.estado === 'solicitud_especial';
-    const isVentaRechazada          = currentVenta.estado === 'rechazada';
+    const isVentaPendiente = currentVenta.estado === 'pendiente';
+    const isVentaCompletada = currentVenta.estado === 'completada';
+    const isVentaCancelada = currentVenta.estado === 'cancelada';
+    const isVentaSolicitudEspecial = currentVenta.estado === 'solicitud_especial';
+    const isVentaRechazada = currentVenta.estado === 'rechazada';
 
     // Verifica si la cuenta del gestor tiene saldo insuficiente para cubrir la comisión
     const gestorSinSaldo =
@@ -631,7 +718,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
         currentVenta.comision_pago?.cuenta !== null &&
         currentVenta.comision_pago?.monto_cup !== null &&
         (currentVenta.comision_pago?.cuenta?.saldo_disponible ?? Infinity) <
-            (currentVenta.comision_pago?.monto_cup ?? 0);
+        (currentVenta.comision_pago?.monto_cup ?? 0);
 
     // Venta sin gestor con comisión pendiente de configurar (cuenta + tasa) — si no se
     // resuelve antes de aprobar, la comisión nunca se descuenta de ninguna cuenta.
@@ -670,30 +757,40 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     /** Guardar destinatario (y gestor opcional) */
     const handleGuardarDestinatario = async () => {
         if (!formDestinatario.nombre?.trim() || !formDestinatario.apellidos?.trim()) {
-            toast.error('Complete el nombre y apellidos del destinatario');
+            sileo.warning({ title: 'Complete el nombre y apellidos del destinatario' });
             setActiveTab('receptor');
             return;
         }
         if (!formDestinatario.carnet_identidad?.trim()) {
-            toast.error('El carnet de identidad es obligatorio');
+            sileo.warning({ title: 'El carnet de identidad es obligatorio' });
+            setActiveTab('receptor');
+            return;
+        }
+        if (!/^\d{11}$/.test(formDestinatario.carnet_identidad.trim())) {
+            sileo.warning({ title: 'Carnet de identidad inválido', description: 'Debe tener exactamente 11 dígitos numéricos.' });
+            setActiveTab('receptor');
+            return;
+        }
+        if (!formDestinatario.telefono_contacto?.trim()) {
+            sileo.warning({ title: 'El teléfono de contacto es obligatorio' });
             setActiveTab('receptor');
             return;
         }
 
         if (esVentaGestor) {
             if (!gestorCuentaId) {
-                toast.error('Seleccione una cuenta para el gestor');
+                sileo.warning({ title: 'Seleccione una cuenta para el gestor' });
                 setActiveTab('gestor');
                 return;
             }
             if (!gestorMonto || parseFloat(gestorMonto) <= 0) {
-                toast.error('Ingrese el monto de la comisión');
+                sileo.warning({ title: 'Ingrese el monto de la comisión' });
                 setActiveTab('gestor');
                 return;
             }
             // El backend requiere tasa_aplicada_gestor para calcular monto_usd en el cierre de caja
             if (!tasaAplicadaGestor || parseFloat(tasaAplicadaGestor) <= 0) {
-                toast.error('Ingrese la tasa de cambio del gestor');
+                sileo.warning({ title: 'Ingrese la tasa de cambio del gestor' });
                 setActiveTab('gestor');
                 return;
             }
@@ -703,7 +800,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
         try {
             const payload = {
                 ...formDestinatario,
-                telefono_contacto: formDestinatario.telefono_contacto?.trim() || '53 0000 0000',
+                telefono_contacto: formDestinatario.telefono_contacto.trim(),
                 es_venta_gestor: esVentaGestor,
                 gestor_monto: esVentaGestor ? parseFloat(gestorMonto) || 0 : 0,
                 gestor_cuenta_id: esVentaGestor ? gestorCuentaId : null,
@@ -719,12 +816,12 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                     (data.destinatario && data.gestor
                         ? 'Receptor y Gestor guardados correctamente'
                         : data.destinatario
-                          ? isEditingDestinatario
-                              ? 'Receptor actualizado correctamente'
-                              : 'Receptor guardado correctamente'
-                          : 'Gestor guardado correctamente');
+                            ? isEditingDestinatario
+                                ? 'Receptor actualizado correctamente'
+                                : 'Receptor guardado correctamente'
+                            : 'Gestor guardado correctamente');
 
-                toast.success(message);
+                sileo.success({ title: message });
 
                 // Actualizar estado local inmediatamente — sin setTimeout ni router.reload()
                 setCurrentVenta((prev) => ({
@@ -736,15 +833,17 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
                 cerrarModal();
             } else {
-                toast.error(data.message || 'Error al guardar la información');
+                sileo.error({ title: 'No se pudo guardar la información', description: data.message });
             }
         } catch (error: unknown) {
             if (axios.isAxiosError(error)) {
-                toast.error(
-                    error.response?.data?.message || error.response?.data?.error || `Error ${error.response?.status}: ${error.response?.statusText}`,
-                );
+                sileo.error({
+                    title: 'No se pudo guardar la información',
+                    description:
+                        error.response?.data?.message || error.response?.data?.error || `Error ${error.response?.status}: ${error.response?.statusText}`,
+                });
             } else {
-                toast.error('Error de conexión: No se pudo contactar al servidor');
+                sileo.error({ title: 'Error de conexión', description: 'No se pudo contactar al servidor' });
             }
         } finally {
             setIsSavingDestinatario(false);
@@ -757,18 +856,20 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
         try {
             const { data } = await axios.post(route('ventas.aprobar', currentVenta.id));
             if (data.success) {
-                toast.success(data.message || 'Venta aprobada correctamente');
+                sileo.success({ title: data.message || 'Venta aprobada correctamente' });
                 setCurrentVenta((prev) => ({ ...prev, estado: 'completada' }));
             } else {
-                toast.error(data.message || 'Error al aprobar la venta');
+                sileo.error({ title: 'No se pudo aprobar la venta', description: data.message });
             }
         } catch (error: unknown) {
             if (axios.isAxiosError(error)) {
-                toast.error(
-                    error.response?.data?.message || error.response?.data?.error || `Error ${error.response?.status}: ${error.response?.statusText}`,
-                );
+                sileo.error({
+                    title: 'No se pudo aprobar la venta',
+                    description:
+                        error.response?.data?.message || error.response?.data?.error || `Error ${error.response?.status}: ${error.response?.statusText}`,
+                });
             } else {
-                toast.error('Error de conexión: No se pudo contactar al servidor');
+                sileo.error({ title: 'Error de conexión', description: 'No se pudo contactar al servidor' });
             }
         } finally {
             setIsApproving(false);
@@ -781,14 +882,14 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
         try {
             const { data } = await axios.post(route('ventas.especial.aprobar', currentVenta.id));
             if (data.success) {
-                toast.success(data.message);
+                sileo.success({ title: data.message });
                 setCurrentVenta((prev) => ({ ...prev, estado: 'pendiente' }));
             } else {
-                toast.error(data.message || 'Error al aprobar la solicitud');
+                sileo.error({ title: 'No se pudo aprobar la solicitud', description: data.message });
             }
         } catch (error: unknown) {
             if (axios.isAxiosError(error)) {
-                toast.error(error.response?.data?.message || 'Error al aprobar la solicitud');
+                sileo.error({ title: 'No se pudo aprobar la solicitud', description: error.response?.data?.message });
             }
         } finally {
             setIsApproving(false);
@@ -801,14 +902,14 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
         try {
             const { data } = await axios.post(route('ventas.especial.rechazar', currentVenta.id));
             if (data.success) {
-                toast.success(data.message);
+                sileo.success({ title: data.message });
                 setCurrentVenta((prev) => ({ ...prev, estado: 'rechazada' }));
             } else {
-                toast.error(data.message || 'Error al rechazar la solicitud');
+                sileo.error({ title: 'No se pudo rechazar la solicitud', description: data.message });
             }
         } catch (error: unknown) {
             if (axios.isAxiosError(error)) {
-                toast.error(error.response?.data?.message || 'Error al rechazar la solicitud');
+                sileo.error({ title: 'No se pudo rechazar la solicitud', description: error.response?.data?.message });
             }
         } finally {
             setIsRejecting(false);
@@ -828,16 +929,16 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     const handleAbrirEdicion = async () => {
         // Pre-cargar pagos actuales como editables
         const pagosActuales: PaymentEdit[] = currentVenta.pagos.map((p) => ({
-            id:          crypto.randomUUID(),
-            method:      p.metodo as 'transferencia' | 'efectivo',
-            moneda_id:   p.moneda?.id?.toString() ?? '',
-            amount:      p.monto,
-            via:         p.via ?? undefined,
+            id: crypto.randomUUID(),
+            method: p.metodo as 'transferencia' | 'efectivo',
+            moneda_id: p.moneda?.id?.toString() ?? '',
+            amount: p.monto,
+            via: p.via ?? undefined,
             exchangeRate: p.tasa_cambio,
             amountInUsd: p.monto_equivalente,
-            cuenta_id:   p.cuenta?.id?.toString() ?? null,
-            cliente_id:  p.cliente_destino?.id?.toString() ?? null,
-            referencia:  undefined,
+            cuenta_id: p.cuenta?.id?.toString() ?? null,
+            cliente_id: p.cliente_destino?.id?.toString() ?? null,
+            referencia: undefined,
             moneda_info: p.moneda ? { codigo: p.moneda.codigo, nombre: p.moneda.nombre, simbolo: '' } : undefined,
         }));
         setEditPayments(pagosActuales);
@@ -866,20 +967,20 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     /** Guardar cambios de la venta pendiente */
     const handleGuardarEdicion = async () => {
         if (editPayments.length === 0) {
-            toast.error('Debe agregar al menos un pago.');
+            sileo.warning({ title: 'Debe agregar al menos un pago.' });
             return;
         }
 
         const totalEditado = currentVenta.items.reduce((sum, item) => {
-            const key    = item.id ?? item.producto.id;
-            const pvFb   = Number(item.precio_venta);
+            const key = item.id ?? item.producto.id;
+            const pvFb = Number(item.precio_venta);
             const precio = parseFloat(editPrecios[key] ?? pvFb.toString());
             return sum + (isNaN(precio) ? pvFb : precio) * Number(item.cantidad);
         }, 0);
 
         const totalPagado = editPayments.reduce((sum, p) => sum + p.amountInUsd, 0);
         if (totalPagado < totalEditado - 0.01) {
-            toast.error(`Los pagos no cubren el total. Restante: $${(totalEditado - totalPagado).toFixed(2)} USD`);
+            sileo.warning({ title: 'Los pagos no cubren el total', description: `Restante: $${(totalEditado - totalPagado).toFixed(2)} USD` });
             return;
         }
 
@@ -887,31 +988,31 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
         try {
             const payload = {
                 pagos: editPayments.map((p) => ({
-                    metodo:            p.method,
-                    moneda_id:         p.moneda_id,
-                    monto:             p.amount,
-                    via:               p.via ?? null,
-                    tasa_cambio:       p.exchangeRate,
+                    metodo: p.method,
+                    moneda_id: p.moneda_id,
+                    monto: p.amount,
+                    via: p.via ?? null,
+                    tasa_cambio: p.exchangeRate,
                     monto_equivalente: p.amountInUsd,
-                    cuenta_id:         p.cuenta_id ?? null,
-                    cliente_id:        p.cliente_id ?? null,
-                    referencia:        p.referencia ?? null,
+                    cuenta_id: p.cuenta_id ?? null,
+                    cliente_id: p.cliente_id ?? null,
+                    referencia: p.referencia ?? null,
                 })),
                 items: currentVenta.items.map((item) => ({
                     venta_detalle_id: item.id,
-                    precio_venta:     parseFloat(editPrecios[item.id ?? item.producto.id] ?? Number(item.precio_venta).toString()),
+                    precio_venta: parseFloat(editPrecios[item.id ?? item.producto.id] ?? Number(item.precio_venta).toString()),
                 })),
             };
 
             const { data } = await axios.post(route('ventas.editar.pendiente', currentVenta.id), payload);
 
             if (data.success) {
-                toast.success(data.message || 'Venta actualizada correctamente.');
+                sileo.success({ title: data.message || 'Venta actualizada correctamente.' });
                 // Actualizar estado local con los nuevos datos
                 setCurrentVenta((prev) => ({
                     ...prev,
-                    total:       data.total,
-                    pagos:       data.pagos,
+                    total: data.total,
+                    pagos: data.pagos,
                     total_pagado: data.pagos.reduce((s: number, p: { monto_equivalente: number }) => s + p.monto_equivalente, 0),
                     items: prev.items.map((item) => {
                         const updated = data.items?.find((_: unknown, idx: number) => idx === prev.items.indexOf(item));
@@ -920,13 +1021,13 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                 }));
                 setIsEditModalOpen(false);
             } else {
-                toast.error(data.message || 'Error al actualizar la venta.');
+                sileo.error({ title: 'No se pudo actualizar la venta', description: data.message });
             }
         } catch (error: unknown) {
             if (axios.isAxiosError(error)) {
-                toast.error(error.response?.data?.message || 'Error al guardar los cambios.');
+                sileo.error({ title: 'No se pudieron guardar los cambios', description: error.response?.data?.message });
             } else {
-                toast.error('Error de conexión.');
+                sileo.error({ title: 'Error de conexión' });
             }
         } finally {
             setIsSavingEdit(false);
@@ -936,11 +1037,11 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     /** Anular venta */
     const handleAnularVenta = async () => {
         if (!motivoAnulacion) {
-            toast.error('Debe seleccionar un motivo de anulación');
+            sileo.warning({ title: 'Debe seleccionar un motivo de anulación' });
             return;
         }
         if (motivoAnulacion === 'otros' && !detalleAnulacion.trim()) {
-            toast.error('Debe describir el motivo en el campo "Otros"');
+            sileo.warning({ title: 'Debe describir el motivo en el campo "Otros"' });
             return;
         }
         setIsCancelling(true);
@@ -950,7 +1051,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                 detalle_anulacion: motivoAnulacion === 'otros' ? detalleAnulacion.trim() : null,
             });
             if (data.success) {
-                toast.success(data.message || 'Venta anulada correctamente');
+                sileo.success({ title: data.message || 'Venta anulada correctamente' });
                 setCurrentVenta((prev) => ({
                     ...prev,
                     estado: 'cancelada',
@@ -961,13 +1062,16 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                 setMotivoAnulacion('');
                 setDetalleAnulacion('');
             } else {
-                toast.error(data.message || 'Error al anular la venta');
+                sileo.error({ title: 'No se pudo anular la venta', description: data.message });
             }
         } catch (error: unknown) {
             if (axios.isAxiosError(error)) {
-                toast.error(error.response?.data?.message || error.response?.data?.error || 'Ocurrió un error al intentar anular la venta.');
+                sileo.error({
+                    title: 'No se pudo anular la venta',
+                    description: error.response?.data?.message || error.response?.data?.error || 'Ocurrió un error al intentar anular la venta.',
+                });
             } else {
-                toast.error('Error de conexión: No se pudo contactar al servidor');
+                sileo.error({ title: 'Error de conexión', description: 'No se pudo contactar al servidor' });
             }
         } finally {
             setIsCancelling(false);
@@ -980,6 +1084,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={`Detalle de Venta #${currentVenta.id}`} />
+            <Toaster position="top-center" />
 
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 {/* ── Header ── */}
@@ -1384,250 +1489,312 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                 </TabsList>
 
                                 <ScrollProgress className="min-h-0 flex-1">
-                                {/* Tab: Receptor */}
-                                <TabsContent value="receptor" className="mt-4">
-                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                        <div className="space-y-2">
-                                            <Label htmlFor="nombre">Nombre *</Label>
-                                            <Input
-                                                id="nombre"
-                                                value={formDestinatario.nombre}
-                                                onChange={(e) => setFormDestinatario((p) => ({ ...p, nombre: e.target.value }))}
-                                                placeholder="Ingrese el nombre"
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="apellidos">Apellidos *</Label>
-                                            <Input
-                                                id="apellidos"
-                                                value={formDestinatario.apellidos}
-                                                onChange={(e) => setFormDestinatario((p) => ({ ...p, apellidos: e.target.value }))}
-                                                placeholder="Ingrese los apellidos"
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="carnet_identidad">Carnet de Identidad *</Label>
-                                            <Input
-                                                id="carnet_identidad"
-                                                value={formDestinatario.carnet_identidad}
-                                                onChange={(e) => setFormDestinatario((p) => ({ ...p, carnet_identidad: e.target.value }))}
-                                                placeholder="Número de carnet"
-                                                maxLength={11}
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="telefono_contacto">Teléfono Contacto *</Label>
-                                            <Input
-                                                id="telefono_contacto"
-                                                value={formDestinatario.telefono_contacto}
-                                                onChange={(e) => setFormDestinatario((p) => ({ ...p, telefono_contacto: e.target.value }))}
-                                                placeholder="53 0000 0000"
-                                            />
-                                        </div>
-                                        <div className="space-y-2 md:col-span-2">
-                                            <Label htmlFor="direccion_residencia">Dirección de Residencia</Label>
-                                            <Textarea
-                                                id="direccion_residencia"
-                                                value={formDestinatario.direccion_residencia}
-                                                onChange={(e) => setFormDestinatario((p) => ({ ...p, direccion_residencia: e.target.value }))}
-                                                placeholder="Dirección completa donde se entregará el producto"
-                                                rows={3}
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="parentesco_cliente">Parentesco con Cliente</Label>
-                                            <Input
-                                                id="parentesco_cliente"
-                                                value={formDestinatario.parentesco_cliente}
-                                                onChange={(e) => setFormDestinatario((p) => ({ ...p, parentesco_cliente: e.target.value }))}
-                                                placeholder="Ej: Familiar, Amigo, etc."
-                                            />
-                                        </div>
-                                        <div className="space-y-2 md:col-span-2">
-                                            <Label htmlFor="observaciones">Observaciones</Label>
-                                            <Textarea
-                                                id="observaciones"
-                                                value={formDestinatario.observaciones}
-                                                onChange={(e) => setFormDestinatario((p) => ({ ...p, observaciones: e.target.value }))}
-                                                placeholder="Observaciones adicionales"
-                                                rows={2}
-                                            />
-                                        </div>
-                                    </div>
-                                </TabsContent>
-
-                                {/* Tab: Gestor */}
-                                <TabsContent value="gestor" className="mt-4">
-                                    <div className="space-y-4">
-                                        <div className="bg-muted rounded-lg border p-4">
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex flex-col gap-1">
-                                                    <Label htmlFor="gestor-switch" className="font-bold">
-                                                        ¿Venta con Gestor?
-                                                    </Label>
-                                                    <span className="text-muted-foreground text-xs">Asignar comisión a un tercero</span>
-                                                </div>
-                                                <Switch
-                                                    id="gestor-switch"
-                                                    checked={esVentaGestor}
-                                                    onCheckedChange={(checked) => {
-                                                        setEsVentaGestor(checked);
-                                                        if (!checked) limpiarEstadosGestor();
+                                    {/* Tab: Receptor */}
+                                    <TabsContent value="receptor" className="mt-4">
+                                        <div ref={resolveDestinatarioDialogContainer} className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                            <div className="space-y-2">
+                                                <Label htmlFor="nombre">Nombre *</Label>
+                                                <Combobox
+                                                    items={destinatarioSugerencias}
+                                                    itemToStringLabel={(d: DestinatarioSugerido) => d.nombre}
+                                                    itemToStringValue={(d: DestinatarioSugerido) => d.nombre}
+                                                    value={destinatarioValorMostrado}
+                                                    onValueChange={(d: DestinatarioSugerido | null) => {
+                                                        if (d) autocompletarDestinatario(d);
                                                     }}
+                                                    onInputValueChange={(text) => {
+                                                        setDestinatarioSearch(text);
+                                                        setFormDestinatario((p) => ({ ...p, nombre: text }));
+                                                    }}
+                                                >
+                                                    <ComboboxInput id="nombre" placeholder="Ingrese el nombre — autocompleta si ya existe" />
+                                                    <ComboboxContent container={destinatarioDialogContainer}>
+                                                        <ComboboxEmpty>
+                                                            {buscandoDestinatario
+                                                                ? 'Buscando...'
+                                                                : destinatarioSearch.trim().length < 2
+                                                                    ? 'Escribe al menos 2 caracteres'
+                                                                    : 'Sin coincidencias — se registrará como destinatario nuevo'}
+                                                        </ComboboxEmpty>
+                                                        <ComboboxList>
+                                                            {(d: DestinatarioSugerido) => (
+                                                                <ComboboxItem key={d.id} value={d}>
+                                                                    <div className="flex flex-col">
+                                                                        <span className="font-medium">
+                                                                            {d.nombre} {d.apellidos}
+                                                                        </span>
+                                                                        <span className="text-muted-foreground text-xs">
+                                                                            {[d.carnet_identidad, d.parentesco_cliente].filter(Boolean).join(' · ') ||
+                                                                                'Sin más datos'}
+                                                                        </span>
+                                                                    </div>
+                                                                </ComboboxItem>
+                                                            )}
+                                                        </ComboboxList>
+                                                    </ComboboxContent>
+                                                </Combobox>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label htmlFor="apellidos">Apellidos *</Label>
+                                                <Input
+                                                    id="apellidos"
+                                                    value={formDestinatario.apellidos}
+                                                    onChange={(e) => setFormDestinatario((p) => ({ ...p, apellidos: e.target.value }))}
+                                                    placeholder="Ingrese los apellidos"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label htmlFor="carnet_identidad">Carnet de Identidad *</Label>
+                                                <Combobox
+                                                    items={destinatarioSugerencias}
+                                                    itemToStringLabel={(d: DestinatarioSugerido) => d.carnet_identidad ?? ''}
+                                                    itemToStringValue={(d: DestinatarioSugerido) => d.carnet_identidad ?? ''}
+                                                    value={destinatarioValorMostrado}
+                                                    onValueChange={(d: DestinatarioSugerido | null) => {
+                                                        if (d) autocompletarDestinatario(d);
+                                                    }}
+                                                    onInputValueChange={(text) => {
+                                                        setDestinatarioSearch(text);
+                                                        setFormDestinatario((p) => ({ ...p, carnet_identidad: text }));
+                                                    }}
+                                                >
+                                                    <ComboboxInput id="carnet_identidad" placeholder="Número de carnet (11 dígitos)" maxLength={11} />
+                                                    <ComboboxContent container={destinatarioDialogContainer}>
+                                                        <ComboboxEmpty>
+                                                            {buscandoDestinatario
+                                                                ? 'Buscando...'
+                                                                : destinatarioSearch.trim().length < 2
+                                                                    ? 'Escribe al menos 2 caracteres'
+                                                                    : 'Sin coincidencias — se registrará como destinatario nuevo'}
+                                                        </ComboboxEmpty>
+                                                        <ComboboxList>
+                                                            {(d: DestinatarioSugerido) => (
+                                                                <ComboboxItem key={d.id} value={d}>
+                                                                    <div className="flex flex-col">
+                                                                        <span className="font-medium">{d.carnet_identidad}</span>
+                                                                        <span className="text-muted-foreground text-xs">
+                                                                            {d.nombre} {d.apellidos}
+                                                                            {d.parentesco_cliente ? ` · ${d.parentesco_cliente}` : ''}
+                                                                        </span>
+                                                                    </div>
+                                                                </ComboboxItem>
+                                                            )}
+                                                        </ComboboxList>
+                                                    </ComboboxContent>
+                                                </Combobox>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label htmlFor="telefono_contacto">Teléfono Contacto *</Label>
+                                                <Input
+                                                    id="telefono_contacto"
+                                                    value={formDestinatario.telefono_contacto}
+                                                    onChange={(e) => setFormDestinatario((p) => ({ ...p, telefono_contacto: e.target.value }))}
+                                                    placeholder="53 0000 0000"
+                                                />
+                                            </div>
+                                            <div className="space-y-2 md:col-span-2">
+                                                <Label htmlFor="direccion_residencia">Dirección de Residencia</Label>
+                                                <Textarea
+                                                    id="direccion_residencia"
+                                                    value={formDestinatario.direccion_residencia}
+                                                    onChange={(e) => setFormDestinatario((p) => ({ ...p, direccion_residencia: e.target.value }))}
+                                                    placeholder="Dirección completa donde se entregará el producto"
+                                                    rows={3}
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label htmlFor="parentesco_cliente">Parentesco con Cliente</Label>
+                                                <Input
+                                                    id="parentesco_cliente"
+                                                    value={formDestinatario.parentesco_cliente}
+                                                    onChange={(e) => setFormDestinatario((p) => ({ ...p, parentesco_cliente: e.target.value }))}
+                                                    placeholder="Ej: Familiar, Amigo, etc."
+                                                />
+                                            </div>
+                                            <div className="space-y-2 md:col-span-2">
+                                                <Label htmlFor="observaciones">Observaciones</Label>
+                                                <Textarea
+                                                    id="observaciones"
+                                                    value={formDestinatario.observaciones}
+                                                    onChange={(e) => setFormDestinatario((p) => ({ ...p, observaciones: e.target.value }))}
+                                                    placeholder="Observaciones adicionales"
+                                                    rows={2}
                                                 />
                                             </div>
                                         </div>
+                                    </TabsContent>
 
-                                        {esVentaGestor && (
-                                            <div className="space-y-4 rounded-lg border p-4">
-                                                {/* Badges de todas las monedas del sistema */}
-                                                {monedasSistema.length > 0 && (
-                                                    <div className="space-y-2">
-                                                        <Label>Moneda del Gestor</Label>
-                                                        <div className="flex flex-wrap gap-2">
-                                                            {monedasSistema.map((m) => (
-                                                                <button
-                                                                    key={m.id}
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        setMonedaGestorSeleccionada(m);
-                                                                        setTasaAplicadaGestor(String(m.tasa));
-                                                                        setGestorCuentaId('');
-                                                                        setCuentaGestorSeleccionada(null);
-                                                                        const montoCalculado = currentVenta.total_comision * m.tasa;
-                                                                        setGestorMonto(montoCalculado.toFixed(2));
-                                                                    }}
-                                                                    className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
-                                                                        monedaGestorSeleccionada?.id === m.id
-                                                                            ? 'bg-primary text-primary-foreground border-primary'
-                                                                            : 'bg-background text-foreground hover:bg-muted'
-                                                                    }`}
-                                                                >
-                                                                    {m.codigo} · {m.tasa}
-                                                                </button>
-                                                            ))}
-                                                        </div>
+                                    {/* Tab: Gestor */}
+                                    <TabsContent value="gestor" className="mt-4">
+                                        <div className="space-y-4">
+                                            <div className="bg-muted rounded-lg border p-4">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex flex-col gap-1">
+                                                        <Label htmlFor="gestor-switch" className="font-bold">
+                                                            ¿Venta con Gestor?
+                                                        </Label>
+                                                        <span className="text-muted-foreground text-xs">Asignar comisión a un tercero</span>
                                                     </div>
-                                                )}
-                                                {/* Tasa aplicada — editable */}
-                                                <div className="space-y-2">
-                                                    <Label>Tasa Aplicada del Gestor</Label>
-                                                    <Input
-                                                        type="number"
-                                                        step="0.0001"
-                                                        min="0.0001"
-                                                        value={tasaAplicadaGestor}
-                                                        onChange={(e) => {
-                                                            const nuevaTasa = e.target.value;
-                                                            setTasaAplicadaGestor(nuevaTasa);
-                                                            const tasaNum = parseFloat(nuevaTasa);
-                                                            if (tasaNum > 0) {
-                                                                const montoCalculado = currentVenta.total_comision * tasaNum;
-                                                                setGestorMonto(montoCalculado.toFixed(2));
-                                                            }
+                                                    <Switch
+                                                        id="gestor-switch"
+                                                        checked={esVentaGestor}
+                                                        onCheckedChange={(checked) => {
+                                                            setEsVentaGestor(checked);
+                                                            if (!checked) limpiarEstadosGestor();
                                                         }}
-                                                        placeholder="Ej: 500"
-                                                    />
-                                                </div>
-                                                <div className="grid gap-4 md:grid-cols-2">
-                                                    <div className="space-y-2">
-                                                        <Label>Cuenta del Gestor</Label>
-                                                        <Select
-                                                            value={gestorCuentaId}
-                                                            onValueChange={(val) => {
-                                                                setGestorCuentaId(val);
-                                                                setCuentaGestorSeleccionada(cuentasGestor.find((c) => String(c.id) === val) || null);
-                                                            }}
-                                                        >
-                                                            <SelectTrigger>
-                                                                <SelectValue placeholder="Seleccione cuenta..." />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {(monedaGestorSeleccionada
-                                                                    ? cuentasGestor.filter((c) => (c.moneda?.codigo || c.tipo_moneda) === monedaGestorSeleccionada.codigo)
-                                                                    : cuentasGestor
-                                                                ).map((cuenta) => (
-                                                                    <SelectItem key={cuenta.id} value={String(cuenta.id)}>
-                                                                        {cuenta.nombre_cuenta} ({cuenta.moneda?.codigo || cuenta.tipo_moneda})
-                                                                        {' · '}
-                                                                        <span className={cuenta.saldo_actual <= 0 ? 'text-red-500' : 'text-green-600'}>
-                                                                            Saldo: {cuenta.saldo_actual.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                                        </span>
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <Label>Monto de Comisión</Label>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-muted-foreground shrink-0 text-sm font-medium">
-                                                                {cuentaGestorSeleccionada?.moneda?.codigo || monedaGestorSeleccionada?.codigo || 'USD'}
-                                                            </span>
-                                                            <Input
-                                                                type="number"
-                                                                step="0.01"
-                                                                value={gestorMonto}
-                                                                onChange={(e) => setGestorMonto(e.target.value)}
-                                                                placeholder="0.00"
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                {/* Gadget: monto a descontar de la cuenta + saldo disponible */}
-                                                {parseFloat(gestorMonto) > 0 && parseFloat(tasaAplicadaGestor) > 0 && (() => {
-                                                    const montoGestor = parseFloat(gestorMonto);
-                                                    const saldoDisponible = cuentaGestorSeleccionada?.saldo_actual ?? 0;
-                                                    const alcanza = saldoDisponible >= montoGestor;
-                                                    const codigoMoneda = cuentaGestorSeleccionada?.moneda?.codigo || monedaGestorSeleccionada?.codigo || '';
-                                                    return (
-                                                        <div className="space-y-2">
-                                                            {/* Saldo disponible */}
-                                                            {cuentaGestorSeleccionada && (
-                                                                <div className={`flex items-center justify-between rounded-lg border px-4 py-2 ${alcanza ? 'border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950' : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950'}`}>
-                                                                    <span className={`text-xs font-medium ${alcanza ? 'text-blue-700 dark:text-blue-300' : 'text-red-700 dark:text-red-300'}`}>
-                                                                        Saldo disponible en cuenta:
-                                                                    </span>
-                                                                    <span className={`text-sm font-bold ${alcanza ? 'text-blue-700 dark:text-blue-300' : 'text-red-700 dark:text-red-300'}`}>
-                                                                        {saldoDisponible.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {codigoMoneda}
-                                                                    </span>
-                                                                </div>
-                                                            )}
-                                                            {/* Monto a descontar */}
-                                                            <div className={`flex items-center gap-3 rounded-lg border px-4 py-3 ${alcanza ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950' : 'border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950'}`}>
-                                                                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${alcanza ? 'bg-green-100 dark:bg-green-900' : 'bg-red-100 dark:bg-red-900'}`}>
-                                                                    <DollarSign className={`h-4 w-4 ${alcanza ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} />
-                                                                </div>
-                                                                <div className="flex-1">
-                                                                    <p className={`text-xs ${alcanza ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
-                                                                        {alcanza ? 'Se descontará de la cuenta' : '⚠️ Saldo insuficiente para cubrir la comisión'}
-                                                                    </p>
-                                                                    <p className={`text-lg font-bold ${alcanza ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
-                                                                        {montoGestor.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {codigoMoneda}
-                                                                    </p>
-                                                                    <p className={`text-xs ${alcanza ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                                                                        ≈ {(montoGestor / parseFloat(tasaAplicadaGestor)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
-                                                                    </p>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })()}
-                                                <div className="space-y-2">
-                                                    <Label>Comentario</Label>
-                                                    <Textarea
-                                                        placeholder="Ej: Gestor externo, acuerdo 50/50..."
-                                                        value={gestorComentario}
-                                                        onChange={(e) => setGestorComentario(e.target.value)}
-                                                        rows={2}
-                                                        className="resize-none"
                                                     />
                                                 </div>
                                             </div>
-                                        )}
-                                    </div>
-                                </TabsContent>
+
+                                            {esVentaGestor && (
+                                                <div className="space-y-4 rounded-lg border p-4">
+                                                    {/* Badges de todas las monedas del sistema */}
+                                                    {monedasSistema.length > 0 && (
+                                                        <div className="space-y-2">
+                                                            <Label>Moneda del Gestor</Label>
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {monedasSistema.map((m) => (
+                                                                    <button
+                                                                        key={m.id}
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setMonedaGestorSeleccionada(m);
+                                                                            setTasaAplicadaGestor(String(m.tasa));
+                                                                            setGestorCuentaId('');
+                                                                            setCuentaGestorSeleccionada(null);
+                                                                            const montoCalculado = currentVenta.total_comision * m.tasa;
+                                                                            setGestorMonto(montoCalculado.toFixed(2));
+                                                                        }}
+                                                                        className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${monedaGestorSeleccionada?.id === m.id
+                                                                            ? 'bg-primary text-primary-foreground border-primary'
+                                                                            : 'bg-background text-foreground hover:bg-muted'
+                                                                            }`}
+                                                                    >
+                                                                        {m.codigo} · {m.tasa}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    {/* Tasa aplicada — editable */}
+                                                    <div className="space-y-2">
+                                                        <Label>Tasa Aplicada del Gestor</Label>
+                                                        <Input
+                                                            type="number"
+                                                            step="0.0001"
+                                                            min="0.0001"
+                                                            value={tasaAplicadaGestor}
+                                                            onChange={(e) => {
+                                                                const nuevaTasa = e.target.value;
+                                                                setTasaAplicadaGestor(nuevaTasa);
+                                                                const tasaNum = parseFloat(nuevaTasa);
+                                                                if (tasaNum > 0) {
+                                                                    const montoCalculado = currentVenta.total_comision * tasaNum;
+                                                                    setGestorMonto(montoCalculado.toFixed(2));
+                                                                }
+                                                            }}
+                                                            placeholder="Ej: 500"
+                                                        />
+                                                    </div>
+                                                    <div className="grid gap-4 md:grid-cols-2">
+                                                        <div className="space-y-2">
+                                                            <Label>Cuenta del Gestor</Label>
+                                                            <Select
+                                                                value={gestorCuentaId}
+                                                                onValueChange={(val) => {
+                                                                    setGestorCuentaId(val);
+                                                                    setCuentaGestorSeleccionada(cuentasGestor.find((c) => String(c.id) === val) || null);
+                                                                }}
+                                                            >
+                                                                <SelectTrigger>
+                                                                    <SelectValue placeholder="Seleccione cuenta..." />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {(monedaGestorSeleccionada
+                                                                        ? cuentasGestor.filter((c) => (c.moneda?.codigo || c.tipo_moneda) === monedaGestorSeleccionada.codigo)
+                                                                        : cuentasGestor
+                                                                    ).map((cuenta) => (
+                                                                        <SelectItem key={cuenta.id} value={String(cuenta.id)}>
+                                                                            {cuenta.nombre_cuenta} ({cuenta.moneda?.codigo || cuenta.tipo_moneda})
+                                                                            {' · '}
+                                                                            <span className={cuenta.saldo_actual <= 0 ? 'text-red-500' : 'text-green-600'}>
+                                                                                Saldo: {cuenta.saldo_actual.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                                            </span>
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <Label>Monto de Comisión</Label>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-muted-foreground shrink-0 text-sm font-medium">
+                                                                    {cuentaGestorSeleccionada?.moneda?.codigo || monedaGestorSeleccionada?.codigo || 'USD'}
+                                                                </span>
+                                                                <Input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    value={gestorMonto}
+                                                                    onChange={(e) => setGestorMonto(e.target.value)}
+                                                                    placeholder="0.00"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Gadget: monto a descontar de la cuenta + saldo disponible */}
+                                                    {parseFloat(gestorMonto) > 0 && parseFloat(tasaAplicadaGestor) > 0 && (() => {
+                                                        const montoGestor = parseFloat(gestorMonto);
+                                                        const saldoDisponible = cuentaGestorSeleccionada?.saldo_actual ?? 0;
+                                                        const alcanza = saldoDisponible >= montoGestor;
+                                                        const codigoMoneda = cuentaGestorSeleccionada?.moneda?.codigo || monedaGestorSeleccionada?.codigo || '';
+                                                        return (
+                                                            <div className="space-y-2">
+                                                                {/* Saldo disponible */}
+                                                                {cuentaGestorSeleccionada && (
+                                                                    <div className={`flex items-center justify-between rounded-lg border px-4 py-2 ${alcanza ? 'border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950' : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950'}`}>
+                                                                        <span className={`text-xs font-medium ${alcanza ? 'text-blue-700 dark:text-blue-300' : 'text-red-700 dark:text-red-300'}`}>
+                                                                            Saldo disponible en cuenta:
+                                                                        </span>
+                                                                        <span className={`text-sm font-bold ${alcanza ? 'text-blue-700 dark:text-blue-300' : 'text-red-700 dark:text-red-300'}`}>
+                                                                            {saldoDisponible.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {codigoMoneda}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                                {/* Monto a descontar */}
+                                                                <div className={`flex items-center gap-3 rounded-lg border px-4 py-3 ${alcanza ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950' : 'border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950'}`}>
+                                                                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${alcanza ? 'bg-green-100 dark:bg-green-900' : 'bg-red-100 dark:bg-red-900'}`}>
+                                                                        <DollarSign className={`h-4 w-4 ${alcanza ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} />
+                                                                    </div>
+                                                                    <div className="flex-1">
+                                                                        <p className={`text-xs ${alcanza ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
+                                                                            {alcanza ? 'Se descontará de la cuenta' : '⚠️ Saldo insuficiente para cubrir la comisión'}
+                                                                        </p>
+                                                                        <p className={`text-lg font-bold ${alcanza ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
+                                                                            {montoGestor.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {codigoMoneda}
+                                                                        </p>
+                                                                        <p className={`text-xs ${alcanza ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                                                            ≈ {(montoGestor / parseFloat(tasaAplicadaGestor)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                    <div className="space-y-2">
+                                                        <Label>Comentario</Label>
+                                                        <Textarea
+                                                            placeholder="Ej: Gestor externo, acuerdo 50/50..."
+                                                            value={gestorComentario}
+                                                            onChange={(e) => setGestorComentario(e.target.value)}
+                                                            rows={2}
+                                                            className="resize-none"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </TabsContent>
                                 </ScrollProgress>
                             </Tabs>
 
@@ -1805,7 +1972,7 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                             window.print();
                                             document.body.innerHTML = originalContents;
                                         } else {
-                                            toast.error('No se pudo generar el reporte para imprimir');
+                                            sileo.error({ title: 'No se pudo generar el reporte para imprimir' });
                                         }
                                     }}
                                     className="cursor-pointer"
@@ -1832,14 +1999,14 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                     {isApproving
                                         ? 'Aprobando...'
                                         : !currentVenta.destinatario
-                                          ? 'Falta Receptor'
-                                          : comisionSinConfigurar
-                                            ? 'Falta Configurar Comisión'
-                                            : gestorSinSaldo
-                                              ? 'Sin Fondos Gestor'
-                                              : comisionSinSaldo
-                                                ? 'Sin Fondos Comisión'
-                                                : 'Aprobar Venta'}
+                                            ? 'Falta Receptor'
+                                            : comisionSinConfigurar
+                                                ? 'Falta Configurar Comisión'
+                                                : gestorSinSaldo
+                                                    ? 'Sin Fondos Gestor'
+                                                    : comisionSinSaldo
+                                                        ? 'Sin Fondos Comisión'
+                                                        : 'Aprobar Venta'}
                                 </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
@@ -2073,484 +2240,435 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
                 {/* ── Panel Distribución unificado ── */}
                 {isVentaPendiente && (
-                    <div className="bg-card border-sidebar-accent rounded-lg border p-6 shadow-sm">
-                        <h3 className="mb-3 flex items-center gap-2 text-base font-semibold">
-                            <DollarSign className="h-5 w-5 text-emerald-600" />
-                            Distribución de la Venta
-                        </h3>
-
-                        {/* ── Gadget de tasas del sistema ── */}
-                        {monedasSistema.length > 0 && (
-                            <div className="mb-4 flex flex-wrap gap-2">
-                                {monedasSistema.map(m => (
-                                    <span key={m.id} className="inline-flex items-center gap-1.5 rounded-full border bg-muted px-2.5 py-0.5 text-xs font-medium">
-                                        <span className="text-muted-foreground">{m.nombre}</span>
-                                        <span className="text-muted-foreground opacity-40">·</span>
-                                        <span className="font-semibold text-foreground">{m.codigo}</span>
-                                        <span className="text-muted-foreground opacity-40">·</span>
-                                        <span className="font-bold text-emerald-600">{Number(m.tasa).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</span>
-                                    </span>
-                                ))}
-                            </div>
-                        )}
-
-                        {/* ── Resumen de cobro ── */}
-                        <div className="mb-4 rounded-lg bg-slate-50 p-3 dark:bg-slate-900">
-                            <p className="mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">Resumen de cobro</p>
-                            <div className="space-y-1 text-sm">
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Productos:</span>
-                                    <span className="font-medium">
-                                        {formatCurrency(currentVenta.items.reduce((s, i) => s + i.subtotal, 0), monedaPrincipal?.codigo || 'USD')}
-                                    </span>
+                    <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                        <CardHeader className="bg-gradient-to-r from-emerald-600 to-emerald-700 px-6 py-5 text-white">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <DollarSign className="h-5 w-5" />
                                 </div>
-                                {currentVenta.mensajero && (
-                                    <div className="flex justify-between items-start">
-                                        <span className="text-muted-foreground flex items-center gap-1">
-                                            <Truck className="h-3 w-3" /> Mensajería:
-                                        </span>
-                                        <span className="text-right font-medium text-sky-600">
-                                            {(() => {
-                                                const { usd, cup, cobrado } = mensajeroMontos(currentVenta.mensajero);
-                                                const esUSD = !currentVenta.mensajero?.monto_original || currentVenta.mensajero.moneda === 'USD';
-                                                return (
-                                                    <span className="flex flex-col items-end">
-                                                        <span>+{cobrado}</span>
-                                                        {!esUSD && <span className="text-xs text-muted-foreground">≈ {usd}</span>}
-                                                        {cup && <span className="text-xs text-emerald-600">→ {cup} a distribuir</span>}
-                                                    </span>
-                                                );
-                                            })()}
-                                        </span>
-                                    </div>
-                                )}
-                                <div className="flex justify-between border-t pt-1 font-semibold">
-                                    <span>Total cliente:</span>
-                                    <span className="text-emerald-600">{formatCurrency(currentVenta.total, monedaPrincipal?.codigo || 'USD')}</span>
-                                </div>
-                            </div>
-                            {/* Pagos recibidos */}
-                            {currentVenta.pagos.length > 0 && (
-                                <div className="mt-3 border-t pt-2">
-                                    <p className="mb-1 text-xs font-medium text-slate-400">Pagos recibidos:</p>
-                                    <div className="space-y-1">
-                                        {currentVenta.pagos.map((p, i) => (
-                                            <div key={i} className="flex justify-between text-xs">
-                                                <span className="text-muted-foreground capitalize">
-                                                    {p.metodo}{p.via ? ` · ${p.via}` : ''}{p.moneda ? ` (${p.moneda.codigo})` : ''}
-                                                </span>
-                                                <span className="font-medium">
-                                                    {p.monto.toLocaleString('es-ES', { minimumFractionDigits: 2 })} {p.moneda?.codigo}
-                                                </span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* ── Mensajero ── */}
-                        <div className="mb-4 border-t pt-4">
-                            <div className="flex items-center justify-between mb-2">
-                                <h4 className="flex items-center gap-2 text-sm font-semibold">
-                                    <Truck className="h-4 w-4 text-sky-600" />
-                                    Mensajería
-                                    {currentVenta.mensajero && (
-                                        <Badge variant="outline" className="text-sky-600 text-xs">
-                                            {currentVenta.mensajero.tipo === 'propio' ? 'Propio' : 'Externo'}
-                                        </Badge>
-                                    )}
-                                </h4>
-                                {currentVenta.mensajero && (
-                                    <Button size="sm" variant="outline" onClick={() => {
-                                        setShowMensajeroForm(!showMensajeroForm);
-                                    }}>
-                                        {showMensajeroForm ? 'Cancelar' : 'Editar'}
-                                    </Button>
-                                )}
-                            </div>
-
-                            {!currentVenta.mensajero && (
-                                <p className="text-xs text-muted-foreground">Esta venta no tiene mensajería asociada.</p>
-                            )}
-
-                            {currentVenta.mensajero && !showMensajeroForm && (
-                                <div className="space-y-1 rounded-md bg-sky-50 px-3 py-2 text-sm dark:bg-sky-950">
-                                    {/* Bloque propio comentado — habilitar cuando se implemente vehículo propio */}
-                                    {/* {currentVenta.mensajero.tipo === 'propio' && (
-                                        <>
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-muted-foreground text-xs">← Origen: {currentVenta.mensajero.cuenta_origen?.nombre ?? <span className="text-red-500">Sin cuenta origen</span>}</span>
-                                            </div>
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-muted-foreground text-xs">→ Destino: {currentVenta.mensajero.cuenta?.nombre ?? 'Sin cuenta destino'}</span>
-                                                <span className="font-semibold text-sky-700">
-                                                    {currentVenta.mensajero.monto_final_cup
-                                                        ? `${Number(currentVenta.mensajero.monto_final_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
-                                                        : formatCurrency(currentVenta.mensajero.monto, 'USD')}
-                                                </span>
-                                            </div>
-                                        </>
-                                    )} */}
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground">
-                                            🛵 Sale de: {currentVenta.mensajero.cuenta?.nombre ?? 'Sin cuenta asignada'}
-                                        </span>
-                                        <span className="font-semibold text-sky-700">
-                                            {currentVenta.mensajero.monto_final_cup
-                                                ? `${Number(currentVenta.mensajero.monto_final_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
-                                                : formatCurrency(currentVenta.mensajero.monto, 'USD')}
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
-
-                            {showMensajeroForm && (
-                                <div className="mt-2 space-y-3 rounded-lg border p-3">
-                                    {/* Selector de tipo — comentado hasta habilitar vehículo propio */}
-                                    {/* <div className="space-y-1">
-                                        <Label className="text-xs">Tipo de mensajero</Label>
-                                        <Select value={mensajeroFormTipo} onValueChange={v => setMensajeroFormTipo(v as 'propio' | 'externo')}>
-                                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Tipo..." /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="propio">🚗 Vehículo propio</SelectItem>
-                                                <SelectItem value="externo">🛵 Mensajero externo</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div> */}
-
-                                    {/* Referencia del POS — solo lectura */}
-                                    {(() => {
-                                        const m = currentVenta.mensajero!;
-                                        const tasa = monedasSistema.find(x => x.codigo === 'CUP')?.tasa ?? 0;
-                                        const refCUP = Number(m.monto) * tasa;
-                                        return (
-                                            <div className="rounded-md bg-muted px-3 py-2 text-xs">
-                                                <span className="text-muted-foreground">Cobrado al cliente: </span>
-                                                <span className="font-semibold">
-                                                    {refCUP > 0
-                                                        ? `${refCUP.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
-                                                        : formatCurrency(m.monto ?? 0, 'USD')}
-                                                </span>
-                                            </div>
-                                        );
-                                    })()}
-
-                                    {/* Tasa de cambio para procesar el pago — editable, independiente de la tasa del sistema */}
-                                    <div className="space-y-1">
-                                        <Label className="text-xs">Tasa de cambio para el pago (CUP/USD)</Label>
-                                        <Input
-                                            type="number"
-                                            min="0.0001"
-                                            step="0.01"
-                                            value={mensajeroFormTasa}
-                                            onChange={e => {
-                                                const nuevaTasa = e.target.value;
-                                                setMensajeroFormTasa(nuevaTasa);
-                                                const tasaNum = parseFloat(nuevaTasa);
-                                                if (tasaNum > 0 && currentVenta.mensajero) {
-                                                    const nuevoMontoCUP = Number(currentVenta.mensajero.monto) * tasaNum;
-                                                    setMensajeroFormMontoCUP(nuevoMontoCUP > 0 ? String(nuevoMontoCUP.toFixed(2)) : '');
-                                                }
-                                            }}
-                                            placeholder="Ej: 380.00"
-                                            className="h-8 text-sm"
-                                        />
-                                        <p className="text-xs text-muted-foreground">
-                                            Recalcula el monto CUP de abajo. Se sugiere con la tasa del sistema, pero puedes ajustarla al momento de pagar.
-                                        </p>
-                                    </div>
-
-                                    {/* Monto final al mensajero — editable (permite ajuste manual adicional) */}
-                                    <div className="space-y-1">
-                                        <Label className="text-xs">Monto final al mensajero (CUP)</Label>
-                                        <Input
-                                            type="number"
-                                            min="0.01"
-                                            step="0.01"
-                                            value={mensajeroFormMontoCUP}
-                                            onChange={e => setMensajeroFormMontoCUP(e.target.value)}
-                                            placeholder="Ej: 10000.00"
-                                            className="h-8 text-sm"
-                                        />
-                                        {mensajeroFormMontoCUP && parseFloat(mensajeroFormMontoCUP) > 0 && (
-                                            <p className="text-xs font-medium text-sky-600">
-                                                Pago a mensajería: {parseFloat(mensajeroFormMontoCUP).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
-                                            </p>
-                                        )}
-                                    </div>
-
-                                    {/* EXTERNO: cuenta de donde sale el pago */}
-                                    <div className="rounded-md border border-dashed border-orange-300 p-2 space-y-1.5">
-                                        <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">🛵 Cuenta de donde sale el pago</p>
-                                        <Select value={mensajeroFormCuentaId} onValueChange={setMensajeroFormCuentaId}>
-                                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar cuenta CUP..." /></SelectTrigger>
-                                            <SelectContent>
-                                                {cuentasMensajero.map(c => (
-                                                    <SelectItem key={c.id} value={String(c.id)}>
-                                                        {c.nombre_cuenta} — {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        {mensajeroFormCuentaId && (() => {
-                                            const montoCUP = parseFloat(mensajeroFormMontoCUP);
-                                            const cuentaSel = cuentasMensajero.find(c => String(c.id) === mensajeroFormCuentaId);
-                                            const saldo = cuentaSel?.saldo_actual ?? 0;
-                                            const alcanza = !montoCUP || saldo >= montoCUP;
-                                            return (
-                                                <p className={`text-xs ${alcanza ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                    Saldo: <strong>{saldo.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong>
-                                                    {montoCUP > 0 && <> — Necesario: <strong>{montoCUP.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong> {alcanza ? '✓' : '⚠️ Insuficiente'}</>}
-                                                </p>
-                                            );
-                                        })()}
-                                    </div>
-
-                                    {/* Bloque propio comentado — habilitar cuando se implemente vehículo propio */}
-                                    {/* {mensajeroFormTipo === 'propio' && (
-                                        <>
-                                            <div className="rounded-md border border-dashed border-orange-300 p-2 space-y-1.5">
-                                                <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">← Cuenta origen (de donde sale)</p>
-                                                <Select value={mensajeroFormCuentaOrigenId} onValueChange={setMensajeroFormCuentaOrigenId}>
-                                                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Cuenta CUP cobrada al cliente..." /></SelectTrigger>
-                                                    <SelectContent>
-                                                        {cuentasMensajero.map(c => (
-                                                            <SelectItem key={c.id} value={String(c.id)}>
-                                                                {c.nombre_cuenta} — {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div className="rounded-md border border-dashed border-emerald-300 p-2 space-y-1.5">
-                                                <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wide">→ Cuenta destino (mensajero del almacén)</p>
-                                                <Select value={mensajeroFormCuentaId} onValueChange={setMensajeroFormCuentaId}>
-                                                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Cuenta del mensajero..." /></SelectTrigger>
-                                                    <SelectContent>
-                                                        {cuentasMensajero.map(c => (
-                                                            <SelectItem key={c.id} value={String(c.id)}>
-                                                                {c.nombre_cuenta} — {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                        </>
-                                    )} */}
-
-                                    <div className="flex gap-2 justify-end">
-                                        {currentVenta.mensajero && (
-                                            <Button size="sm" variant="outline" className="text-red-600" disabled={guardandoDistribucion}
-                                                onClick={() => guardarDistribucion({ limpiar_mensajero: true })}>
-                                                Quitar
-                                            </Button>
-                                        )}
-                                        <Button size="sm" disabled={guardandoDistribucion} onClick={guardarMensajero}>
-                                            {guardandoDistribucion ? 'Guardando...' : 'Guardar'}
-                                        </Button>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* ── Comisión: vendedor O gestor (XOR) ── */}
-                        <div className="border-t pt-4">
-                            <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                                <Store className="h-4 w-4 text-amber-600" />
-                                Comisión
-                                <span className="text-xs font-normal text-muted-foreground">
-                                    {formatCurrency(currentVenta.total_comision, 'USD')}
-                                </span>
-                            </h4>
-
-                            {/* Selector XOR */}
-                            <div className="flex gap-2 mb-3">
-                                <Button
-                                    size="sm"
-                                    variant={!currentVenta.gestor ? 'default' : 'outline'}
-                                    className={!currentVenta.gestor ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'text-amber-700'}
-                                    onClick={() => {
-                                        if (currentVenta.gestor) setShowCambiarAComisionPV(true);
-                                    }}
-                                >
-                                    🏪 Punto de Venta
-                                </Button>
-                                <Button
-                                    size="sm"
-                                    variant={currentVenta.gestor ? 'default' : 'outline'}
-                                    className={currentVenta.gestor ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'text-blue-700'}
-                                    onClick={() => {
-                                        if (!currentVenta.gestor) {
-                                            setIsEditingDestinatario(!!currentVenta.destinatario);
-                                            setEsVentaGestor(true);
-                                            setActiveTab('gestor');
-                                            setIsDestinatarioDialogOpen(true);
-                                        }
-                                    }}
-                                >
-                                    💼 Gestor
-                                </Button>
-                            </div>
-
-                            {/* Diálogo confirmación cambio a PV */}
-                            <AlertDialog open={showCambiarAComisionPV} onOpenChange={setShowCambiarAComisionPV}>
-                                <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                        <AlertDialogTitle>¿Cambiar a Punto de Venta?</AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                            Se eliminará la configuración del gestor. La comisión pasará al punto de venta y deberás configurar cuenta y tasa.
-                                        </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                        <AlertDialogAction
-                                            className="bg-amber-600 hover:bg-amber-700"
-                                            onClick={() => {
-                                                guardarDistribucion({ limpiar_gestor: true });
-                                                setShowCambiarAComisionPV(false);
-                                            }}
-                                        >
-                                            Sí, cambiar
-                                        </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                </AlertDialogContent>
-                            </AlertDialog>
-
-                            {/* Si hay gestor: info de solo lectura */}
-                            {currentVenta.gestor ? (
-                                <div className="rounded-md bg-blue-50 px-3 py-2 text-sm dark:bg-blue-950">
-                                    <div className="flex justify-between">
-                                        <span className="text-muted-foreground">→ {currentVenta.gestor.cuenta_nombre}:</span>
-                                        <span className="font-semibold text-blue-700">
-                                            {currentVenta.gestor.monto.toLocaleString('es-ES', { minimumFractionDigits: 2 })}{' '}
-                                            {currentVenta.gestor.moneda?.codigo}
-                                        </span>
-                                    </div>
-                                    <p className="mt-1 text-xs text-blue-500">Edita desde la card "Gestor" → botón Editar</p>
-                                </div>
-                            ) : (
-                                /* Sin gestor: comisión va al vendedor */
                                 <div>
-                                    <div className="flex items-center justify-between mb-2">
-                                        <div className="text-sm">
-                                            <span className="text-muted-foreground">Comisión total:</span>{' '}
-                                            <span className="font-bold text-amber-700">
-                                                {formatCurrency(currentVenta.total_comision, 'USD')}
-                                            </span>
-                                            {currentVenta.comision_pago?.monto_cup && (
-                                                <span className="ml-1 text-amber-600">
-                                                    = {Number(currentVenta.comision_pago.monto_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
-                                                </span>
-                                            )}
-                                        </div>
-                                        <Button size="sm" variant="outline" onClick={() => {
-                                            if (currentVenta.comision_pago) {
-                                                setComisionFormCuentaId(String(currentVenta.comision_pago.cuenta?.id ?? ''));
-                                                // Tasa: guardada, o tasa CUP real del sistema
-                                                const tasaCUP = monedasSistema.find(m => m.codigo === 'CUP')?.tasa;
-                                                setComisionFormTasa(
-                                                    currentVenta.comision_pago.tasa
-                                                        ? String(currentVenta.comision_pago.tasa)
-                                                        : String(tasaCUP ?? currentVenta.tasa_cambio_principal ?? '')
-                                                );
-                                            }
-                                            setShowComisionForm(!showComisionForm);
-                                        }}>
-                                            {showComisionForm ? 'Cancelar' : currentVenta.comision_pago?.cuenta ? 'Editar' : 'Configurar'}
-                                        </Button>
+                                    <CardTitle className="text-base font-semibold text-white">Distribución de la Venta</CardTitle>
+                                    <CardDescription className="text-xs text-emerald-100">
+                                        Mensajería, comisión y reparto del cobro
+                                    </CardDescription>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="pt-5">
+
+                            {/* ── Gadget de tasas del sistema ── */}
+                            {monedasSistema.length > 0 && (
+                                <div className="mb-4 flex flex-wrap gap-2">
+                                    {monedasSistema.map(m => (
+                                        <span key={m.id} className="inline-flex items-center gap-1.5 rounded-full border bg-muted px-2.5 py-0.5 text-xs font-medium">
+                                            <span className="text-muted-foreground">{m.nombre}</span>
+                                            <span className="text-muted-foreground opacity-40">·</span>
+                                            <span className="font-semibold text-foreground">{m.codigo}</span>
+                                            <span className="text-muted-foreground opacity-40">·</span>
+                                            <span className="font-bold text-emerald-600">{Number(m.tasa).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</span>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* ── Resumen de cobro ── */}
+                            <div className="mb-4 rounded-lg bg-slate-50 p-3 dark:bg-slate-900">
+                                <p className="mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">Resumen de cobro</p>
+                                <div className="space-y-1 text-sm">
+                                    <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Productos:</span>
+                                        <span className="font-medium">
+                                            {formatCurrency(currentVenta.items.reduce((s, i) => s + i.subtotal, 0), monedaPrincipal?.codigo || 'USD')}
+                                        </span>
                                     </div>
-
-                                    {currentVenta.comision_pago?.cuenta && !showComisionForm && (
-                                        <div className="flex justify-between rounded-md bg-amber-50 px-3 py-2 text-sm dark:bg-amber-950">
-                                            <span className="text-muted-foreground">{currentVenta.comision_pago.cuenta.nombre}</span>
-                                            <span className="font-semibold text-amber-700">
-                                                {Number(currentVenta.comision_pago.monto_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
-                                                {currentVenta.comision_pago.cuenta.saldo_disponible !== undefined && (
-                                                    <span className={`ml-2 text-xs ${currentVenta.comision_pago.cuenta.saldo_disponible >= (currentVenta.comision_pago.monto_cup ?? 0) ? 'text-green-600' : 'text-red-600'}`}>
-                                                        (saldo: {currentVenta.comision_pago.cuenta.saldo_disponible.toLocaleString('es-ES', { minimumFractionDigits: 2 })})
-                                                    </span>
-                                                )}
+                                    {currentVenta.mensajero && (
+                                        <div className="flex justify-between items-start">
+                                            <span className="text-muted-foreground flex items-center gap-1">
+                                                <Truck className="h-3 w-3" /> Mensajería:
                                             </span>
-                                        </div>
-                                    )}
-
-                                    {showComisionForm && (
-                                        <div className="mt-2 space-y-3 rounded-lg border p-3">
-                                            {/* Comisión USD fija de la venta */}
-                                            <div className="rounded-md bg-amber-50 px-3 py-2 text-xs dark:bg-amber-950">
-                                                <span className="text-muted-foreground">Comisión a distribuir: </span>
-                                                <span className="font-bold text-amber-700">{formatCurrency(currentVenta.total_comision, 'USD')}</span>
-                                            </div>
-                                            <div className="space-y-1">
-                                                <Label className="text-xs">Tasa CUP/USD</Label>
-                                                <Input type="number" min="0.01" step="0.01" value={comisionFormTasa}
-                                                    onChange={e => setComisionFormTasa(e.target.value)}
-                                                    className="h-8 text-sm" />
-                                            </div>
-                                            {/* CUP en vivo */}
-                                            {comisionFormTasa && parseFloat(comisionFormTasa) > 0 && (
-                                                <div className="rounded-md bg-sky-50 px-3 py-2 text-xs dark:bg-sky-950">
-                                                    <span className="text-muted-foreground">Equivale a: </span>
-                                                    <span className="font-bold text-sky-700">
-                                                        {(currentVenta.total_comision * parseFloat(comisionFormTasa)).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
-                                                    </span>
-                                                </div>
-                                            )}
-                                            {/* ORIGEN: de donde sale */}
-                                            <div className="rounded-md border border-dashed border-orange-300 p-2 space-y-1.5">
-                                                <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">← Origen (de donde sale)</p>
-                                                <Select value={comisionFormCuentaId} onValueChange={setComisionFormCuentaId}>
-                                                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Cuenta CUP..." /></SelectTrigger>
-                                                    <SelectContent>
-                                                        {cuentasComision.map(c => (
-                                                            <SelectItem key={c.id} value={String(c.id)}>
-                                                                {c.nombre_cuenta} — {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                                {comisionFormCuentaId && comisionFormTasa && parseFloat(comisionFormTasa) > 0 && (() => {
-                                                    const cup = currentVenta.total_comision * parseFloat(comisionFormTasa);
-                                                    const cuentaSel = cuentasComision.find(c => String(c.id) === comisionFormCuentaId);
-                                                    const saldo = cuentaSel?.saldo_actual ?? 0;
-                                                    const alcanza = saldo >= cup;
+                                            <span className="text-right font-medium text-sky-600">
+                                                {(() => {
+                                                    const { usd, cup, cobrado } = mensajeroMontos(currentVenta.mensajero);
+                                                    const esUSD = !currentVenta.mensajero?.monto_original || currentVenta.mensajero.moneda === 'USD';
                                                     return (
-                                                        <p className={`text-xs ${alcanza ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                            Saldo: <strong>{saldo.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong>
-                                                            {' — '}Necesario: <strong>{cup.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong> {alcanza ? '✓' : '⚠️ Insuficiente'}
-                                                        </p>
+                                                        <span className="flex flex-col items-end">
+                                                            <span>+{cobrado}</span>
+                                                            {!esUSD && <span className="text-xs text-muted-foreground">≈ {usd}</span>}
+                                                            {cup && <span className="text-xs text-emerald-600">→ {cup} a distribuir</span>}
+                                                        </span>
                                                     );
                                                 })()}
-                                            </div>
-
-                                            {/* DESTINO: a donde va */}
-                                            <div className="rounded-md border border-dashed border-amber-300 p-2 space-y-1">
-                                                <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide">→ Destino (a donde va)</p>
-                                                <p className="text-xs text-amber-700">
-                                                    Comisión del vendedor <strong>{currentVenta.usuario?.nombre}</strong>
-                                                    {comisionFormTasa && parseFloat(comisionFormTasa) > 0
-                                                        ? ` — ${(currentVenta.total_comision * parseFloat(comisionFormTasa)).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
-                                                        : ''}
-                                                </p>
-                                            </div>
-                                            <div className="flex justify-end gap-2">
-                                                {currentVenta.comision_pago?.cuenta && (
-                                                    <Button size="sm" variant="outline" className="text-red-600" disabled={guardandoDistribucion}
-                                                        onClick={() => guardarDistribucion({ limpiar_comision: true })}>
-                                                        Quitar
-                                                    </Button>
-                                                )}
-                                                <Button size="sm" disabled={guardandoDistribucion} onClick={guardarComisionVendedor}>
-                                                    {guardandoDistribucion ? 'Guardando...' : 'Guardar'}
-                                                </Button>
-                                            </div>
+                                            </span>
                                         </div>
                                     )}
+                                    <div className="flex justify-between border-t pt-1 font-semibold">
+                                        <span>Total cliente:</span>
+                                        <span className="text-emerald-600">{formatCurrency(currentVenta.total, monedaPrincipal?.codigo || 'USD')}</span>
+                                    </div>
                                 </div>
-                            )}
-                        </div>
-                    </div>
+                                {/* Pagos recibidos */}
+                                {currentVenta.pagos.length > 0 && (
+                                    <div className="mt-3 border-t pt-2">
+                                        <p className="mb-1 text-xs font-medium text-slate-400">Pagos recibidos:</p>
+                                        <div className="space-y-1">
+                                            {currentVenta.pagos.map((p, i) => (
+                                                <div key={i} className="flex justify-between text-xs">
+                                                    <span className="text-muted-foreground capitalize">
+                                                        {p.metodo}{p.via ? ` · ${p.via}` : ''}{p.moneda ? ` (${p.moneda.codigo})` : ''}
+                                                    </span>
+                                                    <span className="font-medium">
+                                                        {p.monto.toLocaleString('es-ES', { minimumFractionDigits: 2 })} {p.moneda?.codigo}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* ── Mensajero ── */}
+                            <div className="mb-4 border-t pt-4">
+                                <div className="flex items-center justify-between mb-2">
+                                    <h4 className="flex items-center gap-2 text-sm font-semibold">
+                                        <Truck className="h-4 w-4 text-sky-600" />
+                                        Mensajería
+                                        {currentVenta.mensajero && (
+                                            <Badge variant="outline" className="text-sky-600 text-xs">
+                                                {currentVenta.mensajero.tipo === 'propio' ? 'Propio' : 'Externo'}
+                                            </Badge>
+                                        )}
+                                    </h4>
+                                    {currentVenta.mensajero && (
+                                        <Button size="sm" variant="outline" onClick={() => {
+                                            setShowMensajeroForm(!showMensajeroForm);
+                                        }}>
+                                            {showMensajeroForm ? 'Cancelar' : 'Editar'}
+                                        </Button>
+                                    )}
+                                </div>
+
+                                {!currentVenta.mensajero && (
+                                    <p className="text-xs text-muted-foreground">Esta venta no tiene mensajería asociada.</p>
+                                )}
+
+                                {currentVenta.mensajero && !showMensajeroForm && (
+                                    <div className="space-y-1 rounded-md bg-sky-50 px-3 py-2 text-sm dark:bg-sky-950">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-muted-foreground">
+                                                🛵 Sale de: {currentVenta.mensajero.cuenta?.nombre ?? 'Sin cuenta asignada'}
+                                            </span>
+                                            <span className="font-semibold text-sky-700">
+                                                {currentVenta.mensajero.monto_final_cup
+                                                    ? `${Number(currentVenta.mensajero.monto_final_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
+                                                    : formatCurrency(currentVenta.mensajero.monto, 'USD')}
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {showMensajeroForm && (
+                                    <div className="mt-2 space-y-3 rounded-lg border p-3">
+                                        {/* Referencia del POS — solo lectura */}
+                                        {(() => {
+                                            const m = currentVenta.mensajero!;
+                                            const tasa = monedasSistema.find(x => x.codigo === 'CUP')?.tasa ?? 0;
+                                            const refCUP = Number(m.monto) * tasa;
+                                            return (
+                                                <div className="rounded-md bg-muted px-3 py-2 text-xs">
+                                                    <span className="text-muted-foreground">Cobrado al cliente: </span>
+                                                    <span className="font-semibold">
+                                                        {refCUP > 0
+                                                            ? `${refCUP.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
+                                                            : formatCurrency(m.monto ?? 0, 'USD')}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })()}
+
+                                        {/* Tasa de cambio para procesar el pago — editable, independiente de la tasa del sistema */}
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">Tasa de cambio para el pago (CUP/USD)</Label>
+                                            <Input
+                                                type="number"
+                                                min="0.0001"
+                                                step="0.01"
+                                                value={mensajeroFormTasa}
+                                                onChange={e => {
+                                                    const nuevaTasa = e.target.value;
+                                                    setMensajeroFormTasa(nuevaTasa);
+                                                    const tasaNum = parseFloat(nuevaTasa);
+                                                    if (tasaNum > 0 && currentVenta.mensajero) {
+                                                        const nuevoMontoCUP = Number(currentVenta.mensajero.monto) * tasaNum;
+                                                        setMensajeroFormMontoCUP(nuevoMontoCUP > 0 ? String(nuevoMontoCUP.toFixed(2)) : '');
+                                                    }
+                                                }}
+                                                placeholder="Ej: 380.00"
+                                                className="h-8 text-sm"
+                                            />
+                                            <p className="text-xs text-muted-foreground">
+                                                Recalcula el monto CUP de abajo. Se sugiere con la tasa del sistema, pero puedes ajustarla al momento de pagar.
+                                            </p>
+                                        </div>
+
+                                        {/* Monto final al mensajero — editable (permite ajuste manual adicional) */}
+                                        <div className="space-y-1">
+                                            <Label className="text-xs">Monto final al mensajero (CUP)</Label>
+                                            <Input
+                                                type="number"
+                                                min="0.01"
+                                                step="0.01"
+                                                value={mensajeroFormMontoCUP}
+                                                onChange={e => setMensajeroFormMontoCUP(e.target.value)}
+                                                placeholder="Ej: 10000.00"
+                                                className="h-8 text-sm"
+                                            />
+                                            {mensajeroFormMontoCUP && parseFloat(mensajeroFormMontoCUP) > 0 && (
+                                                <p className="text-xs font-medium text-sky-600">
+                                                    Pago a mensajería: {parseFloat(mensajeroFormMontoCUP).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        {/* EXTERNO: cuenta de donde sale el pago */}
+                                        <div className="rounded-md border border-dashed border-orange-300 p-2 space-y-1.5">
+                                            <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">🛵 Cuenta de donde sale el pago</p>
+                                            <Select value={mensajeroFormCuentaId} onValueChange={setMensajeroFormCuentaId}>
+                                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar cuenta CUP..." /></SelectTrigger>
+                                                <SelectContent>
+                                                    {cuentasMensajero.map(c => (
+                                                        <SelectItem key={c.id} value={String(c.id)}>
+                                                            {c.nombre_cuenta} — {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            {mensajeroFormCuentaId && (() => {
+                                                const montoCUP = parseFloat(mensajeroFormMontoCUP);
+                                                const cuentaSel = cuentasMensajero.find(c => String(c.id) === mensajeroFormCuentaId);
+                                                const saldo = cuentaSel?.saldo_actual ?? 0;
+                                                const alcanza = !montoCUP || saldo >= montoCUP;
+                                                return (
+                                                    <p className={`text-xs ${alcanza ? 'text-emerald-600' : 'text-red-600'}`}>
+                                                        Saldo: <strong>{saldo.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong>
+                                                        {montoCUP > 0 && <> — Necesario: <strong>{montoCUP.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong> {alcanza ? '✓' : '⚠️ Insuficiente'}</>}
+                                                    </p>
+                                                );
+                                            })()}
+                                        </div>
+
+                                        <div className="flex gap-2 justify-end">
+                                            {currentVenta.mensajero && (
+                                                <Button size="sm" variant="outline" className="text-red-600" disabled={guardandoDistribucion}
+                                                    onClick={() => guardarDistribucion({ limpiar_mensajero: true })}>
+                                                    Quitar
+                                                </Button>
+                                            )}
+                                            <Button size="sm" disabled={guardandoDistribucion} onClick={guardarMensajero}>
+                                                {guardandoDistribucion ? 'Guardando...' : 'Guardar'}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* ── Comisión: vendedor O gestor (XOR) ── */}
+                            <div className="border-t pt-4">
+                                <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                                    <Store className="h-4 w-4 text-amber-600" />
+                                    Comisión
+                                    <span className="text-xs font-normal text-muted-foreground">
+                                        {formatCurrency(currentVenta.total_comision, 'USD')}
+                                    </span>
+                                </h4>
+
+                                {/* Selector XOR */}
+                                <div className="flex gap-2 mb-3">
+                                    <Button
+                                        size="sm"
+                                        variant={!currentVenta.gestor ? 'default' : 'outline'}
+                                        className={!currentVenta.gestor ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'text-amber-700'}
+                                        onClick={() => {
+                                            if (currentVenta.gestor) setShowCambiarAComisionPV(true);
+                                        }}
+                                    >
+                                        🏪 Punto de Venta
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant={currentVenta.gestor ? 'default' : 'outline'}
+                                        className={currentVenta.gestor ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'text-blue-700'}
+                                        onClick={() => {
+                                            if (!currentVenta.gestor) {
+                                                setIsEditingDestinatario(!!currentVenta.destinatario);
+                                                setEsVentaGestor(true);
+                                                setActiveTab('gestor');
+                                                setIsDestinatarioDialogOpen(true);
+                                            }
+                                        }}
+                                    >
+                                        💼 Gestor
+                                    </Button>
+                                </div>
+
+                                {/* Diálogo confirmación cambio a PV */}
+                                <AlertDialog open={showCambiarAComisionPV} onOpenChange={setShowCambiarAComisionPV}>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>¿Cambiar a Punto de Venta?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                Se eliminará la configuración del gestor. La comisión pasará al punto de venta y deberás configurar cuenta y tasa.
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                            <AlertDialogAction
+                                                className="bg-amber-600 hover:bg-amber-700"
+                                                onClick={() => {
+                                                    guardarDistribucion({ limpiar_gestor: true });
+                                                    setShowCambiarAComisionPV(false);
+                                                }}
+                                            >
+                                                Sí, cambiar
+                                            </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+
+                                {/* Si hay gestor: info de solo lectura */}
+                                {currentVenta.gestor ? (
+                                    <div className="rounded-md bg-blue-50 px-3 py-2 text-sm dark:bg-blue-950">
+                                        <div className="flex justify-between">
+                                            <span className="text-muted-foreground">→ {currentVenta.gestor.cuenta_nombre}:</span>
+                                            <span className="font-semibold text-blue-700">
+                                                {currentVenta.gestor.monto.toLocaleString('es-ES', { minimumFractionDigits: 2 })}{' '}
+                                                {currentVenta.gestor.moneda?.codigo}
+                                            </span>
+                                        </div>
+                                        <p className="mt-1 text-xs text-blue-500">Edita desde la card "Gestor" → botón Editar</p>
+                                    </div>
+                                ) : (
+                                    /* Sin gestor: comisión va al vendedor */
+                                    <div>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <div className="text-sm">
+                                                <span className="text-muted-foreground">Comisión total:</span>{' '}
+                                                <span className="font-bold text-amber-700">
+                                                    {formatCurrency(currentVenta.total_comision, 'USD')}
+                                                </span>
+                                                {currentVenta.comision_pago?.monto_cup && (
+                                                    <span className="ml-1 text-amber-600">
+                                                        = {Number(currentVenta.comision_pago.monto_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <Button size="sm" variant="outline" onClick={() => {
+                                                if (currentVenta.comision_pago) {
+                                                    setComisionFormCuentaId(String(currentVenta.comision_pago.cuenta?.id ?? ''));
+                                                    // Tasa: guardada, o tasa CUP real del sistema
+                                                    const tasaCUP = monedasSistema.find(m => m.codigo === 'CUP')?.tasa;
+                                                    setComisionFormTasa(
+                                                        currentVenta.comision_pago.tasa
+                                                            ? String(currentVenta.comision_pago.tasa)
+                                                            : String(tasaCUP ?? currentVenta.tasa_cambio_principal ?? '')
+                                                    );
+                                                }
+                                                setShowComisionForm(!showComisionForm);
+                                            }}>
+                                                {showComisionForm ? 'Cancelar' : currentVenta.comision_pago?.cuenta ? 'Editar' : 'Configurar'}
+                                            </Button>
+                                        </div>
+
+                                        {currentVenta.comision_pago?.cuenta && !showComisionForm && (
+                                            <div className="flex justify-between rounded-md bg-amber-50 px-3 py-2 text-sm dark:bg-amber-950">
+                                                <span className="text-muted-foreground">{currentVenta.comision_pago.cuenta.nombre}</span>
+                                                <span className="font-semibold text-amber-700">
+                                                    {Number(currentVenta.comision_pago.monto_cup ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                    {currentVenta.comision_pago.cuenta.saldo_disponible !== undefined && (
+                                                        <span className={`ml-2 text-xs ${currentVenta.comision_pago.cuenta.saldo_disponible >= (currentVenta.comision_pago.monto_cup ?? 0) ? 'text-green-600' : 'text-red-600'}`}>
+                                                            (saldo: {currentVenta.comision_pago.cuenta.saldo_disponible.toLocaleString('es-ES', { minimumFractionDigits: 2 })})
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            </div>
+                                        )}
+
+                                        {showComisionForm && (
+                                            <div className="mt-2 space-y-3 rounded-lg border p-3">
+                                                {/* Comisión USD fija de la venta */}
+                                                <div className="rounded-md bg-amber-50 px-3 py-2 text-xs dark:bg-amber-950">
+                                                    <span className="text-muted-foreground">Comisión a distribuir: </span>
+                                                    <span className="font-bold text-amber-700">{formatCurrency(currentVenta.total_comision, 'USD')}</span>
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <Label className="text-xs">Tasa CUP/USD</Label>
+                                                    <Input type="number" min="0.01" step="0.01" value={comisionFormTasa}
+                                                        onChange={e => setComisionFormTasa(e.target.value)}
+                                                        className="h-8 text-sm" />
+                                                </div>
+                                                {/* CUP en vivo */}
+                                                {comisionFormTasa && parseFloat(comisionFormTasa) > 0 && (
+                                                    <div className="rounded-md bg-sky-50 px-3 py-2 text-xs dark:bg-sky-950">
+                                                        <span className="text-muted-foreground">Equivale a: </span>
+                                                        <span className="font-bold text-sky-700">
+                                                            {(currentVenta.total_comision * parseFloat(comisionFormTasa)).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {/* ORIGEN: de donde sale */}
+                                                <div className="rounded-md border border-dashed border-orange-300 p-2 space-y-1.5">
+                                                    <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">← Origen (de donde sale)</p>
+                                                    <Select value={comisionFormCuentaId} onValueChange={setComisionFormCuentaId}>
+                                                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Cuenta CUP..." /></SelectTrigger>
+                                                        <SelectContent>
+                                                            {cuentasComision.map(c => (
+                                                                <SelectItem key={c.id} value={String(c.id)}>
+                                                                    {c.nombre_cuenta} — {(c.saldo_actual ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    {comisionFormCuentaId && comisionFormTasa && parseFloat(comisionFormTasa) > 0 && (() => {
+                                                        const cup = currentVenta.total_comision * parseFloat(comisionFormTasa);
+                                                        const cuentaSel = cuentasComision.find(c => String(c.id) === comisionFormCuentaId);
+                                                        const saldo = cuentaSel?.saldo_actual ?? 0;
+                                                        const alcanza = saldo >= cup;
+                                                        return (
+                                                            <p className={`text-xs ${alcanza ? 'text-emerald-600' : 'text-red-600'}`}>
+                                                                Saldo: <strong>{saldo.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong>
+                                                                {' — '}Necesario: <strong>{cup.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP</strong> {alcanza ? '✓' : '⚠️ Insuficiente'}
+                                                            </p>
+                                                        );
+                                                    })()}
+                                                </div>
+
+                                                {/* DESTINO: a donde va */}
+                                                <div className="rounded-md border border-dashed border-amber-300 p-2 space-y-1">
+                                                    <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide">→ Destino (a donde va)</p>
+                                                    <p className="text-xs text-amber-700">
+                                                        Comisión del vendedor <strong>{currentVenta.usuario?.nombre}</strong>
+                                                        {comisionFormTasa && parseFloat(comisionFormTasa) > 0
+                                                            ? ` — ${(currentVenta.total_comision * parseFloat(comisionFormTasa)).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP`
+                                                            : ''}
+                                                    </p>
+                                                </div>
+                                                <div className="flex justify-end gap-2">
+                                                    {currentVenta.comision_pago?.cuenta && (
+                                                        <Button size="sm" variant="outline" className="text-red-600" disabled={guardandoDistribucion}
+                                                            onClick={() => guardarDistribucion({ limpiar_comision: true })}>
+                                                            Quitar
+                                                        </Button>
+                                                    )}
+                                                    <Button size="sm" disabled={guardandoDistribucion} onClick={guardarComisionVendedor}>
+                                                        {guardandoDistribucion ? 'Guardando...' : 'Guardar'}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
                 )}
 
                 {/* ── Cards: Destinatario, Comisión PV, Gestor y Mensajero ── */}
@@ -2677,17 +2795,15 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                         </div>
                                     )}
                                     {isVentaPendiente && currentVenta.comision_pago.cuenta?.saldo_disponible !== undefined && currentVenta.comision_pago.monto_cup && (
-                                        <div className={`flex items-center justify-between rounded-md border px-3 py-2 ${
-                                            currentVenta.comision_pago.cuenta.saldo_disponible >= currentVenta.comision_pago.monto_cup
-                                                ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950'
-                                                : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950'
-                                        }`}>
-                                            <span className="text-xs font-medium">Saldo disponible:</span>
-                                            <span className={`text-sm font-bold ${
-                                                currentVenta.comision_pago.cuenta.saldo_disponible >= currentVenta.comision_pago.monto_cup
-                                                    ? 'text-green-700 dark:text-green-300'
-                                                    : 'text-red-700 dark:text-red-300'
+                                        <div className={`flex items-center justify-between rounded-md border px-3 py-2 ${currentVenta.comision_pago.cuenta.saldo_disponible >= currentVenta.comision_pago.monto_cup
+                                            ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950'
+                                            : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950'
                                             }`}>
+                                            <span className="text-xs font-medium">Saldo disponible:</span>
+                                            <span className={`text-sm font-bold ${currentVenta.comision_pago.cuenta.saldo_disponible >= currentVenta.comision_pago.monto_cup
+                                                ? 'text-green-700 dark:text-green-300'
+                                                : 'text-red-700 dark:text-red-300'
+                                                }`}>
                                                 {currentVenta.comision_pago.cuenta.saldo_disponible.toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
                                             </span>
                                         </div>
@@ -2852,31 +2968,71 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
 
                 {/* ── Info general de la venta ── */}
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    <div className="bg-card rounded-lg p-4 shadow-sm">
+                    <div className="bg-card rounded-lg border-l-4 border-slate-400 p-4 shadow-sm dark:border-slate-600">
                         <div className="flex items-center gap-2">
-                            <Calendar className="text-muted-foreground h-5 w-5" />
-                            <h3 className="font-semibold">Fecha y Hora</h3>
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                                <Calendar className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+                            </div>
+                            <h3 className="text-sm font-semibold">Fecha y Hora</h3>
                         </div>
                         <p className="mt-2 text-sm">{formatDate(currentVenta.fecha)}</p>
                     </div>
-                    <div className="bg-card rounded-lg p-4 shadow-sm">
+                    <div className="bg-card rounded-lg border-l-4 border-violet-400 p-4 shadow-sm dark:border-violet-600">
                         <div className="flex items-center gap-2">
-                            <Store className="text-muted-foreground h-5 w-5" />
-                            <h3 className="font-semibold">Almacén</h3>
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-100 dark:bg-violet-900/40">
+                                <Store className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                            </div>
+                            <h3 className="text-sm font-semibold">Almacén</h3>
                         </div>
                         <p className="mt-2 text-sm">{currentVenta.almacen.nombre}</p>
                     </div>
-                    <div className="bg-card rounded-lg p-4 shadow-sm">
+                    <div
+                        className={`bg-card rounded-lg border-l-4 p-4 shadow-sm ${currentVenta.cliente
+                            ? 'border-blue-400 dark:border-blue-600'
+                            : currentVenta.destinatario
+                                ? 'border-amber-400 dark:border-amber-600'
+                                : 'border-muted'
+                            }`}
+                    >
                         <div className="flex items-center gap-2">
-                            <User className="text-muted-foreground h-5 w-5" />
-                            <h3 className="font-semibold">Cliente</h3>
+                            <div
+                                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${currentVenta.cliente
+                                    ? 'bg-blue-100 dark:bg-blue-900/40'
+                                    : currentVenta.destinatario
+                                        ? 'bg-amber-100 dark:bg-amber-900/40'
+                                        : 'bg-muted'
+                                    }`}
+                            >
+                                <User
+                                    className={`h-4 w-4 ${currentVenta.cliente
+                                        ? 'text-blue-600 dark:text-blue-400'
+                                        : currentVenta.destinatario
+                                            ? 'text-amber-600 dark:text-amber-400'
+                                            : 'text-muted-foreground'
+                                        }`}
+                                />
+                            </div>
+                            <h3 className="text-sm font-semibold">Cliente</h3>
                         </div>
-                        <p className="mt-2 text-sm">{currentVenta.cliente?.nombre ?? 'Cliente no especificado'}</p>
+                        {currentVenta.cliente ? (
+                            <p className="mt-2 text-sm">{currentVenta.cliente.nombre}</p>
+                        ) : currentVenta.destinatario ? (
+                            <div className="mt-2">
+                                <p className="text-sm">
+                                    {currentVenta.destinatario.nombre} {currentVenta.destinatario.apellidos}
+                                </p>
+                                <p className="text-muted-foreground text-xs">(Receptor de la venta)</p>
+                            </div>
+                        ) : (
+                            <p className="mt-2 text-sm">Cliente no especificado</p>
+                        )}
                     </div>
-                    <div className="bg-card rounded-lg p-4 shadow-sm">
+                    <div className="bg-card rounded-lg border-l-4 border-emerald-400 p-4 shadow-sm dark:border-emerald-600">
                         <div className="flex items-center gap-2">
-                            <UserCheck className="text-muted-foreground h-5 w-5" />
-                            <h3 className="font-semibold">Vendedor</h3>
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/40">
+                                <UserCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                            </div>
+                            <h3 className="text-sm font-semibold">Vendedor</h3>
                         </div>
                         <p className="mt-2 text-sm">
                             {currentVenta.usuario.nombre} ({currentVenta.usuario.rol})
@@ -2885,269 +3041,303 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                 </div>
 
                 {/* ── Tabla de productos ── */}
-                <div className="bg-card rounded-lg p-6 shadow-sm">
-                    <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold">
-                        <Package className="h-5 w-5" />
-                        Productos Vendidos
-                    </h3>
-                    <div className="overflow-x-auto rounded-lg border">
-                        <table className="w-full text-sm">
-                            <thead className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                                <tr>
-                                    <th className="px-4 py-3 text-left font-semibold">Producto</th>
-                                    <th className="px-4 py-3 text-center font-semibold">Cantidad</th>
-                                    <th className="px-4 py-3 text-left font-semibold">Precio Unitario</th>
-                                    {userRole !== 'vendedor' && <th className="px-4 py-3 text-left font-semibold">Costo Unitario</th>}
-                                    {userRole !== 'vendedor' && <th className="px-4 py-3 text-left font-semibold">Ganancia Unitaria</th>}
-                                    <th className="px-4 py-3 text-left font-semibold">Comisión Unit.</th>
-                                    <th className="px-4 py-3 text-left font-semibold">Subtotal</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                                {currentVenta.items.map((item, index) => (
-                                    <tr key={index} className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                                        <td className="px-4 py-2">
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <div className="flex cursor-default items-center gap-3">
-                                                        <img
-                                                            src={item.producto.imagen_url || 'https://via.placeholder.com/40'}
-                                                            alt={item.producto.nombre}
-                                                            className="h-10 w-10 rounded-md object-cover"
-                                                        />
-                                                        <div>
-                                                            <p className="font-semibold text-gray-800 dark:text-gray-200">{item.producto.nombre}</p>
-                                                            {item.producto.codigo && <p className="text-xs text-gray-500">{item.producto.codigo}</p>}
+                <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                    <CardHeader className="bg-gradient-to-r from-indigo-600 to-indigo-700 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <Package className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-base font-semibold text-white">Productos Vendidos</CardTitle>
+                                <CardDescription className="text-xs text-indigo-100">
+                                    {currentVenta.items.length} {currentVenta.items.length === 1 ? 'producto' : 'productos'} en esta venta
+                                </CardDescription>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="pt-5">
+                        <div className="overflow-x-auto rounded-lg border">
+                            <table className="w-full text-sm">
+                                <thead className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                                    <tr>
+                                        <th className="px-4 py-3 text-left font-semibold">Producto</th>
+                                        <th className="px-4 py-3 text-center font-semibold">Cantidad</th>
+                                        <th className="px-4 py-3 text-left font-semibold">Precio Unitario</th>
+                                        {userRole !== 'vendedor' && <th className="px-4 py-3 text-left font-semibold">Costo Unitario</th>}
+                                        {userRole !== 'vendedor' && <th className="px-4 py-3 text-left font-semibold">Ganancia Unitaria</th>}
+                                        <th className="px-4 py-3 text-left font-semibold">Comisión Unit.</th>
+                                        <th className="px-4 py-3 text-left font-semibold">Subtotal</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                    {currentVenta.items.map((item, index) => (
+                                        <tr key={index} className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                            <td className="px-4 py-2">
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <div className="flex cursor-default items-center gap-3">
+                                                            <img
+                                                                src={item.producto.imagen_url || 'https://via.placeholder.com/40'}
+                                                                alt={item.producto.nombre}
+                                                                className="h-10 w-10 rounded-md object-cover"
+                                                            />
+                                                            <div>
+                                                                <p className="font-semibold text-gray-800 dark:text-gray-200">{item.producto.nombre}</p>
+                                                                {item.producto.codigo && <p className="text-xs text-gray-500">{item.producto.codigo}</p>}
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                </TooltipTrigger>
-                                                <TooltipContent side="right" className="w-56 p-3 text-left">
-                                                    <p className="mb-1 font-semibold">{item.producto.nombre}</p>
-                                                    <p className="text-muted-foreground text-xs">{item.producto.marca} · {item.producto.modelo || 'N/A'}</p>
-                                                    {(item.producto.capacidad || item.producto.color) && (
-                                                        <p className="text-muted-foreground text-xs">{item.producto.capacidad || '—'} · {item.producto.color || '—'}</p>
-                                                    )}
-                                                    <p className="text-muted-foreground mt-1 text-xs">{item.producto.categoria}</p>
-                                                    {item.producto.codigo && <p className="text-muted-foreground mt-1 font-mono text-xs">{item.producto.codigo}</p>}
-                                                </TooltipContent>
-                                            </Tooltip>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent side="right" className="w-56 p-3 text-left">
+                                                        <p className="mb-1 font-semibold">{item.producto.nombre}</p>
+                                                        <p className="text-muted-foreground text-xs">{item.producto.marca} · {item.producto.modelo || 'N/A'}</p>
+                                                        {(item.producto.capacidad || item.producto.color) && (
+                                                            <p className="text-muted-foreground text-xs">{item.producto.capacidad || '—'} · {item.producto.color || '—'}</p>
+                                                        )}
+                                                        <p className="text-muted-foreground mt-1 text-xs">{item.producto.categoria}</p>
+                                                        {item.producto.codigo && <p className="text-muted-foreground mt-1 font-mono text-xs">{item.producto.codigo}</p>}
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </td>
+                                            <td className="px-4 py-2 text-center">
+                                                <span className="font-semibold">{item.cantidad}</span>
+                                            </td>
+                                            <td className="px-4 py-2">{formatCurrency(item.precio_venta, simboloMonedaPrincipal)}</td>
+                                            {userRole !== 'vendedor' && (
+                                                <td className="px-4 py-2 text-muted-foreground">{formatCurrency(item.costo_unitario, simboloMonedaPrincipal)}</td>
+                                            )}
+                                            {userRole !== 'vendedor' && (
+                                                <td className="px-4 py-2 text-green-600">{formatCurrency(item.ganancia, simboloMonedaPrincipal)}</td>
+                                            )}
+                                            <td className="px-4 py-2 text-orange-600">
+                                                {item.comision_unitaria > 0 ? formatCurrency(item.comision_unitaria, simboloMonedaPrincipal) : '—'}
+                                            </td>
+                                            <td className="px-4 py-2 font-medium">{formatCurrency(item.subtotal, simboloMonedaPrincipal)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                                <tfoot className="border-t-2 border-border">
+                                    <tr className="bg-card">
+                                        <td colSpan={userRole === 'vendedor' ? 4 : 6} className="px-4 py-3 text-right font-semibold text-foreground">
+                                            Total Venta:
                                         </td>
-                                        <td className="px-4 py-2 text-center">
-                                            <span className="font-semibold">{item.cantidad}</span>
-                                        </td>
-                                        <td className="px-4 py-2">{formatCurrency(item.precio_venta, simboloMonedaPrincipal)}</td>
-                                        {userRole !== 'vendedor' && (
-                                            <td className="px-4 py-2 text-muted-foreground">{formatCurrency(item.costo_unitario, simboloMonedaPrincipal)}</td>
-                                        )}
-                                        {userRole !== 'vendedor' && (
-                                            <td className="px-4 py-2 text-green-600">{formatCurrency(item.ganancia, simboloMonedaPrincipal)}</td>
-                                        )}
-                                        <td className="px-4 py-2 text-orange-600">
-                                            {item.comision_unitaria > 0 ? formatCurrency(item.comision_unitaria, simboloMonedaPrincipal) : '—'}
-                                        </td>
-                                        <td className="px-4 py-2 font-medium">{formatCurrency(item.subtotal, simboloMonedaPrincipal)}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                            <tfoot className="border-t-2 border-border">
-                                <tr className="bg-card">
-                                    <td colSpan={userRole === 'vendedor' ? 4 : 6} className="px-4 py-3 text-right font-semibold text-foreground">
-                                        Total Venta:
-                                    </td>
-                                    <td className="px-4 py-3 text-right text-lg font-bold text-foreground">
-                                        {formatCurrency(currentVenta.total, simboloMonedaPrincipal)}
-                                    </td>
-                                </tr>
-                                {userRole !== 'vendedor' && (
-                                    <tr className="bg-card border-t border-border">
-                                        <td colSpan={6} className="px-4 py-2.5 text-right text-sm font-medium text-muted-foreground">
-                                            Ganancia Total:
-                                        </td>
-                                        <td className="px-4 py-2.5 text-right font-semibold text-green-500">
-                                            {formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}
+                                        <td className="px-4 py-3 text-right text-lg font-bold text-foreground">
+                                            {formatCurrency(currentVenta.total, simboloMonedaPrincipal)}
                                         </td>
                                     </tr>
-                                )}
-                                {currentVenta.total_comision > 0 && (
-                                    <tr className="bg-card border-t border-border">
-                                        <td colSpan={userRole === 'vendedor' ? 4 : 6} className="px-4 py-2.5 text-right text-sm font-medium text-muted-foreground">
-                                            Comisión Vendedor:
-                                        </td>
-                                        <td className="px-4 py-2.5 text-right font-semibold text-orange-500">
-                                            {formatCurrency(currentVenta.total_comision, simboloMonedaPrincipal)}
-                                        </td>
-                                    </tr>
-                                )}
-                                {userRole !== 'vendedor' && (
-                                    <tr className="bg-card border-t border-border">
-                                        <td colSpan={6} className="px-4 py-2.5 text-right text-sm font-medium text-muted-foreground">
-                                            Ganancia Agencia:
-                                        </td>
-                                        <td className="px-4 py-2.5 text-right font-semibold text-indigo-400">
-                                            {formatCurrency(currentVenta.ganancia_agencia, simboloMonedaPrincipal)}
-                                        </td>
-                                    </tr>
-                                )}
-                            </tfoot>
-                        </table>
-                    </div>
-                </div>
+                                    {userRole !== 'vendedor' && (
+                                        <tr className="bg-card border-t border-border">
+                                            <td colSpan={6} className="px-4 py-2.5 text-right text-sm font-medium text-muted-foreground">
+                                                Ganancia Total:
+                                            </td>
+                                            <td className="px-4 py-2.5 text-right font-semibold text-green-500">
+                                                {formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}
+                                            </td>
+                                        </tr>
+                                    )}
+                                    {currentVenta.total_comision > 0 && (
+                                        <tr className="bg-card border-t border-border">
+                                            <td colSpan={userRole === 'vendedor' ? 4 : 6} className="px-4 py-2.5 text-right text-sm font-medium text-muted-foreground">
+                                                Comisión Vendedor:
+                                            </td>
+                                            <td className="px-4 py-2.5 text-right font-semibold text-orange-500">
+                                                {formatCurrency(currentVenta.total_comision, simboloMonedaPrincipal)}
+                                            </td>
+                                        </tr>
+                                    )}
+                                    {userRole !== 'vendedor' && (
+                                        <tr className="bg-card border-t border-border">
+                                            <td colSpan={6} className="px-4 py-2.5 text-right text-sm font-medium text-muted-foreground">
+                                                Ganancia Agencia:
+                                            </td>
+                                            <td className="px-4 py-2.5 text-right font-semibold text-indigo-400">
+                                                {formatCurrency(currentVenta.ganancia_agencia, simboloMonedaPrincipal)}
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tfoot>
+                            </table>
+                        </div>
+                    </CardContent>
+                </Card>
 
                 {/* ── Pagos y resumen financiero ── */}
                 <div
                     className="animate__animated animate__flipInX grid auto-rows-min gap-6 grid-cols-1 md:grid-cols-2"
                 >
                     {/* Detalles de pagos */}
-                    <div className="bg-card rounded-lg p-6 shadow-sm">
-                        <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold">
-                            <CreditCard className="h-5 w-5" />
-                            Detalles de Pago
-                        </h3>
-                        {currentVenta.pagos.length > 0 ? (
-                            currentVenta.pagos.map((pago, index) => {
-                                const simboloMonedaPago = getCurrencySymbol(pago.moneda);
-                                const simboloMonedaCuenta = getCurrencySymbol(pago.cuenta?.moneda || null);
-                                return (
-                                    <div key={index} className="bg-muted mb-4 rounded-md p-3 last:mb-0">
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <div>
-                                                <p className="text-sm font-medium">Método:</p>
-                                                <p className="text-sm capitalize">{pago.metodo}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-medium">Moneda:</p>
-                                                <p className="text-sm">{pago.moneda?.nombre || 'No especificada'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-medium">Monto Original:</p>
-                                                <p className="text-sm">{formatCurrency(pago.monto, simboloMonedaPago)}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-medium">Equivalente {simboloMonedaPrincipal}:</p>
-                                                <p className="text-sm">{formatCurrency(pago.monto_equivalente, simboloMonedaPrincipal)}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-medium">Tasa Cambio:</p>
-                                                <p className="text-sm">{pago.tasa_cambio}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-medium">Destino:</p>
-                                                <p className="text-sm">
-                                                    {pago.cliente_destino?.nombre
-                                                        ? `Cliente: ${pago.cliente_destino.nombre}`
-                                                        : pago.cuenta?.nombre
-                                                          ? `${pago.cuenta.nombre} (${pago.cuenta.moneda?.nombre || simboloMonedaCuenta})`
-                                                          : 'No especificado'}
-                                                </p>
-                                            </div>
-                                            {pago.via && (
-                                                <div className="col-span-2">
-                                                    <p className="text-sm font-medium">Vía:</p>
-                                                    <p className="text-sm capitalize">{pago.via}</p>
+                    <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                        <CardHeader className="bg-gradient-to-r from-sky-600 to-sky-700 px-6 py-5 text-white">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <CreditCard className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-base font-semibold text-white">Detalles de Pago</CardTitle>
+                                    <CardDescription className="text-xs text-sky-100">
+                                        {currentVenta.pagos.length > 0
+                                            ? `${currentVenta.pagos.length} ${currentVenta.pagos.length === 1 ? 'pago registrado' : 'pagos registrados'}`
+                                            : 'Sin pagos registrados'}
+                                    </CardDescription>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="pt-5">
+                            {currentVenta.pagos.length > 0 ? (
+                                currentVenta.pagos.map((pago, index) => {
+                                    const simboloMonedaPago = getCurrencySymbol(pago.moneda);
+                                    const simboloMonedaCuenta = getCurrencySymbol(pago.cuenta?.moneda || null);
+                                    return (
+                                        <div key={index} className="bg-muted mb-4 rounded-md p-3 last:mb-0">
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <p className="text-sm font-medium">Método:</p>
+                                                    <p className="text-sm capitalize">{pago.metodo}</p>
                                                 </div>
-                                            )}
-                                            {pago.referencia && (
-                                                <div className="col-span-2">
-                                                    <p className="text-sm font-medium">Referencia:</p>
-                                                    <p className="text-sm">{pago.referencia}</p>
+                                                <div>
+                                                    <p className="text-sm font-medium">Moneda:</p>
+                                                    <p className="text-sm">{pago.moneda?.nombre || 'No especificada'}</p>
                                                 </div>
-                                            )}
+                                                <div>
+                                                    <p className="text-sm font-medium">Monto Original:</p>
+                                                    <p className="text-sm">{formatCurrency(pago.monto, simboloMonedaPago)}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-medium">Equivalente {simboloMonedaPrincipal}:</p>
+                                                    <p className="text-sm">{formatCurrency(pago.monto_equivalente, simboloMonedaPrincipal)}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-medium">Tasa Cambio:</p>
+                                                    <p className="text-sm">{pago.tasa_cambio}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-medium">Destino:</p>
+                                                    <p className="text-sm">
+                                                        {pago.cliente_destino?.nombre
+                                                            ? `Cliente: ${pago.cliente_destino.nombre}`
+                                                            : pago.cuenta?.nombre
+                                                                ? `${pago.cuenta.nombre} (${pago.cuenta.moneda?.nombre || simboloMonedaCuenta})`
+                                                                : 'No especificado'}
+                                                    </p>
+                                                </div>
+                                                {pago.via && (
+                                                    <div className="col-span-2">
+                                                        <p className="text-sm font-medium">Vía:</p>
+                                                        <p className="text-sm capitalize">{pago.via}</p>
+                                                    </div>
+                                                )}
+                                                {pago.referencia && (
+                                                    <div className="col-span-2">
+                                                        <p className="text-sm font-medium">Referencia:</p>
+                                                        <p className="text-sm">{pago.referencia}</p>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
-                                );
-                            })
-                        ) : (
-                            <p className="text-muted-foreground text-center">No hay pagos registrados</p>
-                        )}
-                    </div>
+                                    );
+                                })
+                            ) : (
+                                <p className="text-muted-foreground text-center">No hay pagos registrados</p>
+                            )}
+                        </CardContent>
+                    </Card>
 
                     {/* Resumen financiero — todos los roles, ganancia de agencia oculta para vendedor */}
-                    <div className="bg-card rounded-lg p-6 shadow-sm">
-                        <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold">
-                            <DollarSign className="h-5 w-5" />
-                            Resumen Financiero
-                        </h3>
-                        <div className="space-y-3">
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Total de la Venta:</span>
-                                <span className="font-semibold">{formatCurrency(currentVenta.total, simboloMonedaPrincipal)}</span>
+                    <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                        <CardHeader className="bg-gradient-to-r from-teal-600 to-teal-700 px-6 py-5 text-white">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <DollarSign className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-base font-semibold text-white">Resumen Financiero</CardTitle>
+                                    <CardDescription className="text-xs text-teal-100">
+                                        Totales, ganancias y estado de la venta
+                                    </CardDescription>
+                                </div>
                             </div>
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Total Pagado:</span>
-                                <span className="font-semibold text-green-600">
-                                    {formatCurrency(currentVenta.total_pagado, simboloMonedaPrincipal)}
-                                </span>
-                            </div>
-                            <Separator />
-                            <div className="flex justify-between">
-                                <span className="text-muted-foreground">Restante por Pagar:</span>
-                                <span className={`font-semibold ${currentVenta.restante > 0 ? 'text-orange-500' : 'text-green-600'}`}>
-                                    {formatCurrency(currentVenta.restante, simboloMonedaPrincipal)}
-                                </span>
-                            </div>
-                            {/* Ganancia Operacional — solo admin/moderador */}
-                            {userRole !== 'vendedor' && (
+                        </CardHeader>
+                        <CardContent className="pt-5">
+                            <div className="space-y-3">
                                 <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Ganancia Operacional:</span>
+                                    <span className="text-muted-foreground">Total de la Venta:</span>
+                                    <span className="font-semibold">{formatCurrency(currentVenta.total, simboloMonedaPrincipal)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Total Pagado:</span>
                                     <span className="font-semibold text-green-600">
-                                        {formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}
+                                        {formatCurrency(currentVenta.total_pagado, simboloMonedaPrincipal)}
                                     </span>
                                 </div>
-                            )}
-                            {currentVenta.total_comision > 0 && (
+                                <Separator />
                                 <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Comisión P.V.:</span>
-                                    <span className="font-semibold text-orange-600">
-                                        {formatCurrency(currentVenta.total_comision, simboloMonedaPrincipal)}
+                                    <span className="text-muted-foreground">Restante por Pagar:</span>
+                                    <span className={`font-semibold ${currentVenta.restante > 0 ? 'text-orange-500' : 'text-green-600'}`}>
+                                        {formatCurrency(currentVenta.restante, simboloMonedaPrincipal)}
                                     </span>
                                 </div>
-                            )}
-                            {currentVenta.comision_pago?.monto_cup && (
-                                <div className="flex justify-between pl-4 text-sm">
-                                    <span className="text-muted-foreground">→ Pago vendedor (CUP):</span>
-                                    <span className="font-semibold text-orange-500">
-                                        {Number(currentVenta.comision_pago.monto_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
-                                    </span>
-                                </div>
-                            )}
-                            {/* Comisión Gestor — visible para todos si existe */}
-                            {currentVenta.gestor && (
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Comisión Gestor:</span>
-                                    <span className="font-semibold text-purple-600">
-                                        {Number(currentVenta.gestor.monto).toLocaleString('es-ES', { minimumFractionDigits: 2 })}{' '}
-                                        {currentVenta.gestor.moneda?.codigo || ''}
-                                    </span>
-                                </div>
-                            )}
-                            {/* Ganancia Agencia — solo admin/moderador */}
-                            {userRole !== 'vendedor' && (
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Ganancia Agencia:</span>
-                                    <span className="font-semibold text-indigo-600">
-                                        {formatCurrency(currentVenta.ganancia_agencia, simboloMonedaPrincipal)}
-                                    </span>
-                                </div>
-                            )}
-                            {/* Ganancia/Pérdida Cambiaria y Real — solo admin/moderador */}
-                            {userRole !== 'vendedor' && isVentaCompletada && (
-                                <>
+                                {/* Ganancia Operacional — solo admin/moderador */}
+                                {userRole !== 'vendedor' && (
                                     <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Ganancia/Pérdida Cambiaria:</span>
-                                        <span
-                                            className={`font-semibold ${currentVenta.ganancia_perdida_cambiaria < 0 ? 'text-red-500' : 'text-green-600'}`}
-                                        >
-                                            {formatCurrency(currentVenta.ganancia_perdida_cambiaria, simboloMonedaPrincipal)}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Ganancia Real Total:</span>
+                                        <span className="text-muted-foreground">Ganancia Operacional:</span>
                                         <span className="font-semibold text-green-600">
-                                            {formatCurrency(currentVenta.ganancia_real_total, simboloMonedaPrincipal)}
+                                            {formatCurrency(currentVenta.total_ganancia, simboloMonedaPrincipal)}
                                         </span>
                                     </div>
-                                </>
-                            )}
+                                )}
+                                {currentVenta.total_comision > 0 && (
+                                    <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Comisión P.V.:</span>
+                                        <span className="font-semibold text-orange-600">
+                                            {formatCurrency(currentVenta.total_comision, simboloMonedaPrincipal)}
+                                        </span>
+                                    </div>
+                                )}
+                                {currentVenta.comision_pago?.monto_cup && (
+                                    <div className="flex justify-between pl-4 text-sm">
+                                        <span className="text-muted-foreground">→ Pago vendedor (CUP):</span>
+                                        <span className="font-semibold text-orange-500">
+                                            {Number(currentVenta.comision_pago.monto_cup).toLocaleString('es-ES', { minimumFractionDigits: 2 })} CUP
+                                        </span>
+                                    </div>
+                                )}
+                                {/* Comisión Gestor — visible para todos si existe */}
+                                {currentVenta.gestor && (
+                                    <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Comisión Gestor:</span>
+                                        <span className="font-semibold text-purple-600">
+                                            {Number(currentVenta.gestor.monto).toLocaleString('es-ES', { minimumFractionDigits: 2 })}{' '}
+                                            {currentVenta.gestor.moneda?.codigo || ''}
+                                        </span>
+                                    </div>
+                                )}
+                                {/* Ganancia Agencia — solo admin/moderador */}
+                                {userRole !== 'vendedor' && (
+                                    <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Ganancia Agencia:</span>
+                                        <span className="font-semibold text-indigo-600">
+                                            {formatCurrency(currentVenta.ganancia_agencia, simboloMonedaPrincipal)}
+                                        </span>
+                                    </div>
+                                )}
+                                {/* Ganancia/Pérdida Cambiaria y Real — solo admin/moderador */}
+                                {userRole !== 'vendedor' && isVentaCompletada && (
+                                    <>
+                                        <div className="flex justify-between">
+                                            <span className="text-muted-foreground">Ganancia/Pérdida Cambiaria:</span>
+                                            <span
+                                                className={`font-semibold ${currentVenta.ganancia_perdida_cambiaria < 0 ? 'text-red-500' : 'text-green-600'}`}
+                                            >
+                                                {formatCurrency(currentVenta.ganancia_perdida_cambiaria, simboloMonedaPrincipal)}
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-muted-foreground">Ganancia Real Total:</span>
+                                            <span className="font-semibold text-green-600">
+                                                {formatCurrency(currentVenta.ganancia_real_total, simboloMonedaPrincipal)}
+                                            </span>
+                                        </div>
+                                    </>
+                                )}
                                 <Separator />
                                 <div className="flex justify-between">
                                     <span className="text-muted-foreground">Estado:</span>
@@ -3229,189 +3419,167 @@ export default function ResultadoCarrito({ venta, userRole, monedasSistema }: Pr
                                     )}
                                 </div>
                             )}
-                        </div>
+                        </CardContent>
+                    </Card>
                 </div>
 
-                {/* ── Info del sistema (solo si el vendedor de la venta es admin) ── */}
-                {userRole === 'admin' && (
-                    <div className="bg-card rounded-lg p-6 shadow-sm">
-                        <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold">
-                            <UserCheck className="h-5 w-5" />
-                            Información del Sistema
-                        </h3>
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                            <div>
-                                <p className="text-sm font-medium">ID de Venta:</p>
-                                <p className="text-muted-foreground text-sm">#{currentVenta.id}</p>
-                            </div>
-                            <div>
-                                <p className="text-sm font-medium">Vendedor ID:</p>
-                                <p className="text-muted-foreground text-sm">{currentVenta.usuario.id}</p>
-                            </div>
-                            <div>
-                                <p className="text-sm font-medium">Almacén ID:</p>
-                                <p className="text-muted-foreground text-sm">{currentVenta.almacen.id}</p>
-                            </div>
-                        </div>
-                    </div>
-                )}
             </div>
-            {/* ── Modal Editar Venta Pendiente ── */}
-            <Dialog
-                open={isEditModalOpen}
-                onOpenChange={(open) => { if (!isSavingEdit) setIsEditModalOpen(open); }}
-            >
-                <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
-                            <Edit className="h-5 w-5 text-blue-600" />
-                            Editar Venta Pendiente #{currentVenta.id}
-                        </DialogTitle>
-                        <DialogDescription>
-                            Ajusta los precios de los productos y/o los métodos de pago. Los pagos actuales serán reemplazados por los nuevos.
-                        </DialogDescription>
-                    </DialogHeader>
+                {/* ── Modal Editar Venta Pendiente ── */}
+                <Dialog
+                    open={isEditModalOpen}
+                    onOpenChange={(open) => { if (!isSavingEdit) setIsEditModalOpen(open); }}
+                >
+                    <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                                <Edit className="h-5 w-5 text-blue-600" />
+                                Editar Venta Pendiente #{currentVenta.id}
+                            </DialogTitle>
+                            <DialogDescription>
+                                Ajusta los precios de los productos y/o los métodos de pago. Los pagos actuales serán reemplazados por los nuevos.
+                            </DialogDescription>
+                        </DialogHeader>
 
-                    <div className="space-y-6 py-2">
-                        {/* ── Precios ── */}
-                        <div className="space-y-3">
-                            <h4 className="flex items-center gap-2 font-medium">
-                                <Package className="h-4 w-4 text-gray-500" />
-                                Precios por Producto
-                            </h4>
-                            <div className="space-y-2">
-                                {currentVenta.items.map((item) => {
-                                    const key            = item.id ?? item.producto.id;
-                                    const pvOrig         = Number(item.precio_venta);
-                                    const comisionOrig   = Number(item.comision_unitaria);
-                                    const precioBase     = Number(item.precio_base ?? item.precio_venta);
-                                    const precioActual   = parseFloat(editPrecios[key] ?? pvOrig.toString());
+                        <div className="space-y-6 py-2">
+                            {/* ── Precios ── */}
+                            <div className="space-y-3">
+                                <h4 className="flex items-center gap-2 font-medium">
+                                    <Package className="h-4 w-4 text-gray-500" />
+                                    Precios por Producto
+                                </h4>
+                                <div className="space-y-2">
+                                    {currentVenta.items.map((item) => {
+                                        const key = item.id ?? item.producto.id;
+                                        const pvOrig = Number(item.precio_venta);
+                                        const comisionOrig = Number(item.comision_unitaria);
+                                        const precioBase = Number(item.precio_base ?? item.precio_venta);
+                                        const precioActual = parseFloat(editPrecios[key] ?? pvOrig.toString());
 
-                                    // Derivar comisión base desde precio_base y comision_unitaria original
-                                    const comisionBase = pvOrig >= precioBase
-                                        ? comisionOrig - (pvOrig - precioBase)
-                                        : comisionOrig + (precioBase - pvOrig);
+                                        // Derivar comisión base desde precio_base y comision_unitaria original
+                                        const comisionBase = pvOrig >= precioBase
+                                            ? comisionOrig - (pvOrig - precioBase)
+                                            : comisionOrig + (precioBase - pvOrig);
 
-                                    // Recalcular comisión con el precio que está editando
-                                    const nuevaComision = !isNaN(precioActual)
-                                        ? precioActual >= precioBase
-                                            ? comisionBase + (precioActual - precioBase)
-                                            : Math.max(0, comisionBase - (precioBase - precioActual))
-                                        : comisionOrig;
+                                        // Recalcular comisión con el precio que está editando
+                                        const nuevaComision = !isNaN(precioActual)
+                                            ? precioActual >= precioBase
+                                                ? comisionBase + (precioActual - precioBase)
+                                                : Math.max(0, comisionBase - (precioBase - precioActual))
+                                            : comisionOrig;
 
-                                    const markupExtra = !isNaN(precioActual) && precioActual > precioBase
-                                        ? precioActual - precioBase
-                                        : 0;
+                                        const markupExtra = !isNaN(precioActual) && precioActual > precioBase
+                                            ? precioActual - precioBase
+                                            : 0;
 
-                                    return (
-                                        <div key={key} className="bg-secondary/30 rounded-lg border p-3">
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex-1">
-                                                    <p className="text-sm font-medium">{item.producto.nombre}</p>
-                                                    <p className="text-muted-foreground text-xs">
-                                                        {item.producto.marca} · Cant: {item.cantidad} · Base: ${precioBase.toFixed(2)}
-                                                    </p>
+                                        return (
+                                            <div key={key} className="bg-secondary/30 rounded-lg border p-3">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex-1">
+                                                        <p className="text-sm font-medium">{item.producto.nombre}</p>
+                                                        <p className="text-muted-foreground text-xs">
+                                                            {item.producto.marca} · Cant: {item.cantidad} · Base: ${precioBase.toFixed(2)}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-muted-foreground text-xs">$</span>
+                                                        <Input
+                                                            type="number"
+                                                            min="0"
+                                                            step="0.01"
+                                                            className="w-24 text-right text-sm"
+                                                            value={editPrecios[key] ?? pvOrig.toString()}
+                                                            onChange={(e) =>
+                                                                setEditPrecios((prev) => ({ ...prev, [key]: e.target.value }))
+                                                            }
+                                                        />
+                                                    </div>
                                                 </div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-muted-foreground text-xs">$</span>
-                                                    <Input
-                                                        type="number"
-                                                        min="0"
-                                                        step="0.01"
-                                                        className="w-24 text-right text-sm"
-                                                        value={editPrecios[key] ?? pvOrig.toString()}
-                                                        onChange={(e) =>
-                                                            setEditPrecios((prev) => ({ ...prev, [key]: e.target.value }))
-                                                        }
-                                                    />
+                                                {/* Comisión estimada con el precio actual */}
+                                                <div className="mt-2 flex items-center justify-between border-t pt-1.5 text-xs">
+                                                    <span className="text-amber-600">
+                                                        Comisión estimada × {item.cantidad}:
+                                                    </span>
+                                                    <span className="font-semibold text-amber-700">
+                                                        ${(nuevaComision * item.cantidad).toFixed(2)}
+                                                        {markupExtra > 0 && (
+                                                            <span className="text-green-600 ml-1">
+                                                                (base ${(comisionBase * item.cantidad).toFixed(2)} + markup ${(markupExtra * item.cantidad).toFixed(2)})
+                                                            </span>
+                                                        )}
+                                                    </span>
                                                 </div>
                                             </div>
-                                            {/* Comisión estimada con el precio actual */}
-                                            <div className="mt-2 flex items-center justify-between border-t pt-1.5 text-xs">
-                                                <span className="text-amber-600">
-                                                    Comisión estimada × {item.cantidad}:
-                                                </span>
-                                                <span className="font-semibold text-amber-700">
-                                                    ${(nuevaComision * item.cantidad).toFixed(2)}
-                                                    {markupExtra > 0 && (
-                                                        <span className="text-green-600 ml-1">
-                                                            (base ${(comisionBase * item.cantidad).toFixed(2)} + markup ${(markupExtra * item.cantidad).toFixed(2)})
-                                                        </span>
-                                                    )}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
+                                        );
+                                    })}
+                                </div>
                             </div>
-                        </div>
 
-                        <Separator />
+                            <Separator />
 
-                        {/* ── Pagos actuales ── */}
-                        <PaymentList
-                            payments={editPayments}
-                            total={currentVenta.items.reduce((sum, item) => {
-                                const key    = item.id ?? item.producto.id;
-                                const pvFb   = Number(item.precio_venta);
-                                const precio = parseFloat(editPrecios[key] ?? pvFb.toString());
-                                return sum + (isNaN(precio) ? pvFb : precio) * Number(item.cantidad);
-                            }, 0)}
-                            onRemovePayment={(id) => setEditPayments((prev) => prev.filter((p) => p.id !== id))}
-                        />
-
-                        <Separator />
-
-                        {/* ── Formulario de nuevo pago ── */}
-                        <PaymentForm
-                            monedas={monedasSistema.map((m): MonedaForm => ({
-                                id:              m.id,
-                                codigo_moneda:   m.codigo,
-                                nombre_moneda:   m.nombre,
-                                simbolo_moneda:  m.simbolo ?? '',
-                                tasa_cambio:     m.tasa,
-                            }))}
-                            clientesFisicos={clientesFisicosEdit}
-                            remainingInUsd={Math.max(
-                                0,
-                                currentVenta.items.reduce((sum, item) => {
-                                    const key    = item.id ?? item.producto.id;
-                                    const pvFb   = Number(item.precio_venta);
+                            {/* ── Pagos actuales ── */}
+                            <PaymentList
+                                payments={editPayments}
+                                total={currentVenta.items.reduce((sum, item) => {
+                                    const key = item.id ?? item.producto.id;
+                                    const pvFb = Number(item.precio_venta);
                                     const precio = parseFloat(editPrecios[key] ?? pvFb.toString());
                                     return sum + (isNaN(precio) ? pvFb : precio) * Number(item.cantidad);
-                                }, 0) - editPayments.reduce((s, p) => s + p.amountInUsd, 0),
-                            )}
-                            onAddPayment={(payment) => setEditPayments((prev) => [...prev, payment])}
-                        />
-                    </div>
+                                }, 0)}
+                                onRemovePayment={(id) => setEditPayments((prev) => prev.filter((p) => p.id !== id))}
+                            />
 
-                    <DialogFooter className="gap-2 pt-2">
-                        <Button
-                            variant="outline"
-                            onClick={() => setIsEditModalOpen(false)}
-                            disabled={isSavingEdit}
-                        >
-                            Cancelar
-                        </Button>
-                        <Button
-                            onClick={handleGuardarEdicion}
-                            disabled={isSavingEdit || editPayments.length === 0}
-                            className="bg-blue-600 hover:bg-blue-700"
-                        >
-                            {isSavingEdit ? (
-                                <div className="flex items-center gap-2">
-                                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                                    Guardando...
-                                </div>
-                            ) : (
-                                'Guardar Cambios'
-                            )}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                            <Separator />
 
-            <ScrollProgress />
+                            {/* ── Formulario de nuevo pago ── */}
+                            <PaymentForm
+                                monedas={monedasSistema.map((m): MonedaForm => ({
+                                    id: m.id,
+                                    codigo_moneda: m.codigo,
+                                    nombre_moneda: m.nombre,
+                                    simbolo_moneda: m.simbolo ?? '',
+                                    tasa_cambio: m.tasa,
+                                }))}
+                                clientesFisicos={clientesFisicosEdit}
+                                remainingInUsd={Math.max(
+                                    0,
+                                    currentVenta.items.reduce((sum, item) => {
+                                        const key = item.id ?? item.producto.id;
+                                        const pvFb = Number(item.precio_venta);
+                                        const precio = parseFloat(editPrecios[key] ?? pvFb.toString());
+                                        return sum + (isNaN(precio) ? pvFb : precio) * Number(item.cantidad);
+                                    }, 0) - editPayments.reduce((s, p) => s + p.amountInUsd, 0),
+                                )}
+                                onAddPayment={(payment) => setEditPayments((prev) => [...prev, payment])}
+                            />
+                        </div>
+
+                        <DialogFooter className="gap-2 pt-2">
+                            <Button
+                                variant="outline"
+                                onClick={() => setIsEditModalOpen(false)}
+                                disabled={isSavingEdit}
+                            >
+                                Cancelar
+                            </Button>
+                            <Button
+                                onClick={handleGuardarEdicion}
+                                disabled={isSavingEdit || editPayments.length === 0}
+                                className="bg-blue-600 hover:bg-blue-700"
+                            >
+                                {isSavingEdit ? (
+                                    <div className="flex items-center gap-2">
+                                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                        Guardando...
+                                    </div>
+                                ) : (
+                                    'Guardar Cambios'
+                                )}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+                {/* ── Scroll Progress ── */}
+                <ScrollProgress />
         </AppLayout>
     );
 }

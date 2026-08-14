@@ -3,10 +3,10 @@ import { Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList } 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { sileo } from '@/lib/sileo';
 import axios from 'axios';
 import { DollarSign } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -194,7 +194,7 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
             });
             setCuentasFiltradas(data);
         } catch {
-            toast.error('Error al cargar cuentas');
+            sileo.error({ title: 'No se pudieron cargar las cuentas' });
             setCuentasFiltradas([]);
         } finally {
             setCargandoCuentas(false);
@@ -256,19 +256,19 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
             !currentPayment.exchangeRate ||
             parseFloat(currentPayment.exchangeRate) <= 0
         ) {
-            toast.warning('Complete todos los campos del pago.');
+            sileo.warning({ title: 'Complete todos los campos del pago.' });
             return;
         }
 
         const currency = currencies.find((c) => c.id.toString() === currentPayment.moneda_id.toString());
-        if (!currency) { toast.error('Error en la selección de moneda'); return; }
+        if (!currency) { sileo.error({ title: 'Error en la selección de moneda' }); return; }
 
         const amount      = parseFloat(currentPayment.amount);
         const exchangeRate = parseFloat(currentPayment.exchangeRate);
         const amountInUsd  = amount / exchangeRate;
 
         if (!amountInUsd || isNaN(amountInUsd)) {
-            toast.error('Tasa de cambio inválida.');
+            sileo.error({ title: 'Tasa de cambio inválida.' });
             return;
         }
 
@@ -288,11 +288,16 @@ export default function PaymentForm({ monedas, clientesFisicos, remainingInUsd, 
 
         onAddPayment(newPayment);
 
+        const destinoNombre = opcionesDestino.find((o) => o.value === destinoValue)?.nombre;
+
         setCurrentPayment({ method: '', moneda_id: '', via: '', amount: '', exchangeRate: '', cuenta_id: '', cliente_id: '', referencia: '' });
         setCuentasFiltradas([]);
         setDestinoSearch('');
         setConversionCalculada(null);
-        toast.success('Pago agregado');
+        sileo.success({
+            title: 'Pago agregado',
+            description: `${currency.symbol}${amount.toFixed(2)} ${currency.code}${destinoNombre ? ` · ${destinoNombre}` : ''}`,
+        });
     };
 
     const destinoValue = currentPayment.cuenta_id

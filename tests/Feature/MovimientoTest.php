@@ -270,6 +270,57 @@ test('no se puede recibir un movimiento que no está en tránsito', function () 
     $response->assertSessionHasErrors('general');
 });
 
+test('un vendedor no puede recibir en un almacén destino que no tiene asignado', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create(); // no asignado al vendedor
+    $producto = Producto::factory()->create();
+    crearAlmacenProducto($origen, $producto, cantidad: 50, cantidadEnTransito: 10);
+    crearAlmacenProducto($destino, $producto, cantidad: 0);
+
+    $movimiento = Movimiento::factory()->enTransito()->create([
+        'almacen_origen_id' => $origen->id, 'almacen_destino_id' => $destino->id, 'user_id' => $vendedor->id,
+    ]);
+    $movimiento->detalles()->create([
+        'producto_id' => $producto->id, 'cantidad_solicitada' => 10, 'cantidad_despachada' => 10,
+    ]);
+
+    $response = $this->post(route('movimientos.recibir', $movimiento), [
+        'productos' => [['id' => $producto->id, 'cantidad_recibida' => 10]],
+    ]);
+
+    $response->assertForbidden();
+    $this->assertDatabaseHas('movimientos', ['id' => $movimiento->id, 'estado' => 'en_transito']);
+});
+
+test('un vendedor sí puede recibir en un almacén destino que tiene asignado', function () {
+    $vendedor = User::factory()->vendedor()->create();
+    $this->actingAs($vendedor);
+
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create();
+    $vendedor->almacenes()->attach($destino->id);
+    $producto = Producto::factory()->create();
+    crearAlmacenProducto($origen, $producto, cantidad: 50, cantidadEnTransito: 10);
+    crearAlmacenProducto($destino, $producto, cantidad: 0);
+
+    $movimiento = Movimiento::factory()->enTransito()->create([
+        'almacen_origen_id' => $origen->id, 'almacen_destino_id' => $destino->id, 'user_id' => $vendedor->id,
+    ]);
+    $movimiento->detalles()->create([
+        'producto_id' => $producto->id, 'cantidad_solicitada' => 10, 'cantidad_despachada' => 10,
+    ]);
+
+    $response = $this->post(route('movimientos.recibir', $movimiento), [
+        'productos' => [['id' => $producto->id, 'cantidad_recibida' => 10]],
+    ]);
+
+    $response->assertRedirect(route('movimientos.index'));
+    $this->assertDatabaseHas('movimientos', ['id' => $movimiento->id, 'estado' => 'recibido_completo']);
+});
+
 // ==========================================================================
 // RECHAZAR — libera la reserva si estaba en tránsito
 // ==========================================================================
@@ -331,10 +382,11 @@ test('no se puede rechazar un movimiento ya recibido', function () {
 });
 
 // ==========================================================================
-// SHOW — solo movimientos ya resueltos (recibido/rechazado)
+// SHOW — visible en cualquier estado (el emisor debe poder ver qué envió
+// mientras el movimiento está en tránsito, no solo una vez resuelto)
 // ==========================================================================
 
-test('show() bloquea el detalle de un movimiento que todavía está en tránsito', function () {
+test('show() permite ver el detalle de un movimiento todavía en tránsito', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
 
@@ -342,7 +394,7 @@ test('show() bloquea el detalle de un movimiento que todavía está en tránsito
 
     $response = $this->get(route('movimientos.show', $movimiento));
 
-    $response->assertSessionHasErrors('general');
+    $response->assertOk();
 });
 
 test('show() permite ver el detalle de un movimiento recibido completo', function () {
@@ -359,6 +411,46 @@ test('show() permite ver el detalle de un movimiento recibido completo', functio
 // ==========================================================================
 // ACCESO POR ROL
 // ==========================================================================
+
+test('un moderador puede crear un movimiento desde cualquier almacén, igual que admin', function () {
+    $moderador = User::factory()->moderador()->create();
+    $this->actingAs($moderador);
+
+    $origen = Almacen::factory()->almacen()->create(); // no asignado al moderador
+    $destino = Almacen::factory()->almacen()->create();
+    $producto = Producto::factory()->create();
+    crearAlmacenProducto($origen, $producto, cantidad: 50);
+
+    $response = $this->post(route('movimientos.store'), payloadStoreMovimiento($origen, $destino, $producto, 10));
+
+    $response->assertRedirect(route('movimientos.index'));
+    $this->assertDatabaseCount('movimientos', 1);
+});
+
+test('un moderador puede recibir en cualquier almacén destino, igual que admin', function () {
+    $moderador = User::factory()->moderador()->create();
+    $this->actingAs($moderador);
+
+    $origen = Almacen::factory()->almacen()->create();
+    $destino = Almacen::factory()->almacen()->create(); // no asignado al moderador
+    $producto = Producto::factory()->create();
+    crearAlmacenProducto($origen, $producto, cantidad: 50, cantidadEnTransito: 10);
+    crearAlmacenProducto($destino, $producto, cantidad: 0);
+
+    $movimiento = Movimiento::factory()->enTransito()->create([
+        'almacen_origen_id' => $origen->id, 'almacen_destino_id' => $destino->id, 'user_id' => $moderador->id,
+    ]);
+    $movimiento->detalles()->create([
+        'producto_id' => $producto->id, 'cantidad_solicitada' => 10, 'cantidad_despachada' => 10,
+    ]);
+
+    $response = $this->post(route('movimientos.recibir', $movimiento), [
+        'productos' => [['id' => $producto->id, 'cantidad_recibida' => 10]],
+    ]);
+
+    $response->assertRedirect(route('movimientos.index'));
+    $this->assertDatabaseHas('movimientos', ['id' => $movimiento->id, 'estado' => 'recibido_completo']);
+});
 
 test('un vendedor no puede ver productos de un almacén que no tiene asignado', function () {
     $vendedor = User::factory()->vendedor()->create();
