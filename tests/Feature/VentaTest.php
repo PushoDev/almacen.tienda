@@ -14,9 +14,6 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Crea un producto con stock en un almacén y precio/comisión en producto_vendedors.
- * NOTA: en sqlite (entorno de test) la migración 2026_05_30_...refactor_producto_vendedors
- * está condicionada a `DB::connection()->getDriverName() === 'mysql'` y no corre, por lo que
- * el esquema real en test sigue siendo el original: PK (producto_id, user_id, almacen_id).
  */
 function crearProductoConPrecio(Almacen $almacen, float $costo, float $precioVenta, float $comision = 0): array
 {
@@ -34,7 +31,6 @@ function crearProductoConPrecio(Almacen $almacen, float $costo, float $precioVen
 
     DB::table('producto_vendedors')->insert([
         'producto_id' => $producto->id,
-        'user_id' => 1,
         'almacen_id' => $almacen->id,
         'precio_venta' => $precioVenta,
         'venta_ganancia' => $precioVenta - $costo,

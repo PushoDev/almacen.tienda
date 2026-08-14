@@ -197,6 +197,20 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
 
     const bulkSelectedProduct = productosUnicos.find((p) => p.id === bulkSelectedProductId) ?? null;
 
+    // El AlertDialog (Radix) atrapa el foco en su propio subárbol del DOM. El popup del Combobox
+    // de producto (base-ui) se porta a <body> por defecto, quedando como hermano —no descendiente—
+    // del contenido del diálogo, lo que rompe la selección con mouse (funciona con teclado porque
+    // no involucra un evento de puntero "escapando" del focus-trap). Mismo caso ya resuelto en
+    // PaymentForm.tsx y Comprar/Index.tsx (ver docs/pendiente-combobox-reemplazo.md) — se resuelve
+    // portando el popup dentro del propio AlertDialogContent.
+    const [bulkDialogContainer, setBulkDialogContainer] = useState<HTMLElement | undefined>(undefined);
+    const resolveBulkDialogContainer = (node: HTMLElement | null) => {
+        const container = node?.closest('[data-slot="alert-dialog-content"]');
+        if (container instanceof HTMLElement) {
+            setBulkDialogContainer(container);
+        }
+    };
+
     const availableAlmacenes = initialAlmacenes.map((a) => {
         const totalProductos     = a.productos.length;
         const totalStock         = a.productos.reduce((sum, p) => sum + p.stock_almacen, 0);
@@ -1124,7 +1138,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                             </AlertDialogDescription>
                         </AlertDialogHeader>
 
-                        <div className="grid flex-1 overflow-hidden lg:grid-cols-[1fr_380px]">
+                        <div ref={resolveBulkDialogContainer} className="grid flex-1 overflow-hidden lg:grid-cols-[1fr_380px]">
                             {/* Columna principal: buscar producto + precio/comisión */}
                             <div className="flex flex-col gap-y-6 overflow-y-auto px-6 py-6">
                                 <div className="space-y-2">
@@ -1142,7 +1156,7 @@ export default function VendedorPage({ almacenes: initialAlmacenes, meta, canVie
                                             placeholder="Buscar por nombre, marca o modelo..."
                                             showClear={!!bulkSelectedProduct}
                                         />
-                                        <ComboboxContent>
+                                        <ComboboxContent container={bulkDialogContainer}>
                                             <ComboboxEmpty>Sin resultados</ComboboxEmpty>
                                             <ComboboxList>
                                                 {(p: ProductoUnico) => (
