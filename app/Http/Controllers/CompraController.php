@@ -461,6 +461,7 @@ class CompraController extends Controller
                     'cantidad' => $lineaCantidad,
                     'precio' => $lineaPrecio,
                     'almacen_id' => $almacenId,
+                    'es_producto_nuevo' => $isNew,
                 ]);
 
                 // Actualizar inventario en el almacén específico
@@ -488,16 +489,16 @@ class CompraController extends Controller
                         'precio' => $item['precio'],
                     ],
                     'almacen' => Almacen::find($almacenId),
+                    'es_producto_nuevo' => $isNew,
                 ];
             }
 
             DB::commit();
 
-            // ✅ CARGAR RELACIONES ADICIONALES PARA LA VISTA
-            $compra->load(['pagos.cuenta', 'pagos.cliente']);
+            $compra->load(['proveedor', 'cliente', 'pagos.cuenta', 'pagos.cliente']);
 
             return Inertia::render('Comprar/Show', [
-                'compra' => $compra->load('proveedor'),
+                'compra' => $this->shapeCompraParaVista($compra),
                 'productos' => $productosConAlmacen,
                 'success' => 'Compra registrada y productos actualizados correctamente'
             ]);
@@ -512,10 +513,11 @@ class CompraController extends Controller
      */
     public function show(Compra $comprar)
     {
-        $comprar->load(['proveedor', 'cliente']);
+        $comprar->load(['proveedor', 'cliente', 'pagos.cuenta', 'pagos.cliente']);
 
         $productos = $comprar->productos()
-            ->withPivot('cantidad', 'precio', 'almacen_id')
+            ->with('categoria')
+            ->withPivot('cantidad', 'precio', 'almacen_id', 'es_producto_nuevo')
             ->get()
             ->map(function ($producto) {
                 $almacen = $producto->pivot->almacen_id
@@ -529,6 +531,7 @@ class CompraController extends Controller
                     'capacidad_producto' => $producto->capacidad_producto,
                     'color_producto'     => $producto->color_producto,
                     'codigo_producto'    => $producto->codigo_producto,
+                    'categoria'          => $producto->categoria?->nombre_categoria,
                     'pivot' => [
                         'cantidad' => $producto->pivot->cantidad,
                         'precio'   => $producto->pivot->precio,
@@ -536,24 +539,48 @@ class CompraController extends Controller
                     'almacen' => [
                         'nombre_almacen' => $almacen?->nombre_almacen ?? 'N/A',
                     ],
+                    'es_producto_nuevo' => $producto->pivot->es_producto_nuevo === null
+                        ? null
+                        : (bool) $producto->pivot->es_producto_nuevo,
                 ];
             });
 
         return Inertia::render('Comprar/Show', [
-            'compra' => [
-                'id'           => $comprar->id,
-                'fecha_compra' => $comprar->fecha_compra,
-                'total_compra' => (float) $comprar->total_compra,
-                'tipo_compra'  => $comprar->tipo_compra,
-                'proveedor'    => $comprar->proveedor
-                    ? ['id' => $comprar->proveedor->id, 'nombre_proveedor' => $comprar->proveedor->nombre_proveedor]
-                    : null,
-                'cliente'      => $comprar->cliente
-                    ? ['id' => $comprar->cliente->id, 'nombre_cliente' => $comprar->cliente->nombre_cliente]
-                    : null,
-            ],
+            'compra' => $this->shapeCompraParaVista($comprar),
             'productos' => $productos,
         ]);
+    }
+
+    /**
+     * Arma el array de compra para Comprar/Show — mismo shape para store() y show() para que el
+     * detalle de pago (cuentas/clientes de origen y monto de cada uno) se vea igual recién
+     * registrada la compra o al navegar desde el historial. Requiere que el caller ya haya
+     * cargado ['proveedor', 'cliente', 'pagos.cuenta', 'pagos.cliente'].
+     */
+    private function shapeCompraParaVista(Compra $compra): array
+    {
+        return [
+            'id'           => $compra->id,
+            'fecha_compra' => $compra->fecha_compra,
+            'total_compra' => (float) $compra->total_compra,
+            'tipo_compra'  => $compra->tipo_compra,
+            'proveedor'    => $compra->proveedor
+                ? ['id' => $compra->proveedor->id, 'nombre_proveedor' => $compra->proveedor->nombre_proveedor]
+                : null,
+            'cliente'      => $compra->cliente
+                ? ['id' => $compra->cliente->id, 'nombre_cliente' => $compra->cliente->nombre_cliente]
+                : null,
+            'pagos' => $compra->pagos->map(fn ($pago) => [
+                'tipo_pago' => $pago->tipo_pago,
+                'monto'     => (float) $pago->monto,
+                'cuenta'    => $pago->cuenta
+                    ? ['id' => $pago->cuenta->id, 'nombre_cuenta' => $pago->cuenta->nombre_cuenta]
+                    : null,
+                'cliente'   => $pago->cliente
+                    ? ['id' => $pago->cliente->id, 'nombre_cliente' => $pago->cliente->nombre_cliente]
+                    : null,
+            ])->values(),
+        ];
     }
 
     /**

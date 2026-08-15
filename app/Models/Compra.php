@@ -55,7 +55,7 @@ class Compra extends Model
     public function productos()
     {
         return $this->belongsToMany(Producto::class, 'compra_producto')
-            ->withPivot('cantidad', 'precio', 'almacen_id'); // ✅ Agregar almacen_id si existe
+            ->withPivot('cantidad', 'precio', 'almacen_id', 'es_producto_nuevo');
     }
 
     // Relación con todos los pagos de la compra
