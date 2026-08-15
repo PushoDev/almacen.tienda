@@ -192,7 +192,7 @@ class CompraController extends Controller
             ->with('moneda')
             ->get();
 
-        $comprasRecientes = Compra::with(['proveedor', 'cliente'])
+        $comprasRecientes = Compra::with(['proveedor', 'cliente', 'pagos'])
             ->latest()
             ->take(15)
             ->get()
@@ -203,6 +203,11 @@ class CompraController extends Controller
                 'tipo_compra'  => $c->tipo_compra,
                 'proveedor'    => $c->proveedor?->nombre_proveedor,
                 'cliente'      => $c->cliente?->nombre_cliente,
+                // Una compra pago_cash que además tiene un pago tipo deuda_proveedor solo puede venir
+                // del flujo de "completar con deuda si no alcanza" — tipo_compra se queda en pago_cash
+                // a propósito (ver shapeCompraParaVista), esta es la forma de distinguirla sin
+                // necesitar un tercer valor en el enum.
+                'es_parcial'   => $c->tipo_compra === 'pago_cash' && $c->pagos->contains('tipo_pago', 'deuda_proveedor'),
             ]);
 
         return Inertia::render('Comprar/Index', [
@@ -247,7 +252,10 @@ class CompraController extends Controller
             'pagos_clientes' => 'array|nullable',
             'pagos_clientes.*.cliente_id' => 'required|exists:clientes,id',
             'pagos_clientes.*.monto' => 'required|numeric|min:0.01',
+            'permitir_deuda_parcial' => 'nullable|boolean',
         ]);
+
+        $permitirDeudaParcial = $request->boolean('permitir_deuda_parcial');
 
         DB::beginTransaction();
 
@@ -277,6 +285,8 @@ class CompraController extends Controller
             ];
 
             // 2. Lógica de Pagos y Deuda
+            $montoFaltante = 0;
+
             if ($validated['compra'] === 'deuda_proveedor') {
                 if ($tipoProveedor === 'proveedor') {
                     $proveedor->decrement('saldo_proveedor', $total);
@@ -294,8 +304,30 @@ class CompraController extends Controller
 
                 $sumaTotalPagos = collect($pagos)->sum('monto') + collect($pagosClientes)->sum('monto');
 
-                if (abs($sumaTotalPagos - $total) > 0.01) {
+                // Pagar de más nunca se permite, con o sin deuda parcial habilitada.
+                if ($sumaTotalPagos - $total > 0.01) {
+                    throw new \Exception("La suma de los pagos ({$sumaTotalPagos}) supera el total de la compra ({$total}).");
+                }
+
+                $montoFaltante = round($total - $sumaTotalPagos, 2);
+
+                if ($montoFaltante > 0.01 && !$permitirDeudaParcial) {
                     throw new \Exception("La suma de los pagos ({$sumaTotalPagos}) no coincide con el total de la compra ({$total}).");
+                }
+
+                if ($montoFaltante > 0.01) {
+                    // El usuario habilitó completar con deuda: el resto no cubierto por cuentas/clientes
+                    // se suma como deuda al proveedor/cliente de la compra — misma lógica que
+                    // tipo_compra=deuda_proveedor, pero solo por la parte que faltó. Tiene que ir ANTES
+                    // del foreach de pagosClientes de abajo, que reutiliza (y reasigna) esta misma
+                    // variable $cliente para el cliente que está pagando, no el dueño de la compra.
+                    if ($tipoProveedor === 'proveedor') {
+                        $proveedor->decrement('saldo_proveedor', $montoFaltante);
+                    } else {
+                        $cliente->increment('deuda_pago_cliente', $montoFaltante);
+                    }
+                } else {
+                    $montoFaltante = 0;
                 }
 
                 // ✅ VALIDAR Y PROCESAR PAGOS CON CUENTAS
@@ -353,6 +385,19 @@ class CompraController extends Controller
                         'cliente_id' => $pagoCliente['cliente_id'],
                         'monto' => $pagoCliente['monto'],
                         'tipo_pago' => 'cliente',
+                    ]);
+                }
+
+                // Registrar el faltante (si el usuario habilitó completar con deuda) como un pago más,
+                // mismo tipo que usa una compra 100% a deuda — así "Detalles de Pago" lo muestra junto
+                // a los demás sin necesitar ningún cambio en el frontend.
+                if ($montoFaltante > 0) {
+                    CompraPago::create([
+                        'compra_id' => $compra->id,
+                        'cuenta_id' => null,
+                        'cliente_id' => null,
+                        'monto' => $montoFaltante,
+                        'tipo_pago' => 'deuda_proveedor',
                     ]);
                 }
             }
@@ -564,6 +609,9 @@ class CompraController extends Controller
             'fecha_compra' => $compra->fecha_compra,
             'total_compra' => (float) $compra->total_compra,
             'tipo_compra'  => $compra->tipo_compra,
+            // Mismo criterio que index(): pago_cash + algún pago tipo deuda_proveedor solo puede
+            // venir de "completar con deuda si no alcanza".
+            'es_parcial'   => $compra->tipo_compra === 'pago_cash' && $compra->pagos->contains('tipo_pago', 'deuda_proveedor'),
             'proveedor'    => $compra->proveedor
                 ? ['id' => $compra->proveedor->id, 'nombre_proveedor' => $compra->proveedor->nombre_proveedor]
                 : null,

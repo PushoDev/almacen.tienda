@@ -13,6 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     Combobox,
@@ -43,6 +44,7 @@ import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { format } from 'date-fns';
 import {
+    AlertTriangle,
     CalendarIcon,
     CheckCircle,
     CreditCard,
@@ -78,6 +80,7 @@ interface CompraReciente {
     tipo_compra: 'pago_cash' | 'deuda_proveedor';
     proveedor: string | null;
     cliente: string | null;
+    es_parcial: boolean;
 }
 
 interface ProductoExistente {
@@ -323,6 +326,7 @@ export default function ComprarPage() {
         pagos: [] as { cuenta_id: number; monto: number }[],
         pagos_clientes: [] as { cliente_id: number; monto: number }[],
         productos: [] as ProductoComprarProps[],
+        permitir_deuda_parcial: false,
     });
 
     // Estado para el modal de crear cliente
@@ -2323,6 +2327,10 @@ export default function ComprarPage() {
                                 const restante = Math.max(0, totalCompra - totalCubierto);
                                 const progresoPct = totalCompra > 0 ? Math.min(100, (totalCubierto / totalCompra) * 100) : 0;
                                 const pagoCompleto = Number(totalCubierto.toFixed(2)) === Number(totalCompra.toFixed(2));
+                                // Pagar de más nunca se permite, con o sin deuda parcial habilitada — mismo
+                                // criterio que el backend.
+                                const sePaso = totalCubierto - totalCompra > 0.01;
+                                const puedeConfirmar = !sePaso && (pagoCompleto || (data.permitir_deuda_parcial && totalCubierto > 0));
 
                                 return (
                                     <>
@@ -2462,6 +2470,14 @@ export default function ComprarPage() {
                                                                 <span className="text-3xl font-bold text-white">${totalCompra.toFixed(2)}</span>
                                                             </AlertDialogDescription>
                                                         </div>
+                                                        <label className="flex shrink-0 cursor-pointer items-center gap-2 self-start rounded-full bg-white/15 px-3 py-1.5 text-xs font-medium text-white">
+                                                            <Checkbox
+                                                                checked={data.permitir_deuda_parcial}
+                                                                onCheckedChange={(checked) => setData('permitir_deuda_parcial', checked === true)}
+                                                                className="border-white/40 bg-white/10 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-emerald-700"
+                                                            />
+                                                            Permitir completar con deuda si no alcanza
+                                                        </label>
                                                     </div>
 
                                                     <div className="mt-5 space-y-2">
@@ -2469,7 +2485,7 @@ export default function ComprarPage() {
                                                             <div
                                                                 className={cn(
                                                                     'h-full rounded-full transition-all',
-                                                                    pagoCompleto ? 'bg-white' : 'bg-amber-300',
+                                                                    pagoCompleto ? 'bg-green-400' : progresoPct >= 34 ? 'bg-yellow-300' : 'bg-red-400',
                                                                 )}
                                                                 style={{ width: `${progresoPct}%` }}
                                                             />
@@ -2487,13 +2503,19 @@ export default function ComprarPage() {
                                                             <span
                                                                 className={cn(
                                                                     'ml-auto flex items-center gap-1.5 rounded-full px-3 py-1 font-semibold',
-                                                                    pagoCompleto ? 'bg-white text-emerald-700' : 'bg-white/15',
+                                                                    pagoCompleto
+                                                                        ? 'bg-white text-emerald-700'
+                                                                        : data.permitir_deuda_parcial
+                                                                          ? 'bg-amber-400 text-amber-950'
+                                                                          : 'bg-white/15',
                                                                 )}
                                                             >
                                                                 {pagoCompleto ? (
                                                                     <>
                                                                         <CheckCircle className="h-3.5 w-3.5" /> Cubierto: ${totalCubierto.toFixed(2)}
                                                                     </>
+                                                                ) : data.permitir_deuda_parcial ? (
+                                                                    <>Quedará como deuda: ${restante.toFixed(2)}</>
                                                                 ) : (
                                                                     <>Restante: ${restante.toFixed(2)}</>
                                                                 )}
@@ -2779,7 +2801,7 @@ export default function ComprarPage() {
                                                     </Button>
                                                     <Button
                                                         onClick={realizarCompra}
-                                                        disabled={processing || !pagoCompleto}
+                                                        disabled={processing || !puedeConfirmar}
                                                         className="h-12 cursor-pointer bg-emerald-600 px-8 hover:bg-emerald-700"
                                                     >
                                                         {processing ? (
@@ -2863,8 +2885,24 @@ export default function ComprarPage() {
                                             </TableCell>
                                             <TableCell className="font-medium">{compra.proveedor ?? compra.cliente ?? 'Sin registro'}</TableCell>
                                             <TableCell>
-                                                <Badge variant={compra.tipo_compra === 'deuda_proveedor' ? 'destructive' : 'default'}>
-                                                    {compra.tipo_compra === 'deuda_proveedor' ? 'Crédito' : 'Contado'}
+                                                <Badge
+                                                    className={cn(
+                                                        'text-white hover:opacity-90',
+                                                        compra.tipo_compra === 'deuda_proveedor'
+                                                            ? 'bg-red-500'
+                                                            : compra.es_parcial
+                                                              ? 'bg-amber-500'
+                                                              : 'bg-emerald-500',
+                                                    )}
+                                                >
+                                                    {compra.tipo_compra === 'deuda_proveedor' ? (
+                                                        <CreditCard className="h-3 w-3" />
+                                                    ) : compra.es_parcial ? (
+                                                        <AlertTriangle className="h-3 w-3" />
+                                                    ) : (
+                                                        <DollarSign className="h-3 w-3" />
+                                                    )}
+                                                    {compra.tipo_compra === 'deuda_proveedor' ? 'Crédito' : compra.es_parcial ? 'Parcial' : 'Contado'}
                                                 </Badge>
                                             </TableCell>
                                             <TableCell className="text-right font-bold text-emerald-600">
