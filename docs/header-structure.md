@@ -1,5 +1,29 @@
 # Header Structure
 
+> **REGLA CRÍTICA (2026-08-15, confirmada explícitamente por el cliente):** el banner superior de página (ver "Banner superior de página", debajo) es la estructura **identificativa de todo el proyecto** — se repite igual en Dashboard, Compras, y el resto de los módulos. **NUNCA** se le aplica el patrón de degradado de `docs/patron-card-header-degradado.md` (ese es solo para `Card`/`CardHeader`, no para este banner), y no se propone "arreglarlo" ni cambiarle el estilo salvo que el cliente lo pida explícitamente para ESE banner puntual. Ya pasó una vez (intentando "arreglar" un degradado roto en el banner de `Comprar/Show.tsx`) — el cliente lo frenó ahí mismo. No repetir esa confusión entre "banner de página" y "Card".
+
+## Banner superior de página
+
+Casi todas las páginas (Dashboard, Compras, etc.) abren con este bloque, antes de cualquier `Card`:
+
+```tsx
+<div className="bg-sidebar border-sidebar-accent animate__animated animate__fadeIn relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
+    <HeadingSmall
+        title="Opciones Generales del Sistema"
+        description="Descripción breve del módulo"
+    />
+    <IconoDecorativo
+        size={70}
+        color="#f59e0b"
+        className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
+    />
+</div>
+```
+
+Clases fijas que identifican este bloque específico (si un `<div>` tiene esta combinación, es el banner de página, no lo toques como si fuera una Card): `bg-sidebar border-sidebar-accent ... rounded-2xl border border-dashed p-4`.
+
+**Variante opcional, vista en `dashboard.tsx`:** envuelve el mismo bloque en `<CursorProvider><CursorFollow>...</CursorFollow></CursorProvider>` (`resources/js/components/ui/cursor.tsx`, basado en `motion/react`) — agrega un chip flotante que sigue al mouse dentro del área del banner. No está presente en el resto de los módulos (ej. `Comprar/Index.tsx` no lo tiene) — es decorativo y opcional, no parte de la estructura obligatoria.
+
 ## Patrón de Header para todas las páginas
 
 Cada página renderiza un header con la siguiente estructura dentro del layout principal `AppSidebarLayout`:
@@ -86,6 +110,8 @@ Propiedades clave:
 | Reporte VentasPorVendedor | Reporte de Ventas por Vendedor | `User` | `#22d3ee` |
 | Empleados/Index | Gestión de Empleados | — | — |
 | Cierres/Index | Cierres de Caja | `ComputerIcon` | — |
+| dashboard.tsx | Opciones Generales del Sistema | `ComputerIcon` | `#d6d3d1` (tiene además `CursorProvider`/`CursorFollow`) |
+| Comprar/Index | Opciones Generales del Sistema | `ShoppingBasket` | `#f59e0b` |
 
 Algunas páginas (como Empleados) no usan el icono decorativo. Otras personalizan el color del icono.
 

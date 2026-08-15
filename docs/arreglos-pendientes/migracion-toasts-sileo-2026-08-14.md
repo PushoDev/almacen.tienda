@@ -46,9 +46,9 @@ Un archivo a la vez. **El usuario indica el orden** — no asumir que sigue el q
 ## Grupo 2 — Compras
 
 ### 4. Comprar/Index.tsx
-- [ ] Pendiente
+- [x] Cerrado 2026-08-15
 - **Archivo:** `resources/js/pages/Comprar/Index.tsx`
-- **Llamadas a portar:** 31
+- **Llamadas portadas:** 31/31 (carrito de productos — agregar/actualizar/eliminar — migrado primero a pedido del cliente; el resto del archivo, en una segunda pasada la misma sesión). `realizarCompra()` (checkout real, mueve dinero/stock) migrado como swap directo, sin `sileo.promise()`, mismo criterio de cautela que `Vendor/Index.tsx`. `<Toaster/>` de sonner y su import quitados del archivo (ya no queda ningún `toast.*` acá); queda solo el `<Toaster/>` de sileo. Lint limpio (mismos 7 errores/2 warnings preexistentes de `no-explicit-any`/`exhaustive-deps`, no relacionados). Suite completa verificada sin regresión (el único fallo intermitente, `RastreoOperacionesTest`, es el ya conocido — confirmado aislado en verde junto a `CompraTest`, 42/42).
 
 ---
 
@@ -71,8 +71,8 @@ Un archivo a la vez. **El usuario indica el orden** — no asumir que sigue el q
 ## Grupo 4 — Operación diaria (cuentas, movimientos, cierres)
 
 ### 8. Movimientos/Index.tsx
-- [ ] Pendiente
-- **Llamadas a portar:** 12
+- [x] Cerrado 2026-08-14 (junto con la pasada UX de Movimientos, misma sesión — confirmado en código 2026-08-15: usa `@/lib/sileo` y `@/components/ui/sileo-toaster`)
+- **Llamadas portadas:** 12
 
 ### 9. Transacciones/CambiarCostoManual.tsx
 - [ ] Pendiente

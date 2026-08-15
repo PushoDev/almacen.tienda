@@ -13,6 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     Combobox,
@@ -33,15 +34,17 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Toaster } from '@/components/ui/sonner';
+import { Toaster } from '@/components/ui/sileo-toaster';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
+import { sileo } from '@/lib/sileo';
 import { cn } from '@/lib/utils';
 import { AlmacenProps, CategoriasProps, ClienteProps, CuentaNegocioProps, ProveedorClienteProps, type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { format } from 'date-fns';
 import {
+    AlertTriangle,
     CalendarIcon,
     CheckCircle,
     CreditCard,
@@ -64,7 +67,6 @@ import {
     X,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
 
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { ScrollProgress } from '@/components/ui/scroll';
@@ -78,6 +80,7 @@ interface CompraReciente {
     tipo_compra: 'pago_cash' | 'deuda_proveedor';
     proveedor: string | null;
     cliente: string | null;
+    es_parcial: boolean;
 }
 
 interface ProductoExistente {
@@ -99,11 +102,15 @@ function ProductoSugerenciasDropdown({
     mostrar,
     buscando,
     sugerencias,
+    resaltada,
+    onResaltar,
     onSeleccionar,
 }: {
     mostrar: boolean;
     buscando: boolean;
     sugerencias: ProductoExistente[];
+    resaltada: number;
+    onResaltar: (index: number) => void;
     onSeleccionar: (p: ProductoExistente) => void;
 }) {
     if (!mostrar) return null;
@@ -117,14 +124,15 @@ function ProductoSugerenciasDropdown({
                 </div>
             ) : sugerencias.length > 0 ? (
                 <ul className="max-h-64 overflow-y-auto py-1">
-                    {sugerencias.map((p) => (
+                    {sugerencias.map((p, index) => (
                         <li
                             key={p.id}
                             onMouseDown={(e) => {
                                 e.preventDefault();
                                 onSeleccionar(p);
                             }}
-                            className="hover:bg-accent cursor-pointer px-3 py-2 text-sm"
+                            onMouseEnter={() => onResaltar(index)}
+                            className={cn('cursor-pointer px-3 py-2 text-sm', index === resaltada ? 'bg-accent' : 'hover:bg-accent')}
                         >
                             <div className="flex items-center justify-between gap-2">
                                 <span className="font-medium">{p.nombre_producto}</span>
@@ -250,6 +258,9 @@ export default function ComprarPage() {
     const [productoSugerencias, setProductoSugerencias] = useState<ProductoExistente[]>([]);
     const [buscandoProducto, setBuscandoProducto] = useState(false);
     const [campoEnFoco, setCampoEnFoco] = useState<'producto' | 'marca' | 'modelo' | null>(null);
+    // Índice resaltado del dropdown de sugerencias (teclado ↑/↓ y hover del mouse comparten el mismo estado
+    // para que ambos métodos de selección se sientan consistentes). -1 = nada resaltado.
+    const [sugerenciaResaltada, setSugerenciaResaltada] = useState(-1);
     const [productoCoincidente, setProductoCoincidente] = useState<ProductoExistente | null>(null);
     const justSelectedProductoRef = useRef(false);
 
@@ -315,6 +326,7 @@ export default function ComprarPage() {
         pagos: [] as { cuenta_id: number; monto: number }[],
         pagos_clientes: [] as { cliente_id: number; monto: number }[],
         productos: [] as ProductoComprarProps[],
+        permitir_deuda_parcial: false,
     });
 
     // Estado para el modal de crear cliente
@@ -332,7 +344,7 @@ export default function ComprarPage() {
                     setFilteredClientes(response.data);
                 } catch (error) {
                     console.error('Error buscando clientes:', error);
-                    toast.error('Error al buscar clientes');
+                    sileo.error({ title: 'Error al buscar clientes' });
                 } finally {
                     setIsSearchingClientes(false);
                 }
@@ -359,6 +371,7 @@ export default function ComprarPage() {
         const termino = tempFormData[campoEnFoco].trim();
         if (termino.length < 2) {
             setProductoSugerencias([]);
+            setSugerenciaResaltada(-1);
             return;
         }
 
@@ -369,6 +382,7 @@ export default function ComprarPage() {
                     params: { search: termino },
                 });
                 setProductoSugerencias(response.data);
+                setSugerenciaResaltada(-1);
             } catch (error) {
                 console.error('Error buscando productos existentes:', error);
             } finally {
@@ -425,7 +439,7 @@ export default function ComprarPage() {
                 setFilteredClientes(clientesRes.data);
             } catch (error) {
                 console.error('Error al cargar datos:', error);
-                toast.error('Error al cargar los datos necesarios');
+                sileo.error({ title: 'Error al cargar los datos necesarios' });
             } finally {
                 setLoading(false);
             }
@@ -499,7 +513,10 @@ export default function ComprarPage() {
         const prec = parseFloat(tempFormData.precio) || 0;
 
         if (!tempFormData.producto || !tempFormData.categoria || cant <= 0 || prec <= 0 || !tempFormData.almacen_id) {
-            toast.warning('Por favor, completa los campos obligatorios (Producto, Categoría, Cantidad, Precio y Almacén).');
+            sileo.warning({
+                title: 'Faltan datos',
+                description: 'Completa los campos obligatorios (Producto, Categoría, Cantidad, Precio y Almacén).',
+            });
             return;
         }
 
@@ -527,8 +544,10 @@ export default function ComprarPage() {
         if (editingProductId) {
             setProductos((prev) => prev.map((p) => (p.id === editingProductId ? nuevoProducto : p)));
             setEditingProductId(null);
+            sileo.success({ title: 'Producto actualizado', description: `${nuevoProducto.producto} se actualizó en la lista.` });
         } else {
             setProductos((prev) => [...prev, nuevoProducto]);
+            sileo.success({ title: 'Producto agregado', description: `${nuevoProducto.producto} se agregó a la lista de compra.` });
         }
 
         resetTempForm();
@@ -544,6 +563,39 @@ export default function ComprarPage() {
         }
     };
 
+    // Igual que handleEnterAgregarProducto, pero para los 3 campos (Nombre/Marca/Modelo) que además
+    // disparan el dropdown de sugerencias de productos existentes: cuando el dropdown está abierto,
+    // ↑/↓ mueven el resaltado y Enter selecciona la sugerencia resaltada en vez de agregar un producto
+    // nuevo (antes Enter siempre creaba una línea nueva, ignorando el dropdown por completo — el usuario
+    // que autocompletaba por teclado no tenía forma de elegir una sugerencia existente).
+    const handleAutocompleteKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, campo: 'producto' | 'marca' | 'modelo') => {
+        const dropdownAbierto = campoEnFoco === campo && tempFormData[campo].trim().length >= 2 && productoSugerencias.length > 0;
+
+        if (dropdownAbierto) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setSugerenciaResaltada((i) => (i + 1) % productoSugerencias.length);
+                return;
+            }
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setSugerenciaResaltada((i) => (i <= 0 ? productoSugerencias.length - 1 : i - 1));
+                return;
+            }
+            if (e.key === 'Enter' && sugerenciaResaltada >= 0) {
+                e.preventDefault();
+                seleccionarProductoExistente(productoSugerencias[sugerenciaResaltada]);
+                return;
+            }
+            if (e.key === 'Escape') {
+                setCampoEnFoco(null);
+                return;
+            }
+        }
+
+        handleEnterAgregarProducto(e);
+    };
+
     // Preview del código que se autogenera al agregar — mismo cálculo que agregarProducto(),
     // solo que en vivo, para que no sea invisible hasta abrir "Editar" después de cargado.
     const codigoPreview = tempFormData.producto
@@ -551,7 +603,11 @@ export default function ComprarPage() {
         : '';
 
     const eliminarProducto = (id: number) => {
+        const producto = productos.find((p) => p.id === id);
         setProductos((prev) => prev.filter((p) => p.id !== id));
+        if (producto) {
+            sileo.info({ title: 'Producto quitado', description: `${producto.producto} se quitó de la lista.` });
+        }
     };
 
     const editarProducto = (id: number) => {
@@ -579,7 +635,10 @@ export default function ComprarPage() {
         const prec = parseFloat(tempFormData.precio) || 0;
 
         if (!tempFormData.producto.trim() || !tempFormData.categoria.trim() || cant <= 0 || prec <= 0 || !tempFormData.almacen_id) {
-            toast.warning('Por favor, completa los campos obligatorios válidos (Producto, Categoría, Cantidad, Precio y Almacén).');
+            sileo.warning({
+                title: 'Faltan datos',
+                description: 'Completa los campos obligatorios válidos (Producto, Categoría, Cantidad, Precio y Almacén).',
+            });
             return;
         }
 
@@ -605,7 +664,7 @@ export default function ComprarPage() {
 
         resetTempForm();
         setEditingProductId(null);
-        toast.success('Producto actualizado correctamente');
+        sileo.success({ title: 'Producto actualizado', description: 'Los cambios se guardaron correctamente.' });
         setIsDialogOpen(false);
     };
 
@@ -620,23 +679,27 @@ export default function ComprarPage() {
 
     const realizarCompra = () => {
         if (productos.length === 0) {
-            toast.warning('Debe agregar al menos un producto para realizar la compra.');
+            sileo.warning({ title: 'Debe agregar al menos un producto para realizar la compra.' });
             return;
         }
 
         if (!data.proveedor || !date) {
-            toast.warning('Por favor, complete la Fecha y el Proveedor.');
+            sileo.warning({ title: 'Por favor, complete la Fecha y el Proveedor.' });
             return;
         }
 
         setData('fecha', format(date, 'yyyy-MM-dd'));
 
+        // Swap directo, sin sileo.promise(): esta llamada mueve dinero/stock real en el backend
+        // (CompraController::store) y no se puede verificar en navegador en esta sesión — mismo
+        // criterio de cautela ya aplicado en Vendor/Index.tsx para su checkout.
         post(route('comprar.store'), {
             preserveScroll: true,
             onSuccess: () => {
                 setProductos([]);
                 resetTempForm();
-                toast.success('Compra realizada exitosamente!', {
+                sileo.success({
+                    title: 'Compra realizada exitosamente',
                     description: 'Los productos han sido agregados al inventario.',
                 });
             },
@@ -651,15 +714,17 @@ export default function ComprarPage() {
                 if (claveErrorProducto) {
                     const indice = parseInt(claveErrorProducto.split('.')[1], 10);
                     const nombreProducto = productos[indice]?.producto ?? `línea ${indice + 1}`;
-                    toast.error(`Error en "${nombreProducto}"`, {
+                    sileo.error({
+                        title: `Error en "${nombreProducto}"`,
                         description: errors[claveErrorProducto],
                     });
                 } else if (errors.error) {
-                    toast.error('Error al procesar la compra', {
+                    sileo.error({
+                        title: 'Error al procesar la compra',
                         description: errors.error,
                     });
                 } else {
-                    toast.error('Ocurrió un error inesperado al procesar la compra.');
+                    sileo.error({ title: 'Ocurrió un error inesperado al procesar la compra.' });
                 }
             },
         });
@@ -702,7 +767,7 @@ export default function ComprarPage() {
         const crearAlmacenLocal = async () => {
             // Validación básica en frontend
             if (!localAlmacen.nombre_almacen.trim() || !localAlmacen.telefono_almacen.trim()) {
-                toast.error('Nombre y teléfono son requeridos');
+                sileo.error({ title: 'Nombre y teléfono son requeridos' });
                 return;
             }
 
@@ -717,16 +782,18 @@ export default function ComprarPage() {
                     notas_almacen: localAlmacen.notas_almacen.trim().toUpperCase(),
                 });
 
-                const { almacen, message } = response.data;
+                const { almacen, message, existe } = response.data;
 
-                toast.success(message, {
-                    description: 'Almacén creado exitosamente.',
-                });
+                if (existe) {
+                    sileo.warning({ title: message, description: 'Se usará el almacén existente en el sistema.' });
+                } else {
+                    sileo.success({ title: message, description: 'Almacén creado exitosamente.' });
+                }
 
-                // Agregar a la lista de almacenes
-                setAlmacens((prev) => [...prev, almacen]);
+                // Agregar a la lista de almacenes si no está (ya existente o recién creado)
+                setAlmacens((prev) => (prev.some((a) => a.id === almacen.id) ? prev : [...prev, almacen]));
 
-                // Seleccionar automáticamente el nuevo almacén
+                // Seleccionar automáticamente el almacén (nuevo o existente)
                 setLastSelectedAlmacenId(almacen.id.toString());
                 setTempFormData((prev) => ({
                     ...prev,
@@ -749,35 +816,11 @@ export default function ComprarPage() {
             } catch (error: any) {
                 console.error('Error al crear almacén:', error);
 
-                if (error.response?.status === 409) {
-                    // Almacén ya existe
-                    toast.warning('Almacén ya existe', {
-                        description: 'El almacén ya se encuentra registrado en el sistema.',
-                    });
-
-                    // Buscar el almacén existente
-                    const almacenExistente = almacens.find(
-                        (a) => a.nombre_almacen.toLowerCase() === localAlmacen.nombre_almacen.trim().toLowerCase(),
-                    );
-
-                    if (almacenExistente) {
-                        setLastSelectedAlmacenId(almacenExistente.id.toString());
-                        setTempFormData((prev) => ({
-                            ...prev,
-                            almacen_id: almacenExistente.id.toString(),
-                        }));
-                    }
-
-                    setIsCrearAlmacenDialogOpen(false);
-                } else if (error.response?.data?.errors) {
+                if (error.response?.data?.errors) {
                     setLocalErrors(error.response.data.errors);
-                    toast.error('Error de validación', {
-                        description: 'Por favor corrige los errores en el formulario.',
-                    });
+                    sileo.error({ title: 'Error de validación', description: 'Por favor corrige los errores en el formulario.' });
                 } else {
-                    toast.error('Error al crear almacén', {
-                        description: 'Intenta nuevamente o contacta al administrador.',
-                    });
+                    sileo.error({ title: 'Error al crear almacén', description: 'Intenta nuevamente o contacta al administrador.' });
                 }
             }
         };
@@ -992,7 +1035,7 @@ export default function ComprarPage() {
             const nombreMayusculas = nombreCategoria.trim().toUpperCase();
 
             if (!nombreMayusculas) {
-                toast.error('El nombre de la categoría es requerido');
+                sileo.error({ title: 'El nombre de la categoría es requerido' });
                 return;
             }
 
@@ -1003,9 +1046,7 @@ export default function ComprarPage() {
 
                 const { categoria, message } = response.data;
 
-                toast.success(message, {
-                    description: 'Categoría creada exitosamente.',
-                });
+                sileo.success({ title: message, description: 'Categoría creada exitosamente.' });
 
                 // Actualizar el estado global de categorías
                 setCategorias((prev) => [...prev, categoria]);
@@ -1017,13 +1058,9 @@ export default function ComprarPage() {
                 console.error('Error al crear categoría:', error);
                 if (error.response?.data?.errors) {
                     setLocalErrors(error.response.data.errors);
-                    toast.error('Error de validación', {
-                        description: 'Por favor corrige los errores en el formulario.',
-                    });
+                    sileo.error({ title: 'Error de validación', description: 'Por favor corrige los errores en el formulario.' });
                 } else {
-                    toast.error('Error al crear categoría', {
-                        description: error.response?.data?.message || 'Intenta nuevamente.',
-                    });
+                    sileo.error({ title: 'Error al crear categoría', description: error.response?.data?.message || 'Intenta nuevamente.' });
                 }
             }
         };
@@ -1035,15 +1072,19 @@ export default function ComprarPage() {
         };
 
         return (
-            <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2 text-xl">
-                        <HardDriveUpload className="h-5 w-5 text-purple-600" />
-                        Crear Nueva Categoría
-                    </DialogTitle>
-                    <DialogDescription>Añade una nueva categoría para organizar tus productos.</DialogDescription>
+            <DialogContent className="overflow-hidden p-0 sm:max-w-md">
+                <DialogHeader className="border-b bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-5 text-white">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                            <HardDriveUpload className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <DialogTitle className="text-xl text-white">Crear Nueva Categoría</DialogTitle>
+                            <DialogDescription className="text-purple-100">Añade una nueva categoría para organizar tus productos.</DialogDescription>
+                        </div>
+                    </div>
                 </DialogHeader>
-                <div className="grid gap-4 py-4">
+                <div className="grid gap-4 px-6 py-4">
                     <div className="space-y-2">
                         <Label htmlFor="dialog-nombre-categoria">
                             Nombre de la Categoría <span className="text-red-500">*</span>
@@ -1059,7 +1100,7 @@ export default function ComprarPage() {
                         {localErrors.nombre_categoria && <p className="text-sm text-red-500">{localErrors.nombre_categoria}</p>}
                     </div>
                 </div>
-                <DialogFooter className="gap-2">
+                <DialogFooter className="gap-2 border-t px-6 py-4">
                     <Button type="button" variant="outline" onClick={resetDialog}>
                         Cancelar
                     </Button>
@@ -1095,12 +1136,12 @@ export default function ComprarPage() {
             const nombreMayusculas = nombreProveedor.trim().toUpperCase();
 
             if (!nombreMayusculas) {
-                toast.error('El nombre es requerido');
+                sileo.error({ title: 'El nombre es requerido' });
                 return;
             }
 
             if (data.tipo_proveedor === 'cliente' && !telefonoProveedor.trim()) {
-                toast.error('El teléfono es requerido para clientes');
+                sileo.error({ title: 'El teléfono es requerido para clientes' });
                 return;
             }
 
@@ -1120,9 +1161,7 @@ export default function ComprarPage() {
 
                 const { data: nuevoData, message, tipo } = response.data;
 
-                toast.success(message, {
-                    description: `Nuevo ${tipo} creado exitosamente.`,
-                });
+                sileo.success({ title: message, description: `Nuevo ${tipo} creado exitosamente.` });
 
                 // Actualizar el estado global de proveedores/clientes segun el tipo
                 if (tipo === 'proveedor') {
@@ -1140,13 +1179,9 @@ export default function ComprarPage() {
                 console.error('Error al crear proveedor:', error);
                 if (error.response?.data?.errors) {
                     setLocalErrors(error.response.data.errors);
-                    toast.error('Error de validación', {
-                        description: 'Por favor corrige los errores en el formulario.',
-                    });
+                    sileo.error({ title: 'Error de validación', description: 'Por favor corrige los errores en el formulario.' });
                 } else {
-                    toast.error('Error al crear proveedor', {
-                        description: error.response?.data?.message || 'Intenta nuevamente.',
-                    });
+                    sileo.error({ title: 'Error al crear proveedor', description: error.response?.data?.message || 'Intenta nuevamente.' });
                 }
             }
         };
@@ -1161,15 +1196,21 @@ export default function ComprarPage() {
         };
 
         return (
-            <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2 text-xl">
-                        <Truck className="h-5 w-5 text-blue-600" />
-                        Crear Nuevo Proveedor/Cliente
-                    </DialogTitle>
-                    <DialogDescription>Añade un nuevo proveedor o cliente al sistema de forma rápida.</DialogDescription>
+            <DialogContent className="overflow-hidden p-0 sm:max-w-md">
+                <DialogHeader className="border-b bg-gradient-to-r from-violet-600 to-violet-700 px-6 py-5 text-white">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                            <Truck className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <DialogTitle className="text-xl text-white">Crear Nuevo Proveedor/Cliente</DialogTitle>
+                            <DialogDescription className="text-violet-100">
+                                Añade un nuevo proveedor o cliente al sistema de forma rápida.
+                            </DialogDescription>
+                        </div>
+                    </div>
                 </DialogHeader>
-                <div className="grid gap-4 py-4">
+                <div className="grid gap-4 px-6 py-4">
                     <div className="space-y-2">
                         <Label>Tipo de Registro</Label>
                         <div className="flex gap-4">
@@ -1249,11 +1290,11 @@ export default function ComprarPage() {
                         </div>
                     )}
                 </div>
-                <DialogFooter className="gap-2">
+                <DialogFooter className="gap-2 border-t px-6 py-4">
                     <Button type="button" variant="outline" onClick={resetDialog}>
                         Cancelar
                     </Button>
-                    <Button type="button" onClick={crearProveedorLocal} className="bg-blue-600 hover:bg-blue-700">
+                    <Button type="button" onClick={crearProveedorLocal} className="bg-violet-600 hover:bg-violet-700">
                         <PlusCircle className="mr-2 h-4 w-4" />
                         Crear {data.tipo_proveedor === 'proveedor' ? 'Proveedor' : 'Cliente'}
                     </Button>
@@ -1284,7 +1325,7 @@ export default function ComprarPage() {
         const crearClienteLocal = async () => {
             // Validación básica en frontend
             if (!localCliente.nombre_cliente.trim() || !localCliente.telefono_cliente.trim()) {
-                toast.error('Nombre y teléfono son requeridos');
+                sileo.error({ title: 'Nombre y teléfono son requeridos' });
                 return;
             }
 
@@ -1301,16 +1342,12 @@ export default function ComprarPage() {
 
                 // Si el cliente ya existe (retornado por el backend)
                 if (existe) {
-                    toast.info(message, {
-                        description: 'El cliente ya existía en el sistema. Se ha agregado automáticamente.',
-                    });
+                    sileo.info({ title: message, description: 'El cliente ya existía en el sistema. Se ha agregado automáticamente.' });
 
                     sincronizarClienteEnListas(cliente);
                 } else {
                     // Cliente nuevo creado
-                    toast.success(message, {
-                        description: 'Cliente creado exitosamente.',
-                    });
+                    sileo.success({ title: message, description: 'Cliente creado exitosamente.' });
                     sincronizarClienteEnListas(cliente);
                 }
 
@@ -1332,31 +1369,11 @@ export default function ComprarPage() {
             } catch (error: any) {
                 console.error('Error al crear cliente:', error);
 
-                if (error.response?.status === 409 && error.response?.data?.cliente_existente) {
-                    // Cliente ya existe - usar el existente
-                    const clienteExistente = error.response.data.cliente_existente;
-                    toast.warning('Cliente ya existe', {
-                        description: 'Se usará el cliente existente en el sistema.',
-                    });
-
-                    // Agregar a la lista si no está
-                    sincronizarClienteEnListas(clienteExistente);
-
-                    // Agregar a pagos_clientes
-                    if (!data.pagos_clientes.some((p) => p.cliente_id === clienteExistente.id)) {
-                        setData('pagos_clientes', [...data.pagos_clientes, { cliente_id: clienteExistente.id, monto: 0 }]);
-                    }
-
-                    setIsCrearClienteDialogOpen(false);
-                } else if (error.response?.data?.errors) {
+                if (error.response?.data?.errors) {
                     setLocalErrors(error.response.data.errors);
-                    toast.error('Error de validación', {
-                        description: 'Por favor corrige los errores en el formulario.',
-                    });
+                    sileo.error({ title: 'Error de validación', description: 'Por favor corrige los errores en el formulario.' });
                 } else {
-                    toast.error('Error al crear cliente', {
-                        description: 'Intenta nuevamente o contacta al administrador.',
-                    });
+                    sileo.error({ title: 'Error al crear cliente', description: 'Intenta nuevamente o contacta al administrador.' });
                 }
             }
         };
@@ -1373,15 +1390,21 @@ export default function ComprarPage() {
         };
 
         return (
-            <DialogContent className="max-h-[190vh] sm:max-w-lg">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2 text-xl">
-                        <Users className="h-5 w-5 text-blue-600" />
-                        Crear Nuevo Cliente Físico
-                    </DialogTitle>
-                    <DialogDescription>Los clientes físicos pueden usarse como fuente de financiamiento para compras.</DialogDescription>
+            <DialogContent className="max-h-[190vh] overflow-hidden p-0 sm:max-w-lg">
+                <DialogHeader className="border-b bg-gradient-to-r from-sky-600 to-sky-700 px-6 py-5 text-white">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                            <Users className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <DialogTitle className="text-xl text-white">Crear Nuevo Cliente Físico</DialogTitle>
+                            <DialogDescription className="text-sky-100">
+                                Los clientes físicos pueden usarse como fuente de financiamiento para compras.
+                            </DialogDescription>
+                        </div>
+                    </div>
                 </DialogHeader>
-                <ScrollArea className="max-h-[70vh]">
+                <ScrollArea className="max-h-[70vh] px-6">
                     <div className="grid gap-6 py-4">
                         <div className="space-y-4">
                             <div className="grid gap-4">
@@ -1467,14 +1490,14 @@ export default function ComprarPage() {
                     </div>
                 </ScrollArea>
 
-                <DialogFooter className="gap-2">
+                <DialogFooter className="gap-2 border-t px-6 py-4">
                     <Button type="button" variant="destructive" onClick={resetDialog}>
                         Cancelar
                     </Button>
                     <Button
                         type="button"
                         onClick={crearClienteLocal}
-                        className="bg-blue-600 hover:bg-blue-700"
+                        className="bg-sky-600 hover:bg-sky-700"
                         disabled={!localCliente.nombre_cliente.trim() || !localCliente.telefono_cliente.trim()}
                     >
                         <CheckCircle className="mr-2 h-4 w-4" />
@@ -1511,14 +1534,21 @@ export default function ComprarPage() {
                 <Separator className="col-span-4" />
 
                 {/* Sección de Datos Generales de la Compra */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-sidebar-accent text-center">Nuevos Productos</CardTitle>
-                        <CardDescription className="text-center">
-                            A continuación va a realizar una compra de productos, recuerde asignar: fecha y proveedor.
-                        </CardDescription>
+                <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                    <CardHeader className="bg-gradient-to-r from-indigo-600 to-indigo-700 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <CalendarIcon className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-base font-semibold text-white">Nuevos Productos</CardTitle>
+                                <CardDescription className="text-xs text-indigo-100">
+                                    A continuación va a realizar una compra de productos, recuerde asignar: fecha y proveedor.
+                                </CardDescription>
+                            </div>
+                        </div>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="pt-5">
                         <form onSubmit={(e) => e.preventDefault()}>
                             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                                 {/* Fecha de la Compra */}
@@ -1613,11 +1643,21 @@ export default function ComprarPage() {
                 </Card>
 
                 {/* Sección de Ingreso de Producto */}
-                <Card>
-                    <CardHeader>
-                        <CardDescription className="text-center dark:text-emerald-400">Ingrese Datos del Producto a Comprar</CardDescription>
+                <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                    <CardHeader className="bg-gradient-to-r from-cyan-600 to-cyan-700 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <PlusCircle className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-base font-semibold text-white">Ingrese Datos del Producto a Comprar</CardTitle>
+                                <CardDescription className="text-xs text-cyan-100">
+                                    Identificación, destino y datos comerciales de cada producto
+                                </CardDescription>
+                            </div>
+                        </div>
                     </CardHeader>
-                    <CardContent className="space-y-6">
+                    <CardContent className="space-y-6 pt-5">
                         <FieldSet>
                             <FieldLegend>Identificación del Producto</FieldLegend>
                             <FieldGroup className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -1632,12 +1672,14 @@ export default function ComprarPage() {
                                         onChange={handleTempInputChange}
                                         onFocus={() => setCampoEnFoco('producto')}
                                         onBlur={() => setTimeout(() => setCampoEnFoco((c) => (c === 'producto' ? null : c)), 150)}
-                                        onKeyDown={handleEnterAgregarProducto}
+                                        onKeyDown={(e) => handleAutocompleteKeyDown(e, 'producto')}
                                     />
                                     <ProductoSugerenciasDropdown
                                         mostrar={campoEnFoco === 'producto' && tempFormData.producto.trim().length >= 2}
                                         buscando={buscandoProducto}
                                         sugerencias={productoSugerencias}
+                                        resaltada={sugerenciaResaltada}
+                                        onResaltar={setSugerenciaResaltada}
                                         onSeleccionar={seleccionarProductoExistente}
                                     />
                                 </Field>
@@ -1653,12 +1695,14 @@ export default function ComprarPage() {
                                         onChange={handleTempInputChange}
                                         onFocus={() => setCampoEnFoco('marca')}
                                         onBlur={() => setTimeout(() => setCampoEnFoco((c) => (c === 'marca' ? null : c)), 150)}
-                                        onKeyDown={handleEnterAgregarProducto}
+                                        onKeyDown={(e) => handleAutocompleteKeyDown(e, 'marca')}
                                     />
                                     <ProductoSugerenciasDropdown
                                         mostrar={campoEnFoco === 'marca' && tempFormData.marca.trim().length >= 2}
                                         buscando={buscandoProducto}
                                         sugerencias={productoSugerencias}
+                                        resaltada={sugerenciaResaltada}
+                                        onResaltar={setSugerenciaResaltada}
                                         onSeleccionar={seleccionarProductoExistente}
                                     />
                                 </Field>
@@ -1674,12 +1718,14 @@ export default function ComprarPage() {
                                         onChange={handleTempInputChange}
                                         onFocus={() => setCampoEnFoco('modelo')}
                                         onBlur={() => setTimeout(() => setCampoEnFoco((c) => (c === 'modelo' ? null : c)), 150)}
-                                        onKeyDown={handleEnterAgregarProducto}
+                                        onKeyDown={(e) => handleAutocompleteKeyDown(e, 'modelo')}
                                     />
                                     <ProductoSugerenciasDropdown
                                         mostrar={campoEnFoco === 'modelo' && tempFormData.modelo.trim().length >= 2}
                                         buscando={buscandoProducto}
                                         sugerencias={productoSugerencias}
+                                        resaltada={sugerenciaResaltada}
+                                        onResaltar={setSugerenciaResaltada}
                                         onSeleccionar={seleccionarProductoExistente}
                                     />
                                 </Field>
@@ -1906,15 +1952,19 @@ export default function ComprarPage() {
                 </Card>
 
                 {/* Sección de la Tabla de Productos CON DIÁLOGO MEJORADO */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Package className="h-5 w-5" />
-                            Lista de los Productos a Comprar
-                            <Badge variant="outline" className="ml-auto">
-                                {productos.length} {productos.length === 1 ? 'producto' : 'productos'}
-                            </Badge>
-                        </CardTitle>
+                <Card className="overflow-hidden border-0 pt-0 shadow-lg">
+                    <CardHeader className="bg-gradient-to-r from-teal-600 to-teal-700 px-6 py-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                <Package className="h-5 w-5" />
+                            </div>
+                            <div className="flex flex-1 items-center justify-between">
+                                <CardTitle className="text-base font-semibold text-white">Lista de los Productos a Comprar</CardTitle>
+                                <Badge variant="outline" className="border-white/30 bg-white/20 text-white backdrop-blur-sm">
+                                    {productos.length} {productos.length === 1 ? 'producto' : 'productos'}
+                                </Badge>
+                            </div>
+                        </div>
                     </CardHeader>
                     <CardContent className="p-0">
                         <Table>
@@ -1990,15 +2040,21 @@ export default function ComprarPage() {
                                                     </AlertDialogTrigger>
 
                                                     <AlertDialogContent className="flex h-[90vh] w-[95vw] !max-w-none max-w-[1024px] flex-col p-0">
-                                                        <AlertDialogHeader className="shrink-0 border-b px-6 py-4">
-                                                            <AlertDialogTitle className="flex items-center gap-3 text-xl font-semibold text-gray-800 sm:text-2xl dark:text-white">
-                                                                <Edit2 className="h-6 w-6" />
-                                                                <span>Editar Producto</span>
-                                                            </AlertDialogTitle>
-                                                            <AlertDialogDescription className="text-base text-gray-600 dark:text-gray-300">
-                                                                Realiza ajustes detallados al producto. Los cambios se reflejarán en la lista de
-                                                                compra.
-                                                            </AlertDialogDescription>
+                                                        <AlertDialogHeader className="shrink-0 border-b bg-gradient-to-r from-fuchsia-600 to-fuchsia-700 px-6 py-5 text-white">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                                                    <Edit2 className="h-5 w-5" />
+                                                                </div>
+                                                                <div>
+                                                                    <AlertDialogTitle className="text-xl text-white sm:text-2xl">
+                                                                        Editar Producto
+                                                                    </AlertDialogTitle>
+                                                                    <AlertDialogDescription className="text-fuchsia-100">
+                                                                        Realiza ajustes detallados al producto. Los cambios se reflejarán en la
+                                                                        lista de compra.
+                                                                    </AlertDialogDescription>
+                                                                </div>
+                                                            </div>
                                                         </AlertDialogHeader>
 
                                                         <div className="grid flex-1 overflow-hidden lg:grid-cols-[1fr_380px]">
@@ -2206,7 +2262,7 @@ export default function ComprarPage() {
                                                             </AlertDialogCancel>
 
                                                             <Button
-                                                                className="bg-blue-600 text-white hover:bg-blue-700"
+                                                                className="bg-fuchsia-600 text-white hover:bg-fuchsia-700"
                                                                 onClick={handleActualizarProducto}
                                                             >
                                                                 <HardDriveUpload className="mr-2 h-4 w-4" />
@@ -2271,6 +2327,10 @@ export default function ComprarPage() {
                                 const restante = Math.max(0, totalCompra - totalCubierto);
                                 const progresoPct = totalCompra > 0 ? Math.min(100, (totalCubierto / totalCompra) * 100) : 0;
                                 const pagoCompleto = Number(totalCubierto.toFixed(2)) === Number(totalCompra.toFixed(2));
+                                // Pagar de más nunca se permite, con o sin deuda parcial habilitada — mismo
+                                // criterio que el backend.
+                                const sePaso = totalCubierto - totalCompra > 0.01;
+                                const puedeConfirmar = !sePaso && (pagoCompleto || (data.permitir_deuda_parcial && totalCubierto > 0));
 
                                 return (
                                     <>
@@ -2410,6 +2470,14 @@ export default function ComprarPage() {
                                                                 <span className="text-3xl font-bold text-white">${totalCompra.toFixed(2)}</span>
                                                             </AlertDialogDescription>
                                                         </div>
+                                                        <label className="flex shrink-0 cursor-pointer items-center gap-2 self-start rounded-full bg-white/15 px-3 py-1.5 text-xs font-medium text-white">
+                                                            <Checkbox
+                                                                checked={data.permitir_deuda_parcial}
+                                                                onCheckedChange={(checked) => setData('permitir_deuda_parcial', checked === true)}
+                                                                className="border-white/40 bg-white/10 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-emerald-700"
+                                                            />
+                                                            Permitir completar con deuda si no alcanza
+                                                        </label>
                                                     </div>
 
                                                     <div className="mt-5 space-y-2">
@@ -2417,7 +2485,7 @@ export default function ComprarPage() {
                                                             <div
                                                                 className={cn(
                                                                     'h-full rounded-full transition-all',
-                                                                    pagoCompleto ? 'bg-white' : 'bg-amber-300',
+                                                                    pagoCompleto ? 'bg-green-400' : progresoPct >= 34 ? 'bg-yellow-300' : 'bg-red-400',
                                                                 )}
                                                                 style={{ width: `${progresoPct}%` }}
                                                             />
@@ -2435,13 +2503,19 @@ export default function ComprarPage() {
                                                             <span
                                                                 className={cn(
                                                                     'ml-auto flex items-center gap-1.5 rounded-full px-3 py-1 font-semibold',
-                                                                    pagoCompleto ? 'bg-white text-emerald-700' : 'bg-white/15',
+                                                                    pagoCompleto
+                                                                        ? 'bg-white text-emerald-700'
+                                                                        : data.permitir_deuda_parcial
+                                                                          ? 'bg-amber-400 text-amber-950'
+                                                                          : 'bg-white/15',
                                                                 )}
                                                             >
                                                                 {pagoCompleto ? (
                                                                     <>
                                                                         <CheckCircle className="h-3.5 w-3.5" /> Cubierto: ${totalCubierto.toFixed(2)}
                                                                     </>
+                                                                ) : data.permitir_deuda_parcial ? (
+                                                                    <>Quedará como deuda: ${restante.toFixed(2)}</>
                                                                 ) : (
                                                                     <>Restante: ${restante.toFixed(2)}</>
                                                                 )}
@@ -2727,7 +2801,7 @@ export default function ComprarPage() {
                                                     </Button>
                                                     <Button
                                                         onClick={realizarCompra}
-                                                        disabled={processing || !pagoCompleto}
+                                                        disabled={processing || !puedeConfirmar}
                                                         className="h-12 cursor-pointer bg-emerald-600 px-8 hover:bg-emerald-700"
                                                     >
                                                         {processing ? (
@@ -2772,13 +2846,19 @@ export default function ComprarPage() {
 
                 {/* HISTORIAL DE COMPRAS */}
                 {comprasRecientes.length > 0 && (
-                    <Card className="mt-4">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-base">
-                                <ShoppingBasket className="h-5 w-5 text-amber-500" />
-                                Historial de Compras Recientes
-                            </CardTitle>
-                            <CardDescription>Últimas {comprasRecientes.length} compras registradas</CardDescription>
+                    <Card className="mt-4 overflow-hidden border-0 pt-0 shadow-lg">
+                        <CardHeader className="bg-gradient-to-r from-amber-600 to-amber-700 px-6 py-5 text-white">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <ShoppingBasket className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-base font-semibold text-white">Historial de Compras Recientes</CardTitle>
+                                    <CardDescription className="text-xs text-amber-100">
+                                        Últimas {comprasRecientes.length} compras registradas
+                                    </CardDescription>
+                                </div>
+                            </div>
                         </CardHeader>
                         <CardContent className="p-0">
                             <Table>
@@ -2805,8 +2885,24 @@ export default function ComprarPage() {
                                             </TableCell>
                                             <TableCell className="font-medium">{compra.proveedor ?? compra.cliente ?? 'Sin registro'}</TableCell>
                                             <TableCell>
-                                                <Badge variant={compra.tipo_compra === 'deuda_proveedor' ? 'destructive' : 'default'}>
-                                                    {compra.tipo_compra === 'deuda_proveedor' ? 'Crédito' : 'Contado'}
+                                                <Badge
+                                                    className={cn(
+                                                        'text-white hover:opacity-90',
+                                                        compra.tipo_compra === 'deuda_proveedor'
+                                                            ? 'bg-red-500'
+                                                            : compra.es_parcial
+                                                              ? 'bg-amber-500'
+                                                              : 'bg-emerald-500',
+                                                    )}
+                                                >
+                                                    {compra.tipo_compra === 'deuda_proveedor' ? (
+                                                        <CreditCard className="h-3 w-3" />
+                                                    ) : compra.es_parcial ? (
+                                                        <AlertTriangle className="h-3 w-3" />
+                                                    ) : (
+                                                        <DollarSign className="h-3 w-3" />
+                                                    )}
+                                                    {compra.tipo_compra === 'deuda_proveedor' ? 'Crédito' : compra.es_parcial ? 'Parcial' : 'Contado'}
                                                 </Badge>
                                             </TableCell>
                                             <TableCell className="text-right font-bold text-emerald-600">

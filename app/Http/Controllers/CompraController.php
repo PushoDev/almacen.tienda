@@ -20,17 +20,6 @@ use Inertia\Inertia;
 class CompraController extends Controller
 {
     /**
-     * Devuelve una lista de almacenes.
-     *
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function getAlmacen()
-    {
-        $almacenes = Almacen::select('id', 'nombre_almacen')->get();
-        return response()->json($almacenes);
-    }
-
-    /**
      * Devuelve una lista de proveedores y clientes tipo fisico combinados.
      *
      * @return \Illuminate\Http\JsonResponse
@@ -203,7 +192,7 @@ class CompraController extends Controller
             ->with('moneda')
             ->get();
 
-        $comprasRecientes = Compra::with(['proveedor', 'cliente'])
+        $comprasRecientes = Compra::with(['proveedor', 'cliente', 'pagos'])
             ->latest()
             ->take(15)
             ->get()
@@ -214,6 +203,11 @@ class CompraController extends Controller
                 'tipo_compra'  => $c->tipo_compra,
                 'proveedor'    => $c->proveedor?->nombre_proveedor,
                 'cliente'      => $c->cliente?->nombre_cliente,
+                // Una compra pago_cash que además tiene un pago tipo deuda_proveedor solo puede venir
+                // del flujo de "completar con deuda si no alcanza" — tipo_compra se queda en pago_cash
+                // a propósito (ver shapeCompraParaVista), esta es la forma de distinguirla sin
+                // necesitar un tercer valor en el enum.
+                'es_parcial'   => $c->tipo_compra === 'pago_cash' && $c->pagos->contains('tipo_pago', 'deuda_proveedor'),
             ]);
 
         return Inertia::render('Comprar/Index', [
@@ -258,7 +252,10 @@ class CompraController extends Controller
             'pagos_clientes' => 'array|nullable',
             'pagos_clientes.*.cliente_id' => 'required|exists:clientes,id',
             'pagos_clientes.*.monto' => 'required|numeric|min:0.01',
+            'permitir_deuda_parcial' => 'nullable|boolean',
         ]);
+
+        $permitirDeudaParcial = $request->boolean('permitir_deuda_parcial');
 
         DB::beginTransaction();
 
@@ -288,6 +285,8 @@ class CompraController extends Controller
             ];
 
             // 2. Lógica de Pagos y Deuda
+            $montoFaltante = 0;
+
             if ($validated['compra'] === 'deuda_proveedor') {
                 if ($tipoProveedor === 'proveedor') {
                     $proveedor->decrement('saldo_proveedor', $total);
@@ -305,8 +304,30 @@ class CompraController extends Controller
 
                 $sumaTotalPagos = collect($pagos)->sum('monto') + collect($pagosClientes)->sum('monto');
 
-                if (abs($sumaTotalPagos - $total) > 0.01) {
+                // Pagar de más nunca se permite, con o sin deuda parcial habilitada.
+                if ($sumaTotalPagos - $total > 0.01) {
+                    throw new \Exception("La suma de los pagos ({$sumaTotalPagos}) supera el total de la compra ({$total}).");
+                }
+
+                $montoFaltante = round($total - $sumaTotalPagos, 2);
+
+                if ($montoFaltante > 0.01 && !$permitirDeudaParcial) {
                     throw new \Exception("La suma de los pagos ({$sumaTotalPagos}) no coincide con el total de la compra ({$total}).");
+                }
+
+                if ($montoFaltante > 0.01) {
+                    // El usuario habilitó completar con deuda: el resto no cubierto por cuentas/clientes
+                    // se suma como deuda al proveedor/cliente de la compra — misma lógica que
+                    // tipo_compra=deuda_proveedor, pero solo por la parte que faltó. Tiene que ir ANTES
+                    // del foreach de pagosClientes de abajo, que reutiliza (y reasigna) esta misma
+                    // variable $cliente para el cliente que está pagando, no el dueño de la compra.
+                    if ($tipoProveedor === 'proveedor') {
+                        $proveedor->decrement('saldo_proveedor', $montoFaltante);
+                    } else {
+                        $cliente->increment('deuda_pago_cliente', $montoFaltante);
+                    }
+                } else {
+                    $montoFaltante = 0;
                 }
 
                 // ✅ VALIDAR Y PROCESAR PAGOS CON CUENTAS
@@ -364,6 +385,19 @@ class CompraController extends Controller
                         'cliente_id' => $pagoCliente['cliente_id'],
                         'monto' => $pagoCliente['monto'],
                         'tipo_pago' => 'cliente',
+                    ]);
+                }
+
+                // Registrar el faltante (si el usuario habilitó completar con deuda) como un pago más,
+                // mismo tipo que usa una compra 100% a deuda — así "Detalles de Pago" lo muestra junto
+                // a los demás sin necesitar ningún cambio en el frontend.
+                if ($montoFaltante > 0) {
+                    CompraPago::create([
+                        'compra_id' => $compra->id,
+                        'cuenta_id' => null,
+                        'cliente_id' => null,
+                        'monto' => $montoFaltante,
+                        'tipo_pago' => 'deuda_proveedor',
                     ]);
                 }
             }
@@ -472,6 +506,7 @@ class CompraController extends Controller
                     'cantidad' => $lineaCantidad,
                     'precio' => $lineaPrecio,
                     'almacen_id' => $almacenId,
+                    'es_producto_nuevo' => $isNew,
                 ]);
 
                 // Actualizar inventario en el almacén específico
@@ -499,16 +534,16 @@ class CompraController extends Controller
                         'precio' => $item['precio'],
                     ],
                     'almacen' => Almacen::find($almacenId),
+                    'es_producto_nuevo' => $isNew,
                 ];
             }
 
             DB::commit();
 
-            // ✅ CARGAR RELACIONES ADICIONALES PARA LA VISTA
-            $compra->load(['pagos.cuenta', 'pagos.cliente']);
+            $compra->load(['proveedor', 'cliente', 'pagos.cuenta', 'pagos.cliente']);
 
             return Inertia::render('Comprar/Show', [
-                'compra' => $compra->load('proveedor'),
+                'compra' => $this->shapeCompraParaVista($compra),
                 'productos' => $productosConAlmacen,
                 'success' => 'Compra registrada y productos actualizados correctamente'
             ]);
@@ -523,10 +558,11 @@ class CompraController extends Controller
      */
     public function show(Compra $comprar)
     {
-        $comprar->load(['proveedor', 'cliente']);
+        $comprar->load(['proveedor', 'cliente', 'pagos.cuenta', 'pagos.cliente']);
 
         $productos = $comprar->productos()
-            ->withPivot('cantidad', 'precio', 'almacen_id')
+            ->with('categoria')
+            ->withPivot('cantidad', 'precio', 'almacen_id', 'es_producto_nuevo')
             ->get()
             ->map(function ($producto) {
                 $almacen = $producto->pivot->almacen_id
@@ -540,6 +576,7 @@ class CompraController extends Controller
                     'capacidad_producto' => $producto->capacidad_producto,
                     'color_producto'     => $producto->color_producto,
                     'codigo_producto'    => $producto->codigo_producto,
+                    'categoria'          => $producto->categoria?->nombre_categoria,
                     'pivot' => [
                         'cantidad' => $producto->pivot->cantidad,
                         'precio'   => $producto->pivot->precio,
@@ -547,24 +584,51 @@ class CompraController extends Controller
                     'almacen' => [
                         'nombre_almacen' => $almacen?->nombre_almacen ?? 'N/A',
                     ],
+                    'es_producto_nuevo' => $producto->pivot->es_producto_nuevo === null
+                        ? null
+                        : (bool) $producto->pivot->es_producto_nuevo,
                 ];
             });
 
         return Inertia::render('Comprar/Show', [
-            'compra' => [
-                'id'           => $comprar->id,
-                'fecha_compra' => $comprar->fecha_compra,
-                'total_compra' => (float) $comprar->total_compra,
-                'tipo_compra'  => $comprar->tipo_compra,
-                'proveedor'    => $comprar->proveedor
-                    ? ['id' => $comprar->proveedor->id, 'nombre_proveedor' => $comprar->proveedor->nombre_proveedor]
-                    : null,
-                'cliente'      => $comprar->cliente
-                    ? ['id' => $comprar->cliente->id, 'nombre_cliente' => $comprar->cliente->nombre_cliente]
-                    : null,
-            ],
+            'compra' => $this->shapeCompraParaVista($comprar),
             'productos' => $productos,
         ]);
+    }
+
+    /**
+     * Arma el array de compra para Comprar/Show — mismo shape para store() y show() para que el
+     * detalle de pago (cuentas/clientes de origen y monto de cada uno) se vea igual recién
+     * registrada la compra o al navegar desde el historial. Requiere que el caller ya haya
+     * cargado ['proveedor', 'cliente', 'pagos.cuenta', 'pagos.cliente'].
+     */
+    private function shapeCompraParaVista(Compra $compra): array
+    {
+        return [
+            'id'           => $compra->id,
+            'fecha_compra' => $compra->fecha_compra,
+            'total_compra' => (float) $compra->total_compra,
+            'tipo_compra'  => $compra->tipo_compra,
+            // Mismo criterio que index(): pago_cash + algún pago tipo deuda_proveedor solo puede
+            // venir de "completar con deuda si no alcanza".
+            'es_parcial'   => $compra->tipo_compra === 'pago_cash' && $compra->pagos->contains('tipo_pago', 'deuda_proveedor'),
+            'proveedor'    => $compra->proveedor
+                ? ['id' => $compra->proveedor->id, 'nombre_proveedor' => $compra->proveedor->nombre_proveedor]
+                : null,
+            'cliente'      => $compra->cliente
+                ? ['id' => $compra->cliente->id, 'nombre_cliente' => $compra->cliente->nombre_cliente]
+                : null,
+            'pagos' => $compra->pagos->map(fn ($pago) => [
+                'tipo_pago' => $pago->tipo_pago,
+                'monto'     => (float) $pago->monto,
+                'cuenta'    => $pago->cuenta
+                    ? ['id' => $pago->cuenta->id, 'nombre_cuenta' => $pago->cuenta->nombre_cuenta]
+                    : null,
+                'cliente'   => $pago->cliente
+                    ? ['id' => $pago->cliente->id, 'nombre_cliente' => $pago->cliente->nombre_cliente]
+                    : null,
+            ])->values(),
+        ];
     }
 
     /**
@@ -683,6 +747,20 @@ class CompraController extends Controller
      */
     public function storeAlmacenForCompra(Request $request)
     {
+        // Mismo patrón que storeClienteForCompra: si ya existe (por nombre O teléfono), devolverlo
+        // directo en vez de dejar que la validación 'unique' de abajo lo rechace con un 422 crudo.
+        $almacenExistente = Almacen::where('nombre_almacen', $request->nombre_almacen)
+            ->orWhere('telefono_almacen', $request->telefono_almacen)
+            ->first();
+
+        if ($almacenExistente) {
+            return response()->json([
+                'message' => 'Almacén ya existe en el sistema. Usando almacén existente.',
+                'almacen' => $almacenExistente,
+                'existe' => true
+            ], 200);
+        }
+
         // Validación de datos
         $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
             'nombre_almacen' => ['required', 'string', 'unique:almacens,nombre_almacen'],
@@ -707,7 +785,8 @@ class CompraController extends Controller
 
         return response()->json([
             'message' => 'Almacén creado exitosamente.',
-            'almacen' => $almacen
+            'almacen' => $almacen,
+            'existe' => false
         ], 201);
     }
 

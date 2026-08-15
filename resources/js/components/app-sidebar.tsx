@@ -19,6 +19,7 @@ import {
     ShoppingCart,
     StoreIcon,
     Users,
+    CalendarIcon,
 } from 'lucide-react';
 import AppLogo from './app-logo';
 
@@ -117,6 +118,12 @@ const allNavItems: NavItem[] = [
         title: 'Empleados',
         href: '/empleados',
         icon: Contact,
+        roles: ['admin'],
+    },
+    {
+        title: 'Calendario de Historial',
+        href: '#',
+        icon: CalendarIcon,
         roles: ['admin'],
     },
 ];
