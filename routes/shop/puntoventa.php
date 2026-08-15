@@ -2,7 +2,6 @@
 
 use App\Http\Controllers\VentaController;
 use App\Http\Controllers\CierreCajaController; // Importar nuevo controlador
-use App\Http\Controllers\CompraController; // Asegúrate de importar el controlador de Compras
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -69,16 +68,5 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/ventas/{venta}/especial/rechazar', [VentaController::class, 'rechazarSolicitudEspecial'])->name('ventas.especial.rechazar');
     Route::post('/ventas/{venta}/decision-notificada', [VentaController::class, 'marcarDecisionNotificada'])->name('ventas.decision.notificada');
 
-    // Rutas para Compras (nuevas) — solo admin, mismo criterio que routes/acciones/compras.php
-    Route::middleware('admin.only')->group(function () {
-        Route::get('/compras/almacenes', [CompraController::class, 'getAlmacen'])->name('compras.almacenes');
-        Route::get('/compras/proveedores', [CompraController::class, 'getProveedor'])->name('compras.proveedores');
-        Route::get('/compras/categorias', [CompraController::class, 'getCategorias'])->name('compras.categorias');
-        Route::get('/compras/cuentas/pago', [CompraController::class, 'getCuentas'])->name('compras.cuentas.pago');
-        Route::get('/compras/clientes/fisicos', [CompraController::class, 'getClientesFisicos'])->name('compras.clientes.fisicos');
-        Route::post('/comprar', [CompraController::class, 'store'])->name('comprar.store');
-
-        // Ruta adicional para obtener productos de compras (si es necesaria)
-        Route::get('/compras/almacenes/{id}/productos', [CompraController::class, 'getProductos'])->name('compras.getProductos');
-    });
+    // Rutas de Compras: ver routes/acciones/compras.php (única fuente, ya no duplicadas acá — 2026-08-15).
 });

@@ -20,17 +20,6 @@ use Inertia\Inertia;
 class CompraController extends Controller
 {
     /**
-     * Devuelve una lista de almacenes.
-     *
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function getAlmacen()
-    {
-        $almacenes = Almacen::select('id', 'nombre_almacen')->get();
-        return response()->json($almacenes);
-    }
-
-    /**
      * Devuelve una lista de proveedores y clientes tipo fisico combinados.
      *
      * @return \Illuminate\Http\JsonResponse
@@ -683,6 +672,20 @@ class CompraController extends Controller
      */
     public function storeAlmacenForCompra(Request $request)
     {
+        // Mismo patrón que storeClienteForCompra: si ya existe (por nombre O teléfono), devolverlo
+        // directo en vez de dejar que la validación 'unique' de abajo lo rechace con un 422 crudo.
+        $almacenExistente = Almacen::where('nombre_almacen', $request->nombre_almacen)
+            ->orWhere('telefono_almacen', $request->telefono_almacen)
+            ->first();
+
+        if ($almacenExistente) {
+            return response()->json([
+                'message' => 'Almacén ya existe en el sistema. Usando almacén existente.',
+                'almacen' => $almacenExistente,
+                'existe' => true
+            ], 200);
+        }
+
         // Validación de datos
         $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
             'nombre_almacen' => ['required', 'string', 'unique:almacens,nombre_almacen'],
@@ -707,7 +710,8 @@ class CompraController extends Controller
 
         return response()->json([
             'message' => 'Almacén creado exitosamente.',
-            'almacen' => $almacen
+            'almacen' => $almacen,
+            'existe' => false
         ], 201);
     }
 
