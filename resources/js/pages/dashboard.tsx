@@ -14,6 +14,7 @@ import {
     DiamondPercent,
     DollarSign,
     IdCard,
+    Info,
     Landmark,
     LucideBaggageClaim,
     LucideBoomBox,
@@ -32,7 +33,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ChartConfig, ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+
+import type {
+    ComparacionMensual,
+    EstadoFinanciero,
+    HistorialCambio,
+    HistorialCostoPrecioItem,
+    Moneda,
+    MontoPorMoneda,
+    ResumenFinanciero,
+    StatsCostoPrecio,
+    Usuario,
+} from './Dashboard/types';
+import { colorMoneda } from './Dashboard/utils';
 
 const chartConfig = {
     compras: {
@@ -51,136 +65,6 @@ const breadcrumbs: BreadcrumbItem[] = [
         href: '/dashboard',
     },
 ];
-
-interface Usuario {
-    id: number;
-    name: string;
-    email: string;
-    role: string;
-}
-
-interface Moneda {
-    id: number;
-    nombre_moneda: string;
-    codigo_moneda: string;
-    simbolo_moneda: string;
-    tasa_cambio: number;
-    commission: number;
-    estado: boolean;
-    principal: boolean;
-}
-
-interface MontoPorMoneda {
-    descripcion: string;
-    simbolo: string;
-    monto: number;
-    tasa_cambio: number;
-}
-
-interface ComparacionMensual {
-    moneda: string;
-    nombre_moneda: string;
-    simbolo_moneda: string;
-    monto_actual: number;
-    monto_anterior: number;
-    diferencia: number;
-    porcentaje_cambio: number;
-    es_positivo: boolean;
-    tasa_cambio: number;
-}
-
-interface EstadoFinanciero {
-    cuenta_id: number;
-    nombre_cuenta: string;
-    tipo: string;
-    saldo_cuenta: number;
-    deuda: number;
-    tipo_cuenta: string;
-    estado_cuenta: boolean;
-    moneda: Moneda;
-    usuarios: Usuario[];
-}
-
-interface HistorialCambio {
-    id: number;
-    moneda: {
-        id: number;
-        nombre_moneda: string;
-        codigo_moneda: string;
-        simbolo_moneda: string;
-    };
-    usuario: {
-        id: number;
-        name: string;
-    };
-    tasa_anterior: string;
-    tasa_nueva: string;
-    diferencia_tasa: string;
-    porcentaje_cambio: string;
-    total_cuentas_afectadas: string;
-    impacto_financiero: string;
-    impacto_porcentaje: string;
-    numero_cuentas_afectadas: number;
-    es_ganancia: boolean;
-    es_perdida: boolean;
-    impacto_formateado: string;
-    impacto_porcentaje_formateado: string;
-    fecha_cambio: string;
-    fecha_formateada: string;
-}
-
-interface HistorialCostoPrecioItem {
-    id: number;
-    producto: { id: number; nombre_producto: string };
-    usuario: { id: number; name: string };
-    precio_anterior: number;
-    precio_nuevo: number;
-    diferencia: number;
-    stock_momento: number;
-    impacto_financiero: number;
-    impacto_formateado: string;
-    es_ganancia: boolean;
-    es_perdida: boolean;
-    motivo: string | null;
-    fecha_formateada: string;
-}
-
-interface StatsCostoPrecio {
-    total_ganancias: number;
-    total_perdidas: number;
-    neto_impacto: number;
-    numero_cambios: number;
-}
-
-interface CapitalPorMoneda {
-    codigo: string;
-    simbolo: string;
-    monto: number;
-    incluye_clientes_proveedores_inventario: boolean;
-}
-
-interface ResumenFinanciero {
-    capital_financiero: number;
-    capital_por_moneda: CapitalPorMoneda[];
-    moneda_principal: { simbolo: string; codigo: string };
-}
-
-// Colores fijos para las monedas más comunes; cualquier otra (dinámica, agregada por el
-// admin en Gestión de Monedas) cae en la paleta de respaldo, ciclando por posición —
-// mismo criterio que `colorPago()` en RastreoOperaciones.tsx.
-const COLORES_MONEDA: Record<string, { bg: string; text: string; border: string }> = {
-    USD: { bg: 'bg-emerald-100 dark:bg-emerald-900/40', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-300 dark:border-emerald-700' },
-    CUP: { bg: 'bg-indigo-100 dark:bg-indigo-900/40', text: 'text-indigo-700 dark:text-indigo-300', border: 'border-indigo-300 dark:border-indigo-700' },
-    EUR: { bg: 'bg-blue-100 dark:bg-blue-900/40', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-300 dark:border-blue-700' },
-    MLC: { bg: 'bg-amber-100 dark:bg-amber-900/40', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-300 dark:border-amber-700' },
-};
-const PALETA_MONEDA_RESPALDO = [
-    { bg: 'bg-violet-100 dark:bg-violet-900/40', text: 'text-violet-700 dark:text-violet-300', border: 'border-violet-300 dark:border-violet-700' },
-    { bg: 'bg-pink-100 dark:bg-pink-900/40', text: 'text-pink-700 dark:text-pink-300', border: 'border-pink-300 dark:border-pink-700' },
-    { bg: 'bg-cyan-100 dark:bg-cyan-900/40', text: 'text-cyan-700 dark:text-cyan-300', border: 'border-cyan-300 dark:border-cyan-700' },
-    { bg: 'bg-lime-100 dark:bg-lime-900/40', text: 'text-lime-700 dark:text-lime-300', border: 'border-lime-300 dark:border-lime-700' },
-];
-const colorMoneda = (codigo: string, index: number) => COLORES_MONEDA[codigo] ?? PALETA_MONEDA_RESPALDO[index % PALETA_MONEDA_RESPALDO.length];
 
 export default function Dashboard({
     userRole,
@@ -675,59 +559,173 @@ export default function Dashboard({
                                 </div>
                             </CardHeader>
                             <CardContent>
+                                <div className="mb-4 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
+                                    <Info className="mt-0.5 h-4 w-4 shrink-0" />
+                                    <span>
+                                        <strong>Saldo Acumulado</strong> es cuánto se ha movido (entradas − salidas) desde que empezó este mes — arranca en{' '}
+                                        <strong>0.00 cada día 1</strong> y va sumando en tiempo real con cada operación. Ver todo en 0.00 es normal al
+                                        inicio del mes, no un error.
+                                    </span>
+                                </div>
                                 <Table>
                                     <TableHeader>
                                         <TableRow className="border-b-sidebar-border dark:border-b-sidebar-border hover:bg-transparent">
                                             <TableHead className="text-gray-700 dark:text-gray-300">Moneda</TableHead>
                                             <TableHead className="text-right text-gray-700 dark:text-gray-300">Mes Anterior</TableHead>
-                                            <TableHead className="text-right text-gray-700 dark:text-gray-300">Diferencia</TableHead>
+                                            <TableHead className="text-right text-gray-700 dark:text-gray-300">Mes Actual</TableHead>
                                             <TableHead className="text-right text-gray-700 dark:text-gray-300">Saldo Acumulado</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {comparaciones && comparaciones.length > 0 ? (
-                                            comparaciones.map((comparacion, index) => {
-                                                const c = colorMoneda(comparacion.moneda, index);
-                                                return (
-                                                    <TableRow
-                                                        key={index}
-                                                        className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50 hover:bg-sidebar/10 dark:hover:bg-sidebar/20 transition-colors"
-                                                    >
-                                                        <TableCell className="font-medium">
-                                                            <Badge variant="outline" className={`${c.bg} ${c.text} ${c.border}`}>
-                                                                {comparacion.moneda}
-                                                            </Badge>
-                                                        </TableCell>
-                                                        <TableCell className="text-right">
-                                                            {comparacion.monto_anterior.toLocaleString('es-ES', {
-                                                                minimumFractionDigits: 2,
-                                                                maximumFractionDigits: 6,
-                                                            })}
-                                                        </TableCell>
-                                                        <TableCell className="text-right">
-                                                            <span
-                                                                className={
-                                                                    comparacion.es_positivo
-                                                                        ? 'font-medium text-green-600 dark:text-green-400'
-                                                                        : 'font-medium text-red-600 dark:text-red-400'
-                                                                }
-                                                            >
-                                                                {comparacion.diferencia >= 0 ? '+' : ''}
-                                                                {comparacion.diferencia.toLocaleString('es-ES', {
+                                            (() => {
+                                                // Inventario no es dinero líquido — se muestra con su propio detalle,
+                                                // pero nunca se mezcla dentro de "Totales" (eso es solo caja/monedas).
+                                                const filasMonedas = comparaciones.filter((c) => c.moneda !== 'INVENTARIO');
+                                                const filaInventario = comparaciones.find((c) => c.moneda === 'INVENTARIO');
+
+                                                const totalMesAnterior = filasMonedas.reduce(
+                                                    (sum, comp) => sum + comp.monto_anterior / (comp.tasa_cambio || 1),
+                                                    0,
+                                                );
+                                                const totalDiferencia = filasMonedas.reduce(
+                                                    (sum, comp) => sum + comp.diferencia / (comp.tasa_cambio || 1),
+                                                    0,
+                                                );
+                                                const totalSaldoAcumulado = filasMonedas.reduce(
+                                                    (sum, comp) => sum + comp.monto_actual / (comp.tasa_cambio || 1),
+                                                    0,
+                                                );
+
+                                                const filaComparacion = (comparacion: ComparacionMensual, index: number) => {
+                                                    const c = colorMoneda(comparacion.moneda, index);
+                                                    return (
+                                                        <TableRow
+                                                            key={comparacion.moneda}
+                                                            className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50 hover:bg-sidebar/10 dark:hover:bg-sidebar/20 transition-colors"
+                                                        >
+                                                            <TableCell className="font-medium">
+                                                                <Badge variant="outline" className={`${c.bg} ${c.text} ${c.border}`}>
+                                                                    {comparacion.moneda}
+                                                                </Badge>
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                                {comparacion.monto_anterior.toLocaleString('es-ES', {
                                                                     minimumFractionDigits: 2,
                                                                     maximumFractionDigits: 6,
                                                                 })}
-                                                            </span>
-                                                        </TableCell>
-                                                        <TableCell className="text-right">
-                                                            {comparacion.monto_actual.toLocaleString('es-ES', {
-                                                                minimumFractionDigits: 2,
-                                                                maximumFractionDigits: 6,
-                                                            })}
-                                                        </TableCell>
-                                                    </TableRow>
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                                <span
+                                                                    className={
+                                                                        comparacion.es_positivo
+                                                                            ? 'font-medium text-green-600 dark:text-green-400'
+                                                                            : 'font-medium text-red-600 dark:text-red-400'
+                                                                    }
+                                                                >
+                                                                    {comparacion.diferencia >= 0 ? '+' : ''}
+                                                                    {comparacion.diferencia.toLocaleString('es-ES', {
+                                                                        minimumFractionDigits: 2,
+                                                                        maximumFractionDigits: 6,
+                                                                    })}
+                                                                </span>
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                                {comparacion.monto_actual.toLocaleString('es-ES', {
+                                                                    minimumFractionDigits: 2,
+                                                                    maximumFractionDigits: 6,
+                                                                })}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    );
+                                                };
+
+                                                return (
+                                                    <>
+                                                        {filasMonedas.map((comparacion, index) => filaComparacion(comparacion, index))}
+
+                                                        <TableRow className="bg-muted/40 hover:bg-muted/40 font-semibold">
+                                                            <TableCell>Totales</TableCell>
+                                                            <TableCell className="text-right">
+                                                                {totalMesAnterior.toLocaleString('es-ES', {
+                                                                    minimumFractionDigits: 2,
+                                                                    maximumFractionDigits: 2,
+                                                                })}{' '}
+                                                                USD
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                                <span
+                                                                    className={
+                                                                        totalDiferencia >= 0
+                                                                            ? 'text-green-600 dark:text-green-400'
+                                                                            : 'text-red-600 dark:text-red-400'
+                                                                    }
+                                                                >
+                                                                    {totalDiferencia >= 0 ? '+' : ''}
+                                                                    {totalDiferencia.toLocaleString('es-ES', {
+                                                                        minimumFractionDigits: 2,
+                                                                        maximumFractionDigits: 2,
+                                                                    })}{' '}
+                                                                    USD
+                                                                </span>
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                                {totalSaldoAcumulado.toLocaleString('es-ES', {
+                                                                    minimumFractionDigits: 2,
+                                                                    maximumFractionDigits: 2,
+                                                                })}{' '}
+                                                                USD
+                                                            </TableCell>
+                                                        </TableRow>
+
+                                                        {filaInventario && (
+                                                            <TableRow
+                                                                key="INVENTARIO"
+                                                                className="border-t-sidebar-border dark:border-t-sidebar-border hover:bg-sidebar/10 dark:hover:bg-sidebar/20 border-t-2 border-dashed transition-colors"
+                                                            >
+                                                                <TableCell className="font-medium">
+                                                                    <Badge
+                                                                        variant="outline"
+                                                                        className={`${colorMoneda('INVENTARIO', 0).bg} ${colorMoneda('INVENTARIO', 0).text} ${colorMoneda('INVENTARIO', 0).border}`}
+                                                                    >
+                                                                        {filaInventario.moneda}
+                                                                    </Badge>
+                                                                    <span className="text-muted-foreground ml-2 text-xs italic">
+                                                                        aparte, no incluido en Totales
+                                                                    </span>
+                                                                </TableCell>
+                                                                <TableCell className="text-right">
+                                                                    {filaInventario.monto_anterior.toLocaleString('es-ES', {
+                                                                        minimumFractionDigits: 2,
+                                                                        maximumFractionDigits: 6,
+                                                                    })}
+                                                                </TableCell>
+                                                                <TableCell className="text-right">
+                                                                    <span
+                                                                        className={
+                                                                            filaInventario.es_positivo
+                                                                                ? 'font-medium text-green-600 dark:text-green-400'
+                                                                                : 'font-medium text-red-600 dark:text-red-400'
+                                                                        }
+                                                                    >
+                                                                        {filaInventario.diferencia >= 0 ? '+' : ''}
+                                                                        {filaInventario.diferencia.toLocaleString('es-ES', {
+                                                                            minimumFractionDigits: 2,
+                                                                            maximumFractionDigits: 6,
+                                                                        })}
+                                                                    </span>
+                                                                </TableCell>
+                                                                <TableCell className="text-right">
+                                                                    {filaInventario.monto_actual.toLocaleString('es-ES', {
+                                                                        minimumFractionDigits: 2,
+                                                                        maximumFractionDigits: 6,
+                                                                    })}
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        )}
+                                                    </>
                                                 );
-                                            })
+                                            })()
                                         ) : (
                                             <TableRow className="border-b-sidebar-border/50 dark:border-b-sidebar-border/50">
                                                 <TableCell colSpan={4} className="py-8 text-center text-gray-500 dark:text-gray-400">
@@ -736,66 +734,6 @@ export default function Dashboard({
                                             </TableRow>
                                         )}
                                     </TableBody>
-                                    {comparaciones && comparaciones.length > 0 && (
-                                        <TableFooter>
-                                            <TableRow className="hover:bg-transparent">
-                                                <TableCell>Totales</TableCell>
-                                                <TableCell className="text-right">
-                                                    {comparaciones
-                                                        .reduce((sum, comp) => {
-                                                            const tasaCambio = comp.tasa_cambio || 1;
-                                                            return sum + comp.monto_anterior / tasaCambio;
-                                                        }, 0)
-                                                        .toLocaleString('es-ES', {
-                                                            minimumFractionDigits: 2,
-                                                            maximumFractionDigits: 2,
-                                                        })}{' '}
-                                                    USD
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    <span
-                                                        className={
-                                                            comparaciones.reduce((sum, comp) => {
-                                                                const tasaCambio = comp.tasa_cambio || 1;
-                                                                return sum + comp.diferencia / tasaCambio;
-                                                            }, 0) >= 0
-                                                                ? 'text-green-600 dark:text-green-400'
-                                                                : 'text-red-600 dark:text-red-400'
-                                                        }
-                                                    >
-                                                        {comparaciones.reduce((sum, comp) => {
-                                                            const tasaCambio = comp.tasa_cambio || 1;
-                                                            return sum + comp.diferencia / tasaCambio;
-                                                        }, 0) >= 0
-                                                            ? '+'
-                                                            : ''}
-                                                        {comparaciones
-                                                            .reduce((sum, comp) => {
-                                                                const tasaCambio = comp.tasa_cambio || 1;
-                                                                return sum + comp.diferencia / tasaCambio;
-                                                            }, 0)
-                                                            .toLocaleString('es-ES', {
-                                                                minimumFractionDigits: 2,
-                                                                maximumFractionDigits: 2,
-                                                            })}{' '}
-                                                        USD
-                                                    </span>
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    {comparaciones
-                                                        .reduce((sum, comp) => {
-                                                            const tasaCambio = comp.tasa_cambio || 1;
-                                                            return sum + comp.monto_actual / tasaCambio;
-                                                        }, 0)
-                                                        .toLocaleString('es-ES', {
-                                                            minimumFractionDigits: 2,
-                                                            maximumFractionDigits: 2,
-                                                        })}{' '}
-                                                    USD
-                                                </TableCell>
-                                            </TableRow>
-                                        </TableFooter>
-                                    )}
                                 </Table>
                             </CardContent>
                         </Card>

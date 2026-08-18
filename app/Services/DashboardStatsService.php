@@ -133,29 +133,38 @@ class DashboardStatsService
 
     /**
      * Actualiza (o crea, en el primer acceso al mes) el snapshot de comparación
-     * mensual por moneda. "Mes Anterior" queda fijo desde que se crea la fila del
-     * mes en curso — nunca se vuelve a tocar. "Mes Actual" (la UI lo llama "Saldo
-     * Acumulado") se refresca en cada llamada con el saldo real y en vivo de las
-     * cuentas (mismo origen que Tabla 1: `getResumenCuentas()['por_moneda_perm']`)
-     * — ya no se recalcula sumando `movimientos_financieros`, que es donde vivía
-     * el bug de agrupación de WHERE (whereIn()->orWhereIn()->where()->where()
-     * sin agrupar, dejaba el lado "origen" sin filtro de moneda/fecha).
+     * mensual por moneda + una fila sintética "INVENTARIO" (valor de costo del
+     * stock, mismo cálculo que ya usa Logistica). "Mes Anterior" es el "Saldo
+     * Acumulado" (movimiento neto) con el que cerró el mes pasado — congelado,
+     * se lee tal cual. "Saldo Acumulado" es cuánto se ha movido (entradas −
+     * salidas) desde que empezó este mes: arranca en 0 el día 1, calculado como
+     * `valor en vivo ahora − saldo_inicio_mes` (el ancla, capturada una sola vez
+     * en el primer acceso del mes y nunca vuelta a tocar) — así se evita volver
+     * a sumar `movimientos_financieros`, que es donde vivía el bug de agrupación
+     * de WHERE (whereIn()->orWhereIn()->where()->where() sin agrupar, dejaba el
+     * lado "origen" sin filtro de moneda/fecha). "Diferencia" compara el
+     * movimiento de este mes contra el del mes pasado.
      *
      * Se llama tanto desde el comando programado (00:00 del día 1) como, de red
      * de seguridad, desde AdminController::index() en cada carga del dashboard —
      * si el comando no corrió todavía, el primer acceso del mes nuevo hace el
-     * "cierre" ahí mismo.
+     * "cierre" (captura del ancla) ahí mismo.
      */
     public function actualizarComparacionMensual(?int $userId = null): array
     {
         $mesActual = now()->startOfMonth()->toDateString();
         $porMoneda = $this->getResumenCuentas()['por_moneda_perm'];
+        $porMoneda['INVENTARIO'] = [
+            'original' => $this->getResumenProductos()['total_importe_global'],
+            'simbolo' => '$',
+        ];
         $monedasInfo = DB::table('monedas')->get()->groupBy('codigo_moneda');
 
         $resultado = [];
 
         foreach ($porMoneda as $codigo => $info) {
             $monedaInfo = $monedasInfo->get($codigo)?->first();
+            $valorEnVivo = (float) $info['original'];
 
             $filaExistente = HistorialComparacionMensual::where('user_id', $userId)
                 ->where('mes_comparado', $mesActual)
@@ -163,8 +172,12 @@ class DashboardStatsService
                 ->first();
 
             if ($filaExistente) {
+                $saldoInicioMes = (float) $filaExistente->saldo_inicio_mes;
                 $montoAnterior = (float) $filaExistente->monto_anterior;
             } else {
+                // Primer acceso del mes: el ancla se captura ahora mismo y ya no se toca.
+                $saldoInicioMes = $valorEnVivo;
+
                 $ultimaFila = HistorialComparacionMensual::where('user_id', $userId)
                     ->where('moneda_codigo', $codigo)
                     ->where('mes_comparado', '<', $mesActual)
@@ -174,15 +187,17 @@ class DashboardStatsService
                 $montoAnterior = $ultimaFila ? (float) $ultimaFila->monto_actual : 0.0;
             }
 
-            $montoActual = (float) $info['original'];
+            $montoActual = $valorEnVivo - $saldoInicioMes;
             $diferencia = $montoActual - $montoAnterior;
             $porcentajeCambio = $montoAnterior != 0.0 ? round(($diferencia / $montoAnterior) * 100, 2) : 0.0;
+            $nombreMoneda = $monedaInfo->nombre_moneda ?? ($codigo === 'INVENTARIO' ? 'Inventario' : $codigo);
 
             HistorialComparacionMensual::updateOrCreate(
                 ['user_id' => $userId, 'mes_comparado' => $mesActual, 'moneda_codigo' => $codigo],
                 [
-                    'moneda_nombre' => $monedaInfo->nombre_moneda ?? $codigo,
+                    'moneda_nombre' => $nombreMoneda,
                     'moneda_simbolo' => $info['simbolo'],
+                    'saldo_inicio_mes' => $saldoInicioMes,
                     'monto_anterior' => $montoAnterior,
                     'monto_actual' => $montoActual,
                     'diferencia' => $diferencia,
@@ -193,7 +208,7 @@ class DashboardStatsService
 
             $resultado[] = [
                 'moneda' => $codigo,
-                'nombre_moneda' => $monedaInfo->nombre_moneda ?? $codigo,
+                'nombre_moneda' => $nombreMoneda,
                 'simbolo_moneda' => $info['simbolo'],
                 'monto_actual' => round($montoActual, 2),
                 'monto_anterior' => round($montoAnterior, 2),
