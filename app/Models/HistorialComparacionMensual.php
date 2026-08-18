@@ -15,6 +15,7 @@ class HistorialComparacionMensual extends Model
         'moneda_codigo',
         'moneda_nombre',
         'moneda_simbolo',
+        'saldo_inicio_mes',
         'monto_anterior',
         'monto_actual',
         'diferencia',
@@ -24,6 +25,7 @@ class HistorialComparacionMensual extends Model
 
     protected $casts = [
         'mes_comparado' => 'date',
+        'saldo_inicio_mes' => 'decimal:2',
         'monto_anterior' => 'decimal:2',
         'monto_actual' => 'decimal:2',
         'diferencia' => 'decimal:2',
