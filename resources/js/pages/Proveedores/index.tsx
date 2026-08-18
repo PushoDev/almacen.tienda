@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import {
     Pagination,
     PaginationContent,
@@ -26,7 +26,7 @@ import { ScrollProgress } from '@/components/ui/scroll';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
-import { ProveedorProps, type BreadcrumbItem, type PageProps } from '@/types';
+import { ProveedorProps, ResumenProveedorData, type BreadcrumbItem, type PageProps } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     AlertCircle,
@@ -42,13 +42,14 @@ import {
     Mail,
     MapPin,
     Phone,
+    Search,
     Sheet,
     Trash2,
     TrendingDown,
     TrendingUp,
     Users,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -62,11 +63,17 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function ProveedoresPage({ proveedores }: { proveedores: ProveedorProps[] }) {
+const ESTADOS = ['fondo', 'deuda', 'neutro'] as const;
+const estadoStyles: Record<string, { label: string; bg: string; text: string; border: string; bar: string; icon: React.ElementType }> = {
+    fondo: { label: 'Con Fondo', bg: 'bg-emerald-50 dark:bg-emerald-950/20', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-800', bar: 'bg-emerald-500', icon: TrendingUp },
+    deuda: { label: 'En Deuda', bg: 'bg-red-50 dark:bg-red-950/20', text: 'text-red-700 dark:text-red-300', border: 'border-red-200 dark:border-red-800', bar: 'bg-red-500', icon: TrendingDown },
+    neutro: { label: 'Neutro', bg: 'bg-gray-50 dark:bg-gray-800/40', text: 'text-gray-600 dark:text-gray-400', border: 'border-gray-200 dark:border-gray-700', bar: 'bg-gray-400', icon: CheckCircle },
+};
+
+export default function ProveedoresPage({ proveedores, resumen }: { proveedores: ProveedorProps[]; resumen: ResumenProveedorData }) {
     const { props } = usePage<PageProps>();
     const isAdmin = props.auth?.user?.role === 'admin';
 
-    // Eliminar Proveedor
     const deleteProveedor = (id: number) => {
         router.delete(route('proveedores.destroy', { proveedor: id }), {
             onSuccess: () => {
@@ -78,9 +85,8 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
         });
     };
 
-    // Función para formatear el saldo
     const formatearMoneda = (valor: number | null) => {
-        if (valor === null || valor === undefined || isNaN(valor)) return '$0.00';
+        if (valor === null || valor === undefined || isNaN(valor)) return '$: 0.00';
         return new Intl.NumberFormat('es-ES', {
             style: 'currency',
             currency: 'USD',
@@ -89,35 +95,73 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
         }).format(valor);
     };
 
-    // Calcular estadísticas
-    const estadisticas = {
-        totalProveedores: proveedores.length,
-        totalDeudas: proveedores.filter((p) => p.saldo_proveedor < 0).length,
-        totalFondos: proveedores.filter((p) => p.saldo_proveedor > 0).length,
-        montoTotalDeudas: proveedores.filter((p) => p.saldo_proveedor < 0).reduce((sum, p) => sum + Math.abs(p.saldo_proveedor), 0),
-        montoTotalFondos: proveedores.filter((p) => p.saldo_proveedor > 0).reduce((sum, p) => sum + p.saldo_proveedor, 0),
-        // Solo suma de fondos (saldo positivo)
-        saldoNeto: proveedores.filter((p) => p.saldo_proveedor > 0).reduce((sum, p) => sum + p.saldo_proveedor, 0),
+    const getEstadoSaldo = (saldo: number | undefined | null) => {
+        if (saldo === null || saldo === undefined || saldo === 0) return { texto: 'Neutro', color: 'secondary' as const };
+        if (saldo < 0) return { texto: 'Deuda', color: 'destructive' as const };
+        return { texto: 'Fondo', color: 'default' as const };
     };
 
-    // Función para determinar el estado del saldo
-    const getEstadoSaldo = (saldo: number) => {
-        if (saldo < 0) return { texto: 'Deuda', color: 'destructive' };
-        if (saldo > 0) return { texto: 'Fondo', color: 'default' };
-        return { texto: 'Neutral', color: 'secondary' };
-    };
-
-    // Paginación
+    const [filtroEstado, setFiltroEstado] = useState('');
+    const [busqueda, setBusqueda] = useState('');
     const [paginaActual, setPaginaActual] = useState(1);
     const elementosPorPagina = 10;
-    const indiceUltimoElemento = paginaActual * elementosPorPagina;
-    const indicePrimerElemento = indiceUltimoElemento - elementosPorPagina;
 
-    // Obtener los proveedores a mostrar en la página actual
-    const proveedoresAmostrar = proveedores.slice(indicePrimerElemento, indiceUltimoElemento);
+    const hasFilters = !!filtroEstado || !!busqueda;
 
-    // Calcular el número total de páginas
-    const totalPaginas = Math.ceil(proveedores.length / elementosPorPagina);
+    const limpiarFiltros = () => {
+        setFiltroEstado('');
+        setBusqueda('');
+        setPaginaActual(1);
+    };
+
+    const toggleEstado = (v: string) => {
+        setFiltroEstado((p) => (p === v ? '' : v));
+        setPaginaActual(1);
+    };
+
+    const proveedoresFiltrados = useMemo(() => {
+        const termino = busqueda.trim().toLowerCase();
+
+        return proveedores.filter((p) => {
+            if (filtroEstado) {
+                const saldo = p.saldo_proveedor ?? 0;
+                if (filtroEstado === 'fondo' && !(saldo > 0)) return false;
+                if (filtroEstado === 'deuda' && !(saldo < 0)) return false;
+                if (filtroEstado === 'neutro' && saldo !== 0) return false;
+            }
+
+            if (termino) {
+                const coincide = [p.nombre_proveedor, p.telefono_proveedor, p.correo_proveedor, p.localidad_proveedor]
+                    .filter(Boolean)
+                    .some((campo) => campo!.toLowerCase().includes(termino));
+                if (!coincide) return false;
+            }
+
+            return true;
+        });
+    }, [proveedores, filtroEstado, busqueda]);
+
+    const totalPaginas = Math.ceil(proveedoresFiltrados.length / elementosPorPagina);
+    const desde = (paginaActual - 1) * elementosPorPagina;
+    const proveedoresAmostrar = proveedoresFiltrados.slice(desde, desde + elementosPorPagina);
+
+    const paginas = useMemo((): (number | 'ellipsis')[] => {
+        if (totalPaginas <= 7) return Array.from({ length: totalPaginas }, (_, i) => i + 1);
+        const r: (number | 'ellipsis')[] = [1];
+        if (paginaActual > 3) r.push('ellipsis');
+        const start = Math.max(2, paginaActual - 1);
+        const end = Math.min(totalPaginas - 1, paginaActual + 1);
+        for (let i = start; i <= end; i++) r.push(i);
+        if (paginaActual < totalPaginas - 2) r.push('ellipsis');
+        r.push(totalPaginas);
+        return r;
+    }, [totalPaginas, paginaActual]);
+
+    const totalProv = resumen?.total_proveedores ?? proveedores.length;
+    const maxCantidad = Math.max(
+        ...ESTADOS.map((e) => resumen?.por_estado?.[e]?.cantidad ?? 0),
+        1
+    );
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -134,79 +178,152 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                 </div>
                 <Separator className="col-span-4" />
 
-                {/* Widgets de Estadísticas */}
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    {/* Total Proveedores */}
-                    <Card className="bg-card border-border">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Proveedores</CardTitle>
-                            <Users className="text-muted-foreground h-4 w-4" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{estadisticas.totalProveedores}</div>
-                            <p className="text-muted-foreground text-xs">Proveedores registrados</p>
-                        </CardContent>
-                    </Card>
+                {/* Row 1: KPIs */}
+                <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+                    <div onClick={limpiarFiltros} className={`cursor-pointer rounded-lg border p-4 shadow-sm transition-all hover:shadow-md ${hasFilters ? 'border-blue-500/40 bg-blue-100/60 dark:bg-blue-900/30' : 'border-blue-500/20 bg-blue-50/50 dark:bg-blue-900/20'}`}>
+                        <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Total Proveedores</p>
+                            <Users className="h-5 w-5 text-blue-500" />
+                        </div>
+                        <p className="mt-1 text-2xl font-bold text-blue-900 dark:text-blue-200">{totalProv}</p>
+                        <p className="text-xs text-blue-500 dark:text-blue-400">Proveedores registrados</p>
+                    </div>
 
-                    {/* Proveedores con Deuda */}
-                    <Card className="bg-card border-border">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">En Deuda</CardTitle>
-                            <TrendingDown className="text-destructive h-4 w-4" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-destructive text-2xl font-bold">{estadisticas.totalDeudas}</div>
-                            <p className="text-muted-foreground text-xs">{formatearMoneda(estadisticas.montoTotalDeudas)} total</p>
-                        </CardContent>
-                    </Card>
+                    <div onClick={() => toggleEstado('fondo')} className={`cursor-pointer rounded-lg border p-4 shadow-sm transition-all hover:shadow-md ${filtroEstado === 'fondo' ? 'border-emerald-500 bg-emerald-100 dark:bg-emerald-900/40' : 'border-emerald-500/20 bg-emerald-50/50 dark:bg-emerald-900/20'}`}>
+                        <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Fondo Total</p>
+                            <TrendingUp className="h-5 w-5 text-emerald-500" />
+                        </div>
+                        <p className="mt-1 text-2xl font-bold text-emerald-900 dark:text-emerald-200">
+                            $: {(resumen?.total_fondo ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                        <p className="text-xs text-emerald-500 dark:text-emerald-400">Saldo a favor de proveedores</p>
+                    </div>
 
-                    {/* Proveedores con Fondo */}
-                    <Card className="bg-card border-border">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Con Fondo</CardTitle>
-                            <TrendingUp className="h-4 w-4 text-green-500" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-green-500">{estadisticas.totalFondos}</div>
-                            <p className="text-muted-foreground text-xs">{formatearMoneda(estadisticas.montoTotalFondos)} total</p>
-                        </CardContent>
-                    </Card>
+                    <div onClick={() => toggleEstado('deuda')} className={`cursor-pointer rounded-lg border p-4 shadow-sm transition-all hover:shadow-md ${filtroEstado === 'deuda' ? 'border-red-500 bg-red-100 dark:bg-red-900/40' : 'border-red-500/20 bg-red-50/50 dark:bg-red-900/20'}`}>
+                        <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-red-600 dark:text-red-400">Deuda Total</p>
+                            <TrendingDown className="h-5 w-5 text-red-500" />
+                        </div>
+                        <p className="mt-1 text-2xl font-bold text-red-900 dark:text-red-200">
+                            $: {(resumen?.total_deuda ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                        <p className="text-xs text-red-500 dark:text-red-400">Deuda pendiente con proveedores</p>
+                    </div>
 
-                    {/* Saldo Neto - Solo Fondos */}
-                    <Card className="bg-card border-border">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Fondos</CardTitle>
-                            <DollarSign className="text-muted-foreground h-4 w-4" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-green-500">{formatearMoneda(estadisticas.saldoNeto)}</div>
-                            <p className="text-muted-foreground text-xs">Suma de fondos disponibles</p>
-                        </CardContent>
-                    </Card>
+                    <div className="rounded-lg border border-slate-500/20 bg-slate-50/50 p-4 shadow-sm dark:bg-slate-900/20">
+                        <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Balance Neto</p>
+                            <DollarSign className="h-5 w-5 text-slate-500" />
+                        </div>
+                        <p className={`mt-1 text-2xl font-bold ${(resumen?.balance_neto ?? 0) > 0 ? 'text-emerald-600' : (resumen?.balance_neto ?? 0) < 0 ? 'text-red-600' : 'text-slate-900 dark:text-slate-200'}`}>
+                            $: {(resumen?.balance_neto ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                            {(resumen?.balance_neto ?? 0) > 0
+                                ? 'A favor empresa'
+                                : (resumen?.balance_neto ?? 0) < 0
+                                  ? 'A favor proveedores'
+                                  : 'Equilibrado'}
+                        </p>
+                    </div>
+                </div>
+
+                {/* Row 2: 3 barras por estado de saldo */}
+                <div className="grid gap-4 md:grid-cols-3">
+                    {ESTADOS.map((estado) => {
+                        const s = estadoStyles[estado];
+                        const info = resumen?.por_estado?.[estado] ?? { cantidad: 0, saldo: 0 };
+                        const pct = totalProv > 0 ? (info.cantidad / totalProv) * 100 : 0;
+                        const active = filtroEstado === estado;
+                        const Icon = s.icon;
+                        return (
+                            <div
+                                key={estado}
+                                onClick={() => toggleEstado(estado)}
+                                className={`cursor-pointer rounded-lg border p-4 shadow-sm transition-all hover:shadow-md ${s.border} ${s.bg} ${active ? 'ring-2 ring-offset-1 ring-current' : ''}`}
+                            >
+                                <div className="mb-2 flex items-center justify-between">
+                                    <span className={`text-sm font-semibold ${s.text}`}>{s.label}</span>
+                                    <Badge variant="outline" className={`${s.text} ${s.border} text-xs`}>
+                                        {info.cantidad} {info.cantidad === 1 ? 'proveedor' : 'proveedores'}
+                                    </Badge>
+                                </div>
+                                <p className={`text-2xl font-bold ${s.text}`}>
+                                    {info.saldo > 0 ? '$: ' : ''}
+                                    {info.saldo.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                                <div className="mt-3 flex items-center gap-3">
+                                    <Icon size={16} className={s.text} />
+                                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+                                        <div
+                                            className={`h-full rounded-full transition-all duration-500 ${s.bar}`}
+                                            style={{ width: `${Math.min(pct, 100)}%` }}
+                                        />
+                                    </div>
+                                    <span className="text-xs font-medium tabular-nums text-muted-foreground">
+                                        {pct.toFixed(0)}%
+                                    </span>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {/* Info bar */}
+                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                    <span>
+                        {filtroEstado
+                            ? `${proveedoresFiltrados.length} de ${totalProv} proveedores`
+                            : `${totalProv} proveedores en total`
+                        }
+                        {filtroEstado && (
+                            <Button variant="ghost" size="sm" onClick={() => setFiltroEstado('')} className="ml-2 h-6 text-xs">
+                                Limpiar filtro
+                            </Button>
+                        )}
+                    </span>
+                    <span className="font-medium text-foreground">
+                        Balance: $: {(resumen?.balance_neto ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </span>
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex justify-end gap-2">
-                    <Link href={route('proveedores.create')}>
-                        <Button variant="default" className="flex cursor-pointer items-center gap-2">
-                            <BadgePlus size={16} />
-                            Crear Nuevo
-                        </Button>
-                    </Link>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="relative sm:max-w-sm sm:flex-1">
+                        <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+                        <Input
+                            placeholder="Buscar por nombre, teléfono, correo o ubicación..."
+                            value={busqueda}
+                            onChange={(e) => {
+                                setBusqueda(e.target.value);
+                                setPaginaActual(1);
+                            }}
+                            className="pl-10"
+                        />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                        <Link href={route('proveedores.create')}>
+                            <Button variant="default" className="flex cursor-pointer items-center gap-2">
+                                <BadgePlus size={16} />
+                                Crear Nuevo
+                            </Button>
+                        </Link>
 
-                    <Link href="#">
-                        <Button variant="outline" className="hover:bg-chart-5 flex cursor-pointer items-center gap-2">
-                            <FileText size={16} />
-                            Exportar PDF
-                        </Button>
-                    </Link>
+                        <Link href="#">
+                            <Button variant="outline" className="hover:bg-chart-5 flex cursor-pointer items-center gap-2">
+                                <FileText size={16} />
+                                Exportar PDF
+                            </Button>
+                        </Link>
 
-                    <Link href="#">
-                        <Button variant="secondary" className="hover:bg-chart-2 flex cursor-pointer items-center gap-2">
-                            <Sheet size={16} />
-                            Exportar Excel
-                        </Button>
-                    </Link>
+                        <Link href="#">
+                            <Button variant="secondary" className="hover:bg-chart-2 flex cursor-pointer items-center gap-2">
+                                <Sheet size={16} />
+                                Exportar Excel
+                            </Button>
+                        </Link>
+                    </div>
                 </div>
 
                 {/* Proveedores Table */}
@@ -229,7 +346,6 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
 
                                 return (
                                     <TableRow key={proveedor.id}>
-                                        {/* Nombre */}
                                         <TableCell className="min-w-[180px]">
                                             <div className="flex items-center gap-2">
                                                 <Building size={14} className="text-primary shrink-0" />
@@ -242,7 +358,6 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                                             </div>
                                         </TableCell>
 
-                                        {/* Teléfono */}
                                         <TableCell>
                                             <div className="flex items-center gap-2">
                                                 <Phone size={14} className="shrink-0 text-gray-500" />
@@ -250,7 +365,6 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                                             </div>
                                         </TableCell>
 
-                                        {/* Correo */}
                                         <TableCell>
                                             <div className="flex items-center gap-2">
                                                 <Mail size={14} className="shrink-0 text-gray-500" />
@@ -267,7 +381,6 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                                             </div>
                                         </TableCell>
 
-                                        {/* Localidad */}
                                         <TableCell>
                                             <div className="flex items-center gap-2">
                                                 <MapPin size={14} className="shrink-0 text-gray-500" />
@@ -279,10 +392,8 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                                             </div>
                                         </TableCell>
 
-                                        {/* Saldo */}
                                         <TableCell>
-                                            <div className={`flex items-center gap-1 font-medium`}>
-                                                {/* Icono según el saldo */}
+                                            <div className="flex items-center gap-1 font-medium">
                                                 {proveedor.saldo_proveedor !== null && proveedor.saldo_proveedor !== undefined ? (
                                                     proveedor.saldo_proveedor < 0 ? (
                                                         <ArrowDownCircle size={14} className="shrink-0 text-red-600 dark:text-red-400" />
@@ -315,15 +426,12 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                                             </div>
                                         </TableCell>
 
-                                        {/* Estado */}
                                         <TableCell>
-                                            <Badge variant={estado.color as 'destructive' | 'default' | 'secondary'}>{estado.texto}</Badge>
+                                            <Badge variant={estado.color}>{estado.texto}</Badge>
                                         </TableCell>
 
-                                        {/* Acciones */}
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-2">
-                                                {/* Botón Ver Detalles */}
                                                 <Link href={route('proveedores.show', { proveedor: proveedor.id })}>
                                                     <Button
                                                         variant="outline"
@@ -334,7 +442,6 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                                                     </Button>
                                                 </Link>
 
-                                                {/* Botón Editar */}
                                                 <Link href={route('proveedores.edit', { proveedor: proveedor.id })}>
                                                     <Button
                                                         variant="outline"
@@ -345,7 +452,6 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                                                     </Button>
                                                 </Link>
 
-                                                {/* Botón Eliminar */}
                                                 <AlertDialog>
                                                     <AlertDialogTrigger asChild>
                                                         <Button
@@ -391,12 +497,11 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                     </Table>
                 </div>
 
-                {/* Controles de Paginación */}
+                {/* Pagination */}
                 {totalPaginas > 1 && (
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col items-center justify-between gap-2 sm:flex-row">
                         <div className="text-muted-foreground text-sm">
-                            {(paginaActual - 1) * elementosPorPagina + 1} - {Math.min(paginaActual * elementosPorPagina, proveedores.length)} de{' '}
-                            {proveedores.length} proveedores
+                            {desde + 1} - {Math.min(desde + elementosPorPagina, proveedoresFiltrados.length)} de {proveedoresFiltrados.length} proveedores
                         </div>
                         <Pagination>
                             <PaginationContent>
@@ -406,21 +511,20 @@ export default function ProveedoresPage({ proveedores }: { proveedores: Proveedo
                                         className={paginaActual === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
                                     />
                                 </PaginationItem>
-                                {Array.from({ length: totalPaginas }, (_, i) => i + 1).map((pagina) => (
-                                    <PaginationItem key={pagina}>
-                                        <PaginationLink
-                                            isActive={pagina === paginaActual}
-                                            onClick={() => setPaginaActual(pagina)}
-                                            className="cursor-pointer"
-                                        >
-                                            {pagina}
-                                        </PaginationLink>
-                                    </PaginationItem>
-                                ))}
-                                {totalPaginas > 5 && paginaActual < totalPaginas - 2 && (
-                                    <PaginationItem>
-                                        <PaginationEllipsis />
-                                    </PaginationItem>
+                                {paginas.map((item, i) =>
+                                    item === 'ellipsis' ? (
+                                        <PaginationItem key={`e-${i}`}><PaginationEllipsis /></PaginationItem>
+                                    ) : (
+                                        <PaginationItem key={item}>
+                                            <PaginationLink
+                                                isActive={paginaActual === item}
+                                                onClick={() => setPaginaActual(item)}
+                                                className="cursor-pointer"
+                                            >
+                                                {item}
+                                            </PaginationLink>
+                                        </PaginationItem>
+                                    )
                                 )}
                                 <PaginationItem>
                                     <PaginationNext
