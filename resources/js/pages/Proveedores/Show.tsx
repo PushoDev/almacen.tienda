@@ -24,6 +24,8 @@ import {
     Phone,
     TrendingDown,
     TrendingUp,
+    Wallet,
+    User,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -122,6 +124,50 @@ const DetallesCompraModal = ({ compra, isOpen, onClose }: { compra: CompraProvee
                         ))}
                     </TableBody>
                 </Table>
+
+                {compra.pagos && compra.pagos.length > 0 && (
+                    <div className="mt-6">
+                        <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                            <CreditCard className="h-4 w-4" />
+                            Pagos realizados
+                        </h4>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Tipo</TableHead>
+                                    <TableHead>Monto</TableHead>
+                                    <TableHead>Destino</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {compra.pagos.map((pago) => (
+                                    <TableRow key={pago.id}>
+                                        <TableCell>
+                                            <Badge variant="outline">
+                                                {pago.tipo_pago === 'cuenta' ? 'Cuenta' : 'Cliente'}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="font-medium">{formatearMoneda(pago.monto)}</TableCell>
+                                        <TableCell>
+                                            {pago.cuenta && (
+                                                <span className="flex items-center gap-1 text-sm">
+                                                    <Wallet className="text-muted-foreground h-3 w-3" />
+                                                    {pago.cuenta.nombre_cuenta}
+                                                </span>
+                                            )}
+                                            {pago.cliente && (
+                                                <span className="flex items-center gap-1 text-sm">
+                                                    <User className="text-muted-foreground h-3 w-3" />
+                                                    {pago.cliente.nombre_cliente}
+                                                </span>
+                                            )}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                )}
             </div>
         </div>
     );

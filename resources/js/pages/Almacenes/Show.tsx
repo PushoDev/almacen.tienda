@@ -35,6 +35,7 @@ interface ProductDetails extends ProductoPorAlmacenDetalleRef {
     marca?: string;
     modelo?: string;
     capacidad?: string;
+    color?: string;
     codigo?: string;
     categoria?: string;
     imagen_url?: string;
@@ -461,6 +462,7 @@ export default function ShowAlmacenesPage({ almacen, productos }: { almacen: Alm
                                                 <TableHead className="cursor-pointer select-none" onClick={() => handleSort('capacidad')}>
                                                     Capacidad <SortIcon field="capacidad" />
                                                 </TableHead>
+                                                <TableHead>Color</TableHead>
                                                 <TableHead className="cursor-pointer select-none" onClick={() => handleSort('codigo')}>
                                                     Código <SortIcon field="codigo" />
                                                 </TableHead>
@@ -528,6 +530,7 @@ export default function ShowAlmacenesPage({ almacen, productos }: { almacen: Alm
                                                         <TableCell>{producto.marca || '-'}</TableCell>
                                                         <TableCell>{producto.modelo || '-'}</TableCell>
                                                         <TableCell>{producto.capacidad || '-'}</TableCell>
+                                                        <TableCell>{producto.color || '-'}</TableCell>
                                                         <TableCell className="font-mono text-xs">{producto.codigo || '-'}</TableCell>
                                                         <TableCell>{producto.categoria || '-'}</TableCell>
                                                         <TableCell className="text-right">
@@ -641,6 +644,10 @@ export default function ShowAlmacenesPage({ almacen, productos }: { almacen: Alm
                                         <div>
                                             <p className="font-medium text-gray-500">Capacidad</p>
                                             <p className="font-semibold text-gray-900">{selectedProduct.capacidad || 'N/A'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-gray-500">Color</p>
+                                            <p className="font-semibold text-gray-900">{selectedProduct.color || 'N/A'}</p>
                                         </div>
                                         <div>
                                             <p className="font-medium text-gray-500">Categoría</p>
