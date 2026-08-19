@@ -2,6 +2,7 @@ import HeadingSmall from '@/components/heading-small';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -9,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm, usePage } from '@inertiajs/react';
-import { Banknote, Eye, EyeOff, Landmark } from 'lucide-react';
+import { Banknote, Eye, EyeOff, Landmark, ShieldAlert } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -72,28 +73,49 @@ export default function EditarCuentasPage({ cuenta, monedas }: EditarCuentasPage
         estado: cuenta.estado as 'activa' | 'inactiva',
         notas_cuenta: cuenta.notas_cuenta || '',
         security_password: '',
+        motivo_ajuste_saldo: '',
     });
 
     const [showSecurityPassword, setShowSecurityPassword] = useState(false);
+    const [isSaldoDialogOpen, setIsSaldoDialogOpen] = useState(false);
     const saldoCambio = useMemo(() => Number(data.saldo_cuenta) !== Number(cuenta.saldo_cuenta ?? 0), [data.saldo_cuenta, cuenta.saldo_cuenta]);
 
-    // Función para enviar el formulario
-    const submit = (e: React.FormEvent) => {
-        e.preventDefault();
-
-        if (isAdmin && saldoCambio && !data.security_password) {
-            toast.error('Debe ingresar la contraseña de seguridad para cambiar el saldo.');
-            return;
-        }
-
+    const enviarActualizacion = () => {
         put(route('cuentas.update', { cuenta: cuenta.id }), {
             onSuccess: () => {
+                setIsSaldoDialogOpen(false);
                 toast.success('Cuenta actualizada correctamente');
             },
             onError: () => {
                 toast.error('Error al actualizar la cuenta. Por favor, verifica los datos.');
             },
         });
+    };
+
+    // Función para enviar el formulario
+    const submit = (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (isAdmin && saldoCambio) {
+            setIsSaldoDialogOpen(true);
+            return;
+        }
+
+        enviarActualizacion();
+    };
+
+    const confirmarAjusteSaldo = () => {
+        if (!data.security_password) {
+            toast.error('Debe ingresar su contraseña para cambiar el saldo.');
+            return;
+        }
+
+        if (!data.motivo_ajuste_saldo.trim()) {
+            toast.error('Debe indicar el motivo del ajuste de saldo.');
+            return;
+        }
+
+        enviarActualizacion();
     };
 
     return (
@@ -162,38 +184,12 @@ export default function EditarCuentasPage({ cuenta, monedas }: EditarCuentasPage
                                         <InputError message={errors.saldo_cuenta} />
                                         <p className="text-muted-foreground text-xs">
                                             {isAdmin
-                                                ? 'Solo admin puede editar el saldo.'
+                                                ? saldoCambio
+                                                    ? 'Se le pedirá confirmar con su contraseña y un motivo al guardar.'
+                                                    : 'Solo admin puede editar el saldo.'
                                                 : 'El saldo no se puede modificar directamente.'}
                                         </p>
                                     </div>
-
-                                    {/* Contraseña de Seguridad (solo admin) */}
-                                    {isAdmin && (
-                                        <div className="space-y-2">
-                                            <Label htmlFor="security_password">Contraseña de Seguridad *</Label>
-                                            <div className="relative">
-                                                <Input
-                                                    id="security_password"
-                                                    type={showSecurityPassword ? 'text' : 'password'}
-                                                    value={data.security_password}
-                                                    onChange={(e) => setData('security_password', e.target.value)}
-                                                    placeholder="Ingrese la contraseña"
-                                                    className="w-full pr-10"
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setShowSecurityPassword((prev) => !prev)}
-                                                    className="text-muted-foreground hover:text-foreground absolute top-1/2 right-2 -translate-y-1/2"
-                                                >
-                                                    {showSecurityPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                                </button>
-                                            </div>
-                                            <InputError message={errors.security_password} />
-                                            <p className="text-muted-foreground text-xs">
-                                                Requerida para cambiar el saldo de la cuenta.
-                                            </p>
-                                        </div>
-                                    )}
                                 </div>
 
                                 {/* Columna 2 */}
@@ -336,6 +332,93 @@ export default function EditarCuentasPage({ cuenta, monedas }: EditarCuentasPage
                         </form>
                     </CardContent>
                 </Card>
+
+                {/* Confirmación con contraseña antes de aplicar el ajuste de saldo (mismo patrón que Productos/Vendor/Index.tsx) */}
+                <Dialog
+                    open={isSaldoDialogOpen}
+                    onOpenChange={(open) => {
+                        setIsSaldoDialogOpen(open);
+                        if (!open) {
+                            setData('security_password', '');
+                            setData('motivo_ajuste_saldo', '');
+                            setShowSecurityPassword(false);
+                        }
+                    }}
+                >
+                    <DialogContent className="sm:max-w-[440px]">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                                <ShieldAlert className="text-amber-500" size={20} />
+                                Confirmar ajuste de saldo
+                            </DialogTitle>
+                            <DialogDescription>
+                                Vas a cambiar el saldo de <strong>{cuenta.nombre_cuenta}</strong> de{' '}
+                                <strong>
+                                    {cuenta.moneda?.simbolo_moneda || '$'} {cuenta.saldo_cuenta?.toFixed(2)}
+                                </strong>{' '}
+                                a{' '}
+                                <strong>
+                                    {cuenta.moneda?.simbolo_moneda || '$'} {Number(data.saldo_cuenta).toFixed(2)}
+                                </strong>
+                                . Esta acción queda registrada en el historial de auditoría. Ingresa tu contraseña y el motivo para confirmar.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-2">
+                            <div className="grid gap-2">
+                                <Label htmlFor="security_password">Su Contraseña *</Label>
+                                <div className="relative">
+                                    <Input
+                                        id="security_password"
+                                        type={showSecurityPassword ? 'text' : 'password'}
+                                        value={data.security_password}
+                                        onChange={(e) => setData('security_password', e.target.value)}
+                                        placeholder="Ingrese su contraseña"
+                                        className="pr-10"
+                                        autoFocus
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowSecurityPassword((prev) => !prev)}
+                                        className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2"
+                                        tabIndex={-1}
+                                    >
+                                        {showSecurityPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                    </button>
+                                </div>
+                                <InputError message={errors.security_password} />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="motivo_ajuste_saldo">Motivo del Ajuste *</Label>
+                                <Textarea
+                                    id="motivo_ajuste_saldo"
+                                    value={data.motivo_ajuste_saldo}
+                                    onChange={(e) => setData('motivo_ajuste_saldo', e.target.value)}
+                                    placeholder="Explique por qué se está corrigiendo este saldo..."
+                                    className="min-h-[80px]"
+                                />
+                                <InputError message={errors.motivo_ajuste_saldo} />
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setIsSaldoDialogOpen(false)}
+                                disabled={processing}
+                            >
+                                Cancelar
+                            </Button>
+                            <Button
+                                type="button"
+                                disabled={!data.security_password || !data.motivo_ajuste_saldo.trim() || processing}
+                                onClick={confirmarAjusteSaldo}
+                                className="bg-amber-600 text-white hover:bg-amber-700"
+                            >
+                                {processing ? 'Confirmando...' : 'Confirmar cambio'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             </div>
         </AppLayout>
     );
