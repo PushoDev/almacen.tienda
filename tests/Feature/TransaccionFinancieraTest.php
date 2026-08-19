@@ -290,6 +290,13 @@ test('una transferencia con tasa personalizada usa esa tasa en vez de la tasa re
     $response->assertRedirect();
     $this->assertDatabaseHas('cuentas', ['id' => $destino->id, 'saldo_cuenta' => 1]); // 300 / 300 (custom) = 1 USD, no 300/400
     $this->assertDatabaseHas('movimientos_financieros', ['tipo_movimiento_id' => 3, 'tasa_cambio_aplicada' => 300]);
+    // La tasa personalizada (300) le da al destino MÁS USD que la oficial (400) hubiera
+    // dado (1.00 vs 0.75) — la agencia entregó de más, así que es una PÉRDIDA (negativo).
+    $this->assertDatabaseHas('movimientos_financieros', [
+        'tipo_movimiento_id' => 3,
+        'tasa_oficial_en_momento' => 400,
+        'ganancia_perdida_cambiaria' => -0.25,
+    ]);
 });
 
 test('no se puede transferir de una cuenta a sí misma', function () {

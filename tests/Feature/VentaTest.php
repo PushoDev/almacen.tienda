@@ -395,6 +395,38 @@ test('aprobarVenta sin gestor descuenta la comisión del vendedor de su cuenta C
     ]);
 });
 
+test('aprobarVenta guarda ganancia_neta = total_ganancia - total_comision + ganancia_perdida_cambiaria', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    $almacen = Almacen::factory()->puntoVenta()->create();
+    $monedaCup = Moneda::factory()->create(['codigo_moneda' => 'CUP', 'estado' => true, 'tasa_cambio' => 365]);
+    $cuentaComision = crearCuentaCup(saldo: 5000);
+
+    $venta = Venta::factory()->create([
+        'user_id' => $admin->id,
+        'almacen_id' => $almacen->id,
+        'estado' => 'pendiente',
+        'moneda_id' => $monedaCup->id,
+        'total' => 100,
+        'es_venta_gestor' => false,
+        'total_ganancia' => 50,
+        'total_comision' => 10,
+        'comision_cuenta_id' => $cuentaComision->id,
+        'comision_tasa' => 365,
+    ]);
+    crearDestinatario($venta);
+
+    $response = $this->postJson(route('ventas.aprobar', $venta));
+    $response->assertJson(['success' => true]);
+
+    // Sin pagos en CUP registrados, ganancia_perdida_cambiaria queda en 0 — ganancia_neta = 50 - 10 + 0.
+    $this->assertDatabaseHas('ventas', [
+        'id' => $venta->id,
+        'ganancia_neta' => 40,
+    ]);
+});
+
 // ==========================================================================
 // APROBAR VENTA — saldos, deuda cliente, validaciones
 // ==========================================================================

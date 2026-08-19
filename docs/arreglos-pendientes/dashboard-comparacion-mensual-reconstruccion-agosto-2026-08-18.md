@@ -1,6 +1,30 @@
 # Comparación Mensual — reconstrucción del movimiento real de agosto (1-18)
 
-**Estado: análisis cerrado, implementación NO empezada — no arrancar sin luz verde explícita.** Continúa el trabajo de Fase 4a (ver `dashboard-resumen-financiero-2026-08-12.md` y `dashboard-comparacion-mensual-aviso-despliegue-2026-08-18.md`, ya implementada y lista para producción). Este doc es la fase siguiente, deliberadamente separada para no bloquear el despliegue de hoy.
+**Estado: IMPLEMENTADO Y APLICADO 2026-08-19.** Continúa el trabajo de Fase 4a (ver `dashboard-resumen-financiero-2026-08-12.md` y `dashboard-comparacion-mensual-aviso-despliegue-2026-08-18.md`, ya implementada y lista para producción).
+
+## Implementación 2026-08-19
+
+**Riesgo de ediciones manuales silenciosas resuelto primero:** se cerró el hueco de auditoría de `CuentaController::update()` (ver `cuenta-auditoria-saldo-2026-08-19.md` y [[project_cuenta_seguridad_pendiente]]) antes de tocar esto — opción 1 de las 3 listadas abajo (implementar igual, el cliente confirmó que no recuerda ediciones manuales previas a esta fecha, así que se aplica sin nota de salvedad adicional en la UI, pero queda documentado el riesgo teórico de ediciones anteriores a la auditoría).
+
+**Construido:**
+- `DashboardStatsService::reconstruirMovimientoCuentas(Carbon $desde, Carbon $hasta): array` — generaliza las mismas 6 fuentes que ya usan `obtenerHistorialVentas()`/`obtenerHistorialCompras()`/`obtenerHistorialTransacciones()` de `CuentaController`, sumadas por moneda en vez de paginadas por cuenta. Agrega una 7ma fuente no prevista en el análisis original: `ajustes_saldo_cuenta` (no existía el 18 de agosto, se creó hoy mismo con la auditoría de saldos).
+- Comando `php artisan dashboard:reconstruir-movimiento-agosto-2026` (`app/Console/Commands/ReconstruirMovimientoAgosto2026.php`) — backfill único, no genérico. Para cada moneda (excepto INVENTARIO, que necesita su propio análisis separado, no cubierto): `ancla_nueva = saldo_real_hoy − movimiento_reconstruido`, actualiza solo `saldo_inicio_mes` de la fila ya existente (no borra/recrea nada), y llama a `actualizarComparacionMensual()` para recalcular `monto_actual`/`diferencia` de inmediato. Idempotente: recalcula desde las tablas fuente cada vez, no suma incrementalmente.
+
+**Números reales aplicados (verificados y confirmados con el cliente antes de correr el comando):**
+
+| Moneda | Movimiento reconstruido (1-19 ago) | Ancla anterior | Ancla nueva |
+|---|---|---|---|
+| CUP | +1,311,632.50 | 7,114,969.67 | 5,803,337.17 |
+| USD | −522,781.16 | 40,891.84 | 563,673.00 |
+| EUR | +5.00 (el ajuste de prueba "OFICINA EUR" 15→20, dejado a propósito) | 15.00 | 15.00 (sin cambio — caso trivial que valida la fórmula) |
+
+El componente de compras (−254,770.00 USD) coincidió exacto con el número ya verificado el 18 de agosto, confirmando la fuente.
+
+**Verificado:** suite completa 170/170 sin regresiones. `historial_comparacion_mensuals` releído tras correr el comando — `monto_actual`/`diferencia` reflejan los números de la tabla de arriba.
+
+**Pendiente para producción:** correr `php artisan dashboard:reconstruir-movimiento-agosto-2026` una sola vez después de desplegar este código (no hace falta ningún paso manual de `tinker` — es un comando real, versionado, auditable). Como el comando calcula "hasta = ahora" en el momento en que se ejecuta, en producción va a capturar el movimiento real hasta ese instante (más completo que lo calculado hoy en local) — comportamiento correcto y esperado, no un bug.
+
+## Contexto original (2026-08-18), previo a la implementación
 
 ## Por qué existe este doc
 

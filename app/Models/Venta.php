@@ -22,6 +22,7 @@ class Venta extends Model
         'total_esperado_usd',
         'ganancia_perdida_cambiaria',
         'ganancia_real_total',
+        'ganancia_neta',
         // NUEVOS CAMPOS (aceptan negativos)
         'tasa_aplicada_venta',
         'moneda_cobro_id',
@@ -62,6 +63,7 @@ class Venta extends Model
         'total_esperado_usd' => 'decimal:2',
         'ganancia_perdida_cambiaria' => 'decimal:2',
         'ganancia_real_total' => 'decimal:2',
+        'ganancia_neta' => 'decimal:2',
         'tasa_aplicada_venta' => 'decimal:2',
         'monto_diferencia_cambiaria' => 'decimal:2',
         'tasa_aplicada_gestor' => 'decimal:2',

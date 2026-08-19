@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AjusteSaldoCuenta;
 use App\Models\Cuenta;
 use App\Models\Moneda;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Inertia\Inertia;
 
 class CuentaController extends Controller
@@ -536,9 +538,9 @@ class CuentaController extends Controller
             ]);
         }
 
-        if ($saldoCambio && $request->input('security_password') !== 'glorietashop') {
+        if ($saldoCambio && !Hash::check((string) $request->input('security_password'), auth()->user()->password)) {
             return back()->withErrors([
-                'security_password' => 'Contraseña de seguridad incorrecta.',
+                'security_password' => 'Contraseña incorrecta.',
             ]);
         }
 
@@ -556,7 +558,10 @@ class CuentaController extends Controller
             'tipo_cuenta' => ['required', 'in:permanentes'],
             'estado' => ['required', 'in:activa,inactiva'],
             'notas_cuenta' => ['nullable', 'string'],
+            'motivo_ajuste_saldo' => [$saldoCambio ? 'required' : 'nullable', 'string', 'max:500'],
         ]);
+
+        $saldoAnterior = $cuenta->saldo_cuenta;
 
         $cuenta->update([
             'nombre_cuenta' => $validated['nombre_cuenta'],
@@ -568,6 +573,16 @@ class CuentaController extends Controller
             'estado' => $validated['estado'],
             'notas_cuenta' => $validated['notas_cuenta'],
         ]);
+
+        if ($saldoCambio) {
+            AjusteSaldoCuenta::create([
+                'cuenta_id' => $cuenta->id,
+                'user_id' => auth()->id(),
+                'saldo_anterior' => $saldoAnterior,
+                'saldo_nuevo' => $validated['saldo_cuenta'],
+                'motivo' => $validated['motivo_ajuste_saldo'],
+            ]);
+        }
 
         // Redirigimos al usuario a la lista de cuentas
         return redirect()->route('cuentas.index')->with('success', 'Cuenta actualizada exitosamente.');

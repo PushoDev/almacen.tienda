@@ -68,6 +68,7 @@ class AdminController extends Controller
         $historialCostoPrecio = [];
         $statsCostoPrecio     = [];
         $resumenFinanciero    = null;
+        $gananciaAgenciaMes   = null;
         if ($user && in_array($user->role, ['admin', 'moderador'])) {
             $historialCostoPrecio = $this->getHistorialCostoPrecioReciente();
             $statsCostoPrecio     = $this->getStatsCostoPrecio();
@@ -76,7 +77,8 @@ class AdminController extends Controller
             // todavía este mes (p.ej. no hay cron configurado en el servidor), el primer
             // acceso al dashboard en el mes nuevo hace el cierre acá mismo. Llamadas
             // siguientes solo refrescan el saldo en vivo, sin tocar "Mes Anterior".
-            $comparaciones = $dashboardStatsService->actualizarComparacionMensual(null);
+            $comparaciones      = $dashboardStatsService->actualizarComparacionMensual(null);
+            $gananciaAgenciaMes = $dashboardStatsService->getGananciaAgenciaMes();
         }
 
         return Inertia::render('dashboard', [
@@ -88,6 +90,7 @@ class AdminController extends Controller
             'historialCostoPrecio'=> $historialCostoPrecio,
             'statsCostoPrecio'    => $statsCostoPrecio,
             'resumenFinanciero'   => $resumenFinanciero,
+            'gananciaAgenciaMes'  => $gananciaAgenciaMes,
         ]);
     }
 

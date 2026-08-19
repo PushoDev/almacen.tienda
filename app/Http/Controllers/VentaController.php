@@ -1364,9 +1364,18 @@ class VentaController extends Controller
                 $gananciaExtraUSD       = round(($cupProductos / $tasaOficialCUP) - $cupContadoUSD_productos, 2);
             }
 
+            // Ganancia neta = margen bruto − comisión (total_comision ya es la suma de
+            // comision_unitaria*cantidad por línea, ver store()) + ganancia/pérdida
+            // cambiaria recién calculada arriba. Nota: para ventas con gestor, este
+            // "total_comision" es la comisión teórica por línea, no el gestor_monto
+            // real pagado desde la cuenta del gestor (modelo distinto) — mismo criterio
+            // que ya usa VentaController::show() para 'ganancia_agencia', no es nuevo.
+            $gananciaAgencia = (float) $venta->total_ganancia - (float) $venta->total_comision;
+
             $venta->update([
                 'ganancia_perdida_cambiaria' => $gananciaExtraUSD,
                 'ganancia_real_total'        => $venta->total_ganancia + $gananciaExtraUSD,
+                'ganancia_neta'              => round($gananciaAgencia + $gananciaExtraUSD, 2),
             ]);
 
             // DESCUENTO GESTOR
