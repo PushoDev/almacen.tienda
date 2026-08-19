@@ -134,21 +134,25 @@ class DashboardStatsService
     /**
      * Actualiza (o crea, en el primer acceso al mes) el snapshot de comparación
      * mensual por moneda + una fila sintética "INVENTARIO" (valor de costo del
-     * stock, mismo cálculo que ya usa Logistica). "Mes Anterior" es el "Saldo
-     * Acumulado" (movimiento neto) con el que cerró el mes pasado — congelado,
-     * se lee tal cual. "Saldo Acumulado" es cuánto se ha movido (entradas −
-     * salidas) desde que empezó este mes: arranca en 0 el día 1, calculado como
-     * `valor en vivo ahora − saldo_inicio_mes` (el ancla, capturada una sola vez
-     * en el primer acceso del mes y nunca vuelta a tocar) — así se evita volver
-     * a sumar `movimientos_financieros`, que es donde vivía el bug de agrupación
-     * de WHERE (whereIn()->orWhereIn()->where()->where() sin agrupar, dejaba el
-     * lado "origen" sin filtro de moneda/fecha). "Diferencia" compara el
-     * movimiento de este mes contra el del mes pasado.
+     * stock, mismo cálculo que ya usa Logistica).
+     *
+     * "Saldo Acumulado" = saldo TOTAL en vivo de las cuentas ahora mismo (mismo
+     * número que Tabla 1 / Logística) — nunca negativo mientras exista dinero
+     * real, sin importar cuánto se haya movido. "Mes Anterior" es ese mismo
+     * total, congelado tal como cerró el mes pasado. "Diferencia" = Saldo
+     * Acumulado − Mes Anterior, el único lugar donde puede aparecer un número
+     * negativo, y ahí sí tiene sentido porque está etiquetado como cambio, no
+     * como saldo.
+     *
+     * (Redefinido 2026-08-19: la versión anterior mostraba en "Saldo Acumulado"
+     * el movimiento neto del mes en vez del total, restando un ancla
+     * `saldo_inicio_mes` — generaba confusión real, un saldo de cuenta con
+     * dinero real se veía negativo. `saldo_inicio_mes` se sigue capturando por
+     * si sirve como referencia histórica, pero ya no se usa para calcular
+     * `monto_actual`.)
      *
      * Se llama tanto desde el comando programado (00:00 del día 1) como, de red
-     * de seguridad, desde AdminController::index() en cada carga del dashboard —
-     * si el comando no corrió todavía, el primer acceso del mes nuevo hace el
-     * "cierre" (captura del ancla) ahí mismo.
+     * de seguridad, desde AdminController::index() en cada carga del dashboard.
      */
     public function actualizarComparacionMensual(?int $userId = null): array
     {
@@ -175,7 +179,7 @@ class DashboardStatsService
                 $saldoInicioMes = (float) $filaExistente->saldo_inicio_mes;
                 $montoAnterior = (float) $filaExistente->monto_anterior;
             } else {
-                // Primer acceso del mes: el ancla se captura ahora mismo y ya no se toca.
+                // Primer acceso del mes: se guarda como referencia histórica (ya no se usa en el cálculo de abajo).
                 $saldoInicioMes = $valorEnVivo;
 
                 $ultimaFila = HistorialComparacionMensual::where('user_id', $userId)
@@ -187,7 +191,7 @@ class DashboardStatsService
                 $montoAnterior = $ultimaFila ? (float) $ultimaFila->monto_actual : 0.0;
             }
 
-            $montoActual = $valorEnVivo - $saldoInicioMes;
+            $montoActual = $valorEnVivo;
             $diferencia = $montoActual - $montoAnterior;
             $porcentajeCambio = $montoAnterior != 0.0 ? round(($diferencia / $montoAnterior) * 100, 2) : 0.0;
             $nombreMoneda = $monedaInfo->nombre_moneda ?? ($codigo === 'INVENTARIO' ? 'Inventario' : $codigo);
@@ -220,6 +224,99 @@ class DashboardStatsService
         }
 
         return $resultado;
+    }
+
+    /**
+     * Reconstruye el movimiento neto real de las cuentas (entradas − salidas)
+     * en un rango de fechas, por moneda. `movimientos_financieros` solo es
+     * confiable para Gasto/Ingreso/Transferencia — Venta y Compra mueven
+     * `saldo_cuenta` directo sin loguearse ahí (ver CuentaController.php,
+     * métodos `obtenerHistorialVentas`/`obtenerHistorialCompras`, de donde
+     * salen estas mismas 6 fuentes, aquí sumadas por moneda en vez de
+     * paginadas por cuenta). También incluye `ajustes_saldo_cuenta` (ediciones
+     * manuales auditadas) para que el neto cuadre siempre con el saldo real.
+     *
+     * Usado por el comando de backfill de agosto 2026 — no se llama desde
+     * ningún flujo normal del dashboard.
+     */
+    public function reconstruirMovimientoCuentas(\Carbon\Carbon $desde, \Carbon\Carbon $hasta): array
+    {
+        $neto = [];
+
+        $sumar = function (string $moneda, float $monto) use (&$neto) {
+            $neto[$moneda] = ($neto[$moneda] ?? 0.0) + $monto;
+        };
+
+        DB::table('movimientos_financieros')
+            ->whereBetween('fecha_operacion', [$desde, $hasta])
+            ->whereNotNull('cuenta_origen_id')
+            ->selectRaw('moneda_origen as moneda, SUM(saldo_posterior_origen - saldo_anterior_origen) as delta')
+            ->groupBy('moneda_origen')
+            ->get()
+            ->each(fn ($r) => $sumar($r->moneda, (float) $r->delta));
+
+        DB::table('movimientos_financieros')
+            ->whereBetween('fecha_operacion', [$desde, $hasta])
+            ->whereNotNull('cuenta_destino_id')
+            ->selectRaw('moneda_destino as moneda, SUM(saldo_posterior_destino - saldo_anterior_destino) as delta')
+            ->groupBy('moneda_destino')
+            ->get()
+            ->each(fn ($r) => $sumar($r->moneda, (float) $r->delta));
+
+        DB::table('pago_ventas as pv')
+            ->join('ventas as v', 'pv.venta_id', '=', 'v.id')
+            ->leftJoin('monedas as m', 'pv.moneda_id', '=', 'm.id')
+            ->where('v.estado', 'completada')
+            ->whereBetween('v.updated_at', [$desde, $hasta])
+            ->selectRaw("COALESCE(m.codigo_moneda, 'USD') as moneda, SUM(pv.monto) as total")
+            ->groupBy('moneda')
+            ->get()
+            ->each(fn ($r) => $sumar($r->moneda, (float) $r->total));
+
+        $comisionPv = (float) DB::table('ventas')
+            ->whereNotNull('comision_cuenta_id')
+            ->where('estado', 'completada')
+            ->where('es_venta_gestor', false)
+            ->where('total_comision', '>', 0)
+            ->where('comision_tasa', '>', 0)
+            ->whereBetween('updated_at', [$desde, $hasta])
+            ->sum(DB::raw('total_comision * comision_tasa'));
+        $sumar('CUP', -$comisionPv);
+
+        $comisionGestor = (float) DB::table('ventas')
+            ->whereNotNull('gestor_cuenta_id')
+            ->where('estado', 'completada')
+            ->where('es_venta_gestor', true)
+            ->where('gestor_monto', '>', 0)
+            ->whereBetween('updated_at', [$desde, $hasta])
+            ->sum('gestor_monto');
+        $sumar('CUP', -$comisionGestor);
+
+        $mensajeria = (float) DB::table('ventas')
+            ->whereNotNull('mensajero_cuenta_id')
+            ->where('estado', 'completada')
+            ->where('mensajero_tipo', 'externo')
+            ->where('mensajero_monto', '>', 0)
+            ->whereBetween('updated_at', [$desde, $hasta])
+            ->sum(DB::raw('COALESCE(NULLIF(mensajero_monto_final_cup, 0), mensajero_monto_original)'));
+        $sumar('CUP', -$mensajeria);
+
+        $comprasPago = (float) DB::table('compra_pago as cp')
+            ->join('compras as c', 'cp.compra_id', '=', 'c.id')
+            ->whereBetween('c.fecha_compra', [$desde, $hasta])
+            ->sum('cp.monto');
+        $sumar('USD', -$comprasPago);
+
+        DB::table('ajustes_saldo_cuenta as a')
+            ->join('cuentas as c', 'a.cuenta_id', '=', 'c.id')
+            ->join('monedas as m', 'c.moneda_id', '=', 'm.id')
+            ->whereBetween('a.created_at', [$desde, $hasta])
+            ->selectRaw('m.codigo_moneda as moneda, SUM(a.saldo_nuevo - a.saldo_anterior) as delta')
+            ->groupBy('moneda')
+            ->get()
+            ->each(fn ($r) => $sumar($r->moneda, (float) $r->delta));
+
+        return $neto;
     }
 
     /**

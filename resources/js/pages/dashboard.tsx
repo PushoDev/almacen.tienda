@@ -562,9 +562,9 @@ export default function Dashboard({
                                 <div className="mb-4 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
                                     <Info className="mt-0.5 h-4 w-4 shrink-0" />
                                     <span>
-                                        <strong>Saldo Acumulado</strong> es cuánto se ha movido (entradas − salidas) desde que empezó este mes — arranca en{' '}
-                                        <strong>0.00 cada día 1</strong> y va sumando en tiempo real con cada operación. Ver todo en 0.00 es normal al
-                                        inicio del mes, no un error.
+                                        <strong>Saldo Acumulado</strong> es el saldo total real de las cuentas ahora mismo (mismo valor que el Resumen
+                                        Financiero). <strong>Mes Actual</strong> muestra cuánto cambió ese saldo desde que cerró el mes pasado — esa
+                                        columna sí puede aparecer en rojo si el saldo bajó, eso no significa que la cuenta esté en negativo.
                                     </span>
                                 </div>
                                 <Table>

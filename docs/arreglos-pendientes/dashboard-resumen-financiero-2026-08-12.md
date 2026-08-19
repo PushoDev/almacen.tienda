@@ -90,6 +90,25 @@ Queda sin commitear, para revisión del cliente. **Pendiente operativo, no de c�
 
 **Aviso de despliegue a producción:** ver `dashboard-comparacion-mensual-aviso-despliegue-2026-08-18.md`. La migración se encarga sola de reiniciar la fila del mes en curso (no hace falta ningún comando manual aparte — corregido en la misma sesión, la primera versión pedía un `tinker` a mano y se descartó por poco confiable en producción). Ese doc también trae el texto sugerido para explicarle al cliente por qué la tabla arranca en 0.00 tras la actualización, y ahora hay una nota visible en la propia tabla (`dashboard.tsx`) que explica esto permanentemente — no solo para este despliegue.
 
+## Fase 4a-ter — "Saldo Acumulado" vuelve a ser el saldo TOTAL — IMPLEMENTADO 2026-08-19
+
+Un día después de que Fase 4a-bis reconstruyera el movimiento de agosto (ver más arriba), el cliente probó la tabla en la práctica y la definición "movimiento neto" (heredada de Fase 4, decidida el 12 de agosto) le generó confusión real, no hipotética: vio USD en negativo en Comparación Mensual (−$522,781.16, el movimiento neto reconstruido) mientras que `/logistica` mostraba USD positivo ($40,891.84, el saldo total) — dos números correctos pero de conceptos distintos, mostrados uno al lado del otro sin aclaración suficiente. Cuando se explicó la diferencia (saldo vs. movimiento) el cliente la entendió, pero fue tajante: "no, no, no acomulado deberia ser el total... eso crea confusion en el usuario... es imposible" — pidió revertir la definición, no solo aclararla con un tooltip (que se había ofrecido primero).
+
+**Redefinición (revierte la de Fase 4/12 de agosto, vuelve a la semántica original de Fase 3):**
+- **Saldo Acumulado** = saldo total en vivo de las cuentas ahora mismo — mismo número que Tabla 1 "Resumen Financiero" y `/logistica`. Nunca 0.00 ni negativo salvo que la cuenta esté realmente en descubierto.
+- **Mes Anterior** = ese mismo total, congelado tal como cerró el mes pasado.
+- **Diferencia** (columna "Mes Actual" en el frontend) = Saldo Acumulado − Mes Anterior. Sigue siendo el único lugar donde puede aparecer un número negativo — y ahí tiene sentido, porque está etiquetado como cambio/diferencia, no como si fuera el saldo de la cuenta.
+
+**Implementado:**
+- `DashboardStatsService::actualizarComparacionMensual()`: `$montoActual = $valorEnVivo;` en vez de `$valorEnVivo - $saldoInicioMes`. La columna `saldo_inicio_mes` se sigue capturando (queda como referencia histórica de "cuál era el saldo real al empezar a trackear"), pero ya no participa en el cálculo de lo que se muestra.
+- `dashboard.tsx`: reemplazado el aviso azul que decía "arranca en 0.00 cada día 1" (ya no es cierto bajo la nueva definición) por uno que explica saldo total vs. diferencia.
+- Tabla `historial_comparacion_mensuals` recalculada con `actualizarComparacionMensual()` — CUP/USD/EUR/Inventario ahora muestran el total real (ej. USD 40,891.84, positivo).
+- Suite completa 170/170 sin regresiones, eslint limpio.
+
+**Consecuencia sobre Fase 4a-bis (el backfill de esta misma mañana):** los valores de `saldo_inicio_mes` que se calcularon y aplicaron ahí (CUP 5,803,337.17 / USD 563,673.00 / EUR 15.00, reconstruyendo el movimiento real del 1-19 de agosto) **siguen guardados en la base de datos, correctos, sin revertir** — pero ya no alimentan ningún número visible en el dashboard, porque "Saldo Acumulado" ya no se calcula restando esa ancla. El comando `dashboard:reconstruir-movimiento-agosto-2026` y el método `reconstruirMovimientoCuentas()` quedan en el código (no se borraron), pero su propósito original (corregir lo que mostraba "Saldo Acumulado") ya no aplica bajo esta redefinición — quedan como fue construidos, documentados, pero efectivamente sin consumidor visible por ahora.
+
+**Doc de despliegue superado:** `dashboard-comparacion-mensual-aviso-despliegue-2026-08-18.md` describe la definición vieja (movimiento neto, arranca en 0.00) — marcado como superado, no reutilizar sin revisar primero.
+
 ## Fase 4b — Ganancia real de la agencia — SIGUE EN ANÁLISIS, sin tocar, fuera del alcance de Fase 4a
 
 Surgió el mismo día (2026-08-12), en la sesión siguiente a que el cliente hiciera commit de las Fases 1-3, al preguntar "¿de dónde sacás los datos de Tabla 2?". La respuesta abrió una conversación larga que redefine cómo debe funcionar Tabla 2 — **nada de esto está implementado todavía**, es la fase de análisis/diseño antes de tocar código.
