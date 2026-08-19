@@ -110,3 +110,9 @@ export interface ResumenFinanciero {
     capital_por_moneda: CapitalPorMoneda[];
     moneda_principal: { simbolo: string; codigo: string };
 }
+
+export interface GananciaAgenciaMes {
+    ganancia_ventas: number;
+    ganancia_transferencias: number;
+    ganancia_neta_total: number;
+}

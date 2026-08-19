@@ -86,6 +86,22 @@ class TransferenciaController extends Controller
             $montoDestino = $this->calcularMontoConvertido($montoOrigen, $monedaOrigen, $monedaDestino, $request->tasa_cambio_aplicada, $request->origen_tipo, $request->destino_tipo);
             $tasaCambioAplicada = $this->obtenerTasaCambioFinal($monedaOrigen, $monedaDestino, $request->tasa_cambio_aplicada, $request->origen_tipo, $request->destino_tipo);
 
+            // Ganancia/pérdida cambiaria: si la tasa aplicada le da al destino MÁS de
+            // lo que le hubiera dado la tasa oficial, la agencia entregó de más → eso
+            // es una PÉRDIDA (negativo). Si le da MENOS, la agencia se quedó con la
+            // diferencia → GANANCIA (positivo). Por eso es "oficial − real", no al
+            // revés. Mismo sentido que VentaController usa para su propia
+            // ganancia_perdida_cambiaria (verificado con un ejemplo numérico antes de
+            // aplicar). Solo tiene sentido cuando hay conversión de moneda real — para
+            // el resto da 0 de forma natural.
+            $montoDestinoOficial = $this->calcularMontoConvertido($montoOrigen, $monedaOrigen, $monedaDestino, null, $request->origen_tipo, $request->destino_tipo);
+            $tasaOficialEnMomento = $this->obtenerTasaCambioFinal($monedaOrigen, $monedaDestino, null, $request->origen_tipo, $request->destino_tipo);
+            $diferenciaMonedaDestino = $montoDestinoOficial - $montoDestino;
+            $tasaUsdMonedaDestino = $monedaDestino->codigo_moneda === 'USD' ? 1.0 : (float) $monedaDestino->tasa_cambio;
+            $gananciaPerdidaCambiaria = $tasaUsdMonedaDestino > 0
+                ? round($diferenciaMonedaDestino / $tasaUsdMonedaDestino, 2)
+                : 0.0;
+
             $saldoAnteriorOrigen = $this->obtenerSaldoEntidad($origen, $request->origen_tipo);
             $saldoAnteriorDestino = $this->obtenerSaldoEntidad($destino, $request->destino_tipo);
 
@@ -109,6 +125,8 @@ class TransferenciaController extends Controller
                 'monto' => $montoOrigen,
                 'moneda' => $request->moneda,
                 'tasa_cambio_aplicada' => $tasaCambioAplicada,
+                'tasa_oficial_en_momento' => $tasaOficialEnMomento,
+                'ganancia_perdida_cambiaria' => $gananciaPerdidaCambiaria,
                 'descripcion' => $request->comentario ?? "Transferencia: {$montoOrigen} {$monedaOrigen->codigo_moneda} → {$montoDestino} {$monedaDestino->codigo_moneda} ({$origenNombre} → {$destinoNombre})",
                 'fecha_operacion' => now(),
                 'estado' => 'completado',

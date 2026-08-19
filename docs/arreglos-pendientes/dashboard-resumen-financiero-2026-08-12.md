@@ -109,7 +109,24 @@ Un día después de que Fase 4a-bis reconstruyera el movimiento de agosto (ver m
 
 **Doc de despliegue superado:** `dashboard-comparacion-mensual-aviso-despliegue-2026-08-18.md` describe la definición vieja (movimiento neto, arranca en 0.00) — marcado como superado, no reutilizar sin revisar primero.
 
-## Fase 4b — Ganancia real de la agencia — SIGUE EN ANÁLISIS, sin tocar, fuera del alcance de Fase 4a
+## Fase 4b — Ganancia real de la agencia — IMPLEMENTADO 2026-08-19
+
+Las 3 preguntas abiertas se resolvieron vía `AskUserQuestion`: sí incluir Transferencias (con la salvedad de que el cliente preguntó si la tasa se puede editar por operación — confirmado en código que sí, `tasa_cambio_aplicada` es opcional y personalizable por transferencia), y guardar `ganancia_neta` en columna nueva (no calcular al vuelo).
+
+**Construido:**
+- Migración `2026_08_19_210000_add_ganancia_neta_to_ventas_table` — columna `ventas.ganancia_neta` (nullable, null hasta que la venta se aprueba).
+- `VentaController::aprobarVenta()`: calcula y guarda `ganancia_neta = total_ganancia − total_comision + ganancia_perdida_cambiaria` en el mismo `update()` donde ya se calculaba `ganancia_perdida_cambiaria`/`ganancia_real_total`. Nota dejada en el código: para ventas con gestor, `total_comision` es la comisión teórica por línea, no el `gestor_monto` real pagado desde la cuenta del gestor (moneda distinta, CUP vs USD) — mismo criterio que ya usaba `ganancia_agencia` en `show()`, no es una limitación nueva introducida hoy.
+- Migración `2026_08_19_210100_add_ganancia_cambiaria_to_movimientos_financieros_table` — columnas `tasa_oficial_en_momento` y `ganancia_perdida_cambiaria` en `movimientos_financieros`, nullable, **solo se llenan para Transferencias nuevas desde hoy** — no hay forma de reconstruir la tasa oficial vigente en transferencias ya hechas si en su momento se usó una tasa personalizada (ese dato nunca se guardó).
+- `TransferenciaController::store()`: calcula `montoDestinoOficial` (mismo `calcularMontoConvertido()` pero forzando tasa oficial) y compara contra `montoDestino` real. **Bug de signo encontrado y corregido durante la verificación manual:** la primera versión restaba al revés (`montoDestino - montoDestinoOficial`), lo que hacía ver como "ganancia" el caso donde la agencia entrega de más (en realidad pérdida). Verificado con un ejemplo numérico a mano antes de aplicar, y con un test nuevo (`tests/Feature/TransaccionFinancieraTest.php`, extiende el test ya existente de "tasa personalizada") que fija el signo correcto: tasa personalizada más favorable para el destino → pérdida (negativo) para la agencia.
+- `DashboardStatsService::getGananciaAgenciaMes()` — suma `ventas.ganancia_neta` (ventas completadas, `updated_at >= inicio de mes`) + `movimientos_financieros.ganancia_perdida_cambiaria` (Transferencia Interna, `fecha_operacion >= inicio de mes`). Compras/Gasto/Ingreso quedan fuera a propósito (sin margen posible, ya analizado).
+- `AdminController::index()`: pasa `gananciaAgenciaMes` al frontend, solo para admin/moderador.
+- **Tarjeta nueva en `dashboard.tsx`**, separada de Comparación Mensual a propósito (mezclar "saldo" con "ganancia" en la misma tabla fue justo la causa de la confusión de Fase 4a-ter) — "Ganancia Real de la Agencia", 3 valores: Ganancia de Ventas | Ganancia/Pérdida de Transferencias | Ganancia Neta del Mes (suma), con aviso aclarando que Compras/Gasto/Ingreso no aparecen porque no tienen margen posible, y que Transferencias solo cuenta desde hoy.
+
+**Verificado:** suite completa 171/171 (170 + 1 test nuevo de `ganancia_neta`, más 3 assertions nuevas en el test de tasa personalizada), eslint limpio en `dashboard.tsx`/`types.ts`, imports vs. tags JSX revisados a mano. `getGananciaAgenciaMes()` corrido en tinker sin errores (da 0/0/0 hoy — esperado, no hay ventas/transferencias todavía con los campos nuevos poblados).
+
+**Fuera de alcance, no hecho:** no se agregó `ganancia_neta` a la respuesta JSON de `VentaController::show()`/`aprobarVenta()` (el detalle de una venta individual) — solo se usa agregado en el dashboard. Backfill de transferencias viejas explícitamente descartado (dato irrecuperable).
+
+## Fase 4b — contexto original del análisis (2026-08-12), previo a la implementación de arriba
 
 Surgió el mismo día (2026-08-12), en la sesión siguiente a que el cliente hiciera commit de las Fases 1-3, al preguntar "¿de dónde sacás los datos de Tabla 2?". La respuesta abrió una conversación larga que redefine cómo debe funcionar Tabla 2 — **nada de esto está implementado todavía**, es la fase de análisis/diseño antes de tocar código.
 

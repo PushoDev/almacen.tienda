@@ -227,6 +227,73 @@ class DashboardStatsService
     }
 
     /**
+     * Ganancia real de la agencia en lo que va del mes en curso, desglosada por
+     * fuente. Compras/Gasto/Ingreso no tienen margen posible (ver análisis en
+     * docs/arreglos-pendientes/dashboard-resumen-financiero-2026-08-12.md, Fase
+     * 4b) — solo Ventas y Transferencias pueden generar ganancia real, cada una
+     * ya calculada y guardada por su propio controller al momento de la
+     * operación (`ventas.ganancia_neta` en `VentaController::aprobarVenta()`,
+     * `movimientos_financieros.ganancia_perdida_cambiaria` en
+     * `TransferenciaController::store()`) — acá solo se suman.
+     */
+    public function getGananciaAgenciaMes(): array
+    {
+        $inicioMes = now()->startOfMonth();
+
+        $gananciaVentas = (float) DB::table('ventas')
+            ->where('estado', 'completada')
+            ->where('updated_at', '>=', $inicioMes)
+            ->sum('ganancia_neta');
+
+        $gananciaTransferencias = (float) DB::table('movimientos_financieros')
+            ->where('tipo_movimiento_id', 3) // Transferencia Interna
+            ->where('fecha_operacion', '>=', $inicioMes)
+            ->sum('ganancia_perdida_cambiaria');
+
+        return [
+            'ganancia_ventas' => round($gananciaVentas, 2),
+            'ganancia_transferencias' => round($gananciaTransferencias, 2),
+            'ganancia_neta_total' => round($gananciaVentas + $gananciaTransferencias, 2),
+        ];
+    }
+
+    /**
+     * Tasa de cambio oficial de una moneda (por `moneda_id`, no por código — este
+     * sistema tiene 2 monedas distintas codificadas "CUP" con historiales de tasa
+     * independientes, hay que resolver por id o se mezclan) vigente en un instante
+     * pasado. Reconstruida desde `historial_tasa_cambios` (cada cambio de tasa
+     * queda ahí con su fecha), no desde el valor actual de `monedas.tasa_cambio`
+     * (que ya cambió desde entonces). Usado por el backfill de ganancia de
+     * Transferencias — no se llama desde ningún flujo normal del dashboard.
+     */
+    public function tasaOficialHistorica(int $monedaId, \Carbon\Carbon $momento): float
+    {
+        $cambio = DB::table('historial_tasa_cambios')
+            ->where('moneda_id', $monedaId)
+            ->where('created_at', '<=', $momento)
+            ->orderByDesc('created_at')
+            ->first();
+
+        if ($cambio) {
+            return (float) $cambio->tasa_nueva;
+        }
+
+        // No hay ningún cambio registrado antes de ese momento: o la tasa nunca
+        // cambió, o cambió por primera vez después — el mejor dato disponible es
+        // el "tasa_anterior" del cambio más antiguo (si existe) o la tasa actual.
+        $primerCambio = DB::table('historial_tasa_cambios')
+            ->where('moneda_id', $monedaId)
+            ->orderBy('created_at')
+            ->first();
+
+        if ($primerCambio) {
+            return (float) $primerCambio->tasa_anterior;
+        }
+
+        return (float) (DB::table('monedas')->where('id', $monedaId)->value('tasa_cambio') ?? 1.0);
+    }
+
+    /**
      * Reconstruye el movimiento neto real de las cuentas (entradas − salidas)
      * en un rango de fechas, por moneda. `movimientos_financieros` solo es
      * confiable para Gasto/Ingreso/Transferencia — Venta y Compra mueven
