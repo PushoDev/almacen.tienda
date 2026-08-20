@@ -1,5 +1,7 @@
 # Propuesta: costo promedio ponderado por almacén
 
+> ⚠️ **SUPERADO 2026-08-20.** El cliente prefirió un enfoque distinto — duplicar el producto por almacén en vez de mover el costo a un campo por almacén, con una operación manual de "unificar" en Movimientos. Ver `costo-promedio-ponderado-duplicacion-por-almacen-propuesta-2026-08-20.md`. Este doc queda como referencia del diagnóstico original (sigue siendo válido), no como el plan a implementar.
+
 **Estado: propuesta, sin implementar.** Analizado el 2026-08-15 a partir de una duda del cliente sobre qué pasa al comprar un producto ya existente que además requiere prorratearse dos veces (movimientos a almacenes lejanos). Este doc es para proponérselo al cliente antes de tocar código — no arrancar la implementación sin luz verde explícita.
 
 ## El problema, en palabras del cliente

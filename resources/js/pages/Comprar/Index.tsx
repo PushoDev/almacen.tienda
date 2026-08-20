@@ -1906,10 +1906,15 @@ export default function ComprarPage() {
                             {productoCoincidente &&
                                 (() => {
                                     // El stock es por almacén; el costo (precio_compra_producto) es un solo dato por
-                                    // producto, sin importar el almacén. El aviso separa las dos cosas a propósito.
+                                    // producto. El precio es parte de la identidad: si el precio que se está
+                                    // escribiendo no coincide exactamente con el ya registrado, la compra crea un
+                                    // producto nuevo (ficha aparte) en vez de reemplazar el costo del existente.
                                     const stockEnEsteAlmacen = selectedAlmacen
                                         ? (productoCoincidente.stock_por_almacen.find((s) => s.almacen_id === selectedAlmacen.id)?.cantidad ?? 0)
                                         : null;
+
+                                    const precioIngresado = parseFloat(tempFormData.precio ?? '');
+                                    const precioDistinto = !isNaN(precioIngresado) && precioIngresado !== productoCoincidente.precio_compra_producto;
 
                                     return (
                                         <div className="mt-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/30">
@@ -1932,9 +1937,17 @@ export default function ComprarPage() {
                                                         específicamente.{' '}
                                                     </>
                                                 )}
-                                                El costo (<strong>${productoCoincidente.precio_compra_producto.toFixed(2)}</strong>) es un dato único
-                                                por producto, no por almacén: si continuás, el precio que pongas acá lo va a reemplazar para todos los
-                                                almacenes.
+                                                {precioDistinto ? (
+                                                    <>
+                                                        Ya existe a <strong>${productoCoincidente.precio_compra_producto.toFixed(2)}</strong> — como
+                                                        el precio que estás poniendo es distinto, se va a registrar como un producto nuevo, aparte
+                                                        del existente.
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        El costo actual es <strong>${productoCoincidente.precio_compra_producto.toFixed(2)}</strong>.
+                                                    </>
+                                                )}
                                             </p>
                                         </div>
                                     );

@@ -218,7 +218,7 @@ test('rechaza precio de compra negativo', function () {
     $response->assertSessionHasErrors(['productos.0.precio']);
 });
 
-test('el mismo producto en dos almacenes distintos dentro de la misma compra queda en dos líneas separadas, sin fusionar precio ni cantidad', function () {
+test('el mismo producto en dos almacenes distintos dentro de la misma compra, a precios distintos, queda en dos fichas separadas', function () {
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
@@ -258,35 +258,43 @@ test('el mismo producto en dos almacenes distintos dentro de la misma compra que
 
     $response->assertSessionHasNoErrors();
 
-    $producto = \App\Models\Producto::where('nombre_producto', 'Producto Repetido')->firstOrFail();
+    // El precio es parte de la identidad: al no coincidir (10 vs 12), son dos fichas
+    // de Producto distintas, cada una con su propia línea de pivot — no una fusionada.
+    $fichas = \App\Models\Producto::where('nombre_producto', 'Producto Repetido')->get();
+    expect($fichas)->toHaveCount(2);
 
-    // Dos líneas reales en el pivot, no una fusionada — sin promediar precio ni sumar cantidad.
-    expect(\App\Models\CompraProducto::where('producto_id', $producto->id)->count())->toBe(2);
+    $productoA = $fichas->firstWhere('precio_compra_producto', '10.00');
+    $productoB = $fichas->firstWhere('precio_compra_producto', '12.00');
+    expect($productoA)->not->toBeNull();
+    expect($productoB)->not->toBeNull();
+
+    expect(\App\Models\CompraProducto::where('producto_id', $productoA->id)->count())->toBe(1);
+    expect(\App\Models\CompraProducto::where('producto_id', $productoB->id)->count())->toBe(1);
 
     $this->assertDatabaseHas('compra_producto', [
-        'producto_id' => $producto->id,
+        'producto_id' => $productoA->id,
         'almacen_id' => $almacenA->id,
         'cantidad' => 5,
         'precio' => 10,
     ]);
 
     $this->assertDatabaseHas('compra_producto', [
-        'producto_id' => $producto->id,
+        'producto_id' => $productoB->id,
         'almacen_id' => $almacenB->id,
         'cantidad' => 3,
         'precio' => 12,
     ]);
 
-    // El stock sí queda correcto por almacén, independiente del fix del pivot.
+    // El stock queda correcto por almacén, cada ficha en el suyo.
     $this->assertDatabaseHas('almacen_producto', [
         'almacen_id' => $almacenA->id,
-        'producto_id' => $producto->id,
+        'producto_id' => $productoA->id,
         'cantidad' => 5,
     ]);
 
     $this->assertDatabaseHas('almacen_producto', [
         'almacen_id' => $almacenB->id,
-        'producto_id' => $producto->id,
+        'producto_id' => $productoB->id,
         'cantidad' => 3,
     ]);
 });
@@ -374,9 +382,9 @@ test('un vendedor no puede registrar una compra por bypass directo de URL (403),
     expect(Compra::count())->toBe(0);
 });
 
-// ─── Historial de costo (historial_precio_costos) ─────────────────────────────
+// ─── Identidad de producto por precio (precio_compra_producto es parte del match) ──
 
-test('una compra que cambia el costo de un producto existente deja rastro en historial_precio_costos', function () {
+test('una compra del mismo producto a un precio distinto crea una ficha nueva, sin pisar el costo de la existente', function () {
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
@@ -392,8 +400,6 @@ test('una compra que cambia el costo de un producto existente deja rastro en his
         'precio_compra_producto' => 10,
     ]);
 
-    // Stock previo a esta compra — debe ser el que se registre como stock_momento,
-    // no el stock ya incluyendo las unidades que esta misma compra está agregando.
     AlmacenProducto::create([
         'almacen_id' => $almacen->id,
         'producto_id' => $producto->id,
@@ -418,19 +424,60 @@ test('una compra que cambia el costo de un producto existente deja rastro en his
 
     $response->assertSessionHasNoErrors();
 
-    $this->assertDatabaseHas('historial_precio_costos', [
-        'producto_id' => $producto->id,
-        'user_id' => $user->id,
-        'precio_anterior' => 10.0000,
-        'precio_nuevo' => 15.0000,
-        'diferencia' => 5.0000,
-        'stock_momento' => 4,
-        'impacto_financiero' => 20.0000,
-        'es_perdida' => false,
-    ]);
+    // La ficha original no se toca.
+    expect($producto->refresh()->precio_compra_producto)->toEqual('10.00');
+
+    // Se creó una ficha nueva, separada, con el precio de esta compra.
+    $productoNuevo = Producto::where('nombre_producto', 'Producto Costo')
+        ->where('id', '!=', $producto->id)
+        ->first();
+    expect($productoNuevo)->not->toBeNull();
+    expect($productoNuevo->precio_compra_producto)->toEqual('15.00');
+
+    // El match por precio hace que este camino ya no pise costos existentes,
+    // así que tampoco debe quedar rastro en historial_precio_costos.
+    expect(HistorialPrecioCosto::where('producto_id', $producto->id)->count())->toBe(0);
 });
 
-test('una compra con el mismo costo que ya tenía el producto no crea entrada en historial_precio_costos', function () {
+test('comprar el mismo producto dos veces en una misma compra, a precios distintos, crea dos fichas separadas', function () {
+    $user = User::factory()->admin()->create();
+    $this->actingAs($user);
+
+    $almacen = Almacen::factory()->create();
+    $categoria = Categoria::factory()->create();
+
+    $response = $this->post(route('comprar.store'), [
+        'compra' => 'deuda_proveedor',
+        'proveedor' => 'Proveedor Contenedor',
+        'tipo_proveedor' => 'proveedor',
+        'fecha' => '2026-08-11',
+        'productos' => [
+            [
+                'almacen_id' => $almacen->id,
+                'producto' => 'Producto Contenedor',
+                'categoria' => $categoria->nombre_categoria,
+                'cantidad' => 3,
+                'precio' => 20,
+            ],
+            [
+                'almacen_id' => $almacen->id,
+                'producto' => 'Producto Contenedor',
+                'categoria' => $categoria->nombre_categoria,
+                'cantidad' => 5,
+                'precio' => 25,
+            ],
+        ],
+    ]);
+
+    $response->assertSessionHasNoErrors();
+
+    $fichas = Producto::where('nombre_producto', 'Producto Contenedor')->get();
+    expect($fichas)->toHaveCount(2);
+    expect($fichas->pluck('precio_compra_producto')->map(fn ($p) => (string) $p)->sort()->values()->all())
+        ->toBe(['20.00', '25.00']);
+});
+
+test('una compra con el mismo costo que ya tenía el producto reutiliza la misma ficha, no crea una nueva', function () {
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
@@ -464,6 +511,7 @@ test('una compra con el mismo costo que ya tenía el producto no crea entrada en
 
     $response->assertSessionHasNoErrors();
 
+    expect(Producto::where('nombre_producto', 'Producto Costo Igual')->count())->toBe(1);
     expect(HistorialPrecioCosto::where('producto_id', $producto->id)->count())->toBe(0);
 });
 
