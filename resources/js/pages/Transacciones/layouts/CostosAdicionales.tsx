@@ -188,7 +188,7 @@ export default function CostosAdicionales({ compras, cuentas, tasaCambioActual }
                                             </div>
                                         </TableCell>
                                         <TableCell className="text-right">
-                                            <Link href={route('transacciones.distribuir-costos.show', compra.id)}>
+                                            <Link href={route('distribucion-costos.formulario', compra.id)}>
                                                 <Button
                                                     variant="outline"
                                                     size="sm"

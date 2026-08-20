@@ -37,4 +37,16 @@ class CostDistribution extends Model
     {
         return $this->hasMany(CostDistributionItem::class);
     }
+
+    // Relación con las cuentas que financiaron esta distribución (una o varias)
+    public function cuentas()
+    {
+        return $this->hasMany(CostDistributionCuenta::class);
+    }
+
+    // Relación con las compras cubiertas por esta distribución (una o varias, "lote")
+    public function compras()
+    {
+        return $this->hasMany(CostDistributionCompra::class);
+    }
 }

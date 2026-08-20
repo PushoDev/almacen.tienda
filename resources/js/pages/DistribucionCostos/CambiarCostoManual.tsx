@@ -1,13 +1,16 @@
 import HeadingSmall from '@/components/heading-small';
 import { Button } from '@/components/ui/button';
+import { Combobox, ComboboxChip, ComboboxChips, ComboboxChipsInput, ComboboxContent, ComboboxEmpty, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
+import { Field, FieldDescription, FieldGroup, FieldLegend, FieldSet } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
+import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
-import { AlertCircle, Banknote, DollarSign, Euro, Wallet } from 'lucide-react';
+import { AlertCircle, DollarSign, Wallet, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 // --- Funciones de formato ---
@@ -48,33 +51,31 @@ interface Cuenta {
     moneda: Moneda;
 }
 
-interface Compra {
+interface ProductoCompra {
     id: number;
-    productos: Array<{
-        id: number;
-        nombre_producto: string;
-        precio_compra_producto: number;
-        pivot: {
-            cantidad: number;
-            precio: number;
-        };
-    }>;
+    nombre_producto: string;
+    precio_compra_producto: number;
+    pivot: {
+        cantidad: number;
+        precio: number;
+    };
 }
 
 interface Props {
-    compra: Compra;
+    compraIds: number[];
+    productos: ProductoCompra[];
     cuentas: Cuenta[];
     tasaCambioActual: number;
 }
 
-export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }: Props) {
+export default function CambiarCostoManual({ compraIds, productos, cuentas, tasaCambioActual }: Props) {
     const { data, setData, post, processing, errors } = useForm({
-        purchase_id: compra.id,
-        account_id: '',
-        amount_cup: '',
+        purchase_ids: compraIds,
+        // Una o varias cuentas financiando la distribución, cada una con su propio monto en CUP.
+        cuentas: [] as Array<{ account_id: number; amount_cup: string }>,
         exchange_rate: tasaCambioActual.toString(), // Mantener como string para permitir borrado
         details: '',
-        productos: compra.productos.map((producto) => ({
+        productos: productos.map((producto) => ({
             product_id: producto.id,
             product_name: producto.nombre_producto,
             old_cost_usd: producto.precio_compra_producto,
@@ -83,12 +84,33 @@ export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }
         })),
     });
 
+    const titulo = `Compra${compraIds.length > 1 ? 's' : ''} #${compraIds.join(', #')}`;
+
+    const breadcrumbs: BreadcrumbItem[] = [
+        {
+            title: 'Resumen General',
+            href: '/dashboard',
+        },
+        {
+            title: 'Distribución de Costos',
+            href: '/distribucion-costos',
+        },
+        {
+            title: `Cambiar Costo ${titulo}`,
+            href: '#',
+        },
+    ];
+
     // ✅ FILTRAR CUENTAS CUP
     const cuentasCup = cuentas.filter((cuenta) => cuenta.moneda.codigo_moneda === 'CUP' && cuenta.estado === 'activa');
 
+    const cuentasSeleccionadas = data.cuentas
+        .map((c) => cuentasCup.find((cuenta) => cuenta.id === c.account_id))
+        .filter((c): c is Cuenta => !!c);
+
     // --- Cálculos ---
     const exchangeRate = parseFloat(data.exchange_rate) || tasaCambioActual;
-    const amountCup = parseFloat(data.amount_cup) || 0;
+    const amountCup = data.cuentas.reduce((acc, c) => acc + (parseFloat(c.amount_cup) || 0), 0);
     const totalUsdToDistribute = amountCup / exchangeRate;
     const distributedTotal = data.productos.reduce((acc, prod) => acc + (parseFloat(prod.amount_usd) || 0), 0);
     const remainingUsd = totalUsdToDistribute - distributedTotal;
@@ -98,8 +120,8 @@ export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }
         e.preventDefault();
 
         // Validaciones
-        if (!data.account_id) {
-            toast.error('Debe seleccionar una cuenta de origen');
+        if (data.cuentas.length === 0) {
+            toast.error('Debe seleccionar al menos una cuenta de origen');
             return;
         }
         if (amountCup <= 0) {
@@ -115,7 +137,7 @@ export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }
             return;
         }
 
-        post(route('distribuir.costos.manual'), {
+        post(route('distribucion-costos.distribuir'), {
             onSuccess: () => {},
             onError: (errors) => {
                 const firstError = Object.values(errors)[0];
@@ -154,18 +176,18 @@ export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }
         }
     };
 
-    const isButtonDisabled = processing || !data.account_id || amountCup <= 0 || distributedTotal === 0 || remainingUsd < -0.01;
+    const isButtonDisabled = processing || data.cuentas.length === 0 || amountCup <= 0 || distributedTotal === 0 || remainingUsd < -0.01;
 
     return (
-        <AppLayout breadcrumbs={[]}>
-            <Head title="Prorrateo Manual de Costos" />
+        <AppLayout breadcrumbs={breadcrumbs}>
+            <Head title="Distribución de Costos" />
             <div className="animate__animated animate__fadeIn flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 <div className="bg-sidebar border-sidebar-accent relative col-span-4 space-y-1 overflow-hidden rounded-2xl border border-dashed p-4">
                     <HeadingSmall
-                        title="Transacciones / Prorrateo de Precio de Costo"
-                        description="Distribuya un gasto adicional entre los productos de una compra."
+                        title="Distribución de Costos"
+                        description={`Distribuya un gasto adicional entre los productos de ${compraIds.length > 1 ? 'las compras' : 'la compra'} #${compraIds.join(', #')}.`}
                     />
-                    <Banknote
+                    <DollarSign
                         size={70}
                         color="#d6d3d1"
                         className="pointer-events-none absolute right-2 bottom-0 translate-x-0 translate-y-[-5] transform animate-pulse opacity-40"
@@ -174,62 +196,120 @@ export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }
                 <Separator className="col-span-4" />
 
                 <div className="bg-card rounded-lg p-6 shadow-md">
-                    <h2 className="mb-4 text-xl font-bold">Detalles de Prorrateo para Compra #{compra.id}</h2>
+                    <h2 className="mb-4 text-xl font-bold">Detalles de Prorrateo para {titulo}</h2>
                     <form onSubmit={handleSubmit} className="space-y-6">
-                        {/* --- Sección de Datos Principales --- */}
-                        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                            <div>
-                                <Label htmlFor="accountId" className="flex items-center gap-1">
-                                    <Wallet size={16} /> Cuenta de Origen (CUP)
-                                </Label>
-                                <Select onValueChange={(value) => setData('account_id', value)} value={data.account_id}>
-                                    <SelectTrigger className="mt-1 w-full">
-                                        <SelectValue placeholder="Selecciona una cuenta en CUP" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {cuentasCup.map((cuenta) => (
-                                            <SelectItem key={cuenta.id} value={String(cuenta.id)}>
-                                                {cuenta.nombre_cuenta} - Saldo: {formatCupCurrency(cuenta.saldo_cuenta)}
-                                                <span className="text-muted-foreground ml-2 text-xs">({cuenta.moneda.codigo_moneda})</span>
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                {errors.account_id && <div className="mt-1 text-sm text-red-500">{errors.account_id}</div>}
-                            </div>
-                            <div>
-                                <Label htmlFor="amountCup" className="flex items-center gap-1">
-                                    <Euro size={16} /> Monto del Gasto (CUP)
-                                </Label>
-                                <Input
-                                    id="amountCup"
-                                    type="number"
-                                    step="0.01"
-                                    min="0.01"
-                                    value={data.amount_cup}
-                                    onChange={(e) => setData('amount_cup', e.target.value)}
-                                    placeholder="Ej: 25000"
-                                    className="mt-1"
-                                />
-                                {errors.amount_cup && <div className="mt-1 text-sm text-red-500">{errors.amount_cup}</div>}
-                            </div>
-                            <div>
-                                <Label htmlFor="exchangeRate" className="flex items-center gap-1">
-                                    <DollarSign size={16} /> Tasa de Cambio (CUP a USD)
-                                </Label>
-                                <Input
-                                    id="exchangeRate"
-                                    type="number"
-                                    step="any" // ✅ PERMITIR CUALQUIER VALOR
-                                    min="0.01"
-                                    value={data.exchange_rate}
-                                    onChange={handleExchangeRateChange}
-                                    placeholder="Tasa de cambio"
-                                    className="mt-1"
-                                />
-                                {errors.exchange_rate && <div className="mt-1 text-sm text-red-500">{errors.exchange_rate}</div>}
-                                <p className="text-muted-foreground mt-1 text-xs">Tasa actual: {formatDisplayNumber(tasaCambioActual)} CUP/USD</p>
-                            </div>
+                        {/* --- Cuentas de origen (una o varias) --- */}
+                        <FieldSet>
+                            <FieldLegend className="flex items-center gap-2 text-base font-semibold">
+                                <Wallet className="h-5 w-5 text-emerald-600" />
+                                Cuentas de Origen (CUP)
+                            </FieldLegend>
+                            <FieldDescription>Selecciona una o varias cuentas para financiar esta distribución.</FieldDescription>
+
+                            <FieldGroup className="space-y-4 pt-4">
+                                <Field>
+                                    <Combobox
+                                        multiple
+                                        items={cuentasCup}
+                                        itemToStringLabel={(c: Cuenta) => c.nombre_cuenta}
+                                        value={cuentasSeleccionadas}
+                                        onValueChange={(seleccionadas: Cuenta[]) => {
+                                            setData(
+                                                'cuentas',
+                                                seleccionadas.map(
+                                                    (c) => data.cuentas.find((item) => item.account_id === c.id) ?? { account_id: c.id, amount_cup: '' },
+                                                ),
+                                            );
+                                        }}
+                                    >
+                                        <ComboboxChips>
+                                            {cuentasSeleccionadas.map((cuenta) => (
+                                                <ComboboxChip key={cuenta.id}>{cuenta.nombre_cuenta}</ComboboxChip>
+                                            ))}
+                                            <ComboboxChipsInput placeholder="Buscar cuentas en CUP..." />
+                                        </ComboboxChips>
+                                        <ComboboxContent>
+                                            <ComboboxEmpty>No se encontraron cuentas.</ComboboxEmpty>
+                                            <ComboboxList>
+                                                {(cuenta: Cuenta) => (
+                                                    <ComboboxItem key={cuenta.id} value={cuenta}>
+                                                        <div className="flex w-full items-center justify-between gap-2">
+                                                            <span>{cuenta.nombre_cuenta}</span>
+                                                            <span className="text-muted-foreground text-xs">
+                                                                Saldo: {formatCupCurrency(cuenta.saldo_cuenta)}
+                                                            </span>
+                                                        </div>
+                                                    </ComboboxItem>
+                                                )}
+                                            </ComboboxList>
+                                        </ComboboxContent>
+                                    </Combobox>
+                                    {errors.cuentas && <div className="mt-1 text-sm text-red-500">{errors.cuentas}</div>}
+                                </Field>
+
+                                {cuentasSeleccionadas.length > 0 && (
+                                    <div className="divide-y rounded-lg border">
+                                        {cuentasSeleccionadas.map((cuenta) => {
+                                            const item = data.cuentas.find((c) => c.account_id === cuenta.id);
+                                            return (
+                                                <div key={cuenta.id} className="flex items-center gap-3 p-3">
+                                                    <div className="bg-primary/10 text-primary flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold">
+                                                        {cuenta.nombre_cuenta[0]}
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="truncate text-sm font-medium">{cuenta.nombre_cuenta}</p>
+                                                        <p className="text-muted-foreground text-xs">Saldo: {formatCupCurrency(cuenta.saldo_cuenta)}</p>
+                                                    </div>
+                                                    <InputGroup className="w-36 shrink-0">
+                                                        <InputGroupAddon>$</InputGroupAddon>
+                                                        <InputGroupInput
+                                                            inputMode="decimal"
+                                                            placeholder="0.00"
+                                                            value={item?.amount_cup || ''}
+                                                            onChange={(e) => {
+                                                                setData(
+                                                                    'cuentas',
+                                                                    data.cuentas.map((c) =>
+                                                                        c.account_id === cuenta.id ? { ...c, amount_cup: e.target.value } : c,
+                                                                    ),
+                                                                );
+                                                            }}
+                                                        />
+                                                    </InputGroup>
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="shrink-0 cursor-pointer"
+                                                        onClick={() => setData('cuentas', data.cuentas.filter((c) => c.account_id !== cuenta.id))}
+                                                    >
+                                                        <X className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </FieldGroup>
+                        </FieldSet>
+
+                        {/* --- Tasa de cambio --- */}
+                        <div className="max-w-xs">
+                            <Label htmlFor="exchangeRate" className="flex items-center gap-1">
+                                <DollarSign size={16} /> Tasa de Cambio (CUP a USD)
+                            </Label>
+                            <Input
+                                id="exchangeRate"
+                                type="number"
+                                step="any" // ✅ PERMITIR CUALQUIER VALOR
+                                min="0.01"
+                                value={data.exchange_rate}
+                                onChange={handleExchangeRateChange}
+                                placeholder="Tasa de cambio"
+                                className="mt-1"
+                            />
+                            {errors.exchange_rate && <div className="mt-1 text-sm text-red-500">{errors.exchange_rate}</div>}
+                            <p className="text-muted-foreground mt-1 text-xs">Tasa actual: {formatDisplayNumber(tasaCambioActual)} CUP/USD</p>
                         </div>
 
                         {/* --- Paneles de Resumen --- */}
@@ -285,7 +365,7 @@ export default function CambiarCostoManual({ compra, cuentas, tasaCambioActual }
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
                                 <h3 className="text-lg font-semibold">Productos de la Compra</h3>
-                                <div className="text-sm text-gray-500">{compra.productos.length} producto(s) encontrado(s)</div>
+                                <div className="text-sm text-gray-500">{productos.length} producto(s) encontrado(s)</div>
                             </div>
                             <Table>
                                 <TableHeader>

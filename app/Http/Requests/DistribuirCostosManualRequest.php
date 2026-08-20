@@ -24,11 +24,17 @@ class DistribuirCostosManualRequest extends FormRequest
     {
         return [
             //
-            'purchase_id'   => 'required|exists:compras,id',
-            'account_id'    => 'required|exists:cuentas,id',
-            'amount_cup'    => 'required|numeric|min:0.01',
             'exchange_rate' => 'nullable|numeric|min:0.0001',
             'details'       => 'nullable|string|max:1000',
+
+            // Una o varias compras cubiertas por esta distribución ("lote")
+            'purchase_ids'   => 'required|array|min:1',
+            'purchase_ids.*' => 'required|exists:compras,id',
+
+            // Una o varias cuentas financiando esta distribución
+            'cuentas'              => 'required|array|min:1',
+            'cuentas.*.account_id' => 'required|exists:cuentas,id',
+            'cuentas.*.amount_cup' => 'required|numeric|min:0.01',
 
             // El array de productos con su distribución manual
             'productos'              => 'required|array',

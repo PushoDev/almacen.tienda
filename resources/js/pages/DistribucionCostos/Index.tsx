@@ -2,6 +2,7 @@ import HeadingSmall from '@/components/heading-small';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
@@ -118,6 +119,19 @@ export default function DistribucionCostosIndex({ compras, cuentas, tasaCambioAc
         delete nuevos.page;
 
         router.get(window.location.pathname, nuevos, { preserveState: true, preserveScroll: true, replace: true });
+    };
+
+    // Selección de compras para prorratear varias juntas ("lote") en una sola operación.
+    const [seleccionadas, setSeleccionadas] = useState<number[]>([]);
+
+    const toggleSeleccionada = (id: number) => {
+        setSeleccionadas((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
+    };
+
+    const distribuirSeleccionadas = () => {
+        if (seleccionadas.length > 0) {
+            router.get(route('distribucion-costos.formulario'), { compras: seleccionadas });
+        }
     };
 
     const proveedorSeleccionado = proveedores.find((p) => String(p.id) === filtros.proveedor_id) ?? null;
@@ -289,23 +303,35 @@ export default function DistribucionCostosIndex({ compras, cuentas, tasaCambioAc
                 {/* Listado de compras para prorratear — card con header en degradado (patrón de Comprar/Index.tsx) */}
                 <Card className="overflow-hidden border-0 pt-0 shadow-lg">
                     <CardHeader className="bg-gradient-to-r from-indigo-600 to-indigo-700 px-6 py-5 text-white">
-                        <div className="flex items-center gap-3">
-                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
-                                <Package className="h-5 w-5" />
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                                    <Package className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-white">Compras para Distribuir Costos</CardTitle>
+                                    <CardDescription className="text-indigo-100">
+                                        Seleccione una o varias compras para distribuir manualmente los costos adicionales entre sus productos.
+                                        Solo disponible para cuentas en moneda CUP.
+                                    </CardDescription>
+                                </div>
                             </div>
-                            <div>
-                                <CardTitle className="text-white">Compras para Distribuir Costos</CardTitle>
-                                <CardDescription className="text-indigo-100">
-                                    Seleccione una compra para distribuir manualmente los costos adicionales entre sus productos. Solo disponible
-                                    para cuentas en moneda CUP.
-                                </CardDescription>
-                            </div>
+                            {seleccionadas.length > 0 && (
+                                <Button
+                                    onClick={distribuirSeleccionadas}
+                                    className="cursor-pointer bg-white/20 text-white backdrop-blur-sm hover:bg-white/30"
+                                >
+                                    <ArrowRightLeft className="h-4 w-4" />
+                                    Distribuir {seleccionadas.length} seleccionada{seleccionadas.length === 1 ? '' : 's'}
+                                </Button>
+                            )}
                         </div>
                     </CardHeader>
                     <CardContent>
                         <Table>
                             <TableHeader>
                                 <TableRow className="bg-sidebar-accent hover:bg-sidebar-accent">
+                                    <TableHead className="w-10"></TableHead>
                                     <TableHead className="w-20">ID</TableHead>
                                     <TableHead className="w-32">
                                         <div className="flex items-center gap-1">
@@ -339,6 +365,13 @@ export default function DistribucionCostosIndex({ compras, cuentas, tasaCambioAc
                                 {compras.data.length > 0 ? (
                                     compras.data.map((compra) => (
                                         <TableRow key={compra.id} className="group hover:bg-muted/50">
+                                            <TableCell>
+                                                <Checkbox
+                                                    checked={seleccionadas.includes(compra.id)}
+                                                    onCheckedChange={() => toggleSeleccionada(compra.id)}
+                                                    className="size-5 border-2 border-slate-400 dark:border-slate-300"
+                                                />
+                                            </TableCell>
                                             <TableCell className="font-medium">
                                                 <Badge variant="secondary">#{compra.id}</Badge>
                                             </TableCell>
@@ -383,7 +416,7 @@ export default function DistribucionCostosIndex({ compras, cuentas, tasaCambioAc
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <div className="flex justify-end gap-2">
-                                                    <Link href={route('transacciones.distribuir-costos.show', compra.id)}>
+                                                    <Link href={route('distribucion-costos.formulario', { compras: [compra.id] })}>
                                                         <Button
                                                             size="sm"
                                                             className="cursor-pointer bg-indigo-600 text-white shadow-sm hover:bg-indigo-700"
@@ -393,7 +426,7 @@ export default function DistribucionCostosIndex({ compras, cuentas, tasaCambioAc
                                                         </Button>
                                                     </Link>
                                                     {compra.tiene_distribucion && (
-                                                        <Link href={route('transacciones.distribuir-costos.show', compra.id)}>
+                                                        <Link href={route('distribucion-costos.formulario', { compras: [compra.id] })}>
                                                             <Button variant="outline" size="sm" className="cursor-pointer">
                                                                 <Eye className="h-4 w-4" />
                                                                 Detalles
@@ -406,7 +439,7 @@ export default function DistribucionCostosIndex({ compras, cuentas, tasaCambioAc
                                     ))
                                 ) : (
                                     <TableRow>
-                                        <TableCell colSpan={7} className="py-8 text-center">
+                                        <TableCell colSpan={8} className="py-8 text-center">
                                             <div className="text-muted-foreground flex flex-col items-center gap-2">
                                                 <Package className="h-12 w-12 opacity-50" />
                                                 <p>No se encontraron compras recientes</p>
