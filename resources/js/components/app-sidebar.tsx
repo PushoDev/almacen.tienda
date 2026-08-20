@@ -45,7 +45,7 @@ const allNavItems: NavItem[] = [
     },
     {
         title: 'Distribuicion de Costos',
-        href: '#',
+        href: '/distribucion-costos',
         icon: DollarSignIcon,
         roles: ['admin'],
     },
